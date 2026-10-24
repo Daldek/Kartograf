@@ -27,7 +27,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import ValidationError
 
 if TYPE_CHECKING:

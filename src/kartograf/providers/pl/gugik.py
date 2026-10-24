@@ -25,8 +25,9 @@ from pathlib import Path
 import requests
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import BBox
 from kartograf.core.coverage import Polygon
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import (
     DownloadError,
     NoCoverageError,
@@ -318,14 +319,19 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         )
 
     def _in_format(self, record: SkorowidzRecord) -> bool:
-        """The record's ``format`` AND URL give the variant's format token."""
+        """Check whether the record matches the variant's format.
+
+        The record's ``format`` AND URL give the variant's format token.
+        """
         return source_format(record.file_format, record.url) == self.variant.format
 
     def record_variant(
         self, record: SkorowidzRecord, vertical_crs: str
     ) -> ProductVariant | None:
-        """Registered variant of an index record of this product (``None``:
-        inconsistent record or a combination outside the registry)."""
+        """Return the registered variant of an index record of this product.
+
+        ``None``: inconsistent record or a combination outside the registry.
+        """
         token = source_format(record.file_format, record.url)
         if token is None:
             return None
@@ -436,8 +442,9 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         return list(found.items())
 
     def _variant_hints(self, parser: SheetParser) -> set[str]:
-        """Hints naming the variants of the format in the OTHER height system
-        whose index has the sheet (P10, 0.7.2; WFS since 0.8.0).
+        """Return hints naming the variants of the format in the OTHER height system.
+
+        Those whose index has the sheet (P10, 0.7.2; WFS since 0.8.0).
 
         One GetFeature with every yearly type of that service around the
         sheet centre; a record passes the same hard filter as a download
@@ -557,7 +564,7 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     # =========================================================================
 
     def has_wcs(self) -> bool:
-        """The variant's descriptor has a WCS channel (1 m grids)."""
+        """Check whether the variant's descriptor has a WCS channel (1 m grids)."""
         return any(
             channel.transport == TransportKind.WCS
             for channel in get_source(self.variant.source).channels

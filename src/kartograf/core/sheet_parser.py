@@ -8,9 +8,13 @@ coordinate system, and sheet components.
 
 import math
 import re
+from typing import Any
 
 from kartograf.core import parser_registry
-from kartograf.core.bbox import BBox, transform_bbox, validate_bbox
+
+# BBox is re-exported: Hydrograf, Hydrolog, Retman and the tests import it from here.
+from kartograf.core.bbox import BBox as BBox
+from kartograf.core.bbox import transform_bbox, validate_bbox
 from kartograf.exceptions import ParseError, ValidationError
 
 
@@ -725,7 +729,7 @@ class SheetParser:
             "Obslugiwane: EPSG:2180, EPSG:4326"
         )
 
-    def _calculate_wgs84_bbox(self) -> tuple:
+    def _calculate_wgs84_bbox(self) -> tuple[Any, ...]:
         """
         Compute the bounding box in WGS84 (degrees).
 
@@ -762,9 +766,8 @@ class SheetParser:
 
     def _apply_500k_subdivision(
         self, south: float, north: float, west: float, east: float
-    ) -> tuple:
+    ) -> tuple[Any, ...]:
         """Apply the subdivision for 1:500k and smaller scales."""
-
         # 1:500k - arkusz_200k holds a letter A-D (misleading name in COMPONENT_NAMES)
         if "arkusz_200k" in self._components:
             letter = self._components["arkusz_200k"]
@@ -802,7 +805,7 @@ class SheetParser:
         west_1m: float,
         east_1m: float,
         arkusz_num: int,
-    ) -> tuple:
+    ) -> tuple[Any, ...]:
         """
         Compute the bbox for a 1:200k sheet and smaller.
 
@@ -984,8 +987,9 @@ def _expand_degenerate(bbox: BBox, eps: float) -> BBox:
 
 def _bboxes_intersect(a: BBox, b: BBox) -> bool:
     """
-    Positive-area intersection; shared edges/corners do NOT count
-    (audit 0.7.0, A1-7).
+    Check whether two bounding boxes intersect with positive area.
+
+    Positive-area intersection; shared edges/corners do NOT count (audit 0.7.0, A1-7).
 
     Parameters
     ----------

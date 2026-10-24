@@ -70,18 +70,43 @@ line-length = 88
 extend-exclude = [".claude", "*.md"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests need no docstrings (DEV-7.2); the research scripts of docs/ are frozen
+# records of past investigations.
+"tests/**" = ["D"]
+"docs/**" = ["D", "C4"]
 
 [tool.ruff.format]
 quote-style = "double"
 
 [tool.mypy]
+strict = true
+files = ["src", "tests"]
 # Same as ruff: never descend into local agent worktrees (mypy .)
 exclude = ['^\.claude/']
 
 [[tool.mypy.overrides]]
-module = ["requests.*", "rasterio.*", "shapefile.*", "affine.*", "pyogrio.*", "jsonschema.*"]
+# Packages without type information (mypy cannot follow them).
+module = ["rasterio.*", "shapefile.*", "affine.*", "pyogrio.*", "jsonschema.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Shortfall of the tests (DEV-7.3; a deviation listed in CLAUDE.md): the test
+# functions and their fakes are not annotated, so their bodies are not checked.
+module = ["tests", "tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_any_generics = false
+warn_return_any = false
+check_untyped_defs = false
+warn_unused_ignores = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

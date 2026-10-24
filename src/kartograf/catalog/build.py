@@ -83,8 +83,10 @@ SCHEMA_DESCRIPTIONS = {
 
 
 def _frozen(value: object) -> object:
-    """Mappings read-only, lists as tuples (the encoder writes them back as
-    objects and arrays)."""
+    """Freeze mappings read-only and lists as tuples.
+
+    The encoder writes them back as objects and arrays.
+    """
     if isinstance(value, Mapping):
         return _frozen_mapping(value)
     if isinstance(value, list | tuple):
@@ -155,7 +157,7 @@ def _check_references(command: Command) -> None:
 
 
 def _command_info(command: Command) -> CommandInfo:
-    """The command with its parameters, constraints and examples."""
+    """Return the command with its parameters, constraints and examples."""
     _check_references(command)
     return CommandInfo(
         id=command.id,
@@ -220,8 +222,10 @@ def _schema_infos(commands: Sequence[Command]) -> tuple[SchemaInfo, ...]:
 
 
 def _build_full(commands: Sequence[Command], groups: Sequence[Group]) -> Catalog:
-    """The catalog of every command, with parameters, constraints, examples and
-    the tables: the source of every view."""
+    """Return the catalog of every command: the source of every view.
+
+    It has the parameters, constraints, examples and the tables.
+    """
     from kartograf import __version__  # the package imports the catalog
 
     check_declarations(commands, groups)
@@ -250,8 +254,11 @@ def _select(
     params: bool | None,
     tables: bool | None,
 ) -> Catalog:
-    """A view of the full catalog (spec 8.5): the overview when nothing is
-    selected and no parameters are asked for, else the full view."""
+    """Return a view of the full catalog (spec 8.5).
+
+    The overview when nothing is selected and no parameters are asked for, else the full
+    view.
+    """
     groups, commands = full.groups, full.commands
     if group is not None:
         names = tuple(g.name for g in groups)
@@ -304,8 +311,9 @@ def build_catalog(
     command: str | None = None,
     tables: bool | None = None,
 ) -> Catalog:
-    """The catalog of the given declarations (the view arguments are those of
-    ``get_catalog``); nothing is cached.
+    """Return the catalog of the given declarations.
+
+    The view arguments are those of ``get_catalog``; nothing is cached.
 
     Raises
     ------
@@ -348,7 +356,7 @@ def get_catalog(
     params: bool | None = None,
     tables: bool | None = None,
 ) -> Catalog:
-    """The catalog of the commands: ``kartograf catalog --json``.
+    """Return the catalog of the commands: ``kartograf catalog --json``.
 
     Without arguments the *overview*: every group (summary, product names) and
     every command (id, summary, MCP tool, whether it can check for updates) -
@@ -386,6 +394,8 @@ def get_catalog(
 
 
 def data_commands() -> tuple[CommandInfo, ...]:
-    """The data commands a project task may run, with their parameters: the twelve
-    commands of ``COMMANDS`` in its order (``project_task`` is true)."""
+    """Return the data commands a project task may run, with their parameters.
+
+    The twelve commands of ``COMMANDS`` in its order (``project_task`` is true).
+    """
     return tuple(c for c in _full_catalog().commands if c.project_task)

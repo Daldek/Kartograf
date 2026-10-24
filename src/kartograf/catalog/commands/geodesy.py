@@ -1,6 +1,8 @@
-"""``kartograf geodesy``: survey control networks - PRPOG (GUGiK, PL) and
-Bodove pole (CUZK, CZ) - and the quasi-geoid models PL-geoid2021 and
-QGZU-2013 (plan E, E5)."""
+"""Declare ``kartograf geodesy``.
+
+Survey control networks - PRPOG (GUGiK, PL) and Bodove pole (CUZK, CZ) - and the
+quasi-geoid models PL-geoid2021 and QGZU-2013 (plan E, E5).
+"""
 
 from kartograf.catalog.commands._collection import (
     Products,

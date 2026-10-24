@@ -112,7 +112,7 @@ def validate_year_bounds(min_year: int | None, max_year: int | None) -> None:
         )
 
 
-def record_year(record) -> int | None:
+def record_year(record: "IndexRecord") -> int | None:
     """Year from ``aktualnoscRok``, else ``aktualnosc[:4]``; non-digit -> None."""
     year = record.raw.get("aktualnoscRok") or record.aktualnosc[:4]
     return int(year) if year.isdigit() else None
@@ -240,30 +240,41 @@ def year_range_error(
 
 
 class IndexRecord(Protocol):
-    """Structural type of an index (skorowidz) record read by
-    ``CampaignRef.from_record`` (``SkorowidzRecord`` satisfies it)."""
+    """Describe an index (skorowidz) record read by ``CampaignRef``.
+
+    Structural type of an index (skorowidz) record read by
+    ``CampaignRef.from_record`` (``SkorowidzRecord`` satisfies it).
+    """
 
     @property
-    def url(self) -> str: ...
+    def url(self) -> str:
+        """Return the URL of the record file."""
 
     @property
-    def sheet(self) -> str: ...
+    def sheet(self) -> str:
+        """Return the sheet code of the record."""
 
     @property
-    def aktualnosc(self) -> str: ...
+    def aktualnosc(self) -> str:
+        """Return the currency date of the record."""
 
     @property
-    def dt_pzgik(self) -> str | None: ...
+    def dt_pzgik(self) -> str | None:
+        """Return the PZGiK date of the record."""
 
     @property
-    def full_sheet(self) -> bool | None: ...
+    def full_sheet(self) -> bool | None:
+        """Return whether the record declares a full sheet."""
 
     @property
-    def raw(self) -> Mapping[str, str]: ...
+    def raw(self) -> Mapping[str, str]:
+        """Return the raw attributes of the record."""
 
 
 @dataclass(frozen=True)
 class CampaignRef:
+    """Describe one acquisition campaign of a sheet."""
+
     id: str  # digits or 'u'+8 hex — path-safe
     date: str  # acquisition date, YYYY-MM-DD (validated)
     dt_pzgik: str | None
@@ -275,9 +286,12 @@ class CampaignRef:
 
     @classmethod
     def from_record(cls, record: IndexRecord) -> "CampaignRef":
-        """Build from an index record (duck typing: url, sheet, aktualnosc,
+        """Build a campaign reference from an index record.
+
+        Build from an index record (duck typing: url, sheet, aktualnosc,
         dt_pzgik, full_sheet, raw). An aktualnosc outside YYYY-MM-DD raises
-        DownloadError — the server value ends up in a path."""
+        DownloadError — the server value ends up in a path.
+        """
         date = record.aktualnosc
         if not isinstance(date, str) or not _DATE.fullmatch(date):
             raise DownloadError(
@@ -299,8 +313,11 @@ class CampaignRef:
 
     @classmethod
     def from_sidecar(cls, meta: dict[str, Any]) -> "CampaignRef | None":
-        """Rebuild from a version sidecar (``extra.campaign`` +
-        ``extra.source.url``); ``None`` when it describes no campaign."""
+        """Rebuild a campaign reference from a version sidecar.
+
+        Rebuild from a version sidecar (``extra.campaign`` +
+        ``extra.source.url``); ``None`` when it describes no campaign.
+        """
         extra = meta.get("extra")
         campaign = extra.get("campaign") if isinstance(extra, dict) else None
         source = extra.get("source") if isinstance(extra, dict) else None
@@ -322,10 +339,12 @@ class CampaignRef:
 
     @property
     def dirname(self) -> str:
+        """Return the version directory name of the campaign."""
         return f"{self.date}_{self.id}"
 
     @property
     def year(self) -> int:
+        """Return the year of the acquisition date."""
         return int(self.date[:4])
 
     @property
@@ -356,8 +375,10 @@ RECORD_VERTICAL_CRS: Mapping[str, str] = {
 }
 
 
-def verify_record_vertical_crs(record, vertical_crs: str | None, sheet: str) -> None:
-    """The vertical datum declared by the record must be the requested one.
+def verify_record_vertical_crs(
+    record: "IndexRecord", vertical_crs: str | None, sheet: str
+) -> None:
+    """Verify that the record declares the requested vertical datum.
 
     The datum is chosen only by the endpoint (one WMS index per datum); the
     record field ``ukladWspolrzednychPionowych`` is the check that the
@@ -413,8 +434,11 @@ def campaign_extension(ref: CampaignRef, default_ext: str) -> str:
 
 
 def _intergraph(head: bytes) -> bool:
-    """IGDS header element (type 9) of Intergraph DGN v7/GRD: level byte
-    ``0x08`` with optional flags, type ``0x09``."""
+    """Check the IGDS header element (type 9) of Intergraph DGN v7/GRD.
+
+    IGDS header element (type 9) of Intergraph DGN v7/GRD: level byte
+    ``0x08`` with optional flags, type ``0x09``.
+    """
     return len(head) >= 2 and head[0] & 0x3F == 0x08 and head[1] == 0x09
 
 
@@ -494,7 +518,7 @@ class AscCoverage:
         self._carry = data[cut + 1 :]
 
     def result(self) -> float:
-        """Valid share rounded to 4 places; ``DownloadError`` when malformed."""
+        """Return the valid share rounded to 4 places; raise when malformed."""
         if self._error is None:
             data, self._carry = self._carry, b""
             if self._in_header:
@@ -591,7 +615,7 @@ def _alnum(text: str) -> str:
 
 
 def verify_record_url(url: str, sheet: str, suffix: str = "") -> None:
-    """The record URL file name must end with the sheet code (B4).
+    """Check that the record URL file name ends with the sheet code (B4).
 
     GUGiK names files ``<id>_<number>_<sheet>.<ext>``; a URL without the
     sheet code (or with another one) points to an unknown file. Both codes
@@ -632,7 +656,7 @@ def verify_record_url(url: str, sheet: str, suffix: str = "") -> None:
 
 
 def verify_sheet_extent(path: Path, sheet: str, ext: str) -> None:
-    """The ASC header extent must lie in the sheet frame (B4; '.asc' only).
+    """Check that the ASC header extent lies in the sheet frame (B4; '.asc' only).
 
     At least ``MIN_FRAME_OVERLAP`` of the file extent must lie inside the
     frame. The frame is taken in the FILE's CRS (the rule of

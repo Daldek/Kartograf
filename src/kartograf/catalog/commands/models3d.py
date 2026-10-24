@@ -1,6 +1,8 @@
-"""``kartograf models3d``: 3D models of GUGiK - buildings and trees (CityGML,
-powiat packages) and the mesh of towns (OBJ tiles of an index) (ADR-042 D9;
-plan E, E5)."""
+"""Declare ``kartograf models3d``.
+
+3D models of GUGiK - buildings and trees (CityGML, powiat packages) and the mesh of
+towns (OBJ tiles of an index) (ADR-042 D9; plan E, E5).
+"""
 
 from kartograf.catalog.commands._collection import (
     Products,

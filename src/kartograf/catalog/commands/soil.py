@@ -1,5 +1,6 @@
 """``kartograf soil``: SoilGrids layers (ISRIC) and hydrologic soil groups (ADR-039)."""
 
+from collections.abc import Callable
 from dataclasses import replace
 
 from kartograf.catalog import shared
@@ -28,15 +29,19 @@ def _products() -> list[tuple[str, str]]:
 
 
 def _described(kind: str) -> str:
-    """``bdod: gestosc objetosciowa (kg/dm3); ...``: the values of ``kind`` with
-    their texts."""
+    """Return the values of ``kind`` with their texts.
+
+    The text is like ``bdod: gestosc objetosciowa (kg/dm3); ...``.
+    """
     return "; ".join(f"{value}: {text}" for value, text in soil_choices()[kind].items())
 
 
 def _depths(standard_only: bool = False) -> str:
-    """The depth values of ``--depth`` with their explanation: all of them for
-    ``soil download`` (``0-30cm`` only for ocs), the standard ones for HSG
-    (clay, sand and silt are published at those only)."""
+    """Return the depth values of ``--depth`` with their explanation.
+
+    All of them for ``soil download`` (``0-30cm`` only for ocs), the standard ones for
+    HSG (clay, sand and silt are published at those only).
+    """
     depths = soil_choices()["depth"]
     names = SoilGridsProvider.DEPTHS if standard_only else list(depths)
     note = "" if standard_only else "; 0-30cm tylko dla ocs"
@@ -59,7 +64,7 @@ def _stat_help() -> str:
     return f"Wymagane: {_described('stat')}"
 
 
-def _values(kind: str):
+def _values(kind: str) -> Callable[[], list[str]]:
     return lambda: list(soil_choices()[kind])
 
 
@@ -79,7 +84,7 @@ def _depth(standard_only: bool = False) -> Param:
     )
 
 
-def _update(plan: str):
+def _update(plan: str) -> tuple[Param, ...]:
     return shared.update_params(
         check="Porownaj lokalne wersje z wydaniem SoilGrids bez pobierania",
         upgrade="Pobierz nowsze wydanie SoilGrids (domyslnie tylko "

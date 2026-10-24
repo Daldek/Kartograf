@@ -14,6 +14,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any, cast
 
 import requests
 
@@ -49,6 +50,7 @@ from kartograf.download.storage import storage_for_provider
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import UNVERIFIED_LOCAL, Notice, NoticeSink
+from kartograf.providers.cuzk.raster import CuzkRasterProvider
 from kartograf.sources.registry import get_source
 from kartograf.sources.sidecar import emit_sidecar
 from kartograf.sources.variants import (
@@ -78,7 +80,7 @@ class CzSheetResult:
 def cz_sheet_variant(
     sheet: str, product: str, resolution: str | None, vertical_crs: str
 ) -> ProductVariant:
-    """The row of the route table of a CZ sheet code (plan B, decision 2).
+    """Return the row of the route table of a CZ sheet code (plan B, decision 2).
 
     An SM5 sheet may omit ``resolution`` when one label of the product has
     SM5 files (NMT 5m DMR 4G, NMPT 0.5m DMP OK); a TM33 tile requires it.
@@ -103,9 +105,11 @@ def cz_sheet_variant(
     )
 
 
-def _sheet_slot(provider, sheet: str, output_dir: str | Path) -> FileSlot:
+def _sheet_slot(
+    provider: CuzkRasterProvider, sheet: str, output_dir: str | Path
+) -> FileSlot:
     sheet = sheet.strip()
-    descriptor = get_source(provider.descriptor_key)
+    descriptor = get_source(cast(str, provider.descriptor_key))
     storage = storage_for_provider(
         output_dir,
         provider,
@@ -121,7 +125,9 @@ def _sheet_slot(provider, sheet: str, output_dir: str | Path) -> FileSlot:
     )
 
 
-def _check_sheet(provider, sheet: str, *, output_dir: str | Path) -> UpdatePlan:
+def _check_sheet(
+    provider: CuzkRasterProvider, sheet: str, *, output_dir: str | Path
+) -> UpdatePlan:
     """Inspect one CZ sheet without transferring raster bytes."""
     sheet = sheet.strip()
     route = provider.route(sheet)
@@ -149,7 +155,7 @@ def _local_result(slot: FileSlot, stale: tuple[PlanItem, ...]) -> CzSheetResult:
 
 
 def _run_cz_sheet(
-    provider,
+    provider: CuzkRasterProvider,
     sheet: str,
     *,
     output_dir: str | Path,
@@ -197,19 +203,19 @@ def _run_cz_sheet(
         if route.files:
             available_signal = todo[0].available_signal
 
-            def planned_probe() -> dict:
+            def planned_probe() -> dict[str, Any]:
                 return available_signal or {}
 
             probe = planned_probe
 
-    received: dict | None = None
+    received: dict[str, Any] | None = None
     empty = False
 
     def on_response(response: requests.Response) -> None:
         nonlocal received
         received = response_signal(response)
 
-    def fetch(staged: Path) -> dict | None:
+    def fetch(staged: Path) -> dict[str, Any] | None:
         provider.download(
             sheet,
             staged,
@@ -219,12 +225,15 @@ def _run_cz_sheet(
         return received if route.files else None
 
     def write_sidecar(
-        data: Path, version: VersionRef, digest: ContentDigest, http: dict | None
+        data: Path,
+        version: VersionRef,
+        digest: ContentDigest,
+        http: dict[str, Any] | None,
     ) -> None:
         nonlocal empty
         nodata = read_tif_nodata(data)
         empty = _all_nodata(data, nodata)
-        extra: dict = {"all_nodata": empty}
+        extra: dict[str, Any] = {"all_nodata": empty}
         if http is not None:
             extra["http"] = http
         if cz_sheet_system(sheet) == "sm5":
@@ -293,8 +302,8 @@ def _sheet_provider(
     product: str,
     vertical_crs: str,
     resolution: str | None,
-    cache,
-):
+    cache: MetadataCache | None,
+) -> CuzkRasterProvider:
     """CZ raster provider of a sheet code (the variant of its route table row)."""
     from kartograf.providers.cuzk import create_cz_raster_provider
 

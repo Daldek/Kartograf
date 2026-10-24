@@ -62,7 +62,7 @@ SHEET_TTL_SECONDS = 30 * 24 * 3600
 
 
 def is_lock_error(error: BaseException) -> bool:
-    """True when ``error`` is SQLite's "database is locked" (busy) error.
+    """Return True when ``error`` is SQLite's "database is locked" (busy) error.
 
     A lock is not damage: the file is fine, another process holds it longer
     than the connection timeout. The cache is disabled the same way, but the
@@ -72,11 +72,13 @@ def is_lock_error(error: BaseException) -> bool:
 
 
 def is_unwritable_error(error: BaseException, path: Path) -> bool:
-    """True when SQLite could not open, create or write the cache file ``path``
-    for a reason that is not damage of the file: a read-only directory or file,
+    """Return True when SQLite could not open, create or write the cache file.
+
+    The cause is not damage of the file ``path``: a read-only directory or file,
     a full disk, a directory in place of the file, a file that cannot be created.
     (A file that exists and cannot be opened, e.g. no read permission, is the
-    unreadable one that ``cache clear`` removes.)"""
+    unreadable one that ``cache clear`` removes.)
+    """
     if not isinstance(error, sqlite3.OperationalError):
         return False
     name = getattr(error, "sqlite_errorname", None) or ""
@@ -414,7 +416,8 @@ class MetadataCache:
                 return None
 
             logger.debug(f"Record cache hit for {sheet} ({product})")
-            return json.loads(payload)
+            result: dict[str, Any] = json.loads(payload)
+            return result
         return None  # disabled by an SQLite error (_db_errors)
 
     def set_record(
@@ -459,8 +462,9 @@ class MetadataCache:
         vertical_crs: str,
         sheet: str,
     ) -> dict[str, Any] | None:
-        """Return the sheet's campaigns or None (missing/expired/refresh mode), 7-day
-        TTL.
+        """Return the sheet's campaigns or None (missing/expired/refresh mode).
+
+        The cache entry lives 7 days.
 
         Key as in record_cache; `--min-year` is NOT part of the key.
         """
@@ -495,7 +499,8 @@ class MetadataCache:
                 return None
 
             logger.debug(f"Campaigns cache hit for {sheet} ({product})")
-            return json.loads(payload)
+            result: dict[str, Any] = json.loads(payload)
+            return result
         return None  # disabled by an SQLite error (_db_errors)
 
     def set_campaigns(
@@ -578,7 +583,8 @@ class MetadataCache:
                 return None
 
             logger.debug(f"TERYT cache hit for ({x}, {y}): {teryt}")
-            return teryt
+            found: str = teryt
+            return found
         return None  # disabled by an SQLite error (_db_errors)
 
     def set_teryt(self, x: float, y: float, teryt: str) -> None:
@@ -609,7 +615,7 @@ class MetadataCache:
         logger.debug(f"Cached TERYT {teryt} for ({x}, {y})")
 
     def get_teryts_for_bbox(self, bbox: "BBox") -> list[str] | None:
-        """Cached powiat TERYT codes of an EPSG:2180 area (None = miss/expired).
+        """Return the cached powiat TERYT codes of an EPSG:2180 area (or None).
 
         An empty list is a valid cached answer (no powiat: sea, abroad).
         Always None in ``refresh`` mode. Lock guards the read too - see the
@@ -700,7 +706,8 @@ class MetadataCache:
                 conn.commit()
                 return None
             logger.debug(f"Sheet cache hit for {system}/{sheet}")
-            return json.loads(payload)
+            result: dict[str, Any] = json.loads(payload)
+            return result
         return None  # disabled by an SQLite error (_db_errors)
 
     def set_sheet(self, system: str, sheet: str, payload: dict[str, Any]) -> None:
@@ -748,7 +755,8 @@ class MetadataCache:
                 conn.execute("DELETE FROM index_area_cache WHERE key=?", (key,))
                 conn.commit()
                 return None
-            return json.loads(payload)
+            cached: object = json.loads(payload)
+            return cached
         return None  # disabled by an SQLite error (_db_errors)
 
     def set_index_area(self, key: str, payload: object) -> None:
@@ -772,7 +780,7 @@ class MetadataCache:
     def get_atom_entries(
         self, feed: str
     ) -> tuple[str | None, dict[str, Any], bool] | None:
-        """Stored index of a service feed: ``(etag, entries, fresh)``.
+        """Return the stored index of a service feed: ``(etag, entries, fresh)``.
 
         ``fresh`` = younger than the TTL. An older index is returned too: its
         ``ETag`` revalidates it with a conditional GET (``304`` keeps it).
@@ -958,7 +966,8 @@ class MetadataCache:
                     f"{sheet_deleted} Sheet, {area_deleted} Index area, "
                     f"{atom_deleted} ATOM feed)"
                 )
-            return total
+            deleted: int = total
+            return deleted
         return 0  # disabled by an SQLite error (_db_errors)
 
     def close(self) -> None:
@@ -973,7 +982,7 @@ class MetadataCache:
                 self._conn = None
                 logger.debug("MetadataCache closed")
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Ensure database connection is closed on garbage collection."""
         # No imports and no exceptions: at interpreter shutdown
         # sys.meta_path can be None (an import in __del__ raised ImportError).
@@ -985,6 +994,7 @@ class MetadataCache:
             pass
 
     def __repr__(self) -> str:
+        """Return the constructor-like text of the cache."""
         return (
             f"MetadataCache(db_path={self._db_path!r}, ttl_seconds={self._ttl_seconds})"
         )

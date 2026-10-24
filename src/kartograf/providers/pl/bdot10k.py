@@ -31,7 +31,7 @@ from typing import Any
 import requests
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.interrupt import check_stop
 from kartograf.providers.base import LandCoverProvider
@@ -118,7 +118,8 @@ BDOT10K_CLASSES = {
 
 
 def normalize_layers(layers: Sequence[str]) -> list[str]:
-    """Sorted unique BDOT10k layer codes in upper case (``ptwp`` = ``PTWP``);
+    """Return sorted unique BDOT10k layer codes in upper case (``ptwp`` = ``PTWP``).
+
     ``ValidationError`` (before any network) for a bad code.
 
     A code is 4 letters of a class of ``BDOT10K_CLASSES`` (``PTWP``, ``SWRS``);
@@ -278,8 +279,11 @@ class Bdot10kProvider(LandCoverProvider):
         return "https://www.geoportal.gov.pl/dane/bdot10k"
 
     def session(self) -> requests.Session:
-        """HTTP session of the current thread: the injected one (``session=``)
-        or one per thread (e.g. the BDOT10k archive of ``LandCoverManager``)."""
+        """Return the HTTP session of the current thread.
+
+        The injected one (``session=``) or one per thread (e.g. the BDOT10k archive of
+        ``LandCoverManager``).
+        """
         return self._sessions.get()
 
     # =========================================================================
@@ -373,8 +377,8 @@ class Bdot10kProvider(LandCoverProvider):
             # to GPKG, where `_extract_gpkg_from_zip` assigns .gpkg.
             output_path = output_path.with_suffix(".zip")
         url = self._construct_opendata_url(code, format)
-        headers: dict = {}
-        found: dict = {}
+        headers: dict[str, Any] = {}
+        found: dict[str, Any] = {}
 
         def capture(response: requests.Response) -> None:
             headers.clear()
@@ -462,8 +466,10 @@ class Bdot10kProvider(LandCoverProvider):
         return pattern.format(base=self.OPENDATA_BASE, woj=woj_code, teryt=teryt)
 
     def package_url(self, teryt: str, format: str = "GPKG") -> str:
-        """The OpenData URL of the package of powiat ``teryt`` (the file
-        ``download_package`` downloads; ``HEAD`` of it gives its size)."""
+        """Return the OpenData URL of the package of powiat ``teryt``.
+
+        The file ``download_package`` downloads; ``HEAD`` of it gives its size.
+        """
         return self._construct_opendata_url(teryt, format)
 
     # =========================================================================
@@ -477,7 +483,10 @@ class Bdot10kProvider(LandCoverProvider):
         )
 
     def _single_teryt(self, bbox: BBox, what: str, timeout: int = 30) -> str:
-        """The one powiat of an area (several: ValidationError, none: NoCoverage)."""
+        """Return the one powiat of an area.
+
+        Several: ValidationError, none: NoCoverage.
+        """
         teryts = self.teryts_for_area(bbox, timeout=timeout)
         if not teryts:
             raise NoCoverageError(f"{what}: obszar nie przecina zadnego powiatu (PRG)")
@@ -604,7 +613,7 @@ class Bdot10kProvider(LandCoverProvider):
         output_path: Path,
         layers: Sequence[str] | None = None,
         raw_path: Path | None = None,
-        report: dict | None = None,
+        report: dict[str, Any] | None = None,
     ) -> Path:
         """
         Extract and merge all layers from downloaded ZIP.
@@ -818,7 +827,7 @@ class Bdot10kProvider(LandCoverProvider):
             staged_path.unlink(missing_ok=True)
             raise
 
-    def _copy_gpkg_layer(self, cursor, source_path: Path) -> None:
+    def _copy_gpkg_layer(self, cursor: sqlite3.Cursor, source_path: Path) -> None:
         """
         Copy a layer from source GPKG to destination (via cursor).
 
@@ -901,7 +910,7 @@ class Bdot10kProvider(LandCoverProvider):
         finally:
             cursor.execute("DETACH DATABASE src")
 
-    def _copy_rtree_index(self, cursor, table_name: str) -> None:
+    def _copy_rtree_index(self, cursor: sqlite3.Cursor, table_name: str) -> None:
         """
         Copy rtree spatial index for a table from attached source database.
 

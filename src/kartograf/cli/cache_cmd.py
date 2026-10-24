@@ -21,7 +21,10 @@ from kartograf.cli._json import emit_document, wants_json
 
 
 def _print_stats(info: CacheInfo) -> None:
-    """The statistics of the cache; a database that does not exist yet has none."""
+    """Print the statistics of the cache.
+
+    A database that does not exist yet has none.
+    """
     entries = info.entries or CacheEntries(0, 0, 0, 0, 0, 0)
     print("Statystyki cache metadanych:")
     print(f"  Wpisy rekordow: {entries.records}")

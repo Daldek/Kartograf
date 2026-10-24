@@ -36,7 +36,7 @@ PinStatus = Literal[
 
 
 def _store_of(ctx: EncodeContext, what: str) -> Path:
-    """The store of the enclosing project document (a pin has no other)."""
+    """Return the store of the enclosing project document (a pin has no other)."""
     if ctx.store is None:
         raise ValueError(
             f"{what} is encoded only inside a project document "
@@ -69,6 +69,7 @@ class PinnedFile:
     size_bytes: int
 
     def __json__(self, ctx: EncodeContext) -> dict[str, object]:
+        """Encode the pin into its JSON form."""
         store = _store_of(ctx, "PinnedFile")
         return {
             "role": self.role,
@@ -83,9 +84,10 @@ class PinnedFile:
 
 @dataclass(frozen=True)
 class ProjectTask:
-    """One task: a data command (``command``, e.g. ``elevation download``)
-    with its ``options`` in the JSON form of the manifest (read-only
-    mapping) and its pinned files (empty before the first download).
+    """One task: a data command (``command``, e.g. ``elevation download``).
+
+    It has its ``options`` in the JSON form of the manifest (read-only mapping) and its
+    pinned files (empty before the first download).
 
     ``pinned_at``/``kartograf_version``: the last change of the pins (UTC,
     ISO 8601) and the Kartograf version that made it, ``None`` for a task
@@ -104,8 +106,10 @@ class ProjectTask:
 
 @dataclass(frozen=True)
 class Project(Document):
-    """A project read from its manifest: ``directory`` holds
-    ``kartograf-project.json``, ``output_dir`` is the store (both absolute).
+    """A project read from its manifest.
+
+    ``directory`` holds ``kartograf-project.json``, ``output_dir`` is the store (both
+    absolute).
 
     Document ``kartograf-project-state/1``; ``tasks[].options`` keep the form
     of the manifest (paths relative to ``directory``, ``bbox`` + ``bbox_crs``).
@@ -118,6 +122,7 @@ class Project(Document):
     tasks: tuple[ProjectTask, ...]
 
     def prepare_context(self, ctx: EncodeContext) -> None:
+        """Set the store of the encoding context."""
         ctx.store = self.output_dir
 
 
@@ -141,9 +146,10 @@ class TaskResult:
 
 @dataclass(frozen=True)
 class ProjectReport(Document):
-    """Outcome of ``download_project``: the manifest after the run, one
-    result per selected task, the data notices (prefixed with the task
-    name) and ``ok`` = no selected task failed.
+    """Outcome of ``download_project``.
+
+    It holds the manifest after the run, one result per selected task, the data notices
+    (prefixed with the task name) and ``ok`` = no selected task failed.
 
     Document ``kartograf-project-report/1``; ``project`` is nested (no
     ``schema`` key).
@@ -157,6 +163,7 @@ class ProjectReport(Document):
     ok: bool
 
     def prepare_context(self, ctx: EncodeContext) -> None:
+        """Set the store of the encoding context."""
         ctx.store = self.project.output_dir
 
 
@@ -182,6 +189,7 @@ class FileCheck:
     detail: str | None
 
     def __json__(self, ctx: EncodeContext) -> dict[str, object]:
+        """Encode the report into its JSON form."""
         return {
             "task": self.task,
             "unit": self.unit,
@@ -214,4 +222,5 @@ class ProjectCheck(Document):
     ok: bool
 
     def prepare_context(self, ctx: EncodeContext) -> None:
+        """Set the store of the encoding context."""
         ctx.store = self.project.output_dir

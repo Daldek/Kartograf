@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import BinaryIO
 
 from kartograf.core import parser_registry
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.bbox import BBox
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.campaigns import FULL_SHEET_DIR
 from kartograf.download.fetch import FileSlot
 from kartograf.download.versions import INCOMING_DIR, VERSIONS_DIR
@@ -144,9 +145,12 @@ class FileStorage:
     def _registered_source(
         product: str | None, resolution: str | None, format: str | None
     ) -> str | None:
-        """Descriptor key of the segment (ADR-026: a new source is a new
+        """Return the descriptor key of the segment.
+
+        Descriptor key of the segment (ADR-026: a new source is a new
         descriptor entry, no path code); ``None`` = the product name itself
-        is the segment (a product outside the registry)."""
+        is the segment (a product outside the registry).
+        """
         name = product or "nmt"
         sheet_variants = variants(product=name, country="PL")
         if sheet_variants and any(v.resolution_m is not None for v in sheet_variants):
@@ -214,7 +218,9 @@ class FileStorage:
         return subdir
 
     def _resolved_subdir(self, identifier: str, system: str | None = None) -> str:
-        """Segment for the identifier: {system} given explicitly or from the
+        """Return the segment for the identifier.
+
+        Segment for the identifier: {system} given explicitly or from the
         sheet system.
 
         Same rule as ``parser_registry.path_parts`` when ``system`` is not
@@ -286,8 +292,11 @@ class FileStorage:
         return self._output_dir / self._resolved_subdir(normalized) / VERSIONS_DIR
 
     def get_versions_root(self, sheet: str) -> Path:
-        """``<output>/<segment>/versions/<hierarchy>/`` — every version of the
-        sheet's files lives in ``<label>_<sha8>/`` directories here (D17)."""
+        """Return the versions root of a sheet.
+
+        ``<output>/<segment>/versions/<hierarchy>/`` — every version of the
+        sheet's files lives in ``<label>_<sha8>/`` directories here (D17).
+        """
         normalized = SheetParser(sheet).sheet
         path = self.get_versions_base(normalized)
         for part in self._get_directory_parts(normalized):
@@ -295,14 +304,19 @@ class FileStorage:
         return path
 
     def has_legacy_campaigns(self) -> bool:
-        """Whether the segment holds a 0.7.x ``kampanie/`` directory (unused
-        since the versioned store; files are downloaded again)."""
+        """Check whether the segment holds a 0.7.x ``kampanie/`` directory.
+
+        Whether the segment holds a 0.7.x ``kampanie/`` directory (unused
+        since the versioned store; files are downloaded again).
+        """
         return any(
             (root / _LEGACY_CAMPAIGNS_DIR).is_dir() for root in self._segment_roots()
         )
 
     def get_full_sheet_path(self, sheet: str, ext: str) -> Path:
         """
+        Return the path of the link to the newest declared-full flight.
+
         Path of the second link to the newest declared-full flight (ADR-033):
         ``<output>/<segment>/full_sheet/<hierarchy>/<sheet><ext>`` — the same
         hierarchy as :meth:`get_path`.
@@ -373,9 +387,12 @@ class FileStorage:
     def get_raw_versions_base(
         self, identifier: str, *, system: str | None = None
     ) -> Path:
-        """``<output>/<segment>/versions`` for an opaque identifier (LAZ tile,
+        """Return the versions root for an opaque identifier.
+
+        ``<output>/<segment>/versions`` for an opaque identifier (LAZ tile,
         CZ sheet) — the segment of :meth:`get_raw_path`, with the staging
-        directory ``.incoming/`` (D19)."""
+        directory ``.incoming/`` (D19).
+        """
         if system is not None and system not in ("1992", "2000"):
             raise ValidationError(
                 f"Nieznany uklad '{system}' (oczekiwano '1992' albo '2000')"
@@ -386,8 +403,11 @@ class FileStorage:
     def get_raw_versions_root(
         self, identifier: str, *, system: str | None = None
     ) -> Path:
-        """``<output>/<segment>/versions/<hierarchy>/`` for an opaque identifier
-        — the versions of the files at :meth:`get_raw_path` (D17)."""
+        """Return the versions directory for an opaque identifier.
+
+        ``<output>/<segment>/versions/<hierarchy>/`` for an opaque identifier
+        — the versions of the files at :meth:`get_raw_path` (D17).
+        """
         path = self.get_raw_versions_base(identifier, system=system)
         for part in self._get_directory_parts(identifier):
             path = path / part
@@ -655,12 +675,14 @@ def prune_empty_dirs(start: Path, stop: Path) -> None:
 
 def storage_for_provider(
     output_dir: str | Path,
-    provider,
+    provider: object,
     *,
     resolution: str | None,
     vertical_crs: str | None,
 ) -> FileStorage:
     """
+    Build the ``FileStorage`` of the segment where the provider's files land.
+
     ``FileStorage`` of the segment where the provider's files land — the
     single place it is built (D18: CLI, ``DownloadManager``, PL cutout, CZ
     flow).
@@ -766,7 +788,9 @@ def token_segment(prefix: str, tokens: Sequence[str]) -> str:
 
 
 def content_segment(descriptor_key: str, tokens: Sequence[str]) -> str:
-    """Segment of a source whose ``storage_subdir`` is a prefix completed by
+    """Return the segment of a source with a content-token prefix.
+
+    Segment of a source whose ``storage_subdir`` is a prefix completed by
     content tokens (land cover, collections: layers, format, year, level).
 
     ``content_segment("pl.gugik.bdot10k", ("shp", "2024"))`` =
@@ -795,7 +819,9 @@ def unit_slot(
     mapnom: str | None = None,
     related_roots: Sequence[Path] = (),
 ) -> FileSlot:
-    """Version slot of one file of a unit (exactly one selection, ADR-042 D8,
+    """Return the version slot of one file of a unit.
+
+    Version slot of one file of a unit (exactly one selection, ADR-042 D8,
     ADR-043).
 
     ``teryt`` -> ``<segment>/teryt/<TERYT><ext>``; ``bbox`` ->

@@ -72,8 +72,11 @@ _PRODUCT_TEXT = {
 
 
 def product_choices(products: Iterable[str] = tuple(_PRODUCT_TEXT)) -> str:
-    """``nmt (...), nmpt (...)``: products named in messages and --help texts
-    (a CLI group names only its own products, ADR-039)."""
+    """Return the products named in messages and ``--help`` texts.
+
+    ``nmt (...), nmpt (...)``: products named in messages and --help texts
+    (a CLI group names only its own products, ADR-039).
+    """
     return ", ".join(f"{product} ({_PRODUCT_TEXT[product]})" for product in products)
 
 
@@ -109,8 +112,11 @@ def require_product(product: str | None, products: Sequence[str]) -> None:
 
 
 def product_directory(product: str) -> str:
-    """Top directory of the files of a ``download_data`` product in the store
-    (``nmt``, ``orto``): the first element of its sources' storage segments."""
+    """Return the top directory of the files of a product in the store.
+
+    Top directory of the files of a ``download_data`` product in the store
+    (``nmt``, ``orto``): the first element of its sources' storage segments.
+    """
     tops = dict.fromkeys(
         source.storage_subdir.split("/", 1)[0]
         for source in sources_for(product=product)
@@ -127,8 +133,11 @@ _COUNTRY_TEXT = {
 
 
 def country_choices(codes: Iterable[str] = tuple(_COUNTRY_TEXT)) -> str:
-    """``pl (GUGiK), cz (CUZK), auto (...)``: the ``--country`` values of a
-    command (a CLI group names only the countries of its products)."""
+    """Return the ``--country`` values of a command as text.
+
+    ``pl (GUGiK), cz (CUZK), auto (...)``: the ``--country`` values of a
+    command (a CLI group names only the countries of its products).
+    """
     return ", ".join(_COUNTRY_TEXT[code] for code in codes)
 
 
@@ -148,8 +157,11 @@ def _image_index(product: object) -> SheetIndexParams | None:
 
 
 def image_cutout_key(product: object) -> str | None:
-    """Descriptor key of the WCS cutout of an image product (``orto``,
-    ``true-orto``); ``None`` for a product without one."""
+    """Return the descriptor key of the WCS cutout of an image product.
+
+    Descriptor key of the WCS cutout of an image product (``orto``,
+    ``true-orto``); ``None`` for a product without one.
+    """
     source = image_source(product)
     if source is None or not wcs_cutout_channels(source.key):
         return None
@@ -157,22 +169,28 @@ def image_cutout_key(product: object) -> str | None:
 
 
 def cutout_products() -> tuple[str, ...]:
-    """Products with a PL cutout (``--cutout``): the grids and the images with
-    a WCS cutout channel, registry order."""
+    """Return the products with a PL cutout (``--cutout``).
+
+    Products with a PL cutout (``--cutout``): the grids and the images with
+    a WCS cutout channel, registry order.
+    """
     images = (p for p in IMAGERY_PRODUCTS if image_cutout_key(p) is not None)
     return (*_SHEET_PRODUCTS, *images)
 
 
 def _or_list(values: Sequence[str]) -> str:
-    """``a, b albo c``."""
+    """Join the values as ``a, b albo c``."""
     return (
         f"{', '.join(values[:-1])} albo {values[-1]}" if len(values) > 1 else values[0]
     )
 
 
 def resolution_text(country: str = "PL") -> str:
-    """Grid resolutions (``--resolution``) of every sheet product, from the
-    variant registry: ``NMT (EVRF2007: 0.15m, ...; KRON86: 0.5m, 1m), NMPT (...)``."""
+    """Return the grid resolutions of every sheet product as text.
+
+    Grid resolutions (``--resolution``) of every sheet product, from the
+    variant registry: ``NMT (EVRF2007: 0.15m, ...; KRON86: 0.5m, 1m), NMPT (...)``.
+    """
     parts = []
     for product in _SHEET_PRODUCTS:
         grids = tuple(
@@ -186,8 +204,11 @@ def resolution_text(country: str = "PL") -> str:
 def vertical_crs_values(
     country: str = "PL", product: str | None = None
 ) -> tuple[str, ...]:
-    """Height systems of the variants of a country (``--vertical-crs`` values),
-    sorted; a variant without one takes no flag."""
+    """Return the height systems of the variants of a country.
+
+    Height systems of the variants of a country (``--vertical-crs`` values),
+    sorted; a variant without one takes no flag.
+    """
     return tuple(
         sorted(
             {
@@ -200,8 +221,11 @@ def vertical_crs_values(
 
 
 def vertical_crs_text(country: str = "PL") -> str:
-    """Height systems of the country's variants (``--vertical-crs``; a
-    variant without one takes no flag)."""
+    """Return the height systems of the country's variants as help text.
+
+    Height systems of the country's variants (``--vertical-crs``; a
+    variant without one takes no flag).
+    """
     return ", ".join(
         f"{name} ({_VERTICAL_CRS_TEXT[name]})" if name in _VERTICAL_CRS_TEXT else name
         for name in vertical_crs_values(country)
@@ -221,8 +245,11 @@ def format_text(country: str = "PL") -> str:
 
 
 def cz_resolution_help() -> str:
-    """CZ grid labels per product with their CUZK model and the labels of the
-    SM5 sheets (variant registry): ``NMT: 2m (DMR 5G), 5m (DMR 4G); ...``."""
+    """Return the CZ grid labels per product as help text.
+
+    CZ grid labels per product with their CUZK model and the labels of the
+    SM5 sheets (variant registry): ``NMT: 2m (DMR 5G), 5m (DMR 4G); ...``.
+    """
     parts = []
     sm5 = []
     for product in _SHEET_PRODUCTS:
@@ -323,10 +350,13 @@ def _format_of(task: SimpleNamespace) -> str | None:
 
 
 def pl_file_variant(task: SimpleNamespace) -> ProductVariant | None:
-    """The PL variant of the request published as voivodeship files of an
+    """Select the PL variant published as voivodeship files.
+
+    The PL variant of the request published as voivodeship files of an
     ATOM feed (no sheet index: NMT 100 m, plan E1), ``None`` for the sheet
     variants. Chosen by the product, the PL resolution and the format
-    (``None`` or the variant's own); nothing is validated here."""
+    (``None`` or the variant's own); nothing is validated here.
+    """
     resolution = country_value(task.resolution, "PL")
     if task.product not in _SHEET_PRODUCTS or not isinstance(resolution, str):
         return None
@@ -372,7 +402,7 @@ def _with_suffix(error: ValidationError, suffix: str) -> ValidationError:
 def _file_variant_error(
     task: SimpleNamespace, variant: ProductVariant
 ) -> ValidationError | None:
-    """The error of the choices a voivodeship file variant does not take."""
+    """Return the error of the choices a voivodeship file variant does not take."""
     label = variant.label or ""
     shown = f"{variant.product.upper()} {label.removesuffix('m')} m"
     reason = f"{shown} to pliki wojewodztw z ATOM - bez arkuszy, lotow i wycinka"
@@ -408,7 +438,7 @@ def pl_option_error(
     code_scale: str | None = None,
     countries: tuple[str, ...] = ("PL",),
 ) -> ValidationError | None:
-    """The error of the PL data choices of the request (``None`` = valid).
+    """Return the error of the PL data choices of the request (``None`` = valid).
 
     ``code_system``/``code_scale`` describe a sheet request (sheet system and
     scale of the code); ``None`` = area request (bbox/geometry). NMT/NMPT
@@ -618,7 +648,9 @@ def cz_option_error(
     system: str | None = None,
     countries: tuple[str, ...] = ("CZ",),
 ) -> ValidationError | None:
-    """The error of the CZ data choices (``None`` = valid), from the variant
+    """Return the error of the CZ data choices.
+
+    The error of the CZ data choices (``None`` = valid), from the variant
     registry (``cz_variant_error``).
 
     ``system``: ``"sm5"``/``"tm33"`` of a sheet code, ``None`` = an area (a
@@ -690,10 +722,13 @@ def cz_option_error(
 
 
 def _contours_error(task: SimpleNamespace) -> ValidationError | None:
-    """The error of a CZ contours request (``None`` = valid): vector SM5
+    """Return the error of a CZ contours request.
+
+    The error of a CZ contours request (``None`` = valid): vector SM5
     sheets take ``--format`` (required, values of the registry) and the
     height system of their files (one value: may be omitted); no grid,
-    flight, cutout or view choice."""
+    flight, cutout or view choice.
+    """
     if task.product != CONTOURS:
         return None
     reason = "warstwice to arkusze SM5 (wektor) - bez rozdzielczosci, lotow i wycinka"
@@ -739,7 +774,7 @@ def _contours_error(task: SimpleNamespace) -> ValidationError | None:
 def cz_orto_option_error(
     task: SimpleNamespace, *, countries: tuple[str, ...] = ("CZ",)
 ) -> ValidationError | None:
-    """The error of the CZ orthophoto choices (``None`` = valid; ADR-042 D13).
+    """Return the error of the CZ orthophoto choices (``None`` = valid; ADR-042 D13).
 
     CUZK publishes only the current release of an SM5 sheet (archival
     orthophotos are paid - out of scope) as a JPEG with world files: no
@@ -802,8 +837,11 @@ def cz_orto_option_error(
 
 
 def require_cz_cutout(task: SimpleNamespace, countries: tuple[str, ...]) -> None:
-    """CZ raster areas require cutout; CZ LAZ and orthophoto areas use the
-    indexed sheets."""
+    """Require a cutout for CZ raster areas.
+
+    CZ raster areas require cutout; CZ LAZ and orthophoto areas use the
+    indexed sheets.
+    """
     if (
         task.product in ("laz", "orto", CONTOURS)
         or task.sheet is not None
@@ -835,8 +873,11 @@ _CRS_CODE = re.compile(r"[A-Za-z]+:[0-9A-Za-z]+")
 
 
 def _spelling[T](value: T, known: Mapping[str, str]) -> T:
-    """``value`` as ``known[value.lower()]`` (``known``: lower case -> registry
-    spelling); a value of another type or not known unchanged."""
+    """Return ``value`` in the registry spelling.
+
+    ``value`` as ``known[value.lower()]`` (``known``: lower case -> registry
+    spelling); a value of another type or not known unchanged.
+    """
     if not isinstance(value, str):
         return value
     return cast(T, known.get(value.strip().lower(), value))
@@ -849,8 +890,11 @@ def canonical_country[T](value: T) -> T:
 
 @functools.cache
 def _formats() -> dict[str, str]:
-    """Lower case -> registry spelling of every file format a source offers
-    (variants of the sheet products, package variants and channel choices)."""
+    """Map lower case to the registry spelling of every source file format.
+
+    Lower case -> registry spelling of every file format a source offers
+    (variants of the sheet products, package variants and channel choices).
+    """
     found: dict[str, str] = {}
     for source in all_sources():
         for variant in source.variants:
@@ -872,8 +916,11 @@ def canonical_format[T](value: T) -> T:
 
 
 def canonical_crs[T](value: T) -> T:
-    """``epsg:2180`` -> ``EPSG:2180``: a CRS code with an upper case authority
-    (``--bbox-crs``, ``--horizontal-crs``); not a CRS code: unchanged."""
+    """Return a CRS code with an upper case authority.
+
+    ``epsg:2180`` -> ``EPSG:2180``: a CRS code with an upper case authority
+    (``--bbox-crs``, ``--horizontal-crs``); not a CRS code: unchanged.
+    """
     if isinstance(value, str) and _CRS_CODE.fullmatch(value.strip()):
         return cast(T, value.strip().upper())
     return value
@@ -887,8 +934,11 @@ def _vertical_names() -> dict[str, str]:
 
 
 def canonical_vertical_crs[T](value: T) -> T:
-    """``evrf2007`` -> ``EVRF2007``, ``BPV`` -> ``Bpv``: a height system (plain
-    or per country) in the spelling of the variant registry."""
+    """Return a height system in the spelling of the variant registry.
+
+    ``evrf2007`` -> ``EVRF2007``, ``BPV`` -> ``Bpv``: a height system (plain
+    or per country) in the spelling of the variant registry.
+    """
     if isinstance(value, Mapping):
         names = _vertical_names()
         return cast(T, {key: _spelling(name, names) for key, name in value.items()})
@@ -896,15 +946,20 @@ def canonical_vertical_crs[T](value: T) -> T:
 
 
 def canonical_bbox[T](bbox: T) -> T:
-    """A ``BBox`` with its CRS code in the upper case spelling
-    (``epsg:5514`` = ``EPSG:5514``); any other value unchanged."""
+    """Return a ``BBox`` with its CRS code in the upper case spelling.
+
+    A ``BBox`` with its CRS code in the upper case spelling
+    (``epsg:5514`` = ``EPSG:5514``); any other value unchanged.
+    """
     if isinstance(bbox, BBox):
         return cast(T, bbox._replace(crs=canonical_crs(bbox.crs)))
     return bbox
 
 
 def validate_request_bbox(bbox: BBox) -> BBox:
-    """Validate parsed bbox coordinates with the same text for CLI and API;
+    """Validate parsed bbox coordinates and return the normalized bbox.
+
+    Validate parsed bbox coordinates with the same text for CLI and API;
     returns the bbox with its CRS code in the registry spelling
     (``epsg:2180`` = ``EPSG:2180``) - callers go on with it.
 
@@ -959,8 +1014,11 @@ def validate_request_bbox(bbox: BBox) -> BBox:
 
 
 def geometry_area_error(envelope: BBox, what: str) -> ValidationError:
-    """The refusal of a ``--geometry`` without an area (``option="geometry"``):
-    ``what`` is the track that needs one (``wycinek (--cutout)``)."""
+    """Build the refusal of a ``--geometry`` without an area.
+
+    The refusal of a ``--geometry`` without an area (``option="geometry"``):
+    ``what`` is the track that needs one (``wycinek (--cutout)``).
+    """
     coords = tuple(
         float(value)
         for value in (envelope.min_x, envelope.min_y, envelope.max_x, envelope.max_y)
@@ -974,7 +1032,9 @@ def geometry_area_error(envelope: BBox, what: str) -> ValidationError:
 
 
 def require_geometry_area(envelope: BBox, what: str) -> None:
-    """The envelope of a ``--geometry`` has an area, for the tracks that cut,
+    """Require that the envelope of a ``--geometry`` has an area.
+
+    The envelope of a ``--geometry`` has an area, for the tracks that cut,
     select tiles of or measure the AREA (``what``: a cutout, LAZ tiles, HSG,
     the availability report). The tracks that pick the sheets, units or pixels
     a point lies in do not call it - a point is a valid ``--geometry`` there
@@ -995,9 +1055,12 @@ def validate_area_choice(
     geometry: object | None,
     layer: object | None = None,
 ) -> None:
-    """Exactly one area choice, a valid bbox and ``layer`` only with
+    """Check the area choice of a request without network access.
+
+    Exactly one area choice, a valid bbox and ``layer`` only with
     ``geometry`` (texts shared by every command taking
-    ``--sheet/--bbox/--geometry``; no network)."""
+    ``--sheet/--bbox/--geometry``; no network).
+    """
     # the CLI parses --bbox before anything else: the same first error
     if bbox is not None:
         validate_request_bbox(bbox)
@@ -1020,7 +1083,9 @@ def validate_area_choice(
 
 
 def check_layer(layer: object, geometry: object, *, landcover: bool = False) -> None:
-    """``layer`` names a layer of the ``geometry`` file; without a geometry
+    """Check that ``layer`` is used only together with ``geometry``.
+
+    ``layer`` names a layer of the ``geometry`` file; without a geometry
     file it would be ignored. ``landcover``: the message points to
     ``--layers`` (the data layers of BDOT10k and BDOO).
 
@@ -1053,24 +1118,33 @@ def parse_sheet(sheet: str) -> SheetParser:
 
 
 def store_files(directories: Iterable[str]) -> str:
-    """``pliki w <KATALOG>/nmt|nmpt/...``: where a store command writes, by the
+    """Return the text naming where a store command writes.
+
+    ``pliki w <KATALOG>/nmt|nmpt/...``: where a store command writes, by the
     top directories of its files (``nmt``, ``boundaries``; ``a|b`` values are
-    split) - one text for the ``--output`` help and its missing-value error."""
+    split) - one text for the ``--output`` help and its missing-value error.
+    """
     tops = dict.fromkeys(top for found in directories for top in found.split("|"))
     return f"pliki w <KATALOG>/{'|'.join(tops)}/..."
 
 
 def output_required(directory: str) -> str:
-    """Error text of a request without ``output_dir`` (every store command):
-    ``directory`` = the top directory of its files (``nmt``, ``boundaries``)."""
+    """Return the error text of a request without ``output_dir``.
+
+    Error text of a request without ``output_dir`` (every store command):
+    ``directory`` = the top directory of its files (``nmt``, ``boundaries``).
+    """
     return f"--output wymagane: katalog magazynu ({store_files([directory])})"
 
 
 def year_bounds(
     year: int | None, min_year: int | None, max_year: int | None
 ) -> tuple[int | None, int | None]:
-    """``(min_year, max_year)`` of the year flags (``year`` = both bounds);
-    ``ValidationError`` naming the flags for a contradictory choice."""
+    """Return the year bounds ``(min_year, max_year)`` of the year flags.
+
+    ``(min_year, max_year)`` of the year flags (``year`` = both bounds);
+    ``ValidationError`` naming the flags for a contradictory choice.
+    """
     if year is not None and (min_year is not None or max_year is not None):
         raise ValidationError(
             "--year wyklucza sie z --min-year/--max-year "
@@ -1102,7 +1176,7 @@ def year_bounds(
 
 
 def validate_request(task: SimpleNamespace) -> None:
-    """Checks of the whole request before anything else (no network).
+    """Check the whole request before anything else (no network).
 
     Exactly one selection, explicit product/output, country for areas,
     per-country syntax, year bounds (``year`` = ``min_year = max_year``),
@@ -1299,9 +1373,12 @@ def validate_request(task: SimpleNamespace) -> None:
 
 
 def _direction_error(task: SimpleNamespace) -> ValidationError | None:
-    """The error of ``direction`` (``None`` = valid); a valid choice is
+    """Return the error of ``direction``.
+
+    The error of ``direction`` (``None`` = valid); a valid choice is
     narrowed to the tuple of its codes in registry order (``None`` stays:
-    every direction of the product)."""
+    every direction of the product).
+    """
     direction = task.direction
     if direction is None:
         return None
@@ -1339,8 +1416,11 @@ def _direction_error(task: SimpleNamespace) -> ValidationError | None:
 
 
 def campaign_option_names(task: SimpleNamespace) -> tuple[str, ...]:
-    """The PL-only campaign/year choices of the request, by argument name
-    (``year`` was narrowed into both bounds: it counts once)."""
+    """Return the PL-only campaign/year choices of the request.
+
+    The PL-only campaign/year choices of the request, by argument name
+    (``year`` was narrowed into both bounds: it counts once).
+    """
     return tuple(
         name
         for name, given in (
@@ -1355,7 +1435,7 @@ def campaign_option_names(task: SimpleNamespace) -> tuple[str, ...]:
 
 
 def reject_campaign_opts_with_cutout(task: SimpleNamespace) -> None:
-    """A PL cutout (WCS, ADR-035) has no year or campaign choice."""
+    """Check that a PL cutout (WCS, ADR-035) has no year or campaign choice."""
     if not task.cutout:
         return
     flag = next(
@@ -1441,16 +1521,20 @@ def resolve_pl_options(
 
 
 def is_source_file_request(task: SimpleNamespace) -> bool:
-    """An archive format (``--format`` other than ASC): sheets from the index."""
+    """Return True for an archive format request (``--format`` other than ASC)."""
     fmt = _format_of(task)
     return fmt is not None and fmt != "ASC"
 
 
 def pl_target_scale(task: SimpleNamespace) -> str:
-    """Sheet scale of a PL area request: PL-2000 ``scale``, PL-1992 the level
+    """Return the sheet scale of a PL area request.
+
+    Sheet scale of a PL area request: PL-2000 ``scale``, PL-1992 the level
     of the product (``1:10000``; the 8-part ``1:5000`` codes of the true
-    orthophotomap, ``series_scale``)."""
+    orthophotomap, ``series_scale``).
+    """
     if task.sheet_system == "2000":
-        return task.scale
+        scale: str = task.scale
+        return scale
     index = _image_index(task.product)
     return series_scale(index.sheet_parts if index is not None else 7)

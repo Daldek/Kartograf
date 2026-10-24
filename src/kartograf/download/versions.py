@@ -99,7 +99,7 @@ class LocalVersion:
     label: str
     label_source: str
     sha256: str
-    meta: dict
+    meta: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -194,7 +194,7 @@ def _warn_once(directory: Path, message: str) -> None:
 
 
 def read_version(directory: Path, name: str) -> LocalVersion | None:
-    """The version ``directory/name`` when valid (see ``list_versions``)."""
+    """Return the version ``directory/name`` when valid (see ``list_versions``)."""
     match = _VERSION_DIR.fullmatch(directory.name)
     data = directory / name
     if match is None or not data.is_file():
@@ -218,7 +218,7 @@ def read_version(directory: Path, name: str) -> LocalVersion | None:
 
 
 def list_versions(versions_root: Path, name: str) -> list[LocalVersion]:
-    """Valid versions of ``name`` in one hierarchy directory, by directory name.
+    """List valid versions of ``name`` in one hierarchy directory, by directory name.
 
     A directory is a version only with both the data file and a readable
     version sidecar whose sha256 matches the ``_<sha8>`` suffix; otherwise
@@ -263,7 +263,7 @@ def version_key(v: LocalVersion) -> tuple[str, str, str]:
 
 
 def newest_version(versions: Iterable[LocalVersion]) -> LocalVersion | None:
-    """The newest version by ``version_key``; ``None`` for no versions.
+    """Return the newest version by ``version_key``; ``None`` for no versions.
 
     Equal keys (new content of the same campaign) — the later download wins.
     """
@@ -341,14 +341,16 @@ def _fsync(path: Path) -> None:
         os.close(fd)
 
 
-def http_signal_of(v: LocalVersion) -> dict | None:
+def http_signal_of(v: LocalVersion) -> dict[str, Any] | None:
     """``extra.http`` of a version sidecar (``etag``, ``last_modified``, ...)."""
     extra = v.meta.get("extra")
     http = extra.get("http") if isinstance(extra, dict) else None
     return http if isinstance(http, dict) else None
 
 
-def same_http_signal(local: dict | None, remote: dict | None) -> bool | None:
+def same_http_signal(
+    local: dict[str, Any] | None, remote: dict[str, Any] | None
+) -> bool | None:
     """Compare HTTP signals (plan 2/3 decision 2); ``None`` = not comparable.
 
     Both with ``etag``: equal ETags. Local without ``etag``: equal
@@ -376,7 +378,7 @@ def commit_version(
     digest: ContentDigest,
     write_sidecar: Callable[[Path, VersionRef, ContentDigest], None],
     *,
-    signal: dict | None = None,
+    signal: dict[str, Any] | None = None,
     related_roots: Iterable[Path] = (),
 ) -> VersionCommit:
     """Publish a staged file as a version of ``name`` (spec 3.1).

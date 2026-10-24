@@ -39,10 +39,11 @@ import tempfile
 import threading
 import zipfile
 import zlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -75,14 +76,17 @@ _KIND_TEXT: dict[FileKind, str] = {
 
 @dataclass(frozen=True)
 class PackageFile:
-    """A downloaded package: ``path`` = the stored file (the ZIP itself, the
-    unpacked member or the ZIP of the chosen classes), ``http`` =
-    ``response_signal`` of the download, ``size`` = bytes of the downloaded
-    ZIP, ``member`` = the unpacked member name, ``classes`` = the chosen
-    classes found in the package (``()``: no class choice)."""
+    """A downloaded package.
+
+    A downloaded package: ``path`` = the stored file (the ZIP itself, the unpacked
+    member or the ZIP of the chosen classes), ``http`` = ``response_signal`` of the
+    download, ``size`` = bytes of the downloaded ZIP, ``member`` = the unpacked member
+    name, ``classes`` = the chosen classes found in the package (``()``: no class
+    choice).
+    """
 
     path: Path
-    http: dict
+    http: dict[str, Any]
     size: int
     member: str | None = None
     classes: tuple[str, ...] = ()
@@ -106,7 +110,7 @@ def _values(variants: list[PackageVariant], key: str) -> list[str]:
 def select_variant(
     params: UnitPackageParams, *, subject: str = "tego produktu", **choice: str | None
 ) -> PackageVariant:
-    """The published variant of a choice (``None`` values = not chosen).
+    """Return the published variant of a choice (``None`` values = not chosen).
 
     Every key must belong to the channel; a chosen value must be published
     (together with the other chosen values); when several variants remain,
@@ -169,8 +173,10 @@ def package_url(
     ku: str | None = None,
     theme: str | None = None,
 ) -> str:
-    """URL of the variant's file for a unit: the template tokens ``{teryt}``,
-    ``{woj}`` (its first two digits), ``{sheet}``, ``{ku}`` and ``{theme}``.
+    """Return the URL of the variant's file for a unit.
+
+    URL of the variant's file for a unit: the template tokens ``{teryt}``, ``{woj}``
+    (its first two digits), ``{sheet}``, ``{ku}`` and ``{theme}``.
 
     Raises
     ------
@@ -198,9 +204,11 @@ def package_url(
 
 
 def index_url(variant: PackageVariant, urls: Mapping[str, str], *, unit: str) -> str:
-    """URL of the variant in the index record of ``unit`` (``url_template``
-    ``None``): the only link of a record with one URL (key ``""``), else the
-    link of the variant's ``format`` choice.
+    """Return the URL of the variant in the index record of ``unit``.
+
+    URL of the variant in the index record of ``unit`` (``url_template`` ``None``): the
+    only link of a record with one URL (key ``""``), else the link of the variant's
+    ``format`` choice.
 
     Raises
     ------
@@ -219,7 +227,9 @@ def index_url(variant: PackageVariant, urls: Mapping[str, str], *, unit: str) ->
     return urls[file_format]
 
 
-def reject_documents(url: str, kind: FileKind = "zip"):
+def reject_documents(
+    url: str, kind: FileKind = "zip"
+) -> Callable[[requests.Response], None]:
     """``download_to`` validator: an HTML/XML document instead of the file."""
 
     def validate(response: requests.Response) -> None:
@@ -243,9 +253,10 @@ def fetch_package(
     timeout: float,
     classes: Sequence[str] = (),
 ) -> PackageFile:
-    """Download the file ``url`` into ``staged`` (the ZIP, its member, the
-    ZIP of the members of ``classes`` or the file of another
-    ``variant.file_kind``).
+    """Download the file ``url`` into ``staged``.
+
+    Download the file ``url`` into ``staged`` (the ZIP, its member, the ZIP of the
+    members of ``classes`` or the file of another ``variant.file_kind``).
 
     ``classes``: class codes of ``variant.classes`` (``layers``) - the
     stored file holds only their members (module docstring).
@@ -267,7 +278,7 @@ def fetch_package(
     unpack = params.unpack if kind == "zip" else None
     rewrite = unpack is not None or bool(classes)
     archive_path = staged.with_name(f"{staged.name}.zip") if rewrite else staged
-    signal: dict = {}
+    signal: dict[str, Any] = {}
     try:
         download_to(
             session,
@@ -310,7 +321,7 @@ def fetch_package(
 
 
 def _check_content(url: str, path: Path, kind: FileKind) -> None:
-    """A file that is not a ZIP checked by its first bytes (module docstring)."""
+    """Reject a file that is not a ZIP, checked by its first bytes."""
     try:
         with open(path, "rb") as stream:
             head = stream.read(_HEAD_BYTES)
@@ -330,9 +341,12 @@ def _check_content(url: str, path: Path, kind: FileKind) -> None:
 
 
 def _is_text(head: bytes) -> bool:
-    """Text without NUL bytes (any 8-bit encoding) whose first non-empty line
-    is not markup: an HTML or XML document is never the published text file,
-    and binary files (ZIP, TIFF, PDF streams) carry NUL bytes in their head."""
+    """Check whether a head of bytes is text without markup.
+
+    Text without NUL bytes (any 8-bit encoding) whose first non-empty line is not
+    markup: an HTML or XML document is never the published text file, and binary files
+    (ZIP, TIFF, PDF streams) carry NUL bytes in their head.
+    """
     if not head or b"\x00" in head:
         return False
     text = head.decode("latin-1").lstrip("\ufeff\xef\xbb\xbf")
@@ -348,9 +362,11 @@ def _check_archive(
     variant: PackageVariant,
     classes: tuple[str, ...],
 ) -> tuple[str | None, tuple[str, ...]]:
-    """Central directory, required members, class members and the optional
-    unpacked member or ZIP of ``classes``: the unpacked member name and the
-    classes kept."""
+    """Check the central directory and the required, class and unpacked members.
+
+    Central directory, required members, class members and the optional unpacked member
+    or ZIP of ``classes``: the unpacked member name and the classes kept.
+    """
     try:
         with zipfile.ZipFile(archive_path) as archive:
             files = [info for info in archive.infolist() if not info.is_dir()]
@@ -402,8 +418,11 @@ def _class_members(
     classes: tuple[str, ...],
     staged: Path,
 ) -> tuple[str, ...]:
-    """The class members of a package (``class_pattern``); with ``classes``
-    the ZIP of their members written to ``staged`` and the classes found."""
+    """Return the class members of a package (``class_pattern``).
+
+    The class members of a package (``class_pattern``); with ``classes`` the ZIP of
+    their members written to ``staged`` and the classes found.
+    """
     regex = re.compile(pattern)
     found: list[tuple[zipfile.ZipInfo, str]] = []
     for info in files:
@@ -431,10 +450,12 @@ def _class_members(
 def _write_members(
     archive: zipfile.ZipFile, members: list[zipfile.ZipInfo], target: Path
 ) -> None:
-    """A new ZIP of ``members`` at ``target`` (atomically): each streamed
-    byte for byte (``zipfile`` checks its CRC) with its name, date, attributes
-    and compression method, in the given order - the same members give the
-    same bytes."""
+    """Write a new ZIP of ``members`` at ``target`` atomically.
+
+    A new ZIP of ``members`` at ``target`` (atomically): each streamed byte for byte
+    (``zipfile`` checks its CRC) with its name, date, attributes and compression method,
+    in the given order - the same members give the same bytes.
+    """
     tmp = target.with_name(f"{target.name}.{os.getpid()}_{threading.get_ident()}.tmp")
     try:
         with zipfile.ZipFile(tmp, "w") as result:
@@ -471,8 +492,11 @@ def _unpack_checked_layers(
     staged: Path,
     params: UnitPackageParams,
 ) -> None:
-    """The GeoPackage member unpacked and checked in a local working directory
-    (module docstring), then moved to ``staged``."""
+    """Unpack and check the GeoPackage member in a local working directory.
+
+    The GeoPackage member unpacked and checked in a local working directory (module
+    docstring), then moved to ``staged``.
+    """
     work = Path(tempfile.mkdtemp(prefix="kartograf-unpack-"))
     try:
         local = work / staged.name

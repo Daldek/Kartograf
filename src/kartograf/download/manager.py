@@ -97,7 +97,7 @@ _DEFAULT_SHEET_SCALE = "1:10000"
 
 
 def _coarser(parser: SheetParser, scale: str) -> bool:
-    """A PL-1992 code coarser than the sheet level ``scale`` (expanded to it)."""
+    """Check whether a PL-1992 code is coarser than the sheet level ``scale``."""
     hierarchy = SheetParser.SCALE_HIERARCHY
     return parser.sheet_system != "2000" and hierarchy.index(
         parser.scale
@@ -360,8 +360,11 @@ class _Pick:
 
 
 def _campaign_list(picks: list[_Pick]) -> str:
-    """``<label> lokalna, <label> do pobrania, ...`` of a sheet's flights
-    (message of the ``campaigns`` progress event)."""
+    """Format the flights of a sheet for the ``campaigns`` progress event.
+
+    ``<label> lokalna, <label> do pobrania, ...`` of a sheet's flights (message of
+    the ``campaigns`` progress event).
+    """
     return ", ".join(
         f"{pick.local.label} lokalna"
         if pick.local is not None and pick.local_ref is not None
@@ -408,13 +411,22 @@ class CampaignProvider(Protocol):
         min_year: int | None = None,
         max_year: int | None = None,
     ) -> list[SkorowidzRecord]:
-        """False selects the newest flight within year bounds; True selects all."""
+        """Resolve the campaigns of a sheet.
 
-    def download_record(self, record: SkorowidzRecord, output_path: Path) -> Path: ...
+        False selects the newest flight within year bounds; True selects all.
+        """
 
-    def record_source(self, record: SkorowidzRecord) -> dict: ...
+    def download_record(self, record: SkorowidzRecord, output_path: Path) -> Path:
+        """Download ``record`` to ``output_path``."""
+        ...
 
-    def record_length(self, record: SkorowidzRecord) -> int | None: ...
+    def record_source(self, record: SkorowidzRecord) -> dict[str, Any]:
+        """Return the source description of ``record``."""
+        ...
+
+    def record_length(self, record: SkorowidzRecord) -> int | None:
+        """Return the size of the file of ``record`` in bytes, if known."""
+        ...
 
 
 # Type alias for progress callback
@@ -422,7 +434,7 @@ ProgressCallback = Callable[[DownloadProgress], None]
 
 
 def _sheet_status(commits: list[VersionCommit]) -> SheetStatus:
-    """The strongest commit status of a sheet; no commit = ``local``."""
+    """Return the strongest commit status of a sheet; no commit = ``local``."""
     statuses = {c.status for c in commits}
     for status in ("new", "relabeled", "unchanged"):
         if status in statuses:
@@ -449,7 +461,7 @@ def _version_coverage(path: Path) -> float | None:
 
 
 def _is_transport_failure(error: DownloadError) -> bool:
-    """A TRANSPORT error (network, 429, 5xx) per the ``transport/http.py`` policy.
+    """Check whether ``error`` is a transport error per ``transport/http.py``.
 
     ``status_code`` carries the HTTP code of the last attempt
     (``http_failure``): 429 and 5xx = transport, other 4xx not. Without a
@@ -465,9 +477,11 @@ def _is_transport_failure(error: DownloadError) -> bool:
 
 
 def no_coverage_text(total: int) -> str:
-    """The failure of a sheet list in which no sheet has data: the download
-    (``download_data``) and the check (``DownloadManager.check_sheets``) of
-    the same area say it the same way."""
+    """Return the failure text of a sheet list in which no sheet has data.
+
+    The download (``download_data``) and the check
+    (``DownloadManager.check_sheets``) of the same area say it the same way.
+    """
     return f"GUGiK nie ma danych dla zadnego z {count_text(total, *OF_SHEETS)} obszaru"
 
 
@@ -786,7 +800,7 @@ class DownloadManager:
         return check
 
     def _in_range(self, version: LocalVersion) -> bool:
-        """A campaign version whose acquisition year is in the bounds."""
+        """Check whether a campaign version's acquisition year is in the bounds."""
         ref = CampaignRef.from_sidecar(version.meta)
         if ref is None:
             return False
@@ -797,9 +811,11 @@ class DownloadManager:
     def _current_local(
         self, std: Path, versions: list[LocalVersion]
     ) -> LocalVersion | None:
-        """The local campaign version the default mode keeps (D5): the
-        standard link target when it is a version in range, else the newest
-        version in range."""
+        """Return the local campaign version the default mode keeps (D5).
+
+        The standard link target when it is a version in range, else the newest
+        version in range.
+        """
         in_range = [v for v in versions if self._in_range(v)]
         target = linked_version(std)
         if target is not None:
@@ -911,9 +927,11 @@ class DownloadManager:
         return self._finish_result(result, single=True)
 
     def is_hierarchy(self, sheet: str) -> bool:
-        """Whether ``download_sheet`` expands ``sheet`` to the provider's sheet
-        level: a PL-1992 code coarser than it (grids and images; an archive
-        variant keeps its index codes) - the result is a list of sheets."""
+        """Check whether ``download_sheet`` expands ``sheet`` to the provider's level.
+
+        A PL-1992 code coarser than it (grids and images; an archive variant
+        keeps its index codes) - the result is a list of sheets.
+        """
         return not self._source_files and _coarser(
             SheetParser(sheet), self._sheet_scale
         )
@@ -974,10 +992,12 @@ class DownloadManager:
         return leaves
 
     def _leaves(self, sheets: list[str]) -> list[str]:
-        """Sheets requested from the provider: ``expand_sheets`` to the
-        provider's sheet level for grids and images; an archive variant keeps
-        the index codes of any scale (normalized, duplicates dropped,
-        first-seen order kept)."""
+        """Return the sheets requested from the provider.
+
+        ``expand_sheets`` to the provider's sheet level for grids and images; an
+        archive variant keeps the index codes of any scale (normalized,
+        duplicates dropped, first-seen order kept).
+        """
         if not self._source_files:
             return self.expand_sheets(sheets, self._sheet_scale)
         return list(dict.fromkeys(SheetParser(sheet).sheet for sheet in sheets))
@@ -1140,10 +1160,12 @@ class DownloadManager:
         plan: UpdatePlan,
         on_progress: ProgressCallback | None,
     ) -> DownloadResult:
-        """Recheck and execute exactly the selected positions of this request:
-        the positions of its sheets in this manager's segment and files (the
-        managers of the view directions of one oblique sheet share the
-        segment; their files differ by the name suffix)."""
+        """Recheck and execute exactly the selected positions of this request.
+
+        The positions of its sheets in this manager's segment and files (the
+        managers of the view directions of one oblique sheet share the segment;
+        their files differ by the name suffix).
+        """
         from kartograf.download.updates import _items, _where
 
         requested = set(leaves)
@@ -1382,9 +1404,11 @@ class DownloadManager:
             shutil.rmtree(staged.parent, ignore_errors=True)
 
     def _announce_size(self, sheet: str, record: SkorowidzRecord) -> None:
-        """``DOWNLOAD_SIZE`` of a record file over ``LARGE_FILE_BYTES`` (the
-        text of the collections), forwarded to ``on_notice`` at once and kept
-        for the ``DownloadResult`` of the call."""
+        """Record a ``DOWNLOAD_SIZE`` notice for a file over ``LARGE_FILE_BYTES``.
+
+        (the text of the collections), forwarded to ``on_notice`` at once and
+        kept for the ``DownloadResult`` of the call.
+        """
         length = self._campaign_provider.record_length(record)
         if length is None or length <= LARGE_FILE_BYTES:
             return
@@ -1400,7 +1424,7 @@ class DownloadManager:
         NoticeSink(self._on_notice).add(notice)
 
     def _drain_size_notices(self) -> tuple[Notice, ...]:
-        """The ``DOWNLOAD_SIZE`` notices emitted since the last drain."""
+        """Return the ``DOWNLOAD_SIZE`` notices emitted since the last drain."""
         with self._size_lock:
             notices = tuple(self._size_notices)
             self._size_notices.clear()
@@ -1409,7 +1433,7 @@ class DownloadManager:
     def _resolve_chosen(
         self, sheet: str, records: tuple[SkorowidzRecord, ...] | None = None
     ) -> tuple[list[SkorowidzRecord], bool]:
-        """Records of the request (strategy, year bounds, ``full_sheet``).
+        """Resolve the records of the request (strategy, year bounds, ``full_sheet``).
 
         ``records`` = already selected by the year-range check; otherwise
         ``resolve_campaigns`` (an index error propagates). ``full_sheet`` with
@@ -1447,7 +1471,7 @@ class DownloadManager:
         chosen: list[SkorowidzRecord],
         update: UpdateMode | None,
     ) -> tuple[list[_Pick], list[tuple[str, DownloadError]]]:
-        """The single rule "local or download" per record (spec 4.2, D5).
+        """Apply the single rule "local or download" per record (spec 4.2, D5).
 
         Each record is checked BEFORE the network (``verify_record_url``, B4;
         ``verify_record_vertical_crs``; extension from ``format``) — a bad
@@ -1757,7 +1781,7 @@ class DownloadManager:
         measure = (
             len(ordered) > 1 and linked is not None and linked.full_sheet is not True
         )
-        flights: list[dict] = []
+        flights: list[dict[str, Any]] = []
         scored: list[tuple[float, CampaignRef]] = []
         linked_score: float | None = None
         for ref, path in ordered:
@@ -1840,9 +1864,7 @@ class DownloadManager:
         check: YearRangeCheck | None = None,
         on_progress: ProgressCallback | None = None,
     ) -> tuple[str, SheetFetch | None, str, str, tuple[str, ...]]:
-        """
-        Download a list sheet: ``DownloadError`` -> a status instead of an
-        exception.
+        """Download a list sheet: ``DownloadError`` -> a status, not an exception.
 
         Shared by sequential and parallel mode. Another exception (e.g. a
         write ``OSError``) propagates: sequentially it aborts the list, in a
@@ -1970,7 +1992,7 @@ class DownloadManager:
         status: str,
         message: str = "",
     ) -> None:
-        """The single place building ``DownloadProgress`` for both modes."""
+        """Build ``DownloadProgress`` for both modes (the single place)."""
         if on_progress:
             on_progress(
                 DownloadProgress(
@@ -2020,9 +2042,11 @@ class DownloadManager:
                 self._record(result, sheet, fetch, status, hints, message)
                 self._emit(on_progress, i, total, sheet, status, message)
         else:
-            outcomes: dict[str, tuple] = {}
+            outcomes: dict[str, tuple[Any, ...]] = {}
 
-            def task(sheet: str) -> tuple[str, SheetFetch | None, str, str, tuple]:
+            def task(
+                sheet: str,
+            ) -> tuple[str, SheetFetch | None, str, str, tuple[Any, ...]]:
                 try:
                     return self._download_single_sheet_task(
                         sheet, update, check=check, on_progress=on_progress
@@ -2034,7 +2058,7 @@ class DownloadManager:
             def finished(
                 ended: int,
                 _sheet: str,
-                outcome: tuple[str, SheetFetch | None, str, str, tuple],
+                outcome: tuple[str, SheetFetch | None, str, str, tuple[Any, ...]],
             ) -> None:
                 sheet, fetch, status, message, hints = outcome
                 outcomes[sheet] = (fetch, status, hints, message)
@@ -2107,9 +2131,9 @@ class DownloadManager:
     def _write_sidecar(
         self,
         data_path: Path,
-        request: dict,
+        request: dict[str, Any],
         *,
-        extra_override: dict | None = None,
+        extra_override: dict[str, Any] | None = None,
         digest: ContentDigest | None = None,
         version: VersionRef | None = None,
     ) -> None:
@@ -2172,7 +2196,7 @@ class DownloadManager:
         is a campaign ``DownloadError`` (the commit removes the data file);
         ``FileExistsError`` = another writer published it (``commit_version``).
         """
-        request: dict = {
+        request: dict[str, Any] = {
             "sheet": sheet,
             "campaigns": "all" if self._all_campaigns else "newest",
         }
@@ -2192,7 +2216,7 @@ class DownloadManager:
                 f"{ref.dirname}: {e}",
                 sheet=sheet,
             ) from e
-        extra: dict = {"source": source, "campaign": ref.to_extra()}
+        extra: dict[str, Any] = {"source": source, "campaign": ref.to_extra()}
         if available is not None:
             extra["available_years"] = list(available)
         self._write_sidecar(

@@ -250,7 +250,7 @@ def test_curves_preserved_or_linearized_consistently(tmp_path):
     2026-10-15 the EGiB answers held no arcs; pyogrio linearizes curves."""
     write_gpkg(tmp_path / "egib.gpkg", egib_pages(tmp_path), params=EGIB)
 
-    layers = {name: kind for name, kind in pyogrio.list_layers(tmp_path / "egib.gpkg")}
+    layers = dict(pyogrio.list_layers(tmp_path / "egib.gpkg"))
     assert layers == {"dzialki": "MultiPolygon", "budynki": "MultiPolygon"}
     counts = {
         name: pyogrio.read_info(tmp_path / "egib.gpkg", layer=name)["features"]

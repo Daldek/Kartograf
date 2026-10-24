@@ -117,8 +117,9 @@ _GRID_TOL_PX = 1e-6
 def orto_cutout_error(
     *, key: str, coverage: object, resolution: object, horizontal_crs: object
 ) -> ValidationError | None:
-    """The error of the cutout choice of image source ``key`` (``None`` =
-    valid).
+    """Return the error of the cutout choice of image source ``key``.
+
+    ``None`` = valid.
 
     Texts name the CLI flags (``download_data`` passes them 1:1, STANDARDS
     11); the coverages and pixels are listed from the registry; ``option`` and
@@ -147,15 +148,19 @@ def orto_cutout_error(
 
 
 def orto_coverage_choices() -> str:
-    """The ``--coverage`` values of the orthophotomap cutout (``--help`` of
-    the CLI, which imports no providers, Z1)."""
+    """Return the ``--coverage`` values of the orthophotomap cutout.
+
+    ``--help`` of the CLI, which imports no providers, Z1.
+    """
     return coverage_choices(ORTO_KEY)
 
 
 def cutout_resolution_choices(products: tuple[str, ...]) -> str:
-    """``orto standard: 0.1m, ...; true-orto: 0.05m, ...``: the cutout pixels
-    of every cutout channel of the image ``products``, registry order
-    (``--resolution`` in ``--help``)."""
+    """Return the cutout pixels of every cutout channel of the image ``products``.
+
+    Format ``orto standard: 0.1m, ...; true-orto: 0.05m, ...`` in registry order
+    (``--resolution`` in ``--help``).
+    """
     parts = []
     for product in products:
         source = image_source(product)
@@ -173,8 +178,7 @@ def cutout_resolution_choices(products: tuple[str, ...]) -> str:
 
 @dataclass(frozen=True)
 class ImageCutoutResult:
-    """Versioned image cutout (orthophotomap, true orthophotomap) and its
-    data notices.
+    """Versioned image cutout (orthophotomap, true orthophotomap) and its data notices.
 
     ``file`` is ``None`` only when a plan skips the cutout and nothing is
     available locally; otherwise it points to the standard bbox link.
@@ -190,8 +194,10 @@ class ImageCutoutResult:
 
 @dataclass(frozen=True)
 class _OrtoCutout:
-    """A prepared cutout: the source, the choice, the aligned result grid and
-    its slot (``coverage`` ``None``: the one channel of the source)."""
+    """A prepared cutout: the source, the choice, the aligned result grid and its slot.
+
+    ``coverage`` ``None``: the one channel of the source.
+    """
 
     key: str
     coverage: str | None
@@ -268,8 +274,10 @@ def _prepare(
 
 
 def _cutout_provider(cutout: _OrtoCutout) -> GugikImageProvider:
-    """Provider of the cutout's WCS channel and pixel (the orthophotomap: the
-    RGB composition)."""
+    """Return the provider of the cutout's WCS channel and pixel.
+
+    The orthophotomap: the RGB composition.
+    """
     if cutout.key == ORTO_KEY:
         return GugikOrtoProvider(
             color=GugikOrtoProvider.DEFAULT_COLOR,
@@ -354,8 +362,10 @@ def _has_image(path: Path) -> bool:
 
 
 def _no_image_error(cutout: _OrtoCutout) -> NoCoverageError:
-    """``NoCoverageError`` of a cutout whose every pixel is 0,0,0, with the
-    reason and the remedy of its WCS channel."""
+    """Build the ``NoCoverageError`` of a cutout whose every pixel is 0,0,0.
+
+    The error carries the reason and the remedy of its WCS channel.
+    """
     if cutout.key != ORTO_KEY:
         what = (
             "wycinek true orto: WCS GUGiK nie ma w tym obszarze prawdziwej "
@@ -386,10 +396,10 @@ def _write_sidecar(
     *,
     version: VersionRef,
     digest: ContentDigest,
-    http: dict | None,
-    parent_request: dict | None,
+    http: dict[str, Any] | None,
+    parent_request: dict[str, Any] | None,
 ) -> None:
-    """The mandatory, exclusive sidecar of a cutout version.
+    """Write the mandatory, exclusive sidecar of a cutout version.
 
     ``request`` = the aligned grid and the choice (``coverage`` only where
     the source has several channels); ``extra.source`` = the WCS request
@@ -399,7 +409,7 @@ def _write_sidecar(
     from kartograf.sources.sidecar import emit_sidecar
 
     endpoint, coverage_id = provider._wcs_target()
-    source: dict = {
+    source: dict[str, Any] = {
         "service": "WCS",
         "endpoint": endpoint,
         "coverage": coverage_id,
@@ -409,13 +419,16 @@ def _write_sidecar(
     if scale is not None:
         source["scalefactor"] = float(f"{scale:g}")  # the value of the URL
     source["composition"] = "server"
-    extra: dict = {}
+    extra: dict[str, Any] = {}
     if parent_request:
         extra["parent_request"] = parent_request
     extra["source"] = source
     if http is not None:
         extra["http"] = http
-    request: dict = {"bbox": bbox_coords(cutout.grid), "bbox_crs": ORTO_CUTOUT_CRS}
+    request: dict[str, Any] = {
+        "bbox": bbox_coords(cutout.grid),
+        "bbox_crs": ORTO_CUTOUT_CRS,
+    }
     if cutout.coverage is not None:
         request["coverage"] = cutout.coverage
     request["resolution"] = cutout.resolution
@@ -437,7 +450,7 @@ def _run(
     *,
     update: UpdateMode | None,
     plan: UpdatePlan | None,
-    parent_request: dict | None,
+    parent_request: dict[str, Any] | None,
     sink: NoticeSink,
     now: datetime | None = None,
 ) -> ImageCutoutResult:
@@ -498,7 +511,10 @@ def _run(
             raise _no_image_error(cutout)
 
     def write_sidecar(
-        path: Path, version: VersionRef, digest: ContentDigest, http: dict | None
+        path: Path,
+        version: VersionRef,
+        digest: ContentDigest,
+        http: dict[str, Any] | None,
     ) -> None:
         assert provider is not None  # fetch ran first
         _write_sidecar(
@@ -544,8 +560,9 @@ def check_image_cutout(
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
-    """Update plan of ``download_image_cutout`` with the same arguments, no
-    download.
+    """Build the update plan of ``download_image_cutout``.
+
+    It takes the same arguments as the download and downloads nothing.
 
     The WCS channel has no remote version signal, so the plan (track
     ``pl_cutout``) reads only the local store: no request is made. ``cache``
@@ -584,8 +601,7 @@ def download_image_cutout(
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> ImageCutoutResult:
-    """One versioned RGB GeoTIFF of an area from the WCS of a GUGiK image
-    ``product``.
+    """Download a versioned RGB GeoTIFF of an area from the WCS of a GUGiK image.
 
     ``product``: ``"orto"`` - the orthophotomap, ``coverage`` ``"standard"``
     (newest orthophotomaps) or ``"high"`` (pixel 10 cm and finer; 0,0,0

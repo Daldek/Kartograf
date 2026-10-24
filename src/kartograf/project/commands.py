@@ -102,7 +102,9 @@ class TaskDownload(Protocol):
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> Document: ...
+    ) -> Document:
+        """Run the download of the task options into ``output_dir``."""
+        ...
 
 
 class TaskCheck(Protocol):
@@ -116,7 +118,9 @@ class TaskCheck(Protocol):
         *,
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
-    ) -> UpdatePlan: ...
+    ) -> UpdatePlan:
+        """Plan the update of the task options in ``output_dir``."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -157,13 +161,19 @@ class UnitReport(Protocol):
     """A command-level report with one ``UnitFile`` per file (``DataReport``)."""
 
     @property
-    def files(self) -> Sequence[UnitFile]: ...
+    def files(self) -> Sequence[UnitFile]:
+        """Return the data files, one per unit."""
+        ...
 
     @property
-    def failed(self) -> Sequence[UnitFailure]: ...
+    def failed(self) -> Sequence[UnitFailure]:
+        """Return the failed units."""
+        ...
 
     @property
-    def ok(self) -> bool: ...
+    def ok(self) -> bool:
+        """Return True when no unit failed."""
+        ...
 
 
 def unit_report_files(report: UnitReport) -> TaskFiles:
@@ -181,7 +191,7 @@ def unit_report_files(report: UnitReport) -> TaskFiles:
 
 
 def _landcover_files(result: LandCoverReport) -> TaskFiles:
-    """Data files and retained original packages, paired per unit."""
+    """Pair data files and retained original packages per unit."""
     files: list[tuple[PinRole, str, VersionedFile]] = []
     raw = {item.unit: item.file for item in result.raw}
     for item in result.files:
@@ -219,14 +229,20 @@ def _hsg_files(result: HsgReport) -> TaskFiles:
 
 
 def _run_options(workers: int | None) -> Options:
-    """``workers`` for a library call; ``None`` keeps the function's default
-    (``download_data``: 4, the other functions: 1, as the CLI groups)."""
+    """Return the ``workers`` keyword for a library call.
+
+    ``None`` keeps the function's default (``download_data``: 4, the other functions: 1,
+    as the CLI groups).
+    """
     return {} if workers is None else {"workers": workers}
 
 
 def _options(name: str) -> Mapping[str, OptionKind]:
-    """The options of a task of a data command: the parameters of its declaration
-    in the catalog that are task options, in the order of the manifest."""
+    """Return the options of a task of a data command.
+
+    They are the parameters of its declaration in the catalog that are task options, in
+    the order of the manifest.
+    """
     return MappingProxyType(declared_commands()[name].task_options)
 
 
@@ -279,7 +295,7 @@ def _data_command(name: str, products: tuple[str, ...]) -> TaskCommand:
 
 
 def _landcover_command(name: str, product: str | None) -> TaskCommand:
-    """The land cover or SoilGrids command-level function."""
+    """Return the land cover or SoilGrids command-level function."""
 
     def request(opts: Options) -> Options:
         if product is None:
@@ -393,10 +409,12 @@ def _hsg_command(name: str) -> TaskCommand:
 
 
 def _collection_command(name: str, group: str) -> TaskCommand:
-    """``download_collection``/``check_collection`` limited to the products of
-    a collection group (``boundaries``, ``cadastre``, ``models3d``, ``hydro``,
-    ``names``, ``maps``, ``geodesy``; ADR-042); the result family is
-    ``CollectionReport`` (``unit_report_files``)."""
+    """Build the command limited to the products of a collection group.
+
+    It wraps ``download_collection``/``check_collection`` for a group (``boundaries``,
+    ``cadastre``, ``models3d``, ``hydro``, ``names``, ``maps``, ``geodesy``; ADR-042);
+    the result family is ``CollectionReport`` (``unit_report_files``).
+    """
 
     def validate(output_dir: Path, opts: Options) -> None:
         require_collection_product(opts.get("product"), group)
@@ -465,14 +483,16 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
 
 
 def data_commands_text() -> str:
-    """The data commands a project accepts, for messages."""
+    """Return the data commands a project accepts, for messages."""
     return ", ".join(COMMANDS)
 
 
 def project_command(project_dir: str | Path, subcommand: str, *args: str) -> str:
-    """A ``kartograf project`` command of a hint, ready to paste: with
-    ``--project <katalog>`` right after the subcommand when the project is
-    not the current directory (``add`` takes it before the task name)."""
+    """Return a ``kartograf project`` command of a hint, ready to paste.
+
+    It has ``--project <katalog>`` right after the subcommand when the project is not
+    the current directory (``add`` takes it before the task name).
+    """
     words = ["kartograf", "project", subcommand]
     try:
         here = Path(project_dir).samefile(Path.cwd())
@@ -484,7 +504,7 @@ def project_command(project_dir: str | Path, subcommand: str, *args: str) -> str
 
 
 def task_command(name: str) -> TaskCommand:
-    """The entry of a data command.
+    """Return the entry of a data command.
 
     Raises
     ------

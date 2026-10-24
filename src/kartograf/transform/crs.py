@@ -128,6 +128,7 @@ class PinnedTransform:
         z: float | _FloatArray | None = None,
     ) -> tuple[Any, ...]:
         """Transform a point or numpy arrays; an inf/NaN result => TransformError."""
+        result: tuple[Any, ...]
         if z is None:
             result = self._transformer.transform(x, y)
         else:
@@ -139,7 +140,7 @@ class PinnedTransform:
         return result
 
     def gdal_operation(self) -> str:
-        """The same operation as a PROJ pipeline for GDAL (``COORDINATE_OPERATION``).
+        """Return the same operation as a PROJ pipeline for GDAL.
 
         Lets ``rasterio.warp.reproject`` be forced to use EXACTLY the operation
         that passed the policy in ``build_pinned_transform`` - without it GDAL
@@ -177,7 +178,7 @@ _AXIS_SWAP = "proj=axisswap order=2,1"
 
 
 def _is_northing_first(crs: str) -> bool:
-    """Whether the CRS's authoritative axis order starts with north/south?"""
+    """Check whether the CRS's authoritative axis order starts with north/south."""
     axes = CRS.from_user_input(crs).axis_info
     return bool(axes) and axes[0].direction.lower() in ("north", "south")
 
@@ -272,7 +273,7 @@ def _epsg_code(crs: str) -> int | None:
 
 
 def _axis_order_only(src_crs: str, dst_crs: str) -> bool:
-    """The two CRSs are the same up to the axis order of a geographic CRS.
+    """Check whether two CRSs differ only in the axis order of a geographic CRS.
 
     ``OGC:CRS84`` (longitude, latitude) and ``EPSG:4326`` (latitude,
     longitude) are one WGS 84; with ``always_xy`` the operation between them is
@@ -304,8 +305,10 @@ def _operation_codes(transformer: Any) -> frozenset[str]:
 
 
 def _transformer_group(src_crs: str, dst_crs: str) -> TransformerGroup:
-    """``TransformerGroup`` without pyproj's "Best transformation is not
-    available" warning.
+    """Build a ``TransformerGroup`` without pyproj's best-transformation warning.
+
+    ``TransformerGroup`` without pyproj's "Best transformation is not available"
+    warning.
 
     pyproj warns when the best operation of a pair needs a grid missing from
     the PROJ data (e.g. the CUZK S-JTSK grid on a clean install). The pinned
@@ -338,8 +341,10 @@ def build_pinned_transform(
         epsg = _epsg_code(crs)
         if epsg is not None:
             required |= DATUM_STEP_PINS.get(epsg, frozenset())
-    previous_network_enabled = network.is_network_enabled()
-    network.set_network_enabled(policy.allow_network_grids)
+    previous_network_enabled = network.is_network_enabled()  # type: ignore[attr-defined]  # re-exported by pyproj.network, stub lacks __all__
+    network.set_network_enabled(  # type: ignore[attr-defined]  # re-exported by pyproj.network, stub lacks __all__
+        policy.allow_network_grids
+    )
     try:
         group = _transformer_group(src_crs, dst_crs)
         identity = _axis_order_only(src_crs, dst_crs)
@@ -387,7 +392,9 @@ def build_pinned_transform(
                     continue
             candidates.append((accuracy, transformer, description))
     finally:
-        network.set_network_enabled(previous_network_enabled)
+        network.set_network_enabled(  # type: ignore[attr-defined]  # re-exported by pyproj.network, stub lacks __all__
+            previous_network_enabled
+        )
 
     if not candidates:
         raise TransformUnavailableError(

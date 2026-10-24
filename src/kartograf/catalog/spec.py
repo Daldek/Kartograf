@@ -18,7 +18,7 @@ import enum
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Final, Literal, cast, get_args
+from typing import Final, Literal, get_args
 
 from kartograf.serialization import SCHEMA_PATTERN
 
@@ -92,14 +92,14 @@ Products = Sequence[tuple[str, str]] | Callable[[], Sequence[tuple[str, str]]]
 
 
 def resolve[T](value: T | Callable[[], T]) -> T:
-    """The value of a declaration field.
+    """Return the value of a declaration field.
 
     A provider (a function without arguments) is called here - the only place
     where registry-backed values are computed; any other value is returned as it
     is.
     """
     if callable(value):
-        return cast(T, value())
+        return value()
     return value
 
 
@@ -180,6 +180,7 @@ class Param:
     nargs: Nargs | None = None
 
     def __post_init__(self) -> None:
+        """Check the parameter declaration."""
         name = self.name
         if not _PARAM_NAME.fullmatch(name):
             raise ValueError(f"Param {name!r}: the name must be snake_case")
@@ -222,8 +223,10 @@ class Param:
 
     @property
     def cli_flag(self) -> str | None:
-        """The CLI flag (``--vertical-crs``); ``None`` for an API-only or a
-        positional parameter."""
+        """Return the CLI flag (``--vertical-crs``).
+
+        ``None`` for an API-only or a positional parameter.
+        """
         if self.positional:
             return None
         if isinstance(self.flag, _Auto):
@@ -260,16 +263,20 @@ class Constraint:
     when: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
+        """Check the constraint declaration."""
         if self.type not in CONSTRAINT_TYPES:
             raise ValueError(f"Constraint: unknown type {self.type!r}")
 
 
 @dataclass(frozen=True)
 class Example:
-    """An example call: ``options`` are the project task options in the JSON form
-    of the manifest (``bbox`` as 4 numbers with ``bbox_crs``, a per-country value
-    as a text or ``{"pl": ..., "cz": ...}``), ``run`` the other flags shown in
-    the command line (the store directory is added by the catalog)."""
+    """An example call.
+
+    ``options`` are the project task options in the JSON form of the manifest (``bbox``
+    as 4 numbers with ``bbox_crs``, a per-country value as a text or ``{"pl": ..., "cz":
+    ...}``), ``run`` the other flags shown in the command line (the store directory is
+    added by the catalog).
+    """
 
     options: Mapping[str, object]
     title: str | None = None
@@ -332,6 +339,7 @@ class Command:
     examples: tuple[Example, ...] = ()
 
     def __post_init__(self) -> None:
+        """Check the command declaration."""
         name = self.id
         if not _COMMAND_ID.fullmatch(name):
             raise ValueError(f"Command {name!r}: id is '<group> <name>' or one word")
@@ -364,8 +372,10 @@ class Command:
 
     @property
     def group(self) -> str | None:
-        """The CLI group (``elevation``); ``None`` for ``parse``, ``catalog`` and
-        the API-only commands."""
+        """Return the CLI group (``elevation``).
+
+        ``None`` for ``parse``, ``catalog`` and the API-only commands.
+        """
         first, space, _ = self.id.partition(" ")
         return first if space else None
 
@@ -386,9 +396,11 @@ class Command:
 
     @property
     def check_tool(self) -> str | None:
-        """The MCP tool that runs the check twin of the command: ``check_updates``
-        for a data command (a project task), ``<group>_check_updates`` for the
-        others (``project_check_updates``); ``None`` without a check or a tool."""
+        """Return the MCP tool that runs the check twin of the command.
+
+        ``check_updates`` for a data command (a project task), ``<group>_check_updates``
+        for the others (``project_check_updates``); ``None`` without a check or a tool.
+        """
         if self.check_function is None or self.tool is None:
             return None
         if self.project_task:
@@ -397,8 +409,10 @@ class Command:
 
     @property
     def task_options(self) -> dict[str, Kind]:
-        """The keys of ``tasks[].options`` of a project task with their kinds, in
-        the order of the parameters (the order of the keys of a manifest)."""
+        """Return the keys of ``tasks[].options`` of a project task with their kinds.
+
+        In the order of the parameters (the order of the keys of a manifest).
+        """
         return {param.name: param.kind for param in self.params if param.task}
 
 
@@ -418,13 +432,16 @@ class Group:
     position: int = 1
 
     def __post_init__(self) -> None:
+        """Check the group declaration."""
         if not _GROUP_NAME.fullmatch(self.name):
             raise ValueError(f"Group {self.name!r}: the name is lowercase letters")
 
 
 def sorted_groups(groups: Iterable[Group]) -> tuple[Group, ...]:
-    """The groups in the order of ``kartograf --help`` and of the catalog: by
-    ``position``, then by name."""
+    """Return the groups in the order of ``kartograf --help`` and of the catalog.
+
+    By ``position``, then by name.
+    """
     return tuple(sorted(groups, key=lambda group: (group.position, group.name)))
 
 

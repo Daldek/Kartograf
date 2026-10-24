@@ -211,7 +211,7 @@ def _ignore(_notice: Notice) -> None:
 
 
 def _unusable(path: Path, error: Exception) -> CacheError:
-    """The error of a cache that cannot be used: locked, or unreadable."""
+    """Return the error of a cache that cannot be used: locked, or unreadable."""
     if is_lock_error(error):
         return CacheError(
             f"cache zablokowany przez inny proces: {path} ({error}) - "

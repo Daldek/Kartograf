@@ -26,7 +26,7 @@ from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from kartograf import _clock
 from kartograf.catalog.kinds import check_options_json
@@ -71,12 +71,15 @@ def manifest_path(project_dir: str | Path) -> Path:
 
 
 def absolute(path: str | Path) -> Path:
-    """An absolute path without ``.``/``..`` (symlinks kept)."""
+    """Return an absolute path without ``.``/``..`` (symlinks kept)."""
     return Path(os.path.abspath(path))
 
 
 def resolve_path(text: str, project_dir: Path) -> Path:
-    """A path of the manifest: relative to the project directory, or absolute."""
+    """Resolve a path of the manifest against the project directory.
+
+    It is relative to the project directory, or absolute.
+    """
     path = Path(text)
     return path if path.is_absolute() else absolute(project_dir / path)
 
@@ -86,8 +89,8 @@ def resolve_path(text: str, project_dir: Path) -> Path:
 # =============================================================================
 
 
-def read_manifest(project_dir: str | Path) -> tuple[Project, dict[str, dict]]:
-    """The project and the JSON state of each task at reading (for merging).
+def read_manifest(project_dir: str | Path) -> tuple[Project, dict[str, dict[str, Any]]]:
+    """Return the project and the JSON state of each task at reading (for merging).
 
     Raises
     ------
@@ -100,8 +103,8 @@ def read_manifest(project_dir: str | Path) -> tuple[Project, dict[str, dict]]:
     return _project(directory, doc), {task["name"]: task for task in doc["tasks"]}
 
 
-def _unique_keys(pairs: list[tuple[str, object]]) -> dict:
-    data: dict = {}
+def _unique_keys(pairs: list[tuple[str, object]]) -> dict[str, Any]:
+    data: dict[str, Any] = {}
     for key, value in pairs:
         if key in data:
             raise ValueError(f"powtorzony klucz {key!r}")
@@ -113,9 +116,12 @@ def _no_constant(name: str) -> NoReturn:
     raise ValueError(f"niedozwolona wartosc {name}")
 
 
-def _load(directory: Path) -> dict:
-    """Read and validate the manifest of ``directory``. A UTF-8 BOM (an editor
-    puts it in) is no part of the JSON; the manifest is always written without."""
+def _load(directory: Path) -> dict[str, Any]:
+    """Read and validate the manifest of ``directory``.
+
+    A UTF-8 BOM (an editor puts it in) is no part of the JSON; the manifest is always
+    written without.
+    """
     path = directory / MANIFEST_NAME
     if directory.is_file():
         raise ValidationError(
@@ -138,7 +144,8 @@ def _load(directory: Path) -> dict:
     except ValueError as e:
         raise ValidationError(f"{MANIFEST_NAME}: nieprawidlowy JSON: {e}") from e
     validate_manifest(doc)
-    return doc
+    result: dict[str, Any] = doc
+    return result
 
 
 def validate_manifest(doc: object) -> None:
@@ -155,7 +162,12 @@ def validate_manifest(doc: object) -> None:
         raise ValidationError(f"{MANIFEST_NAME}: {e}") from None
 
 
-def _keys(obj: dict, required: tuple[str, ...], optional: tuple[str, ...], where: str):
+def _keys(
+    obj: dict[str, Any],
+    required: tuple[str, ...],
+    optional: tuple[str, ...],
+    where: str,
+) -> None:
     for key in obj:
         if key not in required and key not in optional:
             _fail(where, f"nieznany klucz {key!r}")
@@ -307,7 +319,7 @@ def pin_problem(pin: PinnedFile) -> str | None:
     return None
 
 
-def _project(directory: Path, doc: dict) -> Project:
+def _project(directory: Path, doc: dict[str, Any]) -> Project:
     return Project(
         directory=directory,
         output_dir=resolve_path(doc["output_dir"], directory),
@@ -315,8 +327,8 @@ def _project(directory: Path, doc: dict) -> Project:
     )
 
 
-def task_from_json(data: dict) -> ProjectTask:
-    """A validated ``tasks[]`` entry as ``ProjectTask``."""
+def task_from_json(data: dict[str, Any]) -> ProjectTask:
+    """Build ``ProjectTask`` from a validated ``tasks[]`` entry."""
     digests = data.get("geometry_sha256")
     return ProjectTask(
         name=data["name"],
@@ -329,10 +341,10 @@ def task_from_json(data: dict) -> ProjectTask:
     )
 
 
-def task_to_json(task: ProjectTask) -> dict:
+def task_to_json(task: ProjectTask) -> dict[str, Any]:
     """``tasks[]`` entry of a task in the written form (key order of spec 3.3)."""
     order = COMMANDS[task.command].options
-    data: dict = {
+    data: dict[str, Any] = {
         "name": task.name,
         "command": task.command,
         "options": {key: task.options[key] for key in order if key in task.options},
@@ -366,7 +378,7 @@ def _owner_text(lock: Path) -> str:
 
 @contextmanager
 def _locked(directory: Path) -> Iterator[None]:
-    """The project lock for one read-merge-write (never taken over)."""
+    """Take the project lock for one read-merge-write (never taken over)."""
     lock = directory / LOCK_NAME
     deadline = time.monotonic() + LOCK_TIMEOUT_S
     while True:
@@ -416,7 +428,7 @@ def _sync_directory(directory: Path) -> None:
         os.close(fd)
 
 
-def _write(directory: Path, doc: dict) -> None:
+def _write(directory: Path, doc: dict[str, Any]) -> None:
     """Replace the manifest atomically with ``doc`` in the written form."""
     text = json.dumps(_written(doc), indent=2, ensure_ascii=False) + "\n"
     target = directory / MANIFEST_NAME
@@ -440,8 +452,8 @@ def _write(directory: Path, doc: dict) -> None:
     _sync_directory(directory)
 
 
-def _written(doc: dict) -> dict:
-    """The written form: every task through ``task_to_json``."""
+def _written(doc: dict[str, Any]) -> dict[str, Any]:
+    """Return the written form: every task through ``task_to_json``."""
     return {
         "schema": PROJECT_SCHEMA,
         "output_dir": doc["output_dir"],
@@ -469,7 +481,8 @@ def create_manifest(project_dir: str | Path, output_dir: str) -> None:
 
 
 def commit_tasks(
-    project_dir: str | Path, changes: Mapping[str, tuple[dict | None, dict | None]]
+    project_dir: str | Path,
+    changes: Mapping[str, tuple[dict[str, Any] | None, dict[str, Any] | None]],
 ) -> tuple[str, ...]:
     """Write task changes merged into the current manifest; the conflicts.
 
@@ -483,7 +496,7 @@ def commit_tasks(
     directory = absolute(project_dir)
     with _locked(directory):
         doc = _load(directory)
-        tasks: list[dict] = list(doc["tasks"])
+        tasks: list[dict[str, Any]] = list(doc["tasks"])
         conflicts: list[str] = []
         changed = False
         for name, (before, after) in changes.items():

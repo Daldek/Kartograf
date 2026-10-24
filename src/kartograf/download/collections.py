@@ -49,6 +49,7 @@ import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -254,11 +255,14 @@ def _session() -> requests.Session:
 
 
 def _is_collection(descriptor: SourceDescriptor) -> bool:
-    """A product of ``download_collection``: a channel of a collection engine
+    """Describe a channel of a collection engine, a product of ``download_collection``.
+
+    A product of ``download_collection``: a channel of a collection engine
     outside ``landcover`` - unit packages, features of an area or the
     national file of an ATOM feed of one dataset (QGZU); the ATOM feeds of
     sheets or voivodeships (CZ orthophoto, NMT 100 m) and the WCS cutout
-    channels belong to products of ``download_data``."""
+    channels belong to products of ``download_data``.
+    """
     return descriptor.storage_subdir.split("/", 1)[0] != _LANDCOVER_GROUP and any(
         isinstance(channel.params, UnitPackageParams | FeatureBBoxParams)
         or (
@@ -270,8 +274,11 @@ def _is_collection(descriptor: SourceDescriptor) -> bool:
 
 
 def collection_products(group: str | None = None) -> tuple[str, ...]:
-    """Products of ``download_collection`` in registry order; ``group`` = the CLI
-    group (first element of the storage segment: ``boundaries``, ...)."""
+    """Return the products of ``download_collection`` in registry order.
+
+    Products of ``download_collection`` in registry order; ``group`` = the CLI
+    group (first element of the storage segment: ``boundaries``, ...).
+    """
     products: list[str] = []
     for descriptor in sources_for():
         if not _is_collection(descriptor):
@@ -284,8 +291,11 @@ def collection_products(group: str | None = None) -> tuple[str, ...]:
 
 
 def collection_product_choices(products: Sequence[str] | None = None) -> str:
-    """``admin (PRG - granice ..., PL), ...``: products named in messages and
-    ``--help`` (a CLI group names only its own)."""
+    """Return the products named in messages and ``--help``.
+
+    ``admin (PRG - granice ..., PL), ...``: products named in messages and
+    ``--help`` (a CLI group names only its own).
+    """
     names = collection_products() if products is None else tuple(products)
     texts = []
     for product in names:
@@ -296,9 +306,12 @@ def collection_product_choices(products: Sequence[str] | None = None) -> str:
 
 
 def collection_countries(products: Sequence[str]) -> tuple[str, ...]:
-    """``("pl", "cz")``: the countries (``--country`` values) of the sources of
+    """Return the countries of the sources of collection ``products``.
+
+    ``("pl", "cz")``: the countries (``--country`` values) of the sources of
     collection ``products``, in ``COUNTRY_KEYS`` order (``--help`` of a group
-    offers only these, plus ``auto``)."""
+    offers only these, plus ``auto``).
+    """
     found = {
         descriptor.country.lower()
         for product in products
@@ -314,9 +327,12 @@ def _distinct(values: Iterable[str]) -> tuple[str, ...]:
 
 
 def _channel_options(params: ChannelParams | None) -> dict[str, tuple[str, ...]]:
-    """Option values a channel offers (ADR-043): the variant choices of a unit
+    """Return the option values a channel offers (ADR-043).
+
+    Option values a channel offers (ADR-043): the variant choices of a unit
     package channel, the ``choice`` selecting a feature or ATOM channel and
-    the layer codes chosen by ``selection_key``."""
+    the layer codes chosen by ``selection_key``.
+    """
     if isinstance(params, UnitPackageParams):
         return {
             key: _distinct(dict(variant.choice)[key] for variant in params.variants)
@@ -331,10 +347,13 @@ def _channel_options(params: ChannelParams | None) -> dict[str, tuple[str, ...]]
 
 
 def collection_choice_values(product: str, key: str) -> dict[str, tuple[str, ...]]:
-    """Values of the option ``key`` of a collection product per country, in
+    """Return the values of the option ``key`` of a collection product per country.
+
+    Values of the option ``key`` of a collection product per country, in
     registry order (``level``, ``lod``, ``year``, ``format``, ``scale``,
     ``sheet_system``, ``network``; ``--help`` and messages; empty: the
-    product has no such option)."""
+    product has no such option).
+    """
     found: dict[str, list[str]] = {}
     for descriptor in sources_for(product=product):
         if not _is_collection(descriptor):
@@ -362,8 +381,11 @@ def collection_layers(descriptor_key: str) -> tuple[FeatureLayer, ...]:
 
 
 def collection_classes(descriptor_key: str) -> dict[str, tuple[str, ...]]:
-    """Classes ``layers`` may keep from the packages of a source, per
-    published variant (``"--year 2023"`` -> codes; ``{}``: no classes)."""
+    """Return the classes ``layers`` may keep from the packages of a source.
+
+    Classes ``layers`` may keep from the packages of a source, per
+    published variant (``"--year 2023"`` -> codes; ``{}``: no classes).
+    """
     found: dict[str, tuple[str, ...]] = {}
     for channel in get_source(descriptor_key).channels:
         if isinstance(channel.params, UnitPackageParams):
@@ -377,7 +399,9 @@ def collection_classes(descriptor_key: str) -> dict[str, tuple[str, ...]]:
 
 
 def require_collection_product(product: str | None, group: str) -> None:
-    """``product`` of a collection group command (``boundaries download``,
+    """Resolve the ``product`` of a collection group command.
+
+    ``product`` of a collection group command (``boundaries download``,
     ...): one of the group's products; a missing one names only them.
 
     Raises
@@ -402,8 +426,11 @@ def require_collection_product(product: str | None, group: str) -> None:
 
 
 def collection_level_choices(products: Sequence[str]) -> str:
-    """``admin PL: wojewodztwo, powiat, ...``: ``--level`` values of
-    ``products`` per country (``--help``)."""
+    """Return the ``--level`` values of ``products`` per country.
+
+    ``admin PL: wojewodztwo, powiat, ...``: ``--level`` values of
+    ``products`` per country (``--help``).
+    """
     return "; ".join(
         f"{product} {country}: {', '.join(codes)}"
         for product in products
@@ -412,9 +439,12 @@ def collection_level_choices(products: Sequence[str]) -> str:
 
 
 def collection_variant_choices(products: Sequence[str]) -> str:
-    """``buildings: --lod 1 (--year 2019, 2021), --lod 2 (--year 2017)``: the
+    """Return the published package variants of ``products``.
+
+    ``buildings: --lod 1 (--year 2019, 2021), --lod 2 (--year 2017)``: the
     published package variants of ``products`` (``--help`` of the variant
-    flags; a channel with one variant needs no choice)."""
+    flags; a channel with one variant needs no choice).
+    """
     texts = []
     for product in products:
         for descriptor in sources_for(product=product):
@@ -476,12 +506,12 @@ class CollectionPart:
     layers: tuple[FeatureLayer, ...]
     segment: str
     ext: str
-    choice: dict
+    choice: dict[str, Any]
     area: BBox | None = None
-    parent: dict | None = None
+    parent: dict[str, Any] | None = None
     sheet: str | None = None
     year_filter: int | None = None
-    extra: dict = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict[str, Any])
     classes: tuple[str, ...] = ()
 
 
@@ -527,7 +557,7 @@ def _str(value: object) -> str | None:
 
 
 def _descriptors(product: str | None) -> dict[str, SourceDescriptor]:
-    """Collection descriptors of ``product`` by country code."""
+    """Return the collection descriptors of ``product`` by country code."""
     if product is None:
         raise ValidationError(
             f"--product wymagane: {collection_product_choices()}",
@@ -553,9 +583,12 @@ _AREA_TEXT = {
 
 
 def _area_flags(descriptor: SourceDescriptor, channel: AccessChannel) -> str:
-    """The area flags reaching ``channel``: a sheet code is an area of PL
+    """Return the area flags reaching ``channel``.
+
+    The area flags reaching ``channel``: a sheet code is an area of PL
     (its extent) and of a channel of CUZK map sheets (the sheet itself); a CZ
-    area of any other channel is ``--bbox``/``--geometry`` only."""
+    area of any other channel is ``--bbox``/``--geometry`` only.
+    """
     params = channel.params
     cuzk_sheets = (
         isinstance(params, UnitPackageParams)
@@ -571,7 +604,7 @@ def _area_flags(descriptor: SourceDescriptor, channel: AccessChannel) -> str:
 
 
 def _selections(descriptor: SourceDescriptor, channel: AccessChannel) -> list[str]:
-    """The selections reaching ``channel`` of ``descriptor`` (CLI flags).
+    """Return the selections reaching ``channel`` of ``descriptor`` (CLI flags).
 
     An area reaches the channels ``_channel_for`` gives it: the objects of
     the area (``feature_bbox``), its sheets, tiles or cadastral areas, and
@@ -607,9 +640,12 @@ def _selections(descriptor: SourceDescriptor, channel: AccessChannel) -> list[st
 
 
 def _distinguishing_keys(descriptor: SourceDescriptor) -> tuple[str, ...]:
-    """Option keys whose values tell the channels of a product apart (two
+    """Return the option keys whose values tell the channels of a product apart.
+
+    Option keys whose values tell the channels of a product apart (two
     channels or more offer the key with different values: ``network`` of
-    the survey control, ``format`` of the Geonames national files)."""
+    the survey control, ``format`` of the Geonames national files).
+    """
     keys = []
     for key in _OPTION_NAMES:
         offered = {
@@ -623,9 +659,12 @@ def _distinguishing_keys(descriptor: SourceDescriptor) -> tuple[str, ...]:
 
 
 def _available(descriptor: SourceDescriptor) -> str:
-    """Selections a product offers (hint of a selection it does not have),
+    """Return the selections a product offers, for the hint of a missing one.
+
+    Selections a product offers (hint of a selection it does not have),
     with the values of an option telling its channels apart:
-    ``--teryt <4 cyfry> z --network horizontal|vertical (paczka powiatu)``."""
+    ``--teryt <4 cyfry> z --network horizontal|vertical (paczka powiatu)``.
+    """
     keys = _distinguishing_keys(descriptor)
     found: dict[str, dict[str, list[str]]] = {}
     for channel in descriptor.channels:
@@ -649,21 +688,27 @@ def _available(descriptor: SourceDescriptor) -> str:
 
 
 def selection_choices(descriptor_key: str) -> str:
-    """The selections of a source in messages (``--teryt <4 cyfry> (paczka
-    powiatu), --bbox/--sheet/--geometry (paczki powiatow obszaru)``)."""
+    """Return the selections of a source as shown in messages.
+
+    The selections of a source in messages (``--teryt <4 cyfry> (paczka
+    powiatu), --bbox/--sheet/--geometry (paczki powiatow obszaru)``).
+    """
     return _available(get_source(descriptor_key))
 
 
 def _subject_flag(descriptor: SourceDescriptor) -> str:
-    """The flag choosing a source in messages: ``--product admin`` (a
-    collection product), ``--product zabaged`` (a land cover product)."""
+    """Return the flag choosing a source in messages.
+
+    The flag choosing a source in messages: ``--product admin`` (a
+    collection product), ``--product zabaged`` (a land cover product).
+    """
     return f"--product {descriptor.product}"
 
 
 def _shown_descriptors(
     descriptors: Mapping[str, SourceDescriptor], country: object
 ) -> list[SourceDescriptor]:
-    """The sources of the country of a request (each of them without one)."""
+    """Return the sources of the country of a request (each of them without one)."""
     return [
         descriptor
         for code, descriptor in descriptors.items()
@@ -681,7 +726,7 @@ _SELECTION_ARGUMENTS = {
 
 
 def _selection_error(text: str, kind: str) -> ValidationError:
-    """The error of a selection the product does not have: its argument."""
+    """Build the error of a selection the product does not have."""
     names = _SELECTION_ARGUMENTS[kind]
     if len(names) == 1:
         return ValidationError(text, option=names[0])
@@ -691,8 +736,11 @@ def _selection_error(text: str, kind: str) -> ValidationError:
 def _selection_names(
     descriptors: Mapping[str, SourceDescriptor], country: object
 ) -> tuple[str, ...]:
-    """Arguments choosing a selection the product offers in the country of a
-    request, in the order of the CLI (``teryt``, ``ku``, area, whole country)."""
+    """Return the arguments choosing a selection the product offers in a country.
+
+    Arguments choosing a selection the product offers in the country of a
+    request, in the order of the CLI (``teryt``, ``ku``, area, whole country).
+    """
     kinds: set[str] = set()
     for descriptor in _shown_descriptors(descriptors, country):
         if _package_channels(descriptor, "woj") or _package_channels(
@@ -711,8 +759,11 @@ def _selection_names(
 
 
 def _choice_text(descriptors: Mapping[str, SourceDescriptor], country: object) -> str:
-    """The error of a request without exactly one selection: the selections
-    of the product in the country of the request (each country without one)."""
+    """Build the error of a request without exactly one selection.
+
+    The error of a request without exactly one selection: the selections
+    of the product in the country of the request (each country without one).
+    """
     shown = _shown_descriptors(descriptors, country)
     first = shown[0]
     if len(shown) == 1:
@@ -746,15 +797,18 @@ def _area_channels(descriptor: SourceDescriptor) -> list[AccessChannel]:
 
 
 def _area_package_channels(descriptor: SourceDescriptor) -> list[AccessChannel]:
-    """TERYT packages of an area without an area channel: the powiat
-    packages, else the voivodeship packages (BDOO)."""
+    """Return the TERYT packages of an area without an area channel.
+
+    TERYT packages of an area without an area channel: the powiat
+    packages, else the voivodeship packages (BDOO).
+    """
     return _package_channels(descriptor, "powiat") or _package_channels(
         descriptor, "woj"
     )
 
 
 def _feature_channel(descriptor: SourceDescriptor) -> AccessChannel | None:
-    """The first ``feature_bbox`` channel (land cover sources have one)."""
+    """Return the first ``feature_bbox`` channel (land cover sources have one)."""
     for channel in descriptor.channels:
         if isinstance(channel.params, FeatureBBoxParams):
             return channel
@@ -785,8 +839,11 @@ _SELECTION_TEXT = {
 def _candidates(
     descriptor: SourceDescriptor, kind: str, teryt: str | None
 ) -> tuple[list[AccessChannel], str]:
-    """Channels of a kind of selection (ADR-042 D2, ADR-043) and the text of
-    their absence."""
+    """Return the channels of a kind of selection and the text of their absence.
+
+    Channels of a kind of selection (ADR-042 D2, ADR-043) and the text of
+    their absence.
+    """
     product, country = descriptor.product, descriptor.country
     if kind == "teryt":
         assert teryt is not None
@@ -810,9 +867,12 @@ def _candidates(
 
 
 def _selecting_options(params: ChannelParams | None) -> dict[str, tuple[str, ...]]:
-    """Option values that tell channels apart: the variant choices of a unit
+    """Return the option values that tell channels apart.
+
+    Option values that tell channels apart: the variant choices of a unit
     package channel and the ``choice`` of a feature or ATOM channel (the
-    layer codes of ``selection_key`` choose layers inside one channel)."""
+    layer codes of ``selection_key`` choose layers inside one channel).
+    """
     options = _channel_options(params)
     if (
         isinstance(params, FeatureBBoxParams)
@@ -829,11 +889,14 @@ def _check_other_selection(
     kind: str,
     options: Mapping[str, str | None],
 ) -> None:
-    """A given option value no channel of the selection offers, while another
+    """Build the error of an option value that belongs to another selection.
+
+    A given option value no channel of the selection offers, while another
     channel of the product does, belongs to another selection (ADR-043:
     ``--network gravity`` is a service of the objects of an area, not a
     package of ``--teryt``): the error names the selections of that value
-    and the values of this selection."""
+    and the values of this selection.
+    """
     others = [channel for channel in descriptor.channels if channel not in candidates]
     for key, value in options.items():
         if value is None:
@@ -874,7 +937,9 @@ def _country_options(
     *,
     auto: bool,
 ) -> dict[str, str | None]:
-    """The option values of the part of ``descriptor``'s country: a value per
+    """Return the option values of the part of ``descriptor``'s country.
+
+    The option values of the part of ``descriptor``'s country: a value per
     country (``--network pl=...,cz=...``) of that country. An option only the
     source of another country has (``--sheet-system`` of the ZTM maps, CZ)
     applies to that country's part of an ``auto`` request; for this country
@@ -917,13 +982,16 @@ def _channel_for(
     options: Mapping[str, str | None],
     countries: tuple[str, ...] = (),
 ) -> AccessChannel:
-    """The channel of a kind of selection (ADR-042 D2); of several, the one
+    """Return the channel of a kind of selection (ADR-042 D2).
+
+    The channel of a kind of selection (ADR-042 D2); of several, the one
     whose option values (``network``, ``format``, ...) admit the given ones
     (ADR-043: one WFS service per network, one ATOM feed per format); a value
     only another selection offers names that selection. A single candidate
     is returned as it is - its content checks name the allowed values
     (``_content``). ``countries``: the countries of an area request (the
-    values of each in a message)."""
+    values of each in a message).
+    """
     candidates, missing = _candidates(descriptor, kind, teryt)
     if not candidates:
         raise _selection_error(f"{missing}; dostepne: {_available(descriptor)}", kind)
@@ -982,10 +1050,13 @@ def _channel_for(
 def _option_hint(
     descriptor: SourceDescriptor, key: str, countries: tuple[str, ...]
 ) -> str:
-    """Hint of a request in PL and CZ (the message names the values of the
+    """Build the hint of a request in PL and CZ.
+
+    Hint of a request in PL and CZ (the message names the values of the
     country of ``descriptor``): the values of the other countries and those
     of all; an option given per country (``--network``) names that syntax,
-    another one applies its one value to every country."""
+    another one applies its one value to every country.
+    """
     if len(countries) < 2:
         return ""
     values = collection_choice_values(descriptor.product, key)
@@ -1008,8 +1079,11 @@ def _option_hint(
 
 
 def _level_hint(level: str | Mapping[str, str] | None, product: str) -> str:
-    """Hint of the per-country ``--level`` syntax for a request in PL and CZ
-    given one plain value (the levels of the countries differ)."""
+    """Build the hint of the per-country ``--level`` syntax.
+
+    Hint of the per-country ``--level`` syntax for a request in PL and CZ
+    given one plain value (the levels of the countries differ).
+    """
     if not isinstance(level, str):
         return ""
     levels = collection_levels(product)
@@ -1032,12 +1106,15 @@ def _content(
     countries: tuple[str, ...] = (),
     classes: Sequence[str] | None = None,
 ) -> CollectionPart:
-    """Content of one country part: variant, layers or ATOM file, segment and
+    """Describe the content of one country part.
+
+    Content of one country part: variant, layers or ATOM file, segment and
     request values. ``options``: ``format``, ``scale``, ``sheet_system``,
     ``network`` (``None`` = not given). ``countries``: the countries of an
     area request (hint of the per-country ``--level`` syntax). ``classes``:
     the ``layers`` of a land cover source whose packages hold class files
-    (BDOO; ``None`` = not given)."""
+    (BDOO; ``None`` = not given).
+    """
     product = descriptor.product
     params = channel.params
     level_value = country_value(level, code)
@@ -1143,7 +1220,9 @@ def _content(
 def _chosen_classes(
     variant: PackageVariant | None, classes: Sequence[str] | None, product: str
 ) -> tuple[str, ...]:
-    """The classes ``layers`` keeps from each package of ``variant``, sorted
+    """Return the classes ``layers`` keeps from each package of ``variant``, sorted.
+
+    The classes ``layers`` keeps from each package of ``variant``, sorted
     (``()``: not given).
 
     Raises
@@ -1181,7 +1260,7 @@ def _chosen_classes(
 def _check_selecting(
     selecting: Mapping[str, str], given: Mapping[str, str], where: str
 ) -> None:
-    """A given value of an option selecting the channel equals the channel's."""
+    """Check whether a given option value equals the channel's value."""
     for key, value in given.items():
         if key in selecting and selecting[key] != value:
             raise ValidationError(
@@ -1203,8 +1282,11 @@ def _feature_content(
     given: Mapping[str, str],
     countries: tuple[str, ...],
 ) -> tuple[tuple[FeatureLayer, ...], tuple[str, ...], dict[str, object]]:
-    """Layers, segment tokens and request values of a ``feature_bbox`` part:
-    the values of the channel ``choice`` and of its ``selection_key``."""
+    """Return the layers, segment tokens and request values of a ``feature_bbox`` part.
+
+    Layers, segment tokens and request values of a ``feature_bbox`` part:
+    the values of the channel ``choice`` and of its ``selection_key``.
+    """
     product = descriptor.product
     where = f"obszaru {product} ({descriptor.country})"
     for name, number in (("lod", lod), ("year", year)):
@@ -1270,8 +1352,12 @@ def _feature_content(
     return layers, (*tokens, value), {**choice, selector: value}
 
 
-def _selection_kind(args: dict, descriptors: Mapping[str, SourceDescriptor]) -> str:
-    """The kind of the one selection of a request (``area`` for a sheet,
+def _selection_kind(
+    args: dict[str, Any], descriptors: Mapping[str, SourceDescriptor]
+) -> str:
+    """Return the kind of the one selection of a request.
+
+    The kind of the one selection of a request (``area`` for a sheet,
     bbox or geometry); ``layer`` only with ``geometry``.
 
     Raises
@@ -1297,8 +1383,11 @@ def _selection_kind(args: dict, descriptors: Mapping[str, SourceDescriptor]) -> 
 
 
 def _is_landcover(descriptors: Mapping[str, SourceDescriptor]) -> bool:
-    """A land cover source (``landcover download``) rather than a collection
-    product."""
+    """Check whether the descriptor is a land cover source rather than a product.
+
+    A land cover source (``landcover download``) rather than a collection
+    product.
+    """
     return any(
         d.storage_subdir.split("/", 1)[0] == _LANDCOVER_GROUP
         for d in descriptors.values()
@@ -1306,7 +1395,7 @@ def _is_landcover(descriptors: Mapping[str, SourceDescriptor]) -> bool:
 
 
 def _to_crs(bbox: BBox, crs: str) -> BBox:
-    """The area in the native CRS of a service (Czech CRSs: pinned operation)."""
+    """Return the area in the native CRS of a service."""
     if bbox.crs == crs:
         return bbox
     if crs == "EPSG:2180":
@@ -1370,13 +1459,16 @@ def validate_collection_request(
 
 
 def _resolve(
-    args: dict,
+    args: dict[str, Any],
     sink: NoticeSink,
     descriptors: dict[str, SourceDescriptor] | None = None,
 ) -> CollectionRequest:
-    """``validate_collection_request`` with the notices of the area choice;
+    """Validate a collection request and report the notices of the area choice.
+
+    ``validate_collection_request`` with the notices of the area choice;
     ``descriptors``: the sources by country (default: the collection
-    descriptors of ``product``; a land cover source passes its own)."""
+    descriptors of ``product``; a land cover source passes its own).
+    """
     if args["bbox"] is not None:  # the CLI parses --bbox first: the same first error
         args["bbox"] = validate_request_bbox(args["bbox"])
     # library calls only: the CLI parses its flags (STANDARDS 11.2)
@@ -1531,12 +1623,12 @@ def _is_pl_sheet(sheet: str) -> bool:
 
 
 def _sheet_part(
-    args: dict,
+    args: dict[str, Any],
     descriptors: dict[str, SourceDescriptor],
     part: Callable[..., CollectionPart],
     options: dict[str, str | None],
 ) -> CollectionPart:
-    """The part of a sheet code (ADR-039 D4, ADR-043).
+    """Return the part of a sheet code (ADR-039 D4, ADR-043).
 
     A PL sheet code is an area: its extent (EPSG:2180) for objects, powiats
     and tiles, the sheets of a series intersecting it (its geographic extent:
@@ -1621,7 +1713,7 @@ def _part_area(base: CollectionPart, area: BBox) -> BBox:
 
 
 def _area_parts(
-    args: dict,
+    args: dict[str, Any],
     descriptors: dict[str, SourceDescriptor],
     part: Callable[..., CollectionPart],
     sink: NoticeSink,
@@ -1725,8 +1817,8 @@ class UnitJob:
     country: str
     unit: str
     slot: FileSlot
-    request: dict
-    parent: dict | None = None
+    request: dict[str, Any]
+    parent: dict[str, Any] | None = None
     variant: PackageVariant | None = None
     url: str | None = None
     layers: tuple[FeatureLayer, ...] = ()
@@ -1736,7 +1828,7 @@ class UnitJob:
     atom_crs: str | None = None
     atom_key: str = ""
     record: IndexRecord | None = None
-    extra: dict = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict[str, Any])
     classes: tuple[str, ...] = ()
     size: int | None = None
     sized: bool = False
@@ -1745,6 +1837,7 @@ class UnitJob:
 
     @property
     def key(self) -> _SLOT_KEY:
+        """Return the slot identity (segment, hierarchy, name)."""
         return (self.slot.segment, self.slot.hierarchy, self.slot.name)
 
     @property
@@ -1754,8 +1847,11 @@ class UnitJob:
 
 
 def _class_tokens(classes: Sequence[str]) -> tuple[str, ...]:
-    """Segment token of the chosen classes (``kuik-skpp``; ``()``: none) -
-    another content, another segment (ADR-042 D8, as BDOT10k ``--layers``)."""
+    """Return the segment token of the chosen classes.
+
+    Segment token of the chosen classes (``kuik-skpp``; ``()``: none) -
+    another content, another segment (ADR-042 D8, as BDOT10k ``--layers``).
+    """
     return ("-".join(classes),) if classes else ()
 
 
@@ -1797,9 +1893,12 @@ def _related_roots(
 
 
 def _country_unit(country: str, theme: str | None) -> str:
-    """Unit of a national file: the country code, with the theme of a
+    """Return the unit of a national file.
+
+    Unit of a national file: the country code, with the theme of a
     national product of several files after ``_`` (``pl_obiekty-fizjograficzne``,
-    ADR-044 D7)."""
+    ADR-044 D7).
+    """
     code = country.lower()
     return code if theme is None else f"{code}_{theme.lower().replace('_', '-')}"
 
@@ -1812,14 +1911,17 @@ def package_job(
     *,
     country: str,
     teryt: str | None,
-    request: dict,
-    parent: dict | None = None,
+    request: dict[str, Any],
+    parent: dict[str, Any] | None = None,
     theme: str | None = None,
     classes: tuple[str, ...] = (),
 ) -> UnitJob:
-    """The package of one unit (``teryt``) or the national file (``teryt=None``;
+    """Return the package of one unit or the national file.
+
+    The package of one unit (``teryt``) or the national file (``teryt=None``;
     ``theme``: one file of a national product of several themes; ``classes``:
-    only the members of these classes are stored)."""
+    only the members of these classes are stored).
+    """
     params = channel.params
     assert isinstance(params, UnitPackageParams)
     tokens = (*variant.segment_tokens, *_class_tokens(classes))
@@ -1875,7 +1977,7 @@ def _feature_job(output_dir: Path, part: CollectionPart) -> UnitJob:
 
 
 def _atom_job(output_dir: Path, part: CollectionPart) -> UnitJob:
-    """The national file of an ATOM channel (``whole_country``)."""
+    """Return the national file of an ATOM channel (``whole_country``)."""
     code = part.country.lower()
     crs = part.choice.get("horizontal_crs")
     return UnitJob(
@@ -1894,7 +1996,9 @@ def _atom_job(output_dir: Path, part: CollectionPart) -> UnitJob:
 def _area_voivodeships(
     part: CollectionPart, sink: NoticeSink, metadata: MetadataCache | None
 ) -> list[str]:
-    """The voivodeships of the area of ``part``: the first two digits of its
+    """Return the voivodeships of the area of ``part``.
+
+    The voivodeships of the area of ``part``: the first two digits of its
     PRG powiats, sorted and listed in a ``UNIT_LIST`` notice.
 
     Raises
@@ -1927,8 +2031,11 @@ def _voivodeship_jobs(
     sink: NoticeSink,
     metadata: MetadataCache | None,
 ) -> list[UnitJob]:
-    """The files of the voivodeships of an area from an ATOM feed keyed by
-    ``woj`` (the first two digits of the powiats of the area, PRG)."""
+    """Return the files of the voivodeships of an area from an ATOM feed.
+
+    The files of the voivodeships of an area from an ATOM feed keyed by
+    ``woj`` (the first two digits of the powiats of the area, PRG).
+    """
     params = part.channel.params
     assert isinstance(params, AtomFilesParams) and part.area is not None
     if "woj" not in re.compile(params.entry_pattern).groupindex:
@@ -1957,11 +2064,13 @@ def atom_area_request(
     product: str,
     output_dir: Path,
     area: BBox,
-    parent: dict | None,
-    choice: dict,
-    extra: dict,
+    parent: dict[str, Any] | None,
+    choice: dict[str, Any],
+    extra: dict[str, Any],
 ) -> CollectionRequest:
-    """The request of the voivodeship files of an area from the ATOM channel
+    """Build the request of the voivodeship files of an area from an ATOM channel.
+
+    The request of the voivodeship files of an area from the ATOM channel
     of ``descriptor_key`` (``download_data``: NMT 100 m, plan E1; no network).
 
     ``area`` in any supported CRS, ``parent`` = ``extra.parent_request`` of
@@ -1998,11 +2107,14 @@ def _record_job(
     unit: str,
     slot: FileSlot,
     tokens: dict[str, str],
-    request: dict,
+    request: dict[str, Any],
     record: IndexRecord | None = None,
 ) -> UnitJob:
-    """The file of one sheet, tile or cadastral area: the URL from the
-    template (``tokens``) or from the unit's index record."""
+    """Return the file of one sheet, tile or cadastral area.
+
+    The file of one sheet, tile or cadastral area: the URL from the
+    template (``tokens``) or from the unit's index record.
+    """
     variant = part.variant
     assert variant is not None
     if variant.url_template is not None:
@@ -2028,14 +2140,17 @@ def _record_job(
 
 
 def _newest(records: Iterable[IndexRecord]) -> IndexRecord | None:
-    """The newest record of a unit (year, then the label: date first)."""
+    """Return the newest record of a unit (year, then the label: date first)."""
     return max(records, key=lambda r: (r.year or 0, r.label), default=None)
 
 
 def _series_sheets(grid: SheetGrid, area: BBox) -> list[str]:
-    """PL-1992 sheets of a series (``grid.parts`` members) intersecting
+    """Return the PL-1992 sheets of a series intersecting ``area``.
+
+    PL-1992 sheets of a series (``grid.parts`` members) intersecting
     ``area`` with a positive area (``find_sheets_for_bbox``; the series is
-    mapped by its number of members, never by a scale label, plan E)."""
+    mapped by its number of members, never by a scale label, plan E).
+    """
     label = series_scale(grid.parts or 0)
     if area.crs.strip().upper() not in _PL_GRID_CRS:
         area = _to_crs(area, "EPSG:4326")
@@ -2045,8 +2160,11 @@ def _series_sheets(grid: SheetGrid, area: BBox) -> list[str]:
 def _cuzk_sheets(
     part: CollectionPart, grid: SheetGrid, metadata: MetadataCache | None
 ) -> list[str]:
-    """``MAPNOM`` of the CUZK sheet index layer of the part: the requested
-    sheet (checked in the layer) or the sheets of its area."""
+    """Return the ``MAPNOM`` of the CUZK sheet index layer of the part.
+
+    ``MAPNOM`` of the CUZK sheet index layer of the part: the requested
+    sheet (checked in the layer) or the sheets of its area.
+    """
     from kartograf.providers.cuzk.sheets import SheetIndex
 
     if grid.layer is None or grid.crs is None:
@@ -2062,8 +2180,11 @@ def _cuzk_sheets(
 def _sheet_record(
     params: UnitPackageParams, variant: PackageVariant, sheet: str, year: int | None
 ) -> IndexRecord | None:
-    """The newest index record of a PL sheet (GetFeatureInfo at its centre or
-    the WFS records of its extent); ``None``: the index has none."""
+    """Return the newest index record of a PL sheet.
+
+    The newest index record of a PL sheet (GetFeatureInfo at its centre or
+    the WFS records of its extent); ``None``: the index has none.
+    """
     index = params.index
     assert index is not None
     if variant.index_layer is None:
@@ -2090,11 +2211,12 @@ def _sheet_jobs(
     metadata: MetadataCache | None,
     skip_local: bool = False,
 ) -> list[UnitJob]:
-    """The files of the map sheets of an area or of a sheet (ADR-043).
+    """Return the files of the map sheets of an area or of a sheet (ADR-043).
 
     ``skip_local`` (the default download mode): a sheet with a local version
     is not asked for its index record (one GetFeatureInfo per sheet) - the
-    job uses the local version (``UnitJob.unchecked``)."""
+    job uses the local version (``UnitJob.unchecked``).
+    """
     params, variant = part.channel.params, part.variant
     assert isinstance(params, UnitPackageParams) and variant is not None
     grid = variant.sheet_grid
@@ -2183,10 +2305,13 @@ def _tile_jobs(
     sink: NoticeSink,
     metadata: MetadataCache | None,
 ) -> list[UnitJob]:
-    """The files of the index tiles of an area: the newest record of each tile,
+    """Return the files of the index tiles of an area.
+
+    The files of the index tiles of an area: the newest record of each tile,
     or the record of the requested year (ADR-028, ADR-043). The records of
     the area come from the metadata cache when it has them (a repeated run
-    works offline, as the PL sheet indexes)."""
+    works offline, as the PL sheet indexes).
+    """
     params, variant = part.channel.params, part.variant
     assert isinstance(params, UnitPackageParams) and variant is not None
     index = params.index
@@ -2249,8 +2374,11 @@ def _ku_jobs(
     sink: NoticeSink,
     metadata: MetadataCache | None,
 ) -> list[UnitJob]:
-    """The packages of a CZ cadastral area or of the areas of an area (RUIAN;
-    the answer for an area is kept in the metadata cache)."""
+    """Return the packages of a CZ cadastral area or of the areas of an area.
+
+    The packages of a CZ cadastral area or of the areas of an area (RUIAN;
+    the answer for an area is kept in the metadata cache).
+    """
     params = part.channel.params
     assert isinstance(params, UnitPackageParams)
     if request.ku is not None:
@@ -2300,7 +2428,7 @@ def _part_jobs(
     metadata: MetadataCache | None,
     skip_local: bool,
 ) -> list[UnitJob]:
-    """Unit jobs of one country part of a request (``_jobs``)."""
+    """Return the unit jobs of one country part of a request (``_jobs``)."""
     out = request.output_dir
     params = part.channel.params
     if part.layers:
@@ -2381,7 +2509,9 @@ def _jobs(
     metadata: MetadataCache | None,
     skip_local: bool = False,
 ) -> tuple[list[UnitJob], list[UnitFailure]]:
-    """Unit jobs of a request and the countries whose units could not be
+    """Return the unit jobs of a request and the countries without found units.
+
+    Unit jobs of a request and the countries whose units could not be
     found; the units of an area come from PRG (powiats, voivodeships of an
     ATOM feed or of a product with voivodeship packages only), the sheet
     grid or index, the tile index or RUIAN. ``skip_local``: the default
@@ -2422,9 +2552,12 @@ def _jobs(
 
 
 def _no_units(errors: Sequence[DownloadError]) -> DownloadError:
-    """The error of a request of several countries none of which has units:
+    """Build the error of a request of several countries none of which has units.
+
+    The error of a request of several countries none of which has units:
     the only one, or one error with every text (no data in all of them is
-    ``NoCoverageError``)."""
+    ``NoCoverageError``).
+    """
     if len(errors) == 1:
         return errors[0]
     text = "; ".join(str(error) for error in errors)
@@ -2434,10 +2567,13 @@ def _no_units(errors: Sequence[DownloadError]) -> DownloadError:
 
 
 def _capability(descriptor: SourceDescriptor, channel: AccessChannel) -> str:
-    """The capability that names ``channel`` in the sidecar: one no other
+    """Return the capability that names ``channel`` in the sidecar.
+
+    The capability that names ``channel`` in the sidecar: one no other
     channel of the descriptor has, else its first one (several channels of
     one kind - one WFS service per network - share it and declare the same
-    CRSs, which the sidecar reads from the first of them)."""
+    CRSs, which the sidecar reads from the first of them).
+    """
     others = [c for c in descriptor.channels if c is not channel]
     own = sorted(channel.capabilities)
     unique = [cap for cap in own if all(cap not in o.capabilities for o in others)]
@@ -2445,11 +2581,13 @@ def _capability(descriptor: SourceDescriptor, channel: AccessChannel) -> str:
 
 
 def _http(session: requests.Session | None) -> requests.Session:
-    """The caller's session, else the current thread's session of this module."""
+    """Return the caller's session, else the current thread's session of this module."""
     return session if session is not None else _session()
 
 
-def _probe(job: UnitJob, session: requests.Session | None):
+def _probe(
+    job: UnitJob, session: requests.Session | None
+) -> Callable[[], dict[str, Any]] | None:
     """``HEAD`` of the file for a channel with the ``http`` signal."""
     if job.signal != "http" or job.url is None:
         return None
@@ -2463,9 +2601,12 @@ def _atom_file(
     cache: MetadataCache | None,
     refresh: bool,
 ) -> Callable[[], AtomFile]:
-    """The file of an ATOM job from its feeds, asked at most once (the
+    """Return the file of an ATOM job from its feeds, asked at most once.
+
+    The file of an ATOM job from its feeds, asked at most once (the
     edition and the URL of one run come from the same answer); the file
-    found by the volume check of an area (``job.atom_file``) as it is."""
+    found by the volume check of an area (``job.atom_file``) as it is.
+    """
     known = job.atom_file
     if known is not None:
         return lambda: known
@@ -2492,8 +2633,11 @@ def _atom_edition(file: Callable[[], AtomFile]) -> Callable[[], Edition]:
 
 
 def _record_edition(job: UnitJob) -> Callable[[], Edition] | None:
-    """The label of the job's index record as the edition of signal ``index``
-    (ADR-043; ``None``: no record or another signal)."""
+    """Return the label of the job's index record as the edition of signal ``index``.
+
+    The label of the job's index record as the edition of signal ``index``
+    (ADR-043; ``None``: no record or another signal).
+    """
     record, params = job.record, job.channel.params
     if job.signal != "index" or record is None:
         return None
@@ -2523,7 +2667,7 @@ def inspect_job(
         edition = _atom_edition(_atom_file(job, session, cache, refresh=True))
     else:
         edition = _record_edition(job)
-    available: tuple[str | None, dict | None] = (None, None)
+    available: tuple[str | None, dict[str, Any] | None] = (None, None)
     if job.record is not None and edition is not None:
         available = (job.record.label, {"url": job.url, **job.record.raw})
     return inspect_version(
@@ -2538,9 +2682,12 @@ def inspect_job(
 
 
 def _local_only(slot: FileSlot, unverified: str | None = None) -> VersionedFile | None:
-    """A position left out of the plan (``unverified=None``) or a unit the
+    """Return the local version of a position left out of the plan.
+
+    A position left out of the plan (``unverified=None``) or a unit the
     default mode did not ask (``"unchecked"``): its local version, never a
-    download."""
+    download.
+    """
     local = local_version(slot)
     if local is None:
         return None
@@ -2554,25 +2701,34 @@ def _local_only(slot: FileSlot, unverified: str | None = None) -> VersionedFile 
 class _Source:
     """``extra.source`` of the file being downloaded (set by the fetch)."""
 
-    value: dict = field(default_factory=dict)
+    value: dict[str, Any] = field(default_factory=dict[str, Any])
 
 
 def _head_length(session: requests.Session, url: str) -> int | None:
-    """``Content-Length`` of a ``HEAD`` of ``url``; ``None``: not given or the
-    request failed (the transfer itself reports a failure)."""
+    """Return the ``Content-Length`` of a ``HEAD`` of ``url``.
+
+    ``Content-Length`` of a ``HEAD`` of ``url``; ``None``: not given or the
+    request failed (the transfer itself reports a failure).
+    """
     try:
-        return head_signal(session, url, timeout=SIZE_TIMEOUT)["content_length"]
+        length: int | None = head_signal(session, url, timeout=SIZE_TIMEOUT)[
+            "content_length"
+        ]
+        return length
     except DownloadError as e:
         logger.debug("HEAD %s: %s", url, e)
         return None
 
 
 def _announce_size(job: UnitJob, sink: NoticeSink, session: requests.Session) -> None:
-    """The size of a package from ``HEAD`` before its transfer: always for a
+    """Return the size of a package from ``HEAD`` before its transfer.
+
+    The size of a package from ``HEAD`` before its transfer: always for a
     national file (``WHOLE_COUNTRY_SIZE``, K7), above ``LARGE_FILE_BYTES``
     for a unit file (``DOWNLOAD_SIZE``, K9; the GUGiK opendata server ignores
     ``Range``: the file comes whole). A size asked by the volume check of an
-    area (``job.sized``) is not asked again."""
+    area (``job.sized``) is not asked again.
+    """
     assert job.url is not None
     length = job.size if job.sized else _head_length(session, job.url)
     what = job.descriptor.product
@@ -2598,9 +2754,12 @@ def _fetch_package(
     sink: NoticeSink,
     session: requests.Session,
     timeout: int,
-) -> dict:
-    """A package (or the members of its chosen classes) into ``staged``; the
-    chosen classes the unit has no file of are reported (``CLASSES_ABSENT``)."""
+) -> dict[str, Any]:
+    """Stage a package (or the members of its chosen classes) into ``staged``.
+
+    A package (or the members of its chosen classes) into ``staged``; the
+    chosen classes the unit has no file of are reported (``CLASSES_ABSENT``).
+    """
     assert job.url is not None and job.variant is not None
     params = job.channel.params
     assert isinstance(params, UnitPackageParams)
@@ -2614,7 +2773,7 @@ def _fetch_package(
         timeout=timeout,
         classes=job.classes,
     )
-    value: dict = {"url": job.url}
+    value: dict[str, Any] = {"url": job.url}
     if job.variant.edition is not None:
         value["edition"] = job.variant.edition
     if package.member is not None:
@@ -2648,11 +2807,14 @@ def _fetch_atom(
     file: AtomFile,
     session: requests.Session,
     timeout: int,
-) -> dict:
-    """A file of an ATOM feed, the ZIP 1:1: the size from the feed before
+) -> dict[str, Any]:
+    """Stage a file of an ATOM feed, the ZIP 1:1.
+
+    A file of an ATOM feed, the ZIP 1:1: the size from the feed before
     the transfer - always for the national file (``WHOLE_COUNTRY_SIZE``,
     K7), above ``LARGE_FILE_BYTES`` for a voivodeship file
-    (``DOWNLOAD_SIZE``, K9)."""
+    (``DOWNLOAD_SIZE``, K9).
+    """
     what = job.descriptor.product
     if job.whole_country:
         sink.emit(
@@ -2670,7 +2832,7 @@ def _fetch_atom(
     http = fetch_atom_file(session, file, staged, timeout=timeout)
     params = job.channel.params
     assert isinstance(params, AtomFilesParams)
-    value: dict = {
+    value: dict[str, Any] = {
         "url": file.url,
         "service_feed": params.service_feed,
         "dataset_feed": file.dataset_feed,
@@ -2721,7 +2883,7 @@ def _fetch_features(
         raise NoCoverageError(f"{e} (obszar zadania: {requested})") from e
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    value: dict = {
+    value: dict[str, Any] = {
         "service": job.channel.endpoint,
         "protocol": params.protocol,
         "layers": [
@@ -2791,7 +2953,7 @@ def run_job(
     source = _Source()
     atom = _atom_file(job, session, cache, update == "upgrade") if job.atom else None
 
-    def fetch(staged: Path) -> dict | None:
+    def fetch(staged: Path) -> dict[str, Any] | None:
         if on_download is not None:
             on_download()
         if job.layers:
@@ -2821,9 +2983,9 @@ def run_job(
         )
 
     def write(
-        data: Path, ref: VersionRef, digest: ContentDigest, http: dict | None
+        data: Path, ref: VersionRef, digest: ContentDigest, http: dict[str, Any] | None
     ) -> None:
-        extra: dict = {"source": source.value, **job.extra}
+        extra: dict[str, Any] = {"source": source.value, **job.extra}
         if http:
             extra["http"] = http
         if job.parent:
@@ -2885,8 +3047,11 @@ def run_job(
 
 
 def _record_crs(job: UnitJob) -> str | None:
-    """CRS of the file declared by its index record (``zone_field``: GUGiK
-    ``PL-2000:S7`` -> ``EPSG:2178``); ``None``: not declared."""
+    """Return the CRS of the file declared by its index record.
+
+    CRS of the file declared by its index record (``zone_field``: GUGiK
+    ``PL-2000:S7`` -> ``EPSG:2178``); ``None``: not declared.
+    """
     params = job.channel.params
     if job.record is None or not isinstance(params, UnitPackageParams):
         return None
@@ -2901,7 +3066,7 @@ def _record_crs(job: UnitJob) -> str | None:
 # =============================================================================
 
 
-def _choices(values: dict) -> dict:
+def _choices(values: dict[str, Any]) -> dict[str, Any]:
     return {name: values[name] for name in _CHOICE_NAMES}
 
 
@@ -2954,7 +3119,9 @@ def download_collection(
     on_progress: Callable[[DownloadProgress], None] | None = None,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> CollectionReport:
-    """Download a collection product (``download`` of the collection groups)
+    """Download a collection product into the version store of ``output_dir``.
+
+    Download a collection product (``download`` of the collection groups)
     into the version store of ``output_dir``.
 
     Choices as in ``validate_collection_request`` (called first, no network):
@@ -3048,12 +3215,15 @@ def landcover_request(
     horizontal_crs: str | None,
     sink: NoticeSink,
 ) -> CollectionRequest:
-    """The request of a land cover source on the collection engines
+    """Build the request of a land cover source on the collection engines.
+
+    The request of a land cover source on the collection engines
     (``LandCoverManager``: ZABAGED, ADR-042 D10/D15; BDOO, Data50 and
     Data250, ADR-043): its one country, ``teryt`` (a voivodeship of BDOO), an
     area or ``whole_country``, the release ``year`` and the classes
     ``layers`` kept from each package; the same rules as
-    ``validate_collection_request`` (no network)."""
+    ``validate_collection_request`` (no network).
+    """
     descriptor = get_source(descriptor_key)
     args = {
         "product": descriptor.product,
@@ -3080,19 +3250,25 @@ def landcover_request(
 
 
 def _is_area(request: CollectionRequest) -> bool:
-    """A request of an area (``bbox``, ``sheet``, ``geometry``) whose files come
+    """Check whether the request is an area whose files come from the area.
+
+    A request of an area (``bbox``, ``sheet``, ``geometry``) whose files come
     from the area; a unit choice (``teryt``, ``ku``) or ``whole_country``
-    names its files itself."""
+    names its files itself.
+    """
     return request.teryt is None and request.ku is None and not request.whole_country
 
 
 def _transfers(
     jobs: Sequence[UnitJob], update: UpdateMode | None, planned: set[_SLOT_KEY] | None
 ) -> list[UnitJob]:
-    """The jobs that would transfer their file: the positions of a plan to
+    """Return the jobs that would transfer their file.
+
+    The jobs that would transfer their file: the positions of a plan to
     execute, every job with ``update="force"``, otherwise the jobs without a
     local version (a local version is used as it is; ``"upgrade"`` downloads
-    it again only when the signal of its channel shows newer content)."""
+    it again only when the signal of its channel shows newer content).
+    """
     if planned is not None:
         return [job for job in jobs if job.key in planned]
     if update == "force":
@@ -3114,12 +3290,15 @@ def _sized(
     refresh: bool,
     sessions: Callable[[], requests.Session] | None = None,
 ) -> UnitJob:
-    """The job with the bytes of its file asked before the transfer: the
+    """Return the job with the bytes of its file asked before the transfer.
+
+    The job with the bytes of its file asked before the transfer: the
     ``length`` of a file of an ATOM feed (the resolved file is kept for the
     transfer), the ``Content-Length`` of a ``HEAD`` of a package (by the
     session of ``sessions``, the one of the thread of this module without
     it); ``None``: not known (the objects of an area, no length, a failed
-    request - the transfer itself reports a failure)."""
+    request - the transfer itself reports a failure).
+    """
     if job.atom:
         try:
             found = _atom_file(job, None, cache, refresh)()
@@ -3146,9 +3325,12 @@ _UNIT_CHOICE = {"powiat": "--teryt <4 cyfry>", "woj": "--teryt <2 cyfry>", "ku":
 
 
 def unit_choices(descriptors: Iterable[SourceDescriptor]) -> tuple[str, ...]:
-    """The flags that choose ONE unit of the packages of ``descriptors``
+    """Return the flags that choose ONE unit of the packages of ``descriptors``.
+
+    The flags that choose ONE unit of the packages of ``descriptors``
     (``--teryt <4 cyfry>``): what makes a request over the volume limits
-    smaller."""
+    smaller.
+    """
     return _distinct(
         _UNIT_CHOICE[channel.params.unit]
         for descriptor in descriptors
@@ -3166,9 +3348,12 @@ def _volume_error(
     asked: int,
     known: int,
 ) -> ValidationError:
-    """The refusal of an area over the volume limits: the number of files, the
+    """Build the refusal of an area over the volume limits.
+
+    The refusal of an area over the volume limits: the number of files, the
     size (a sum, a lower bound or an estimate from ``asked`` files) and what
-    makes the request smaller (``units``: the flags choosing one unit)."""
+    makes the request smaller (``units``: the flags choosing one unit).
+    """
     if total is None:
         size = "rozmiar nieznany (serwer nie podal Content-Length)"
     elif asked < count:
@@ -3207,7 +3392,9 @@ def within_volume(
     workers: int,
     sessions: Callable[[], requests.Session] | None = None,
 ) -> list[UnitJob]:
-    """The jobs of an area within the volume limits (ADR-043 errata 3; the
+    """Return the jobs of an area within the volume limits (ADR-043 errata 3).
+
+    The jobs of an area within the volume limits (ADR-043 errata 3; the
     collections and the BDOT10k powiat packages of ``LandCoverManager``).
 
     Counted are the files the request would transfer (``_transfers``). Up to
@@ -3250,9 +3437,12 @@ def within_volume(
 
 
 def _progress_status(outcome: VersionedFile | UnitFailure | None) -> str:
-    """Progress status of a finished unit, as for a sheet list: ``failed``
+    """Return the progress status of a finished unit.
+
+    Progress status of a finished unit, as for a sheet list: ``failed``
     (``no_coverage`` without a file at the source), ``skipped`` (no
-    transfer: a local version or a unit outside the plan) or ``completed``."""
+    transfer: a local version or a unit outside the plan) or ``completed``.
+    """
     if isinstance(outcome, UnitFailure):
         return "no_coverage" if outcome.kind == "no_coverage" else "failed"
     if outcome is None or outcome.status == "local":
@@ -3267,7 +3457,9 @@ def _auto_partial_success(
     *,
     check: bool = False,
 ) -> bool:
-    """Whether ``failed`` still leaves the request a success: the rule of
+    """Check whether ``failed`` still leaves the request a success.
+
+    Whether ``failed`` still leaves the request a success: the rule of
     ``download_data`` for ``country="auto"`` (ADR-023 points 4-5, SCOPE 3.2).
 
     A request in PL and CZ whose failures are all in one country while the
@@ -3296,7 +3488,9 @@ def run_request(
     track: Track = _TRACK,
     on_progress: Callable[[DownloadProgress], None] | None = None,
 ) -> tuple[tuple[UnitFile, ...], tuple[UnitFailure, ...], tuple[PlanItem, ...]]:
-    """Files, unit failures and stale plan positions of a validated request
+    """Return the files, unit failures and stale plan positions of a request.
+
+    Files, unit failures and stale plan positions of a validated request
     (``download_collection``; ``LandCoverManager`` on the track ``landcover``).
 
     ``on_progress``: with more than one unit, one ``DownloadProgress`` per
@@ -3417,11 +3611,14 @@ def plan_request(
     sink: NoticeSink,
     track: Track = _TRACK,
 ) -> UpdatePlan:
-    """Update plan of a validated request (no data downloaded). The source is
+    """Build the update plan of a validated request (no data downloaded).
+
+    Update plan of a validated request (no data downloaded). The source is
     always asked: the metadata cache (PRG units, indexes, feeds) is
     refreshed, never read (``--check-updates``). A country of an area in PL
     and CZ (``auto``) whose units could not be found is a ``CHECK_FAILED``
-    warning, and the plan of the other one an ``AUTO_PARTIAL_SUCCESS`` one."""
+    warning, and the plan of the other one an ``AUTO_PARTIAL_SUCCESS`` one.
+    """
     with open_cache(cache, force=True, on_notice=sink.add) as metadata:
         jobs, unlisted = _jobs(request, sink, metadata)
         items = [inspect_job(job, track=track, cache=metadata) for job in jobs]
@@ -3454,7 +3651,9 @@ def check_collection(
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
-    """Update plan of ``download_collection`` with the same choice; no data
+    """Build the update plan of ``download_collection`` with the same choice.
+
+    Update plan of ``download_collection`` with the same choice; no data
     is downloaded (``kartograf-plan/1``, track ``collection``).
 
     Packages and area results of GUGiK have no cheap freshness signal: a

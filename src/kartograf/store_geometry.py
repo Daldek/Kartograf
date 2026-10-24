@@ -97,7 +97,7 @@ class Footprint:
 
 
 def pinned_transform(src_crs: str, dst_crs: str) -> PinnedTransform:
-    """The pinned operation Kartograf uses for envelopes of this CRS pair.
+    """Return the pinned operation Kartograf uses for envelopes of this CRS pair.
 
     Chosen once per thread by ``transform.crs.build_pinned_transform``: an
     operation with a known accuracy of at most 1 m, without ballpark and
@@ -140,9 +140,11 @@ def pinned_transform(src_crs: str, dst_crs: str) -> PinnedTransform:
 
 
 def _same_crs(first: str, second: str) -> bool:
-    """The same CRS up to the axis order of a geographic CRS (``OGC:CRS84`` and
-    ``EPSG:4326`` are one WGS 84; the envelopes here are always x = longitude or
-    easting, y = latitude or northing)."""
+    """Check whether two CRS are the same up to the axis order.
+
+    ``OGC:CRS84`` and ``EPSG:4326`` are one WGS 84; the envelopes here are always
+    x = longitude or easting, y = latitude or northing.
+    """
     return first.strip().upper() == second.strip().upper() or (
         CRS.from_user_input(first).equals(
             CRS.from_user_input(second), ignore_axis_order=True
@@ -186,8 +188,11 @@ def _stem(entry: StoreEntry) -> str:
 
 
 def _is_tile(meta: Sidecar | None) -> bool:
-    """A LAZ tile (``extra.tile_sheet``): one part of the area or sheet it was
-    selected for - ``request.bbox`` is that area, not the extent of the file."""
+    """Check whether the sidecar is of a LAZ tile (``extra.tile_sheet``).
+
+    A tile is one part of the area or sheet it was selected for - ``request.bbox``
+    is that area, not the extent of the file.
+    """
     extra = meta.extra if meta is not None else None
     return extra is not None and isinstance(extra.get("tile_sheet"), str)
 
@@ -375,9 +380,12 @@ def _las_bbox(path: Path, crs: str | None) -> BBox | None:
 
 
 def _companion(entry: StoreEntry, name: str) -> Path | None:
-    """``name`` next to the file; for a version, the single version of the
-    same label that holds it (CZ orthophoto members are committed one by
-    one: same edition, different content hashes and directories)."""
+    """``name`` next to the file.
+
+    For a version, the single version of the same label that holds it (CZ orthophoto
+    members are committed one by one: same edition, different content hashes and
+    directories).
+    """
     local = entry.path.with_name(name)
     if local.is_file():
         return local
@@ -558,7 +566,7 @@ def _sidecar_of(entry: StoreEntry) -> Sidecar | None:
 
 
 def _request_footprint(meta: Sidecar | None) -> Footprint | None:
-    """The request bbox of a file that IS that area (not of a LAZ tile)."""
+    """Return the request bbox of a file that IS that area (not of a LAZ tile)."""
     request = meta.request if meta is not None else None
     if request is None or _is_tile(meta):
         return None

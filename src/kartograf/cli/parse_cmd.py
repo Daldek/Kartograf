@@ -39,8 +39,11 @@ _CRS_NAMES = {"EPSG:5514": "S-JTSK", "EPSG:3045": "ETRS89 / UTM 33N"}
 
 
 def _commands_text(info: SheetInfo) -> str:
-    """``--sheet w <komendy>``: the commands that take the code, from the document
-    (the commands that download first, then the report; each with its note)."""
+    """Return ``--sheet w <komendy>``.
+
+    The commands that take the code, from the document (the commands that download
+    first, then the report; each with its note).
+    """
     ordered = sorted(
         info.commands, key=lambda command: declared_commands()[command].kind != "data"
     )
@@ -50,8 +53,11 @@ def _commands_text(info: SheetInfo) -> str:
 
 
 def _format_cz(info: SheetInfo) -> str:
-    """A CZ code: the system, CRS and extent (the frame of an SM5 or ZTM sheet is
-    in the CUZK index, read at the download) and the commands."""
+    """Return a CZ code.
+
+    The system, CRS and extent (the frame of an SM5 or ZTM sheet is in the CUZK index,
+    read at the download) and the commands.
+    """
     system = _CZ_SYSTEM[info.system].format(sheet_system=info.sheet_system)
     if info.bounds is None:
         extent = "rama z indeksu arkuszy CUZK (odczyt przy pobraniu)"
@@ -70,8 +76,10 @@ def _format_cz(info: SheetInfo) -> str:
 
 
 def _format_basics(info: SheetInfo) -> str:
-    """A PL code: the sheet, scale, system and parts (PL-2000 also the zone and
-    the native CRS)."""
+    """Return a PL code.
+
+    The sheet, scale, system and parts (PL-2000 also the zone and the native CRS).
+    """
     lines = [
         f"Godlo:     {info.sheet}",
         f"Skala:     {info.scale}",
@@ -117,9 +125,11 @@ def _format_descendants(sheet: str, found: SheetDescendants) -> str:
 
 
 def format_sheet(info: SheetInfo) -> str:
-    """The text of ``kartograf parse`` from the document: what the code is and, for
-    a PL code, the hierarchy, children and descendants the document has (each
-    block after a blank line)."""
+    """Return the text of ``kartograf parse`` from the document.
+
+    What the code is and, for a PL code, the hierarchy, children and descendants the
+    document has (each block after a blank line).
+    """
     if info.country == "CZ":
         return _format_cz(info)
     blocks = [_format_basics(info)]

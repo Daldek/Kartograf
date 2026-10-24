@@ -44,7 +44,7 @@ def bbox_to_2180(bbox: BBox) -> BBox:
 def resolve_geometry_layer(
     path: str | Path, layer: str | None, sink: NoticeSink
 ) -> str | None:
-    """The layer of ``path`` read for the request (``None`` for a shapefile).
+    """Return the layer of ``path`` read for the request (``None`` for a shapefile).
 
     A GPKG with several layers and no ``layer`` is read from its first layer
     only - the area of the request comes from it; ``GEOMETRY_LAYER_DEFAULT``
@@ -241,7 +241,7 @@ def emit_clipping_notices(
     sink: NoticeSink,
     bbox: BBox,
     countries: tuple[str, ...],
-    parts: dict,
+    parts: dict[str, Any],
     *,
     pl_geometry_sheets: bool = False,
     pl_sheet_list: bool = False,
@@ -316,13 +316,14 @@ def emit_partial_success(
     *,
     check: bool = False,
 ) -> None:
-    """``AUTO_PARTIAL_SUCCESS``: under ``country="auto"`` the countries
-    ``failed`` failed and the countries ``succeeded`` did not - the request
-    ends with code 0 and this warning (ADR-023 points 4-5). The countries
-    come from RECTANGULAR envelopes, so an area deep inside one country
-    routinely reaches the other one; code 1 stays for an explicit
-    ``--country`` and for the failure of every country. ``check``: the plan
-    of the failed countries could not be made (``--check-updates``).
+    """Emit the ``AUTO_PARTIAL_SUCCESS`` notice of a partly failed ``auto`` request.
+
+    Under ``country="auto"`` the countries ``failed`` failed and the countries
+    ``succeeded`` did not - the request ends with code 0 and this warning (ADR-023
+    points 4-5). The countries come from RECTANGULAR envelopes, so an area deep
+    inside one country routinely reaches the other one; code 1 stays for an explicit
+    ``--country`` and for the failure of every country. ``check``: the plan of the
+    failed countries could not be made (``--check-updates``).
     """
     if check:
         text = (

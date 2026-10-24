@@ -54,9 +54,11 @@ _NORMALIZERS: dict[str, Callable[[str], str]] = {
 
 
 class _HelpFormatter(argparse.HelpFormatter):
-    """Help text wrapped by paragraph (a line break starts a new one); lines
-    indented by two spaces - the commands of an ``epilog`` with examples -
-    stay as written, so an example can be copied whole."""
+    """Help text wrapped by paragraph (a line break starts a new one).
+
+    Lines indented by two spaces - the commands of an ``epilog`` with examples - stay as
+    written, so an example can be copied whole.
+    """
 
     def _fill_text(self, text: str, width: int, indent: str) -> str:
         lines = []
@@ -69,11 +71,12 @@ class _HelpFormatter(argparse.HelpFormatter):
 
 
 class _Parser(argparse.ArgumentParser):
-    """``ArgumentParser`` without prefix abbreviations of long flags: a command
-    line keeps its meaning when a group gains a flag (``--out`` is never read
-    as ``--output``, ``--lay`` is no ambiguous prefix). Every subparser of the
-    CLI is of this class (``add_subparsers`` uses the class of its parser) and
-    formats its help with ``_HelpFormatter`` (examples in ``epilog``).
+    """``ArgumentParser`` without prefix abbreviations of long flags.
+
+    A command line keeps its meaning when a group gains a flag (``--out`` is never read
+    as ``--output``, ``--lay`` is no ambiguous prefix). Every subparser of the CLI is of
+    this class (``add_subparsers`` uses the class of its parser) and formats its help
+    with ``_HelpFormatter`` (examples in ``epilog``).
 
     ``usage_errors``: an error raises ``UsageError`` (the argparse message, and the
     id of the command whose parser found it) instead of printing the usage and
@@ -129,8 +132,10 @@ _REMOVED_COMMANDS = {
 
 
 def _product_value(argv: Sequence[str]) -> str | None:
-    """The ``--product`` (also the 0.7.x ``--source``/``-s``) value of a command
-    line (``None`` if absent)."""
+    """Return the ``--product`` value of a command line.
+
+    Also the 0.7.x ``--source``/``-s`` value (``None`` if absent).
+    """
     for i, arg in enumerate(argv):
         flag, eq, value = arg.partition("=")
         if eq and flag in ("--product", "--source"):
@@ -191,8 +196,10 @@ _JSON_HINT = "podaj ja za komenda, np. kartograf elevation list-sources --json"
 
 
 def _join_bbox_values(argv: Sequence[str]) -> list[str]:
-    """``--bbox -447000,...`` -> ``--bbox=-447000,...`` (negative coordinates,
-    e.g. S-JTSK, after a space)."""
+    """Join ``--bbox -447000,...`` into ``--bbox=-447000,...``.
+
+    This is for negative coordinates (e.g. S-JTSK) after a space.
+    """
     joined: list[str] = []
     i = 0
     while i < len(argv):
@@ -209,7 +216,9 @@ def _join_bbox_values(argv: Sequence[str]) -> list[str]:
     return joined
 
 
-def _subparsers(parser: argparse.ArgumentParser) -> argparse._SubParsersAction | None:
+def _subparsers(
+    parser: argparse.ArgumentParser,
+) -> "argparse._SubParsersAction[argparse.ArgumentParser] | None":
     return next(
         (a for a in parser._actions if isinstance(a, argparse._SubParsersAction)),
         None,
@@ -219,8 +228,11 @@ def _subparsers(parser: argparse.ArgumentParser) -> argparse._SubParsersAction |
 def _command_parser(
     root: argparse.ArgumentParser, parsed: argparse.Namespace
 ) -> argparse.ArgumentParser:
-    """The parser of the command of a parsed line (``kartograf elevation
-    download``); the group or the root parser of a line without one."""
+    """Return the parser of the command of a parsed line.
+
+    For ``kartograf elevation download`` it is that command's parser; a line without a
+    command gives the group or the root parser.
+    """
     current = root
     group = getattr(parsed, "command", None)
     names = (group, getattr(parsed, f"{group}_command", None) if group else None)
@@ -233,7 +245,10 @@ def _command_parser(
 
 
 def _flag_owners(root: argparse.ArgumentParser, flag: str) -> str:
-    """The commands having ``flag``: ``boundaries, cadastre download; soil hsg``."""
+    """Return the commands having ``flag``.
+
+    The text is like ``boundaries, cadastre download; soil hsg``.
+    """
     by_command: dict[str, list[str]] = {}
     top = _subparsers(root)
     assert top is not None
@@ -254,7 +269,7 @@ def _flag_owners(root: argparse.ArgumentParser, flag: str) -> str:
 def _unknown_text(
     root: argparse.ArgumentParser, command: argparse.ArgumentParser, extras: list[str]
 ) -> str:
-    """The input error of arguments a command does not have."""
+    """Return the input error of arguments a command does not have."""
     options = f"Opcje: {command.prog} --help"
     first = extras[0]
     flag = first.partition("=")[0]
@@ -272,8 +287,10 @@ def _unknown_text(
 def parse_command_line(
     parser: argparse.ArgumentParser, argv: Sequence[str]
 ) -> argparse.Namespace:
-    """``parser.parse_args(argv)`` with readable input errors (exit code 2, or
-    ``UsageError`` for a parser built with ``usage_errors``).
+    """Run ``parser.parse_args(argv)`` with readable input errors.
+
+    An error exits with code 2, or raises ``UsageError`` for a parser built with
+    ``usage_errors``.
 
     ``--bbox`` with negative coordinates after a space is joined with its
     value; an unknown flag is reported by the parser of the command (its
@@ -288,7 +305,7 @@ def parse_command_line(
 
 
 def _json_value(param: Param, value: object) -> object:
-    """The JSON form of the text or number a flag was given."""
+    """Return the JSON form of the text or number a flag was given."""
     if param.kind == "per_country":
         return parse_per_country(str(value), param.cli_flag or param.name)
     if param.kind == "str_list":
@@ -301,7 +318,7 @@ def _json_value(param: Param, value: object) -> object:
 def parsed_options(
     command: Command, parsed: argparse.Namespace, *, given_only: bool = False
 ) -> tuple[dict[str, object], dict[str, object]]:
-    """The flags of a parsed command line as the JSON form of the options.
+    """Return the flags of a parsed command line as the JSON form of the options.
 
     Parameters
     ----------
@@ -377,8 +394,10 @@ def _help(text: str) -> str:
 
 
 def _epilog(command: Command) -> str | None:
-    """``Przyklady:`` and one command line per example (kept unwrapped by the
-    help formatter, ready to copy)."""
+    """Return ``Przyklady:`` and one command line per example.
+
+    The help formatter keeps them unwrapped, ready to copy.
+    """
     if not command.examples:
         return None
     lines = (f"  {example_command_line(command, e)}" for e in command.examples)
@@ -386,8 +405,11 @@ def _epilog(command: Command) -> str | None:
 
 
 def _type(param: Param) -> Callable[[str], Any] | None:
-    """The argparse ``type`` of a parameter (the text of a flag is converted
-    here only when the conversion cannot fail; the rest is the library's)."""
+    """Return the argparse ``type`` of a parameter.
+
+    The text of a flag is converted here only when the conversion cannot fail; the rest
+    is the library's.
+    """
     if param.normalize is not None:
         return _NORMALIZERS[param.normalize]
     if param.kind == "int":
@@ -398,8 +420,11 @@ def _type(param: Param) -> Callable[[str], Any] | None:
 
 
 def _argument_kwargs(param: Param, given_only: bool) -> dict[str, Any]:
-    """The keyword arguments of ``add_argument`` of a parameter (``given_only``:
-    no default, so the namespace has the flags of the line only)."""
+    """Return the keyword arguments of ``add_argument`` of a parameter.
+
+    With ``given_only`` there is no default, so the namespace has the flags of the line
+    only.
+    """
     kwargs: dict[str, Any] = {"help": _help(resolve(param.description))}
     if not param.positional:
         kwargs["dest"] = param.cli_dest
@@ -430,8 +455,10 @@ def _argument_kwargs(param: Param, given_only: bool) -> dict[str, Any]:
 def _add_params(
     parser: argparse.ArgumentParser, command: Command, given_only: bool
 ) -> None:
-    """The flags and arguments of ``command`` in declaration order: the sections
-    of ``--help`` in order of first use, the exclusive groups inside them."""
+    """Return the flags and arguments of ``command`` in declaration order.
+
+    The sections of ``--help`` in order of first use, the exclusive groups inside them.
+    """
     sections: dict[str, argparse._ArgumentGroup] = {}
     exclusive: dict[str, argparse._MutuallyExclusiveGroup] = {}
     for param in command.params:
@@ -456,7 +483,7 @@ def _add_params(
 
 
 def _add_command(
-    subparsers: argparse._SubParsersAction,
+    subparsers: "argparse._SubParsersAction[Any]",
     command: Command,
     usage_errors: bool,
     given_only: bool,
@@ -480,7 +507,7 @@ def build_parser(
     usage_errors: bool = False,
     given_only: bool = False,
 ) -> argparse.ArgumentParser:
-    """The parser of ``kartograf`` for the declared commands.
+    """Return the parser of ``kartograf`` for the declared commands.
 
     The commands without a group (``parse``, ``catalog``) come first, then the
     groups by position and name; a command without a CLI (``cli`` is ``None``)

@@ -32,7 +32,7 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.download.arguments import require_workers
 from kartograf.download.fetch import (
     FileSlot,
@@ -125,7 +125,7 @@ def _signal(provider: CuzkLazProvider) -> SignalKind:
     ).update_signal
 
 
-def _provider(model: str, vertical_crs: str, cache: MetadataCache | None):
+def _provider(model: str, vertical_crs: str, cache: MetadataCache | None) -> Any:
     # looked up on the module: callers patch the class at its source
     from kartograf.providers.cuzk import laz
 
@@ -135,8 +135,11 @@ def _provider(model: str, vertical_crs: str, cache: MetadataCache | None):
 def _validate_selection(
     *, model: str, vertical_crs: str, sheet: str | None, bbox: BBox | None
 ) -> BBox | None:
-    """Exactly one of ``sheet``/``bbox`` and a valid choice - before any
-    request; the bbox in the registry spelling of its CRS (or ``None``)."""
+    """Validate the choice of exactly one of ``sheet``/``bbox`` before any request.
+
+    Exactly one of ``sheet``/``bbox`` and a valid choice - before any
+    request; the bbox in the registry spelling of its CRS (or ``None``).
+    """
     from kartograf.download.options import validate_request_bbox
 
     if (sheet is None) == (bbox is None):
@@ -187,8 +190,8 @@ def _fetch_sheet(
     *,
     output_dir: str | Path,
     update: UpdateMode | None,
-    parent_request: dict | None,
-    planned: dict | None,
+    parent_request: dict[str, Any] | None,
+    planned: dict[str, Any] | None,
 ) -> VersionedFile:
     """Local version or download of one sheet's file with its sidecar.
 
@@ -196,25 +199,28 @@ def _fetch_sheet(
     of a second ``HEAD`` before the download.
     """
     slot = _slot(provider, sheet, output_dir)
-    received: dict | None = None
+    received: dict[str, Any] | None = None
 
     def on_response(response: requests.Response) -> None:
         nonlocal received
         received = response_signal(response)
 
-    def fetch(staged: Path) -> dict | None:
+    def fetch(staged: Path) -> dict[str, Any] | None:
         provider.download(sheet, staged, on_response=on_response)
         return received
 
-    def probe() -> dict:
+    def probe() -> dict[str, Any]:
         if planned is not None:
             return planned
         return provider.file_signal(sheet)
 
     def write_sidecar(
-        data: Path, version: VersionRef, digest: ContentDigest, http: dict | None
+        data: Path,
+        version: VersionRef,
+        digest: ContentDigest,
+        http: dict[str, Any] | None,
     ) -> None:
-        extra: dict = {}
+        extra: dict[str, Any] = {}
         if http is not None:
             extra["http"] = http
         if provider.system == "sm5":
@@ -261,13 +267,13 @@ def _run(
     output_dir: str | Path,
     update: UpdateMode | None,
     plan: UpdatePlan | None,
-    parent_request: dict | None,
+    parent_request: dict[str, Any] | None,
     workers: int,
     on_progress: CzLazProgressCallback | None,
 ) -> CzLazResult:
     """Version the files of the sheets, collecting per-sheet failures."""
     selected = sheets
-    planned: dict[str, dict | None] = {}
+    planned: dict[str, dict[str, Any] | None] = {}
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
         require_store(plan, store_id(output_dir))
@@ -294,7 +300,7 @@ def _run(
 
     outcomes: list[tuple[str, VersionedFile | None, DownloadError | None]] = []
 
-    def record(outcome: tuple[str, VersionedFile | None, DownloadError | None]):
+    def record(outcome: tuple[str, VersionedFile | None, DownloadError | None]) -> None:
         outcomes.append(outcome)
         if on_progress is not None:
             on_progress(len(outcomes), total)

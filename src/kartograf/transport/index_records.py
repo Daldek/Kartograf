@@ -31,7 +31,8 @@ from urllib.parse import urlencode, urlparse
 import requests
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.bbox import BBox
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.providers.pl.skorowidz_wfs import (
     GML_NS,
@@ -95,7 +96,7 @@ def gfi_records(
     *,
     timeout: float,
 ) -> list[IndexRecord]:
-    """Records of ``layer`` at the centre of the PL sheet ``sheet``.
+    """Return the records of ``layer`` at the centre of the PL sheet ``sheet``.
 
     WMS 1.3.0 GetFeatureInfo (``LAYERS=QUERY_LAYERS=layer``), EPSG:2180 with
     N,E axes, a ``QUERY_HALF_M`` square around the centre of the sheet frame,
@@ -140,7 +141,7 @@ def gfi_records(
 def records_from_gfi(
     content: bytes, *, source: IndexSource, layer: str, context: str
 ) -> list[IndexRecord]:
-    """Records of one GetFeatureInfo answer of ``layer`` (``source.parser``).
+    """Return the records of one GetFeatureInfo answer of ``layer``.
 
     ``map_links``: an empty answer (point outside the layer) -> ``[]``; one
     record per map sheet table. An OGC exception or any other content (HTML
@@ -177,7 +178,7 @@ def wfs_records(
     timeout: float,
     cache: MetadataCache | None = None,
 ) -> list[IndexRecord]:
-    """Records of the features of type ``layer`` in an EPSG:2180 ``bbox``.
+    """Return the records of the features of type ``layer`` in a ``bbox``.
 
     ``WfsIndex`` reads every page (``next`` only, ``numberReturned`` and the
     host of ``next`` checked; ``ExceptionReport`` or non-XML at 200 ->
@@ -211,7 +212,7 @@ def _mm(bbox: BBox) -> str:
 
 
 def _restore_records(payload: object) -> list[IndexRecord] | None:
-    """Records of a cache payload; ``None`` (a miss) for an unreadable one."""
+    """Return the records of a cache payload (``None`` for an unreadable one)."""
     if not isinstance(payload, list):
         return None
     records = []
@@ -236,7 +237,7 @@ def _restore_records(payload: object) -> list[IndexRecord] | None:
 def records_from_wfs(
     features: Iterable[ET.Element], *, source: IndexSource
 ) -> list[IndexRecord]:
-    """Records of WFS features (fields by local name, ``source`` fields).
+    """Return the records of WFS features (fields by local name).
 
     An unusable feature (no unit, no HTTPS URL, no label value, a label
     outside D29, a year that is not a number, an unknown zone) is skipped with
@@ -298,7 +299,7 @@ def _wfs_record(feature: ET.Element, source: IndexSource) -> IndexRecord:
 
 
 def _feature_fields(feature: ET.Element) -> dict[str, str]:
-    """Simple fields of a feature by local name (geometry and envelope skipped).
+    """Return the simple fields of a feature by local name.
 
     A time field published as ``gml:TimeInstant`` gives its ``timePosition``.
     """
@@ -323,10 +324,12 @@ def _feature_fields(feature: ET.Element) -> dict[str, str]:
 
 
 def _zone_slot(value: str | None) -> str | None:
-    """Slot directory of a GUGiK CRS (ADR-044 D7): the PL system as in the
-    segments, a PL-2000 zone below it as in the PL-2000 sheet codes
-    (``PL-2000:S7`` -> ``2000/7``, ``PL-1992`` -> ``1992``); ``None`` for an
-    unknown value."""
+    """Return the slot directory of a GUGiK CRS (ADR-044 D7).
+
+    Slot directory of a GUGiK CRS (ADR-044 D7): the PL system as in the segments, a
+    PL-2000 zone below it as in the PL-2000 sheet codes (``PL-2000:S7`` -> ``2000/7``,
+    ``PL-1992`` -> ``1992``); ``None`` for an unknown value.
+    """
     parsed = parse_pl_system(value)
     if parsed is None:
         return None

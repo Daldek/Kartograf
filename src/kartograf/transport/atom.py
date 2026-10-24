@@ -48,6 +48,7 @@ import zlib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -79,9 +80,12 @@ _KEY_GROUPS = ("sheet", "woj")
 
 @dataclass(frozen=True)
 class AtomEntry:
-    """One dataset of a service feed: ``key`` (the ``sheet`` or ``woj``
-    group, or ``""``), the dataset feed URL, its ``updated``, the named
-    groups of ``entry_pattern`` and the CRSs of its files (``EPSG:<code>``)."""
+    """One dataset of a service feed.
+
+    One dataset of a service feed: ``key`` (the ``sheet`` or ``woj`` group, or ``""``),
+    the dataset feed URL, its ``updated``, the named groups of ``entry_pattern`` and the
+    CRSs of its files (``EPSG:<code>``).
+    """
 
     key: str
     dataset_feed: str
@@ -119,15 +123,21 @@ class UnpackedMember:
 
 
 def single_dataset(params: AtomFilesParams) -> bool:
-    """Whether the feed has exactly one dataset: ``entry_pattern`` has no
-    ``sheet``/``woj`` group keying the index (a national file, key ``""``)."""
+    """Check whether the feed has exactly one dataset.
+
+    Whether the feed has exactly one dataset: ``entry_pattern`` has no ``sheet``/``woj``
+    group keying the index (a national file, key ``""``).
+    """
     groups = re.compile(params.entry_pattern).groupindex
     return not any(group in groups for group in _KEY_GROUPS)
 
 
 def atom_segment_tokens(params: AtomFilesParams, crs: str | None) -> tuple[str, ...]:
-    """Content tokens of the storage segment: ``segment_tokens`` plus the
-    EPSG number of the chosen file when the dataset has several CRSs."""
+    """Return the content tokens of the storage segment.
+
+    Content tokens of the storage segment: ``segment_tokens`` plus the EPSG number of
+    the chosen file when the dataset has several CRSs.
+    """
     if len(params.crs) > 1:
         assert crs is not None  # check_atom_crs
         return (*params.segment_tokens, crs.split(":", 1)[1])
@@ -135,7 +145,7 @@ def atom_segment_tokens(params: AtomFilesParams, crs: str | None) -> tuple[str, 
 
 
 def check_atom_crs(params: AtomFilesParams, crs: str | None) -> None:
-    """The CRS choice of a file (no network).
+    """Check the CRS choice of a file (no network).
 
     Raises
     ------
@@ -171,7 +181,7 @@ def _local(tag: str) -> str:
 
 
 def _link(params: AtomFilesParams, href: str) -> str:
-    """A link of a feed as it is followed: ``https`` for ``force_https``."""
+    """Return a feed link as it is followed (``https`` for ``force_https``)."""
     href = href.strip()
     if params.force_https and href.startswith("http://"):
         return "https://" + href.removeprefix("http://")
@@ -189,7 +199,7 @@ def _crs_of(element: ET.Element) -> tuple[str, ...]:
 
 
 def _alternate(element: ET.Element, context: str) -> ET.Element:
-    """The one ``rel="alternate"`` link of an entry."""
+    """Return the one ``rel="alternate"`` link of an entry."""
     links = [
         link
         for link in element.findall(f"{_ATOM}link")
@@ -267,7 +277,7 @@ def _parse_service(
     return entries
 
 
-def _payload(index: dict[str, AtomEntry]) -> dict:
+def _payload(index: dict[str, AtomEntry]) -> dict[str, Any]:
     return {
         key: {
             "dataset_feed": entry.dataset_feed,
@@ -279,7 +289,7 @@ def _payload(index: dict[str, AtomEntry]) -> dict:
     }
 
 
-def _from_payload(payload: dict) -> dict[str, AtomEntry]:
+def _from_payload(payload: dict[str, Any]) -> dict[str, AtomEntry]:
     return {
         key: AtomEntry(
             key=key,
@@ -293,7 +303,7 @@ def _from_payload(payload: dict) -> dict[str, AtomEntry]:
 
 
 def _cache_key(params: AtomFilesParams) -> str:
-    """The cache entry of an index: the feed and the pattern that keyed it."""
+    """Return the cache key of an index: the feed and the pattern that keyed it."""
     return f"{params.service_feed}|{params.entry_pattern}"
 
 
@@ -305,7 +315,7 @@ def _index(
     refresh: bool,
     timeout: float,
 ) -> tuple[dict[str, AtomEntry], bool]:
-    """The index and whether it was confirmed by the service in this call."""
+    """Return the index and whether the service confirmed it in this call."""
     key = _cache_key(params)
     stored = cache.get_atom_entries(key) if cache is not None else None
     if stored is not None and stored[2] and not refresh:
@@ -389,7 +399,7 @@ def _select(
     context: str,
     params: AtomFilesParams,
 ) -> AtomFile:
-    """The file of a dataset: the entry of the CRS category (or the only one)."""
+    """Select the file of a dataset: the entry of the CRS category (or the only one)."""
     found = [(element, _crs_of(element)) for element in entries]
     if crs is not None:
         chosen = [element for element, codes in found if crs in codes]
@@ -433,7 +443,7 @@ def resolve_atom_file(
     refresh: bool = False,
     timeout: float = DATASET_FEED_TIMEOUT,
 ) -> AtomFile:
-    """The file of dataset ``key`` (``""``: the only dataset) in ``crs``.
+    """Return the file of dataset ``key`` in ``crs`` (``""``: the only dataset).
 
     The index comes from ``atom_index`` (cache, ``refresh``); the dataset
     feed is always read. A key missing from a cached index or a dataset
@@ -487,7 +497,7 @@ def resolve_atom_file(
 
 def fetch_atom_file(
     session: requests.Session, file: AtomFile, staged: Path, *, timeout: float
-) -> dict:
+) -> dict[str, Any]:
     """Download ``file`` into ``staged`` (atomically); its HTTP signal.
 
     Raises
@@ -498,7 +508,7 @@ def fetch_atom_file(
         ``Content-Length`` (no file is left).
     """
     staged = Path(staged)
-    signal: dict = {}
+    signal: dict[str, Any] = {}
     download_to(
         session,
         file.url,
@@ -525,9 +535,10 @@ def fetch_atom_file(
 def unpack_members(
     archive: Path, params: AtomFilesParams, target_dir: Path, stem: str, *, url: str
 ) -> dict[str, UnpackedMember]:
-    """Members of ``params.members`` from a downloaded ZIP as
-    ``<target_dir>/<stem><stored suffix>``; stored suffix -> the stored file
-    and its member name.
+    """Unpack the members of ``params.members`` from a downloaded ZIP.
+
+    Members of ``params.members`` from a downloaded ZIP as ``<target_dir>/<stem><stored
+    suffix>``; stored suffix -> the stored file and its member name.
 
     Every member suffix must match exactly one ZIP member (the longest
     suffix wins: ``.TM33N.jgw`` before ``.jgw``); other members are left in

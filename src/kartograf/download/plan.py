@@ -73,7 +73,9 @@ class PlanItem:
 
 @dataclass(frozen=True)
 class UpdatePlan(Document):
-    """Plan of one store (``kartograf-plan/1``); ``store`` = resolved output
+    """Describe the plan of one store (``kartograf-plan/1``).
+
+    Plan of one store (``kartograf-plan/1``); ``store`` = resolved output
     directory.
 
     ``notices``: the messages emitted while the plan was built (what the
@@ -157,7 +159,7 @@ class UpdatePlan(Document):
         return tuple(item for item in self.items if item.track == track)
 
 
-def _item(raw: dict) -> PlanItem:
+def _item(raw: dict[str, Any]) -> PlanItem:
     status = raw["status"]
     if status not in get_args(ItemStatus):
         raise ValidationError(f"Nieznany status pozycji planu {status!r}")
@@ -183,9 +185,7 @@ def _notice(raw: Mapping[str, object]) -> Notice:
     level = raw["level"]
     if level not in ("info", "warning"):
         raise ValidationError(f"Nieznany poziom komunikatu planu {level!r}")
-    return Notice(
-        cast(Literal["info", "warning"], level), str(raw["code"]), str(raw["text"])
-    )
+    return Notice(level, str(raw["code"]), str(raw["text"]))
 
 
 def store_id(output_dir: str | Path) -> str:
@@ -194,7 +194,7 @@ def store_id(output_dir: str | Path) -> str:
 
 
 def new_plan(output_dir: str | Path, items: Iterable[PlanItem]) -> UpdatePlan:
-    """A plan of the store ``output_dir`` checked now."""
+    """Return the plan of the store ``output_dir`` checked now."""
     return UpdatePlan(
         store=store_id(output_dir),
         checked_at=_clock.now().isoformat(timespec="seconds"),

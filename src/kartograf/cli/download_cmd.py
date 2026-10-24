@@ -1,6 +1,6 @@
-"""
-``elevation download`` and ``imagery download``: flags -> ``download_data``/
-``check_data`` (Z1).
+"""``elevation download`` and ``imagery download``.
+
+Flags -> ``download_data``/``check_data`` (Z1).
 
 The CLI only translates flags into the library arguments (``library_arguments``:
 the catalog says what each flag is), reads and writes the plan file, prints
@@ -18,6 +18,7 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from kartograf.cli._args import library_arguments
 from kartograf.cli._json import emit_document, wants_json
@@ -32,10 +33,10 @@ from kartograf.serialization import Document
 
 
 class _ProgressPrinter:
-    """Progress bar callback; ``pending`` = last line without a line ending.
+    r"""Progress bar callback; ``pending`` = last line without a line ending.
 
     With ``--workers > 1`` ``pending`` reflects the last write (at worst
-    a redundant or missing ``\\n`` before ``Error:``). ``used``: something was
+    a redundant or missing ``\n`` before ``Error:``). ``used``: something was
     drawn (a blank line separates the bar from the status lines). Campaign
     lines may come from worker threads: one lock keeps them whole.
     """
@@ -47,9 +48,11 @@ class _ProgressPrinter:
         self._lock = threading.Lock()
 
     def __call__(self, progress: DownloadProgress) -> None:
-        """Print progress bar and status (``start``: a transfer begins;
-        ``tiles``: LAZ tile counter; ``campaigns``/``campaign``: flights of
-        a sheet with several selected campaigns)."""
+        """Print progress bar and status.
+
+        ``start``: a transfer begins; ``tiles``: LAZ tile counter;
+        ``campaigns``/``campaign``: flights of a sheet with several selected campaigns.
+        """
         if progress.status in ("campaigns", "campaign"):
             with self._lock:
                 self._campaign_line(progress)
@@ -102,9 +105,12 @@ class _ProgressPrinter:
             self.pending = True
 
     def _campaign_line(self, progress: DownloadProgress) -> None:
-        """``Kampanie <arkusz> (do pobrania k z n): ...`` before the first
-        flight download of a sheet, then ``Pobieranie <arkusz> <etykieta>
-        (k/n)...`` before each one; ends a pending bar line first."""
+        """Print the campaign lines of a sheet.
+
+        ``Kampanie <arkusz> (do pobrania k z n): ...`` before the first flight download
+        of a sheet, then ``Pobieranie <arkusz> <etykieta> (k/n)...`` before each one;
+        ends a pending bar line first.
+        """
         if self.pending:
             print()
             self.pending = False
@@ -123,16 +129,20 @@ class _ProgressPrinter:
             )
 
 
-def create_progress_callback(quiet: bool = False, workers: int = 1):
+def create_progress_callback(
+    quiet: bool = False, workers: int = 1
+) -> _ProgressPrinter | None:
     """Progress callback for downloads (``None`` under ``quiet``)."""
     if quiet:
         return None
     return _ProgressPrinter(workers)
 
 
-def _end_progress(on_progress) -> None:
-    """End a bar line left unterminated (the last unit ``skipped``, a LAZ
-    tile counter) before the status lines and errors."""
+def _end_progress(on_progress: Any) -> None:
+    """End a bar line left unterminated before the status lines and errors.
+
+    It is the last unit ``skipped`` or a LAZ tile counter.
+    """
     if getattr(on_progress, "pending", False) is True:
         print()
         on_progress.pending = False
@@ -165,14 +175,20 @@ def _print_notice(notice: Notice) -> None:
 
 
 def notice_printer(args: argparse.Namespace) -> Callable[[Notice], None] | None:
-    """The ``on_notice`` of a command: it prints each data notice on stderr. With
-    ``--json`` there is none - the notices are in the document (``notices``)."""
+    """Return the ``on_notice`` of a command: it prints each data notice on stderr.
+
+    With ``--json`` there is none - the notices are in the document (``notices``).
+    """
     return None if wants_json(args) else _print_notice
 
 
-def progress_printer(args: argparse.Namespace, workers: int = 1):
-    """The ``on_progress`` of a command: the bar of ``create_progress_callback``
-    (none under ``--quiet`` and ``--json``)."""
+def progress_printer(
+    args: argparse.Namespace, workers: int = 1
+) -> _ProgressPrinter | None:
+    """Return the ``on_progress`` of a command.
+
+    The bar of ``create_progress_callback`` (none under ``--quiet`` and ``--json``).
+    """
     return create_progress_callback(args.quiet or wants_json(args), workers)
 
 
@@ -183,11 +199,13 @@ def progress_printer(args: argparse.Namespace, workers: int = 1):
 
 @dataclass
 class _PlanContext:
-    """Update plan of one run: ``--check-updates`` collects one plan per
-    request (``plans``, written as ONE file); ``--upgrade --plan`` reads the
-    file once (``loaded``). ``document``: the result of the run (a plan or a
-    report); with ``--json`` it waits until the plan file is written, then it
-    is printed."""
+    """Update plan of one run.
+
+    ``--check-updates`` collects one plan per request (``plans``, written as ONE file);
+    ``--upgrade --plan`` reads the file once (``loaded``). ``document``: the result of
+    the run (a plan or a report); with ``--json`` it waits until the plan file is
+    written, then it is printed.
+    """
 
     plans: list[UpdatePlan] = field(default_factory=list)
     loaded: UpdatePlan | None = None
@@ -195,7 +213,7 @@ class _PlanContext:
 
 
 def _plan_context(args: argparse.Namespace) -> _PlanContext:
-    """The run's plan context (a bare ``Namespace`` in tests: a fresh one)."""
+    """Return the run's plan context (a bare ``Namespace`` in tests: a fresh one)."""
     ctx = getattr(args, "plan_ctx", None)
     if not isinstance(ctx, _PlanContext):
         ctx = _PlanContext()
@@ -206,9 +224,12 @@ def _plan_context(args: argparse.Namespace) -> _PlanContext:
 def _present(
     args: argparse.Namespace, document: Document, render: Callable[[], int]
 ) -> int:
-    """The outcome of a command: its text (``render`` prints it and gives the exit
-    code) or, with ``--json``, the document - kept until ``run_with_plan_file`` has
-    written the plan file, so that a failed write is the only thing reported."""
+    """Return the outcome of a command.
+
+    Its text (``render`` prints it and gives the exit code) or, with ``--json``, the
+    document - kept until ``run_with_plan_file`` has written the plan file, so that a
+    failed write is the only thing reported.
+    """
     _plan_context(args).document = document
     if wants_json(args):
         return 0
@@ -216,8 +237,11 @@ def _present(
 
 
 def _ran_nothing(document: Document | None) -> bool:
-    """A report with no file, no failure and no stale position (the five reports
-    of ``kartograf-download/1`` share these keys); a plan has none of them."""
+    """Return a report with no file, no failure and no stale position.
+
+    The five reports of ``kartograf-download/1`` share these keys; a plan has none of
+    them.
+    """
     names = ("files", "raw", "inputs", "failed", "stale")
     return document is not None and not any(getattr(document, n, None) for n in names)
 
@@ -307,9 +331,12 @@ _PLAN_TEXT = {
 
 
 def store_path_label(item: PlanItem) -> str:
-    """Subject of a plan line: the position's path below ``--output``, as in
-    the status lines of the download (one format in both modes; a derived
-    file and its raw ZIP of the same TERYT get different lines)."""
+    """Return the subject of a plan line.
+
+    The position's path below ``--output``, as in the status lines of the download (one
+    format in both modes; a derived file and its raw ZIP of the same TERYT get different
+    lines).
+    """
     return "/".join(part for part in (item.segment, item.hierarchy, item.name) if part)
 
 
@@ -331,8 +358,11 @@ def _plan_line(item: PlanItem) -> str:
 
 
 def _report_plan(args: argparse.Namespace, plan: UpdatePlan) -> int:
-    """``--check-updates``: print the positions (stdout, also with ``-q``) and
-    keep the plan for ``--plan``. A position that could not be checked = 1."""
+    """Run ``--check-updates``.
+
+    Print the positions (stdout, also with ``-q``) and keep the plan for ``--plan``. A
+    position that could not be checked = 1.
+    """
     _plan_context(args).plans.append(plan)
 
     def render() -> int:
@@ -384,10 +414,12 @@ def _status_lines(
 
 
 def _status_line(unit: str, file: VersionedFile, update: UpdateMode | None) -> str:
-    """Status line of one file (``unit``: its path below ``--output``); a
-    local version the default mode did not compare with the source (no cheap
-    signal, or not asked: ADR-036 erratum 3) gets ``(bez sprawdzania;
-    --check-updates)``."""
+    """Return the status line of one file.
+
+    ``unit`` is its path below ``--output``; a local version the default mode did not
+    compare with the source (no cheap signal, or not asked: ADR-036 erratum 3) gets
+    ``(bez sprawdzania; --check-updates)``.
+    """
     (line,) = _status_lines(unit, (file,), file.newer)
     unchecked = file.unverified in ("none", "unchecked")
     if file.status == "local" and unchecked and update is None:
@@ -409,7 +441,7 @@ def _report_file(
 
 
 def _unit_of(path: Path, output_dir: Path) -> str:
-    """Unit of a file in status lines: its path below ``--output``."""
+    """Return the unit of a file in status lines: its path below ``--output``."""
     try:
         return Path(path).relative_to(output_dir).as_posix()
     except ValueError:
@@ -419,8 +451,10 @@ def _unit_of(path: Path, output_dir: Path) -> str:
 def _print_version_summary(
     statuses: Sequence[str], failed: int, output_dir: Path
 ) -> None:
-    """Counters of the files of the request (spec 4.5); ``uzyte ponownie``
-    (HSG, D33) only when a derived file was reused."""
+    """Print the counters of the files of the request (spec 4.5).
+
+    ``uzyte ponownie`` (HSG, D33) only when a derived file was reused.
+    """
     counts = Counter(statuses)
     reused = f"uzyte ponownie: {counts['reused']}, " if counts["reused"] else ""
     print(
@@ -438,8 +472,9 @@ def _print_version_summary(
 def cmd_download(
     args: argparse.Namespace, products: Sequence[str] | None = None
 ) -> int:
-    """``<grupa> download`` of sheet products (plan file cycle around
-    ``_cmd_download``).
+    """Run ``<grupa> download`` of sheet products.
+
+    It is the plan file cycle around ``_cmd_download``.
 
     ``products``: the ``--product`` values of the group; a missing
     ``--product`` names only them (ADR-039: the group checks the presence of
@@ -453,9 +488,11 @@ def cmd_download(
 
 
 def _data_notices(args: argparse.Namespace) -> Callable[[Notice], None] | None:
-    """The ``on_notice`` of ``elevation download``/``imagery download``: the data
-    notices on stderr, the sheet list header as the preamble of the result on
-    stdout (D15); none with ``--json`` (every notice is in the document)."""
+    """Return the ``on_notice`` of ``elevation download``/``imagery download``.
+
+    The data notices on stderr, the sheet list header as the preamble of the result on
+    stdout (D15); none with ``--json`` (every notice is in the document).
+    """
     if wants_json(args):
         return None
     quiet = args.quiet
@@ -474,7 +511,7 @@ def _data_notices(args: argparse.Namespace) -> Callable[[Notice], None] | None:
 def _cmd_download(args: argparse.Namespace) -> int:
     """One ``download_data``/``check_data`` call after the plan file is read."""
     _cache_warnings_shown.clear()
-    arguments = {**library_arguments(args), "output_dir": args.output}
+    arguments: dict[str, Any] = {**library_arguments(args), "output_dir": args.output}
     on_notice = _data_notices(args)
     if getattr(args, "check_updates", False):
         return _report_plan(args, check_data(**arguments, on_notice=on_notice))
@@ -491,9 +528,13 @@ def _cmd_download(args: argparse.Namespace) -> int:
     return _present(args, report, lambda: _print_report(args, report, on_progress))
 
 
-def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> int:
-    """Status lines (the path of each file below ``--output``), summary,
-    failures and stale positions of a report."""
+def _print_report(
+    args: argparse.Namespace, report: DataReport, on_progress: object
+) -> int:
+    """Print status lines, summary, failures and stale positions of a report.
+
+    The status lines name the path of each file below ``--output``.
+    """
     update = _update_mode(args)
     _end_progress(on_progress)
     if not args.quiet:

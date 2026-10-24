@@ -10,7 +10,8 @@ from kartograf.project import (
     open_project,
     verify_project,
 )
-from tests.integration.test_bdoo import BORDER, TRIMMED, route, serve
+from tests.integration.test_bdoo import TRIMMED, route, serve
+from tests.integration.test_nmt_100m import BORDER
 
 pytestmark = pytest.mark.usefixtures("frozen_clock")
 

@@ -1,6 +1,6 @@
-"""
-The example of an error hint (spec 6.3, part (b)): ``example_for``, and the hint
-of a wrong command line (``usage_hint``).
+"""Examples of error hints (spec 6.3, part (b)).
+
+It has ``example_for``, and the hint of a wrong command line (``usage_hint``).
 
 A ``ValidationError`` names the argument that is wrong (``option``); the hint of
 its ``kartograf-error/1`` document points at the CLI flag of that argument and at
@@ -28,8 +28,11 @@ _SELECTIONS = ("teryt", "ku", "sheet", "bbox", "geometry", "whole_country")
 
 
 def _shows(command: Command, param: Param, example: Example) -> bool:
-    """The command line of ``example`` has ``param``: its flag (not dropped as a
-    default of the flag) or, for a positional argument, its value."""
+    """Check whether the command line of ``example`` has ``param``.
+
+    It has its flag (not dropped as a default of the flag) or, for a positional
+    argument, its value.
+    """
     if param.positional:
         return param.name in example.options or param.name in example.run
     flags = {flag for flag in (param.cli_flag, param.short) if flag}
@@ -39,8 +42,9 @@ def _shows(command: Command, param: Param, example: Example) -> bool:
 def _best(
     command: Command, param: Param | None, given: Mapping[str, object] | None
 ) -> Example | None:
-    """The example of the hint of a call that gave ``given`` (``None``: the
-    command has examples of other products only).
+    """Return the example of the hint of a call that gave ``given``.
+
+    ``None`` means the command has examples of other products only.
 
     With a ``product`` among ``given`` only the examples of that product are
     taken (when the examples of the command tell products apart). Of those the
@@ -80,7 +84,7 @@ def example_for(
     option: str | None,
     given: Mapping[str, object] | None = None,
 ) -> tuple[str | None, str | None]:
-    """The CLI flag of an argument and an example command line that uses it.
+    """Return the CLI flag of an argument and an example command line that uses it.
 
     Parameters
     ----------
@@ -121,8 +125,9 @@ def example_for(
 
 
 def usage_hint(command: str | None, *, max_chars: int) -> str | None:
-    """Where the parameters of a command are and an example line of it: the hint
-    of a ``UsageError`` about the command.
+    """Return where the parameters of a command are and an example line of it.
+
+    This is the hint of a ``UsageError`` about the command.
 
     Parameters
     ----------

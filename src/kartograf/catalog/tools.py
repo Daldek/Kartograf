@@ -275,7 +275,7 @@ class ToolSpec:
 
 
 def _brief(tool: str, name: str) -> str | None:
-    """The words a tool call has for an argument (``None``: none)."""
+    """Return the words a tool call has for an argument (``None``: none)."""
     if (tool, name) in _BRIEF_FOR:
         return _BRIEF_FOR[tool, name]
     if name in _BRIEF:
@@ -287,7 +287,7 @@ def _brief(tool: str, name: str) -> str | None:
 
 
 def _property(param: ParamInfo, tool: str) -> dict[str, Any]:
-    """The JSON Schema of one argument (spec 9.4 item 2)."""
+    """Return the JSON Schema of one argument (spec 9.4 item 2)."""
     listed = param.allowed is not None and (tool, param.name) not in _NO_ENUM
     allowed = list(param.allowed) if listed and param.allowed is not None else None
     schema: dict[str, Any]
@@ -338,7 +338,7 @@ def _property(param: ParamInfo, tool: str) -> dict[str, Any]:
 def _object_schema(
     properties: dict[str, dict[str, Any]], required: Sequence[str]
 ) -> dict[str, Any]:
-    """The root schema of a tool: an object with exactly these arguments."""
+    """Return the root schema of a tool: an object with exactly these arguments."""
     schema: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
         schema["required"] = list(required)
@@ -351,8 +351,10 @@ def _object_schema(
 def _from_params(
     params: Sequence[ParamInfo], tool: str
 ) -> tuple[dict[str, Any], dict[str, Kind]]:
-    """The input schema and the kind of every argument of the parameters that have
-    an API argument."""
+    """Return the input schema and the kind of every argument.
+
+    The parameters that have an API argument are used.
+    """
     exposed = [param for param in params if param.argument]
     properties = {str(param.argument): _property(param, tool) for param in exposed}
     required = [str(param.argument) for param in exposed if param.required]
@@ -370,8 +372,11 @@ def _annotations(command: CommandInfo, *, read_only: bool) -> ToolAnnotations:
 def _describe_tool(
     summary: str, schema: str | None = None, pointer: str | None = None
 ) -> str:
-    """``<summary>. <where the arguments are>. Wynik: <document>.`` (a data tool
-    names no document: all twelve return the same, the instructions say which)."""
+    """Return ``<summary>. <where the arguments are>. Wynik: <document>.``.
+
+    A data tool names no document: all twelve return the same, the instructions say
+    which.
+    """
     parts = [f"{summary.rstrip('.')}."]
     if pointer is not None:
         parts.append(pointer)
@@ -381,7 +386,7 @@ def _describe_tool(
 
 
 def _command_tool(command: CommandInfo, family: str) -> ToolSpec:
-    """A tool that runs one catalog command."""
+    """Build the tool that runs one catalog command."""
     assert command.params is not None and command.tool is not None
     schema, kinds = _from_params(command.params, command.tool)
     summary = command.summary
@@ -495,7 +500,10 @@ def _project_check_tool(command: CommandInfo) -> ToolSpec:
 
 
 def _check_schema(spec: ToolSpec) -> dict[str, Any]:
-    """The schema of a data tool for a check: the task options and ``output_dir``."""
+    """Return the schema of a data tool for a check.
+
+    The task options and ``output_dir``.
+    """
     keep = {*spec.task_options, "output_dir"}
     properties = {
         name: copy.deepcopy(schema)
@@ -508,8 +516,10 @@ def _check_schema(spec: ToolSpec) -> dict[str, Any]:
 
 @functools.cache
 def _built() -> tuple[tuple[ToolSpec, ...], dict[str, dict[str, Any]]]:
-    """Every tool in the order of ``FAMILIES`` and the check schema of every data
-    tool."""
+    """Return every tool in the order of ``FAMILIES`` and the check schemas.
+
+    The check schema of every data tool is included.
+    """
     catalog = get_catalog(params=True)
     by_tool: dict[str, list[CommandInfo]] = {}
     for command in catalog.commands:
@@ -548,8 +558,9 @@ def _built() -> tuple[tuple[ToolSpec, ...], dict[str, dict[str, Any]]]:
 
 
 def tool_specs(families: Sequence[str] | None = None) -> tuple[ToolSpec, ...]:
-    """The tools of the given families (all by default) in the order of
-    ``FAMILIES``.
+    """Return the tools of the given families.
+
+    All families are the default; the order is that of ``FAMILIES``.
 
     Raises
     ------
@@ -569,9 +580,10 @@ def tool_specs(families: Sequence[str] | None = None) -> tuple[ToolSpec, ...]:
 
 
 def check_arguments_schema(tool: str) -> dict[str, Any]:
-    """The schema of the ``arguments`` of ``check_updates`` for a data tool: its
-    input schema without the arguments of a run (``update``, ``plan``,
-    ``workers``, ``summary``), ``output_dir`` still required.
+    """Return the schema of the ``arguments`` of ``check_updates`` for a data tool.
+
+    Its input schema without the arguments of a run (``update``, ``plan``, ``workers``,
+    ``summary``), ``output_dir`` still required.
 
     Raises
     ------

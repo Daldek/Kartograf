@@ -97,8 +97,11 @@ def size_text(value: int | None) -> str:
 
 
 def share_text(part_m2: float, whole_m2: float) -> str:
-    """``58%`` - a share rounded down (an incomplete combination never reads
-    100%), ``<1%`` for a non-zero share below one per cent."""
+    """Format a share as ``58%``, rounded down.
+
+    An incomplete combination never reads 100%; ``<1%`` is for a non-zero share below
+    one per cent.
+    """
     if whole_m2 <= 0:
         return "-"
     percent = int(part_m2 * 100 // whole_m2)
@@ -148,8 +151,10 @@ def _complete(combination: AvailabilityCombination, land_m2: float) -> str:
 
 
 def _label(combination: AvailabilityCombination) -> str:
-    """``2025 PL-1992 1m EVRF2007 ASC`` / ``DMP OK S-JTSK 0.5m Bpv TIFF`` - a
-    combination in one line."""
+    """Return a combination in one line.
+
+    The text is like ``2025 PL-1992 1m EVRF2007 ASC`` / ``DMP OK S-JTSK 0.5m Bpv TIFF``.
+    """
     first = (
         str(combination.year) if combination.year is not None else _model(combination)
     )
@@ -279,9 +284,11 @@ def _print_details(report: AvailabilityReport) -> None:
 
 
 def _print_campaigns(combination: AvailabilityCombination, land_m2: float) -> None:
-    """KD-1/KD-2 of a PL combination: the land in full sheets (incomplete
-    only), each campaign on its own and the campaigns of the records the
-    hint downloads."""
+    """KD-1/KD-2 of a PL combination.
+
+    The land in full sheets (incomplete only), each campaign on its own and the
+    campaigns of the records the hint downloads.
+    """
     if not combination.complete:
         print(
             "    lad w ramach pelnych arkuszy: "

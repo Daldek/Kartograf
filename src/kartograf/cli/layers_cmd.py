@@ -42,8 +42,11 @@ _SOIL_NOTE = (
 
 
 def _depth_note() -> str:
-    """The explanation of the depth codes: the description the library gives the
-    depths of SoilGrids (every depth is a depth interval below the surface)."""
+    """Return the explanation of the depth codes.
+
+    The description the library gives the depths of SoilGrids (every depth is a depth
+    interval below the surface).
+    """
     return "; ".join(dict.fromkeys(soil_choices()["depth"].values()))
 
 
@@ -69,8 +72,11 @@ def _classes(layers: LayerList) -> list[str]:
 
 
 def _depths(layers: LayerList) -> list[str]:
-    """The depth intervals; one published for a minority of the properties (``ocs``:
-    0-30cm) is marked with the properties that have it."""
+    """Return the depth intervals.
+
+    One published for a minority of the properties (``ocs``: 0-30cm) is marked with the
+    properties that have it.
+    """
     properties = [p for p in layers.properties or () if isinstance(p, PropertyInfo)]
     lines = []
     for depth in layers.depths or ():
@@ -109,7 +115,7 @@ def _soil(layers: LayerList) -> list[str]:
 
 
 def _corine(layers: LayerList) -> list[str]:
-    """The release years of CORINE: CLMS data or the WMS preview."""
+    """Return the release years of CORINE: CLMS data or the WMS preview."""
     return [
         "  CORINE: jedna klasyfikacja pokrycia terenu.",
         "  Dostepne lata (--year, rok referencyjny):",
@@ -118,9 +124,11 @@ def _corine(layers: LayerList) -> list[str]:
 
 
 def _named(layers: LayerList) -> list[str]:
-    """Layers with a description (BDOT10k, with the note on the classes), or only
-    the names of the layers of the service (ZABAGED, Data50, Data250) with the
-    note on the area result."""
+    """Return layers with a description (BDOT10k, with the note on the classes).
+
+    Or only the names of the layers of the service (ZABAGED, Data50, Data250) with the
+    note on the area result.
+    """
     if any(layer.description is not None for layer in layers.layers):
         return [
             *(f"    {layer.code}  - {layer.description}" for layer in layers.layers),
@@ -135,7 +143,7 @@ def _named(layers: LayerList) -> list[str]:
 
 
 def format_layers(layers: LayerList) -> str:
-    """The text of ``list-layers``: the source and what the product offers."""
+    """Return the text of ``list-layers``: the source and what the product offers."""
     if layers.properties is not None:
         body = _soil(layers)
     elif layers.classes:
@@ -148,8 +156,10 @@ def format_layers(layers: LayerList) -> str:
 
 
 def cmd_list_layers(args: argparse.Namespace, group: str) -> int:
-    """``<group> list-layers`` (``landcover`` with its ``--product``, ``soil``):
-    the text, or with ``--json`` the document of ``list_layers``."""
+    """Run ``<group> list-layers`` (``landcover`` with its ``--product``, ``soil``).
+
+    The result is the text, or with ``--json`` the document of ``list_layers``.
+    """
     layers = list_layers(group=group, product=getattr(args, "product", None))
     if wants_json(args):
         return emit_document(layers)

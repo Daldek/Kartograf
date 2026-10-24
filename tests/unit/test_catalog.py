@@ -916,7 +916,7 @@ def test_real_parser_matches_the_catalog():
             for name in {p.exclusive for p in declaration.params if p.exclusive}
         }
         assert _exclusive_groups(leaf) == exclusive, command_id
-        positional = [a for a in leaf._get_positional_actions()]
+        positional = list(leaf._get_positional_actions())
         assert [a.dest for a in positional] == [
             p.name for p in command.params or () if p.positional
         ], command_id

@@ -21,6 +21,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from typing import Any
 
 import requests
 from urllib3.exceptions import NameResolutionError
@@ -43,10 +44,12 @@ MAX_RETRY_AFTER = 60
 
 def backoff_delay(attempt: int) -> float:
     """Pause after failed attempt ``attempt`` (from 0): 2 s, 4 s, ..."""
-    return RETRY_BACKOFF_BASE ** (attempt + 1)
+    delay: float = RETRY_BACKOFF_BASE ** (attempt + 1)
+    return delay
 
 
 def http_status(exc: requests.RequestException) -> int | None:
+    """Return the HTTP status code carried by ``exc`` (``None`` without a response)."""
     response = getattr(exc, "response", None)
     return response.status_code if response is not None else None
 
@@ -81,8 +84,11 @@ def retry_wait(exc: requests.RequestException, backoff: float) -> float:
 
 
 def _pause(seconds: float) -> None:
-    """Wait ``seconds`` before the next attempt; a thread of a stopping pool does
-    not wait it out (``Stopped``)."""
+    """Wait ``seconds`` before the next attempt.
+
+    Wait ``seconds`` before the next attempt; a thread of a stopping pool does not wait
+    it out (``Stopped``).
+    """
     stop = current_stop()
     if stop is None:
         time.sleep(seconds)
@@ -91,9 +97,12 @@ def _pause(seconds: float) -> None:
 
 
 def failure_reason(exc: requests.RequestException | None) -> str:
-    """Short class of a failed request for user lines (``proba 1/3 nieudana
-    (...)``): the HTTP code, a timeout, no network/DNS or a broken connection.
-    The full exception stays in the cause chain (``KARTOGRAF_DEBUG=1``)."""
+    """Return a short class of a failed request for user lines.
+
+    Short class of a failed request for user lines (``proba 1/3 nieudana (...)``): the
+    HTTP code, a timeout, no network/DNS or a broken connection. The full exception
+    stays in the cause chain (``KARTOGRAF_DEBUG=1``).
+    """
     if exc is None:  # retries=0: no attempt was made
         return "bez proby"
     status = http_status(exc)
@@ -112,7 +121,7 @@ def failure_reason(exc: requests.RequestException | None) -> str:
 
 
 def http_failure(
-    message: str, exc: requests.RequestException | None, **kwargs
+    message: str, exc: requests.RequestException | None, **kwargs: Any
 ) -> DownloadError:
     """DownloadError with the HTTP code of the last attempt (if any)."""
     status = http_status(exc) if exc is not None else None
@@ -153,6 +162,7 @@ class SessionPerThread:
         self._local = threading.local()
 
     def get(self) -> requests.Session:
+        """Return the injected session or the one of the current thread."""
         if self.injected is not None:
             return self.injected
         session = getattr(self._local, "session", None)
@@ -195,7 +205,7 @@ def get_with_retry(
     ``params`` and ``headers`` (optional) go to ``session.get`` unchanged -
     every attempt sends the same query parameters and headers.
     """
-    extra: dict = {"params": params} if params is not None else {}
+    extra: dict[str, Any] = {"params": params} if params is not None else {}
     if headers is not None:
         extra["headers"] = headers
     context = description or url
@@ -231,7 +241,7 @@ def get_with_retry(
     ) from last_error
 
 
-def response_signal(response: requests.Response) -> dict:
+def response_signal(response: requests.Response) -> dict[str, Any]:
     """HTTP freshness signal of a response (versioned store, ``extra.http``).
 
     ``{"etag", "last_modified", "content_length"}``; a missing header (or a
@@ -258,8 +268,10 @@ def head_signal(
     timeout: float,
     retries: int = MAX_RETRIES,
     description: str = "",
-) -> dict:
-    """``response_signal`` of a ``HEAD`` request, with the retry policy of
+) -> dict[str, Any]:
+    """Return the ``response_signal`` of a ``HEAD`` request, with retries.
+
+    ``response_signal`` of a ``HEAD`` request, with the retry policy of
     ``get_with_retry`` (network errors, 429 and 5xx retried).
 
     Raises

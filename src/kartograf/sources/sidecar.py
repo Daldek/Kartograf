@@ -15,6 +15,7 @@ import os
 import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from kartograf import _clock
 from kartograf._version import build_version
@@ -26,6 +27,9 @@ from kartograf.sources.registry import (
     horizontal_crs_for_sheet,
     resolve_vertical_crs,
 )
+
+if TYPE_CHECKING:
+    from kartograf.transform.crs import PinnedTransform
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +49,12 @@ class ResultMetadata:
     vertical_source: str  # "native" | "ellipsoidal" | "server"
     resolution: str | None
     nodata: float | None
-    request: dict  # {"sheet": ...} | {"bbox": [...], "bbox_crs": ...}
-    license: dict  # {"id","attribution","url"}
+    request: dict[str, Any]  # {"sheet": ...} | {"bbox": [...], "bbox_crs": ...}
+    license: dict[str, Any]  # {"id","attribution","url"}
     downloaded_at: str  # ISO 8601 UTC
     kartograf_version: str
-    transform: dict | None = None  # stage 0: None
-    extra: dict = field(default_factory=dict)
+    transform: dict[str, Any] | None = None  # stage 0: None
+    extra: dict[str, Any] = field(default_factory=dict)
     sha256: str | None = None  # of the data file (A3, 0.7.1)
     size_bytes: int | None = None
     schema: str = "kartograf-meta/1"
@@ -118,7 +122,9 @@ def _crs_from_pl_coordinate(x: float) -> str | None:
 
 
 def pl_sheet_horizontal_crs(data_path: Path | None, sheet: str) -> str:
-    """ACTUAL CRS of a PL sheet file: zone from the sheet code, checked against
+    """Return the ACTUAL CRS of a PL sheet file.
+
+    ACTUAL CRS of a PL sheet file: zone from the sheet code, checked against
     coordinates.
 
     A PL-2000 sheet code determines the zone (EPSG:2176..2179), PL-1992 -> EPSG:2180.
@@ -142,7 +148,9 @@ def pl_sheet_horizontal_crs(data_path: Path | None, sheet: str) -> str:
     return actual
 
 
-def _select_channel(descriptor: SourceDescriptor, request: dict) -> AccessChannel:
+def _select_channel(
+    descriptor: SourceDescriptor, request: dict[str, Any]
+) -> AccessChannel:
     """Pick the request channel (bbox -> a bbox_* channel, else the first match)."""
     want_bbox = "bbox" in request
     for ch in descriptor.channels:
@@ -155,7 +163,7 @@ def _select_channel(descriptor: SourceDescriptor, request: dict) -> AccessChanne
 def _default_horizontal_crs(
     descriptor: SourceDescriptor,
     channel: AccessChannel,
-    request: dict,
+    request: dict[str, Any],
     data_path: Path | None,
 ) -> str:
     """Channel CRS; for a PL sheet by sheet code - the file's CRS (PL-2000 zone, N8)."""
@@ -182,24 +190,27 @@ def _select_channel_by_capability(
 
 
 def _now_iso() -> str:
-    """``downloaded_at``: UTC with microseconds — orders two versions of
-    one file downloaded within the same second (``version_key``)."""
+    """Return the ``downloaded_at`` stamp: UTC with microseconds.
+
+    ``downloaded_at``: UTC with microseconds — orders two versions of one file
+    downloaded within the same second (``version_key``).
+    """
     return _clock.now().isoformat(timespec="microseconds")
 
 
 def build_metadata(
     descriptor: SourceDescriptor,
     *,
-    request: dict,
+    request: dict[str, Any],
     vertical_crs: str | None = None,
     data_path: Path | None = None,
-    transform: dict | None = None,
-    extra: dict | None = None,
+    transform: dict[str, Any] | None = None,
+    extra: dict[str, Any] | None = None,
     capability: str | None = None,
     nodata: float | None = None,
     horizontal_crs: str | None = None,
     digest: tuple[str, int] | None = None,
-    version: dict | None = None,
+    version: dict[str, Any] | None = None,
     product: str | None = None,
 ) -> ResultMetadata:
     """Build metadata from the descriptor + the call context.
@@ -265,7 +276,7 @@ def build_metadata(
 
 def write_sidecar(
     data_path: Path,
-    meta: ResultMetadata | dict,
+    meta: ResultMetadata | dict[str, Any],
     *,
     atomic: bool = False,
     exclusive: bool = False,
@@ -315,7 +326,7 @@ def write_sidecar(
     return sidecar_path
 
 
-def pinned_label(pinned) -> str:
+def pinned_label(pinned: "PinnedTransform") -> str:
     """Pinned operation description for the sidecar ``transform`` field (one format)."""
     return f"pinned: {pinned.description} ({pinned.accuracy_m} m)"
 
@@ -324,22 +335,23 @@ def emit_sidecar(
     descriptor_key: object,
     data_path: Path,
     *,
-    request: dict,
+    request: dict[str, Any],
     vertical_crs: str | None = None,
     horizontal_crs: str | None = None,
-    pinned_transforms: dict | None = None,
-    extra: dict | None = None,
+    pinned_transforms: dict[str, Any] | None = None,
+    extra: dict[str, Any] | None = None,
     capability: str | None = None,
     nodata: float | None = None,
     required: bool = False,
     digest: tuple[str, int] | None = None,
-    version: dict | None = None,
+    version: dict[str, Any] | None = None,
     exclusive: bool = False,
     product: str | None = None,
 ) -> Path | None:
-    """Best-effort result sidecar - the one place of the policy "a sidecar never
-    aborts the download" (D7): any build/write exception ends in
-    a log warning and ``None``.
+    """Write a best-effort result sidecar (it never aborts the download).
+
+    Best-effort result sidecar - the one place of the policy "a sidecar never aborts the
+    download" (D7): any build/write exception ends in a log warning and ``None``.
 
     A ``descriptor_key`` that is not a ``str`` (provider without a descriptor, a
     ``Mock`` stand-in) = no sidecar, without a warning. ``pinned_transforms``

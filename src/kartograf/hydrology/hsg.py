@@ -36,12 +36,15 @@ from kartograf.notices import ALL_NODATA, Notice, NoticeSink
 from kartograf.serialization import Document
 
 if TYPE_CHECKING:
+    from rasterio.io import DatasetReader
+
     from kartograf.cache.metadata import MetadataCache
     from kartograf.core.bbox import BBox
     from kartograf.download.fetch import FileSlot, UpdateMode, VersionedFile
     from kartograf.download.plan import ItemStatus, PlanItem, Track, UpdatePlan
-    from kartograf.download.versions import LocalVersion
+    from kartograf.download.versions import ContentDigest, LocalVersion, VersionRef
     from kartograf.landcover.manager import LandCoverManager
+    from kartograf.providers.soilgrids import SoilGridsProvider
 logger = logging.getLogger(__name__)
 
 
@@ -306,10 +309,11 @@ def texture_to_hsg_array(texture: np.ndarray) -> np.ndarray:
         dtype=np.uint8,
     )
 
-    return mapping[texture]
+    result: np.ndarray = mapping[texture]
+    return result
 
 
-def _geographic_row_cell_areas(src) -> np.ndarray:
+def _geographic_row_cell_areas(src: "DatasetReader") -> np.ndarray:
     """
     Geodetic area (m2) of one cell in every row of a geographic raster.
 
@@ -370,7 +374,9 @@ def _classify_hsg(
     return hsg
 
 
-def _write_hsg_geotiff(output_path: Path, hsg: np.ndarray, profile: dict) -> None:
+def _write_hsg_geotiff(
+    output_path: Path, hsg: np.ndarray, profile: dict[str, Any]
+) -> None:
     """Write HSG classes as uint8 GeoTIFF (nodata 0) with the band tags."""
     import rasterio
 
@@ -440,11 +446,13 @@ class HsgReport(Document):
     stale: "tuple[PlanItem, ...]"
     notices: "tuple[Notice, ...]"
     ok: bool
-    summary: "dict | None" = None
+    summary: "dict[str, Any] | None" = None
 
 
 class HSGCalculator:
     """
+    Compute Hydrologic Soil Groups from SoilGrids in the version store.
+
     Hydrologic Soil Groups from SoilGrids clay/sand/silt in the version
     store (the layer below ``calculate_hsg``/``check_hsg``; not in the
     public API).
@@ -462,9 +470,9 @@ class HSGCalculator:
     def __init__(
         self,
         output_dir: str | Path,
-        provider=None,
+        provider: "SoilGridsProvider | None" = None,
         cache: "MetadataCache | bool" = True,
-    ):
+    ) -> None:
         """
         Initialize HSG calculator.
 
@@ -490,7 +498,7 @@ class HSGCalculator:
         self._cache = cache
 
     @property
-    def provider(self):
+    def provider(self) -> "SoilGridsProvider":
         """Return the input provider without changing cache ownership."""
         if self._provider is not None:
             return self._provider
@@ -534,8 +542,11 @@ class HSGCalculator:
         depth: str | None,
         on_notice: "Callable[[Notice], None] | None" = None,
     ) -> "UpdatePlan":
-        """Plan of ``calculate_hsg`` with the same selection, WITHOUT
-        downloading or computing: 3 x ``landcover`` + 1 x ``hsg``."""
+        """Return the plan of ``calculate_hsg`` without downloading or computing.
+
+        Plan of ``calculate_hsg`` with the same selection, WITHOUT
+        downloading or computing: 3 x ``landcover`` + 1 x ``hsg``.
+        """
         sink = NoticeSink(on_notice)
         selection = self._validated(sheet, bbox, geometry, layer, depth, sink)
         assert depth is not None  # checked with the selection
@@ -551,7 +562,9 @@ class HSGCalculator:
         layer: str | None = None,
         depth: str | None,
     ) -> None:
-        """Every check of ``calculate_hsg``/``check_hsg`` before the first
+        """Check the request of ``calculate_hsg`` before the first network access.
+
+        Every check of ``calculate_hsg``/``check_hsg`` before the first
         request: one selection and the input depth (no network, nothing
         written; a ``geometry`` file is read for its envelope) - the same
         exception type and text as ``calculate_hsg`` (``project add``,
@@ -572,8 +585,8 @@ class HSGCalculator:
         layer: str | None,
         depth: str | None,
         sink: NoticeSink,
-    ) -> dict:
-        """The selection, then the depth by the input manager's own checks."""
+    ) -> dict[str, Any]:
+        """Check the selection, then the depth by the input manager's own checks."""
         selection = self._selection(sheet, bbox, geometry, layer, sink)
         self._manager().validate_request(
             **_where(selection), property=HSG_INPUTS[0], depth=depth, stat=_HSG_STAT
@@ -587,7 +600,7 @@ class HSGCalculator:
         geometry: str | Path | None,
         layer: str | None,
         sink: "NoticeSink",
-    ) -> dict:
+    ) -> dict[str, Any]:
         """HSG selection: the canonical sheet or an EPSG:2180 bbox."""
         from kartograf.core.sheet_parser import SheetParser
         from kartograf.download.area import bbox_to_2180, geometry_envelope_2180
@@ -622,7 +635,7 @@ class HSGCalculator:
             return LandCoverManager(self._output_dir, "soilgrids", cache=self._cache)
         return LandCoverManager(self._output_dir, self._provider)
 
-    def _slot(self, selection: dict, depth: str, stat: str) -> "FileSlot":
+    def _slot(self, selection: dict[str, Any], depth: str, stat: str) -> "FileSlot":
         from kartograf.download.storage import unit_slot
         from kartograf.landcover.store import hsg_segment
 
@@ -635,7 +648,7 @@ class HSGCalculator:
         )
 
     def _check(
-        self, selection: dict, depth: str, stat: str, sink: "NoticeSink"
+        self, selection: dict[str, Any], depth: str, stat: str, sink: "NoticeSink"
     ) -> "UpdatePlan":
         from kartograf.download.plan import new_plan
 
@@ -645,8 +658,8 @@ class HSGCalculator:
         )
 
     def _input_items(
-        self, selection: dict, depth: str, stat: str, sink: "NoticeSink"
-    ) -> list:
+        self, selection: dict[str, Any], depth: str, stat: str, sink: "NoticeSink"
+    ) -> list[Any]:
         manager = self._manager()
         where = _where(selection)
         return [
@@ -657,10 +670,15 @@ class HSGCalculator:
             ).items
         ]
 
-    def _hsg_item(self, selection: dict, depth: str, stat: str, inputs: list):
-        """Plan position of the HSG: ``current`` when a version of the current
+    def _hsg_item(
+        self, selection: dict[str, Any], depth: str, stat: str, inputs: list[Any]
+    ) -> "PlanItem":
+        """Return the plan position of the HSG.
+
+        Plan position of the HSG: ``current`` when a version of the current
         local inputs exists and every input is current; ``check_failed`` when an
-        input could not be checked; otherwise ``missing`` (to compute)."""
+        input could not be checked; otherwise ``missing`` (to compute).
+        """
         from kartograf.download.fetch import local_version
         from kartograf.download.plan import PlanItem
         from kartograf.landcover.store import selection_unit
@@ -670,9 +688,7 @@ class HSGCalculator:
         label = "+".join(sorted(set(labels))) if all(labels) else None
         failed = [i for i in inputs if i.status == "check_failed"]
         shas = tuple(i.local_sha256 for i in inputs)
-        reusable = (
-            _matching_version(slot, shas) if all(shas) else None  # type: ignore[arg-type]
-        )
+        reusable = _matching_version(slot, shas) if all(shas) else None
         local = local_version(slot)
         status: ItemStatus
         if failed:
@@ -699,16 +715,19 @@ class HSGCalculator:
 
     def _calculate(
         self,
-        selection: dict,
+        selection: dict[str, Any],
         depth: str,
         stat: str,
         update: "UpdateMode | None",
         plan: "UpdatePlan | None",
         sink: "NoticeSink",
     ) -> HsgReport:
-        """The inputs, then the HSG of their set (computed or reused). An
+        """Run the inputs, then the HSG of their set.
+
+        The inputs, then the HSG of their set (computed or reused). An
         input that failed leaves the HSG out (its failure in ``failed``);
-        a plan without the HSG position keeps its local version."""
+        a plan without the HSG position keeps its local version.
+        """
         from kartograf.download.data import UnitFailure, UnitFile
         from kartograf.download.fetch import validate_update
         from kartograf.download.plan import require_store, select_planned, store_id
@@ -722,7 +741,7 @@ class HSGCalculator:
             bbox=selection.get("bbox_obj"), sheet=selection.get("sheet")
         )
         planned_hsg = True
-        stale: list = []
+        stale: list[Any] = []
         if plan is not None:
             if update != "upgrade":
                 raise ValidationError(
@@ -785,15 +804,18 @@ class HSGCalculator:
     def _reuse_or_compute(
         self,
         slot: "FileSlot",
-        selection: dict,
+        selection: dict[str, Any],
         depth: str,
         stat: str,
         files: "list[VersionedFile]",
         sink: "NoticeSink",
     ) -> "VersionedFile":
-        """The HSG version of these inputs: reused, or computed and stored (a
+        """Return the HSG version of these inputs, reusing or computing it.
+
+        The HSG version of these inputs: reused, or computed and stored (a
         computed HSG without a single class - every input cell is a gap -
-        gets ``extra.all_nodata`` and the ``ALL_NODATA`` warning)."""
+        gets ``extra.all_nodata`` and the ``ALL_NODATA`` warning).
+        """
         import rasterio
 
         from kartograf.download.fetch import (
@@ -855,7 +877,12 @@ class HSGCalculator:
         if empty:
             extra["all_nodata"] = True
 
-        def write(data: Path, ref, dg, _http) -> None:
+        def write(
+            data: Path,
+            ref: "VersionRef",
+            dg: "ContentDigest",
+            _http: dict[str, Any] | None,
+        ) -> None:
             emit_sidecar(
                 _SOILGRIDS,
                 data,
@@ -893,7 +920,7 @@ class HSGCalculator:
 def _calculator(
     output_dir: str | Path | None, cache: "MetadataCache | bool"
 ) -> HSGCalculator:
-    """The calculator of the store ``output_dir`` (checked first)."""
+    """Return the calculator of the store ``output_dir`` (checked first)."""
     if output_dir is None:
         raise ValidationError(_OUTPUT_REQUIRED, option="output_dir")
     return HSGCalculator(output_dir, cache=cache)
@@ -913,7 +940,9 @@ def calculate_hsg(
     cache: "MetadataCache | bool" = True,
     on_notice: "Callable[[Notice], None] | None" = None,
 ) -> HsgReport:
-    """Hydrologic Soil Groups of an area (``soil hsg``) in the version store
+    """Calculate Hydrologic Soil Groups of an area in the version store.
+
+    Hydrologic Soil Groups of an area (``soil hsg``) in the version store
     of ``output_dir``.
 
     Parameter names and values are the flags of the command in
@@ -986,7 +1015,9 @@ def check_hsg(
     cache: "MetadataCache | bool" = True,
     on_notice: "Callable[[Notice], None] | None" = None,
 ) -> "UpdatePlan":
-    """Update plan of ``calculate_hsg`` with the same choice, WITHOUT
+    """Return the update plan of ``calculate_hsg`` without downloading.
+
+    Update plan of ``calculate_hsg`` with the same choice, WITHOUT
     downloading or computing: the three inputs (track ``landcover``,
     compared with the SoilGrids edition) and the HSG (track ``hsg``:
     ``current`` when a version of the current inputs exists, else
@@ -1016,7 +1047,9 @@ def validate_hsg_request(
     layer: str | None = None,
     depth: str | None = None,
 ) -> None:
-    """Every check of ``calculate_hsg``/``check_hsg`` before the first
+    """Check the request of ``calculate_hsg`` before the first network access.
+
+    Every check of ``calculate_hsg``/``check_hsg`` before the first
     request: the store, one selection and the input depth (no network,
     nothing written; a ``geometry`` file is read for its envelope) - the
     same exception type and text as ``calculate_hsg`` (``project add``,
@@ -1034,6 +1067,8 @@ def validate_hsg_request(
 
 def hsg_statistics(hsg_path: str | Path) -> dict[str, Any]:
     """
+    Compute statistics of an HSG raster over its request area.
+
     Statistics of an HSG raster over its request area (``soil hsg
     --summary``).
 
@@ -1115,9 +1150,12 @@ def hsg_statistics(hsg_path: str | Path) -> dict[str, Any]:
 
 
 def _request_area(hsg_path: Path) -> "BBox | None":
-    """The request area of an HSG raster from its sidecar: ``request.bbox``
+    """Return the request area of an HSG raster from its sidecar.
+
+    The request area of an HSG raster from its sidecar: ``request.bbox``
     in ``request.bbox_crs`` or the frame of ``request.sheet``; ``None``
-    without a readable sidecar or area."""
+    without a readable sidecar or area.
+    """
     import json
 
     from kartograf.core.bbox import BBox
@@ -1140,7 +1178,7 @@ def _request_area(hsg_path: Path) -> "BBox | None":
     return None
 
 
-def _area_shares(src, area: "BBox") -> np.ndarray:
+def _area_shares(src: "DatasetReader", area: "BBox") -> np.ndarray:
     """Share (0-1) of every raster cell inside ``area``.
 
     The area outline (densified edges) is transformed to the raster CRS and
@@ -1178,7 +1216,10 @@ def _area_shares(src, area: "BBox") -> np.ndarray:
         transform=src.transform * Affine.scale(1 / _SUBCELLS),
         invert=True,
     )
-    return inside.reshape(src.height, _SUBCELLS, src.width, _SUBCELLS).mean(axis=(1, 3))
+    shares: np.ndarray = inside.reshape(
+        src.height, _SUBCELLS, src.width, _SUBCELLS
+    ).mean(axis=(1, 3))
+    return shares
 
 
 def hsg_from_rasters(
@@ -1221,7 +1262,7 @@ def hsg_from_rasters(
     layers = {"clay": Path(clay), "sand": Path(sand), "silt": Path(silt)}
     arrays: dict[str, np.ndarray] = {}
     nodatas: dict[str, float | None] = {}
-    profile: dict = {}
+    profile: dict[str, Any] = {}
     with tempfile.TemporaryDirectory() as tmp:
         for name, src_path in layers.items():
             with rasterio.open(src_path) as src:
@@ -1286,7 +1327,7 @@ def _write_rasters_sidecar(
     )
 
 
-def _bbox_request(bbox: "BBox") -> dict:
+def _bbox_request(bbox: "BBox") -> dict[str, Any]:
     """HSG selection of a bbox: sidecar ``request`` + the ``BBox`` itself."""
     from kartograf.core.bbox import bbox_coords
 
@@ -1300,8 +1341,11 @@ def _bbox_request(bbox: "BBox") -> dict:
 def _input_plan(
     plan: "UpdatePlan | None", prop: str, depth: str, stat: str
 ) -> "UpdatePlan | None":
-    """The plan positions of one input (its segment): the other inputs are
-    separate requests of the manager, not files that left the selection."""
+    """Narrow the plan to the positions of one input.
+
+    The plan positions of one input (its segment): the other inputs are
+    separate requests of the manager, not files that left the selection.
+    """
     if plan is None:
         return None
     from dataclasses import replace
@@ -1312,7 +1356,7 @@ def _input_plan(
     return replace(plan, items=tuple(i for i in plan.items if i.segment == segment))
 
 
-def _where(selection: dict) -> dict:
+def _where(selection: dict[str, Any]) -> dict[str, Any]:
     """``LandCoverManager`` selection keyword of an HSG selection."""
     if "sheet" in selection:
         return {"sheet": selection["sheet"]}
@@ -1320,10 +1364,10 @@ def _where(selection: dict) -> dict:
 
 
 def _matching_version(slot: "FileSlot", shas: tuple[str, ...]) -> "LocalVersion | None":
-    """The newest HSG version computed from inputs with exactly these sha256."""
+    """Return the newest HSG version computed from inputs with these sha256."""
     from kartograf.download.versions import list_versions, newest_version
 
-    def inputs_of(version) -> tuple[str, ...]:
+    def inputs_of(version: "LocalVersion") -> tuple[str, ...]:
         extra = version.meta.get("extra") or {}
         files = extra.get("source_files") or []
         return tuple(str(f.get("sha256")) for f in files if isinstance(f, dict))
@@ -1334,7 +1378,7 @@ def _matching_version(slot: "FileSlot", shas: tuple[str, ...]) -> "LocalVersion 
 
 
 def _local_only(slot: "FileSlot") -> "VersionedFile | None":
-    """A position left out of the plan: its local version, nothing computed."""
+    """Return the local version of a position left out of the plan."""
     from kartograf.download.fetch import VersionedFile, link_version, local_version
 
     local = local_version(slot)

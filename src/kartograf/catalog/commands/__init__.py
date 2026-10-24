@@ -57,7 +57,7 @@ def _module_names() -> list[str]:
 
 @functools.cache
 def declared() -> Declared:
-    """The declarations of every module of this package.
+    """Return the declarations of every module of this package.
 
     Raises
     ------
@@ -77,6 +77,8 @@ def declared() -> Declared:
 
 @functools.cache
 def declared_commands() -> Mapping[str, Command]:
-    """The declared commands by id (``elevation download``), in the order of
-    ``declared().commands``."""
+    """Return the declared commands by id (``elevation download``).
+
+    The order is that of ``declared().commands``.
+    """
     return MappingProxyType({command.id: command for command in declared().commands})

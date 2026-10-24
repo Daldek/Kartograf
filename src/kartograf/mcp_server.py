@@ -1,6 +1,6 @@
-"""
-The MCP server of Kartograf (spec 9): the tools of ``kartograf.catalog.tools``
-over stdio, for AI agents.
+"""The MCP server of Kartograf (spec 9).
+
+The tools of ``kartograf.catalog.tools`` over stdio, for AI agents.
 
 Every tool calls one function of the library and returns the document that
 function's result serializes to (``to_dict()``, the same document as the CLI
@@ -128,10 +128,13 @@ class _Plan:
 
 
 def default_cache_file() -> Path:
-    """The metadata cache of the server: ``<user cache directory>/kartograf/
-    metadata.db`` (``$XDG_CACHE_HOME`` or ``~/.cache``; ``%LOCALAPPDATA%`` on
-    Windows). It is not ``<cwd>/.kartograf_cache.db``: the client chooses the
-    working directory of the server."""
+    """Return the metadata cache of the server.
+
+    ``<user cache directory>/kartograf/metadata.db`` (``$XDG_CACHE_HOME`` or
+    ``~/.cache``; ``%LOCALAPPDATA%`` on Windows). It is not
+    ``<cwd>/.kartograf_cache.db``: the client chooses the working directory of the
+    server.
+    """
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     else:
@@ -141,10 +144,13 @@ def default_cache_file() -> Path:
 
 
 def _open_cache(path: Path) -> MetadataCache:
-    """The cache at ``path``: its directory is made here, the file by the first
-    write of the library. A directory that cannot be made (a read-only home, a
-    file in the way) does not stop the server: like the CLI and the library with
-    a cache they cannot open, it warns and works without the cache."""
+    """Return the cache at ``path``.
+
+    Its directory is made here, the file by the first write of the library. A directory
+    that cannot be made (a read-only home, a file in the way) does not stop the server:
+    like the CLI and the library with a cache they cannot open, it warns and works
+    without the cache.
+    """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:
@@ -173,7 +179,7 @@ _TYPE_TEXT = {
 
 
 def _type_text(value: object) -> str:
-    """The Polish name of the JSON type of a Python value."""
+    """Return the Polish name of the JSON type of a Python value."""
     if value is None:
         return _TYPE_TEXT["null"]
     if isinstance(value, bool):
@@ -196,9 +202,11 @@ _RANK = {"required": 0, "additionalProperties": 1, "dependentRequired": 2}
 
 
 def _first_violation(validator: Any, arguments: Mapping[str, Any]) -> Any | None:
-    """The violation of the schema to report: a missing argument, then an unknown
-    one, then a missing companion, then a wrong value (in the order of the
-    arguments); ``None`` when the arguments are valid."""
+    """Return the violation of the schema to report.
+
+    A missing argument, then an unknown one, then a missing companion, then a wrong
+    value (in the order of the arguments); ``None`` when the arguments are valid.
+    """
     errors = list(validator.iter_errors(arguments))
     if not errors:
         return None
@@ -210,8 +218,10 @@ def _first_violation(validator: Any, arguments: Mapping[str, Any]) -> Any | None
 
 
 def _violation(error: Any) -> ValidationError:
-    """``ValidationError`` of a violation of the input schema: ``option`` is the
-    argument, the message says what is wrong (Polish, ASCII)."""
+    """``ValidationError`` of a violation of the input schema.
+
+    ``option`` is the argument, the message says what is wrong (Polish, ASCII).
+    """
     path = list(error.absolute_path)
     option = str(path[0]) if path else None
     where = option
@@ -272,8 +282,11 @@ def _violation(error: Any) -> ValidationError:
 
 
 def _progress_text(event: DownloadProgress) -> str:
-    """``<status> <unit> (<current>/<total>): <message>`` of a progress event
-    (ASCII; the empty parts are left out)."""
+    """Return the text of a progress event.
+
+    The form is ``<status> <unit> (<current>/<total>). <message>`` (ASCII; the
+    empty parts are left out).
+    """
     text = " ".join(part for part in (event.status, event.sheet) if part)
     if event.total:
         text += f" ({event.current}/{event.total})"
@@ -314,8 +327,11 @@ class _Progress:
 
 
 class _Toolbox:
-    """The tools of a server: the check of the arguments of a call and the call
-    of the library (no SDK in here: the glue is ``create_server``)."""
+    """The tools of a server.
+
+    The check of the arguments of a call and the call of the library (no SDK in here:
+    the glue is ``create_server``).
+    """
 
     def __init__(
         self,
@@ -337,8 +353,10 @@ class _Toolbox:
         self._allow_dirs = tuple(allow_dirs)
 
     def command_of(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> str | None:
-        """The id of the catalog command a call is about, as far as the
-        arguments tell (for the error document; never raises)."""
+        """Return the id of the catalog command a call is about.
+
+        As far as the arguments tell (for the error document; never raises).
+        """
         if len(spec.commands) == 1:
             return spec.commands[0]
         if spec.name == CHECK_UPDATES:
@@ -351,8 +369,10 @@ class _Toolbox:
         return None
 
     def plan(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> _Plan:
-        """Check the arguments of a call (spec 9.4: the input schema, the rule of
-        absolute paths and ``--allow-dir``) and prepare its library call.
+        """Check the arguments of a call and prepare its library call.
+
+        The checks (spec 9.4) are the input schema, the rule of absolute paths and
+        ``--allow-dir``.
 
         Raises
         ------
@@ -379,8 +399,11 @@ class _Toolbox:
             raise _violation(error)
 
     def _check_paths(self, kinds: Mapping[str, str], values: Mapping[str, Any]) -> None:
-        """Every path is absolute and, with ``--allow-dir``, inside one of the
-        directories (after ``Path.resolve()``)."""
+        """Check that every path is absolute and inside an allowed directory.
+
+        With ``--allow-dir``, inside one of the directories (after
+        ``Path.resolve()``).
+        """
         for option, value in values.items():
             if kinds.get(option) != "path" or not isinstance(value, str):
                 continue  # a value of a wrong form is the library's to report
@@ -473,12 +496,12 @@ class _Toolbox:
 
 
 def _takes(function: str, parameter: str) -> bool:
-    """The library function (a name of ``kartograf``) has the parameter."""
+    """Check whether a library function (a name of ``kartograf``) has the parameter."""
     return parameter in inspect.signature(getattr(kartograf, function)).parameters
 
 
 def _wire_tool(spec: ToolSpec) -> types.Tool:
-    """The protocol form of a tool (``tools/list``)."""
+    """Return the protocol form of a tool (``tools/list``)."""
     import mcp_types as types
 
     hints = spec.annotations
@@ -496,10 +519,12 @@ def _wire_tool(spec: ToolSpec) -> types.Tool:
 
 
 def _result(document: Document, *, failed: bool | None = None) -> types.CallToolResult:
-    """The result of a tool: the document as compact JSON text and as structured
-    content. It is an error exactly when the CLI would exit with a code other
-    than 0 for the document: ``ok`` is false (``failed=True`` forces it for an
-    error document, which has no ``ok``)."""
+    """Return the result of a tool.
+
+    The document as compact JSON text and as structured content. It is an error exactly
+    when the CLI would exit with a code other than 0 for the document: ``ok`` is false
+    (``failed=True`` forces it for an error document, which has no ``ok``).
+    """
     import mcp_types as types
 
     data = document.to_dict()
@@ -513,8 +538,10 @@ def _result(document: Document, *, failed: bool | None = None) -> types.CallTool
 async def _execute(
     ctx: ServerRequestContext[_State], spec: ToolSpec, plan: _Plan
 ) -> types.CallToolResult:
-    """Run a planned call in worker threads (spec 9.7) and encode its document
-    there, so that a large document does not stop the other calls.
+    """Run a planned call in worker threads (spec 9.7) and encode its document.
+
+    The document is encoded there, so that a large document does not stop the
+    other calls.
 
     The check of the library (no network) comes first and does not wait for a
     free slot; a call that uses the network takes one of ``MAX_NETWORK_CALLS``.
@@ -552,7 +579,7 @@ def create_server(
     cache: MetadataCache | Path | bool | None = None,
     allow_dirs: Sequence[str | Path] = (),
 ) -> Server[_State]:
-    """The MCP server: the tools of the given families (all by default).
+    """Build the MCP server with the tools of the given families (all by default).
 
     Parameters
     ----------
@@ -643,7 +670,7 @@ def create_server(
 
 
 def _families(text: str) -> list[str]:
-    """The value of ``--tools``: families separated by commas."""
+    """Return the value of ``--tools``: families separated by commas."""
     names = [name.strip() for name in text.split(",")]
     unknown = [name for name in names if name not in FAMILIES]
     if unknown:
@@ -655,8 +682,9 @@ def _families(text: str) -> list[str]:
 
 
 def _allowed_directory(directory: str | Path) -> Path:
-    """A directory of ``--allow-dir`` as an absolute path (``~`` expanded): a
-    relative one would stand for the working directory the client chose for the
+    """Return a directory of ``--allow-dir`` as an absolute path (``~`` expanded).
+
+    A relative one would stand for the working directory the client chose for the
     server, which the paths of the calls (always absolute) do not share.
 
     Raises
@@ -674,7 +702,7 @@ def _allowed_directory(directory: str | Path) -> Path:
 
 
 def _allow_dir_argument(text: str) -> Path:
-    """The type of ``--allow-dir``: a usage error for a relative directory."""
+    """Return the type of ``--allow-dir``: a usage error for a relative directory."""
     try:
         return _allowed_directory(text)
     except ValueError as error:
@@ -720,8 +748,11 @@ def _parser() -> argparse.ArgumentParser:
 
 
 async def _serve(server: Server[_State]) -> None:
-    """Serve one connection on stdin and stdout; stray output of the library on
-    stdout goes to stderr (the SDK claims the descriptors while it serves)."""
+    """Serve one connection on stdin and stdout.
+
+    Stray output of the library on stdout goes to stderr (the SDK claims the descriptors
+    while it serves).
+    """
     from mcp.server.stdio import stdio_server
 
     async with stdio_server() as (read_stream, write_stream):

@@ -113,7 +113,7 @@ class _Scanner:
 
 
 class _BodyWriter:
-    """Writes a part body; the line break before the next delimiter is dropped.
+    r"""Writes a part body; the line break before the next delimiter is dropped.
 
     The delimiter is searched as ``\\n--boundary``, so a CRLF break leaves a
     trailing ``\\r`` - the last byte is held back until the end of the part.

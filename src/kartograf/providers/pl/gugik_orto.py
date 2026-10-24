@@ -39,7 +39,8 @@ from typing import Literal
 import requests
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.sheet_parser import BBox, SheetParser, series_scale
+from kartograf.core.bbox import BBox
+from kartograf.core.sheet_parser import SheetParser, series_scale
 from kartograf.exceptions import NoCoverageError, ValidationError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import (
@@ -73,9 +74,11 @@ OrtoCoverage = Literal["standard", "high"]
 
 
 def image_source(product: object) -> SourceDescriptor | None:
-    """The PL source of an image product on a GUGiK WMS sheet index
-    (``orto``, ``intensity``, ``true-orto``, ``oblique-orto``); ``None`` for
-    any other product."""
+    """Return the PL source of an image product on a GUGiK WMS sheet index.
+
+    The products are ``orto``, ``intensity``, ``true-orto``, ``oblique-orto``;
+    ``None`` for any other product.
+    """
     if not isinstance(product, str):
         return None
     return next(
@@ -89,7 +92,7 @@ def image_source(product: object) -> SourceDescriptor | None:
 
 
 def sheet_index_channel(key: str) -> AccessChannel:
-    """The WMS sheet index channel of source ``key`` (``SheetIndexParams``).
+    """Return the WMS sheet index channel of source ``key`` (``SheetIndexParams``).
 
     Raises
     ------
@@ -125,17 +128,21 @@ def _params(channel: AccessChannel) -> WcsCutoutParams:
 
 
 def coverage_choices(key: str) -> str:
-    """``standard (...), high (...)``: the ``--coverage`` values of the
-    cutout of ``key`` with their meaning (channel ``notes``), from the
-    registry."""
+    """Return the ``--coverage`` values of the cutout of ``key`` with their meaning.
+
+    The form is ``standard (...), high (...)``; the meaning is the channel ``notes``,
+    from the registry.
+    """
     return ", ".join(
         f"{_params(c).variant} ({c.notes})" for c in wcs_cutout_channels(key)
     )
 
 
 def _coverage_error(key: str, coverage: object) -> ValidationError | None:
-    """The error of ``coverage`` for the cutout of ``key`` (``None`` = valid):
-    required with several cutout channels, none with one."""
+    """Return the error of ``coverage`` for the cutout of ``key`` (``None`` = valid).
+
+    It is required with several cutout channels, none with one.
+    """
     channels = wcs_cutout_channels(key)
     product = get_source(key).product
     if len(channels) == 1:
@@ -165,8 +172,9 @@ def _coverage_error(key: str, coverage: object) -> ValidationError | None:
 
 
 def wcs_cutout_channel(key: str, coverage: str | None) -> AccessChannel:
-    """The WCS cutout channel of source ``key`` chosen by ``coverage``
-    (``None``: the only channel of a source with one).
+    """Return the WCS cutout channel of source ``key`` chosen by ``coverage``.
+
+    ``None``: the only channel of a source with one.
 
     Raises
     ------
@@ -183,8 +191,10 @@ def wcs_cutout_channel(key: str, coverage: str | None) -> AccessChannel:
 
 
 def cutout_resolution_labels(key: str, coverage: str | None) -> list[str]:
-    """Labels K2 of the cutout pixels of ``key`` and ``coverage`` (``0.1m``,
-    ``0.25m``, ...)."""
+    """Return the K2 labels of the cutout pixels of ``key`` and ``coverage``.
+
+    For example ``0.1m``, ``0.25m``.
+    """
     return [
         resolution_label(v)
         for v in _params(wcs_cutout_channel(key, coverage)).resolutions
@@ -194,9 +204,11 @@ def cutout_resolution_labels(key: str, coverage: str | None) -> list[str]:
 def cutout_choice_error(
     key: str, coverage: object, resolution: object
 ) -> ValidationError | None:
-    """The error of a WCS cutout choice of source ``key`` (``None`` = valid;
-    texts name the CLI flags, lists from the registry; ``option`` and
-    ``allowed`` name the argument and its values)."""
+    """Return the error of a WCS cutout choice of source ``key`` (``None`` = valid).
+
+    Texts name the CLI flags, lists from the registry; ``option`` and
+    ``allowed`` name the argument and its values.
+    """
     error = _coverage_error(key, coverage)
     if error is not None:
         return error
@@ -222,8 +234,11 @@ def cutout_choice_error(
 
 
 def image_directions(product: object) -> tuple[str, ...]:
-    """View directions of an image product (``n``, ``e``, ``s``, ``w`` of the
-    oblique orthophotomap), registry order; ``()`` for a product without."""
+    """Return the view directions of an image product.
+
+    ``n``, ``e``, ``s``, ``w`` of the oblique orthophotomap, registry order; ``()``
+    for a product without.
+    """
     source = image_source(product)
     if source is None:
         return ()
@@ -399,15 +414,20 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
     @property
     def storage_suffix(self) -> str | None:
-        """File name suffix in the store: ``_<direction>`` of an oblique image
-        (the four files of a sheet share one segment); the record file name
-        ends with it too (``..._7.125.11.08_N.tif``, compared without case)."""
+        """Return the file name suffix in the store.
+
+        ``_<direction>`` of an oblique image (the four files of a sheet share one
+        segment); the record file name ends with it too
+        (``..._7.125.11.08_N.tif``, compared without case).
+        """
         return f"_{self._direction}" if self._direction is not None else None
 
     @property
     def sheet_scale(self) -> str:
-        """PL-1992 sheet level of the records (``1:5000`` = the 8-part codes of
-        the true orthophotomap)."""
+        """Return the PL-1992 sheet level of the records.
+
+        ``1:5000`` = the 8-part codes of the true orthophotomap.
+        """
         return series_scale(self._index.sheet_parts)
 
     # =========================================================================
@@ -458,8 +478,11 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         return self._resolve_sheet(sheet, timeout).url
 
     def _layers(self, endpoint: str, timeout: float | None = None) -> list[str]:
-        """Index layers: the layer of the direction, the fixed layers of the
-        descriptor, or (none fixed) the yearly layers of GetCapabilities."""
+        """Return the index layers.
+
+        The layer of the direction, the fixed layers of the
+        descriptor, or (none fixed) the yearly layers of GetCapabilities.
+        """
         if self._direction is not None:
             return [dict(self._index.directions)[self._direction]]
         if self._index.layers:
@@ -584,8 +607,11 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         )
 
     def _wcs_target(self) -> tuple[str, str]:
-        """Endpoint and coverage of the WCS cutout channel; without one the
-        raw request of the product (``download_bbox`` checked it exists)."""
+        """Return the endpoint and coverage of the WCS cutout channel.
+
+        Without one the raw request of the product (``download_bbox`` checked it
+        exists).
+        """
         if self._cutout is None:
             assert self.RAW_WCS_TARGET is not None  # download_bbox checked it
             return self.RAW_WCS_TARGET
@@ -754,8 +780,9 @@ def image_provider(
     direction: str | None = None,
     session: requests.Session | None = None,
 ) -> GugikImageProvider:
-    """The provider of the sheets of an image product (``download_data``):
-    the RGB composition of the orthophotomap (``product="orto"``), the other
+    """Provide the sheets of an image product (``download_data``).
+
+    The RGB composition of the orthophotomap (``product="orto"``), the other
     image products by their descriptor, one ``direction`` of an oblique image.
 
     Raises

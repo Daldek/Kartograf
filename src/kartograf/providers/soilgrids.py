@@ -49,7 +49,7 @@ from urllib.parse import urlencode
 import requests
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.sources.edition import Edition, edition_label
@@ -82,8 +82,10 @@ PIXEL_DEGREES = 0.00225
 
 @dataclass(frozen=True)
 class SoilUnits:
-    """The unit of the integer values of a SoilGrids file (the ISRIC "mapped
-    units") and its conversion: ``conventional = value / divisor``."""
+    """Hold the unit of the integer values of a SoilGrids file and its conversion.
+
+    The ISRIC "mapped units"; ``conventional = value / divisor``.
+    """
 
     mapped: str
     conventional: str
@@ -120,17 +122,22 @@ UNCERTAINTY_UNITS = SoilUnits(
 
 
 def units_for(property: str, stat: str) -> SoilUnits:
-    """The unit of the values of the layer ``property``/``stat`` (the
-    ``uncertainty`` of every property is the same ratio)."""
+    """Return the unit of the values of the layer ``property``/``stat``.
+
+    The ``uncertainty`` of every property is the same ratio.
+    """
     return UNCERTAINTY_UNITS if stat == "uncertainty" else PROPERTY_UNITS[property]
 
 
 def _at_least_one_pixel(
     bounds: tuple[float, float, float, float],
 ) -> tuple[float, float, float, float]:
-    """``bounds`` (min_lon, min_lat, max_lon, max_lat) with each side at least
-    ``PIXEL_DEGREES`` long: a shorter side is widened symmetrically around its
-    centre (the WCS answers a window under half a pixel with HTTP 400)."""
+    """Widen ``bounds`` (min_lon, min_lat, max_lon, max_lat) to a minimum side length.
+
+    Each side is at least ``PIXEL_DEGREES`` long: a shorter side is widened
+    symmetrically around its centre (the WCS answers a window under half a pixel
+    with HTTP 400).
+    """
 
     def side(low: float, high: float) -> tuple[float, float]:
         if high - low >= PIXEL_DEGREES:
@@ -150,7 +157,9 @@ _ZERO_IS_DATA = frozenset({"cfvo"})
 
 
 def is_empty(path: Path, property: str) -> bool:
-    """Whether the SoilGrids raster at ``path`` holds no data: every pixel is 0,
+    """Check whether the SoilGrids raster at ``path`` holds no data.
+
+    Every pixel is 0,
     the value SoilGrids gives the areas it masks (sea, water, built-up land,
     bare rock, ice; the GeoTIFF has no NoData tag).
 
@@ -281,13 +290,15 @@ class SoilGridsProvider(LandCoverProvider):
 
     @classmethod
     def depths_for(cls, property: str) -> list[str]:
-        """The depth intervals SoilGrids publishes for ``property``: the six
-        standard ones, ``ocs`` only 0-30cm."""
+        """Return the depth intervals SoilGrids publishes for ``property``.
+
+        The six standard ones, ``ocs`` only 0-30cm.
+        """
         return list(cls.PROPERTY_DEPTHS.get(property, cls.DEPTHS))
 
     @classmethod
     def all_depths(cls) -> list[str]:
-        """The depth intervals of all properties (the standard ones first)."""
+        """Return the depth intervals of all properties (the standard ones first)."""
         extra = [depth for depths in cls.PROPERTY_DEPTHS.values() for depth in depths]
         return list(dict.fromkeys([*cls.DEPTHS, *extra]))
 
@@ -363,8 +374,11 @@ class SoilGridsProvider(LandCoverProvider):
         return f"{self.WCS_BASE}?map=/map/{property}.map&{urlencode(params)}"
 
     def _capabilities_title(self, property: str, timeout: int) -> tuple[str, str]:
-        """``(url, title)``: the GetCapabilities request of the property map
-        and the first ``ows:Title`` of its ``ServiceIdentification``."""
+        """Return ``(url, title)`` of the GetCapabilities of a property map.
+
+        The GetCapabilities request of the property map
+        and the first ``ows:Title`` of its ``ServiceIdentification``.
+        """
         url = self.capabilities_url(property)
         response = get_with_retry(
             self._sessions.get(),

@@ -13,6 +13,7 @@ import os
 import threading
 from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import Any
 from xml.sax.saxutils import escape
 
 import rasterio
@@ -22,7 +23,7 @@ from rasterio.io import MemoryFile
 from rasterio.transform import from_origin
 from rasterio.warp import reproject
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import ValidationError
 from kartograf.transform.crs import PinnedTransform, TransformError
 
@@ -45,14 +46,16 @@ def _same_crs(a: str, b: str) -> bool:
 
 
 @contextlib.contextmanager
-def _quiet_transformer_only_option():
-    """Silence one GDAL message: `COORDINATE_OPERATION` is a TRANSFORMER
-    option, while `rasterio.warp.reproject` passes kwargs also as warper
-    options - GDAL then logs a warning about an unknown option
-    (`CPLE_NotSupported`). The operation works (the test
-    `test_bbox_target_crs_puts_content_where_pyproj_says` checks this on
-    content), but the warning would land on stderr on every PL/CZ warp. The filter
-    is narrow (matched by option name) and removed immediately."""
+def _quiet_transformer_only_option() -> Iterator[None]:
+    """Silence one GDAL message about an unknown warper option.
+
+    Silence one GDAL message: `COORDINATE_OPERATION` is a TRANSFORMER option, while
+    `rasterio.warp.reproject` passes kwargs also as warper options - GDAL then logs a
+    warning about an unknown option (`CPLE_NotSupported`). The operation works (the test
+    `test_bbox_target_crs_puts_content_where_pyproj_says` checks this on content), but
+    the warning would land on stderr on every PL/CZ warp. The filter is narrow (matched
+    by option name) and removed immediately.
+    """
     gdal_logger = logging.getLogger("rasterio._env")
 
     class _Filter(logging.Filter):
@@ -79,7 +82,14 @@ VRT_TYPES = {
 }
 
 
-def vrt_xml(path: Path, meta: dict, *, crs_wkt: str | None, dtype: str, nodata) -> str:
+def vrt_xml(
+    path: Path,
+    meta: dict[str, Any],
+    *,
+    crs_wkt: str | None,
+    dtype: str,
+    nodata: float | None,
+) -> str:
     """Single-band 1:1 VRT over a source: forced SRS and band type.
 
     The source path is absolute (``relativeToVRT="0"``) - the VRT lives in
@@ -102,8 +112,10 @@ def vrt_xml(path: Path, meta: dict, *, crs_wkt: str | None, dtype: str, nodata) 
 
 @contextlib.contextmanager
 def _vrt_over(path: Path, *, crs_wkt: str, dtype: str) -> Iterator[str]:
-    """Name of a 1:1 VRT in ``/vsimem/`` over a source: SRS and band type forced,
-    the source's OWN nodata (mirrors the wrapping in ``mosaic_and_crop``).
+    """Provide the name of a 1:1 VRT in ``/vsimem/`` over a source.
+
+    Name of a 1:1 VRT in ``/vsimem/`` over a source: SRS and band type forced, the
+    source's OWN nodata (mirrors the wrapping in ``mosaic_and_crop``).
 
     Why: ``reproject`` from a source WITHOUT a CRS (a GUGiK ASC sheet without ``.prj``)
     returns only nodata despite an explicit ``src_crs`` (measured 2026-09-29,

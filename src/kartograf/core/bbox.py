@@ -58,7 +58,10 @@ def _norm_label(crs: str) -> str:
 
 @functools.lru_cache(maxsize=64)
 def _transformer(src: str, dst: str) -> Transformer:
-    """Transformer for a CRS pair, once per process (thread-safe since pyproj 3.1)."""
+    """Return the transformer of a CRS pair, built once per process.
+
+    Thread-safe since pyproj 3.1.
+    """
     return Transformer.from_crs(src, dst, always_xy=True)
 
 

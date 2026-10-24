@@ -23,13 +23,14 @@ import zlib
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import detect_system
-from kartograf.core.sheet_parser import BBox
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -90,9 +91,12 @@ def _session() -> requests.Session:
 
 @dataclass(frozen=True)
 class CzContoursResult:
-    """One contour sheet: ``file=None`` only when a plan skips a sheet without
-    a local version; ``stale`` = positions of the plan whose source changed
-    since the check; ``notices`` = data notices."""
+    """One contour sheet.
+
+    ``file=None`` only when a plan skips a sheet without a local version; ``stale``
+    = positions of the plan whose source changed since the check; ``notices`` = data
+    notices.
+    """
 
     file: VersionedFile | None
     stale: tuple[PlanItem, ...] = ()
@@ -100,7 +104,7 @@ class CzContoursResult:
 
 
 def contours_formats() -> tuple[str, ...]:
-    """Formats of the CZ contours (``--format``), registry order."""
+    """Return the formats of the CZ contours (``--format``), registry order."""
     return tuple(v.format for v in variants(product=PRODUCT, country="CZ"))
 
 
@@ -122,7 +126,7 @@ def contours_source(fmt: str) -> SourceDescriptor:
 
 
 def cz_contours_sheet(sheet: str) -> str:
-    """The SM5 code of a contour sheet (whitespace stripped).
+    """Return the SM5 code of a contour sheet (whitespace stripped).
 
     Raises
     ------
@@ -179,13 +183,13 @@ def _slot(source: SourceDescriptor, sheet: str, output_dir: str | Path) -> FileS
 
 
 def _url(source: SourceDescriptor, sheet: str) -> str:
-    """openzu ZIP of the sheet (the URL template of the descriptor channel)."""
+    """Openzu ZIP of the sheet (the URL template of the descriptor channel)."""
     (channel,) = source.channels
     return channel.endpoint.format(sheet=sheet)
 
 
-def _probe(session: requests.Session, url: str) -> Callable[[], dict]:
-    def probe() -> dict:
+def _probe(session: requests.Session, url: str) -> Callable[[], dict[str, Any]]:
+    def probe() -> dict[str, Any]:
         return head_signal(session, url, timeout=HEAD_TIMEOUT)
 
     return probe
@@ -204,7 +208,7 @@ def _inspect(
 
 
 def _local_file(slot: FileSlot) -> VersionedFile | None:
-    """The local version of a sheet outside the plan, linked; no request."""
+    """Return the local version of a sheet outside the plan, linked; no request."""
     local = local_version(slot)
     if local is None:
         return None
@@ -242,12 +246,14 @@ def _members(path: Path, url: str, fmt: str) -> list[str]:
 
 def _sheet_extra(
     session: requests.Session, metadata: MetadataCache | None, sheet: str
-) -> dict:
-    """Map name and the share of the sheet in CZ from the sheet index (best
-    effort: the data matter more than the metadata)."""
+) -> dict[str, Any]:
+    """Return the map name and the share of the sheet in CZ from the sheet index.
+
+    Best effort: the data matter more than the metadata.
+    """
     from kartograf.providers.cuzk.sheets import SheetIndex
 
-    extra: dict = {}
+    extra: dict[str, Any] = {}
     try:
         info = SheetIndex(session=session, cache=metadata).sm5_sheet(sheet)
         if info.name is not None:
@@ -269,8 +275,8 @@ def _fetch(
     slot: FileSlot,
     *,
     update: UpdateMode | None,
-    planned: dict | None,
-    parent_request: dict | None,
+    planned: dict[str, Any] | None,
+    parent_request: dict[str, Any] | None,
     on_download: Callable[[], None] | None,
 ) -> VersionedFile:
     """Local version or download of the sheet's ZIP with its sidecar.
@@ -280,14 +286,14 @@ def _fetch(
     """
     url = _url(source, sheet)
     (variant,) = source.variants
-    received: dict | None = None
+    received: dict[str, Any] | None = None
     members: list[str] = []
 
     def on_response(response: requests.Response) -> None:
         nonlocal received
         received = response_signal(response)
 
-    def fetch(staged: Path) -> dict | None:
+    def fetch(staged: Path) -> dict[str, Any] | None:
         nonlocal members
         if on_download is not None:
             on_download()
@@ -310,15 +316,21 @@ def _fetch(
     probe = _probe(session, url)
     if planned is not None:
 
-        def planned_probe() -> dict:
+        def planned_probe() -> dict[str, Any]:
             return planned
 
         probe = planned_probe
 
     def write_sidecar(
-        data: Path, version: VersionRef, digest: ContentDigest, http: dict | None
+        data: Path,
+        version: VersionRef,
+        digest: ContentDigest,
+        http: dict[str, Any] | None,
     ) -> None:
-        extra: dict = {"members": members, **_sheet_extra(session, metadata, sheet)}
+        extra: dict[str, Any] = {
+            "members": members,
+            **_sheet_extra(session, metadata, sheet),
+        }
         if http is not None:
             extra["http"] = http
         if parent_request is not None:
@@ -356,7 +368,7 @@ def _run(
     output_dir: str | Path,
     update: UpdateMode | None,
     plan: UpdatePlan | None,
-    parent_request: dict | None,
+    parent_request: dict[str, Any] | None,
     on_download: Callable[[], None] | None,
 ) -> CzContoursResult:
     """Local version or one download of the sheet (module docstring).
@@ -365,7 +377,7 @@ def _run(
     downloaded; a position whose source changed since the check is ``stale``.
     """
     slot = _slot(source, sheet, output_dir)
-    planned: dict | None = None
+    planned: dict[str, Any] | None = None
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
         require_store(plan, store_id(output_dir))
@@ -406,8 +418,9 @@ def _run(
 def check_cz_contours_sheet(
     sheet: str, *, format: str, output_dir: str | Path
 ) -> UpdatePlan:
-    """Update plan of ``download_cz_contours_sheet``: one position (track
-    ``cz_sheet``), one ``HEAD`` of the ZIP, nothing downloaded.
+    """Build the update plan of ``download_cz_contours_sheet``.
+
+    One position (track ``cz_sheet``), one ``HEAD`` of the ZIP, nothing downloaded.
 
     Raises
     ------
@@ -427,7 +440,7 @@ def download_cz_contours_sheet(
     output_dir: str | Path,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
     on_download: Callable[[], None] | None = None,

@@ -39,7 +39,10 @@ _CHECK = "kartograf-project-check/1"
 
 
 def _data_commands() -> list[str]:
-    """The ids of the data commands a task can run, in the order of ``COMMANDS``."""
+    """Return the ids of the data commands a task can run.
+
+    In the order of ``COMMANDS``.
+    """
     return [command.id for command in declared().commands if command.project_task]
 
 

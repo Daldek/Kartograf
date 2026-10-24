@@ -17,14 +17,20 @@ from kartograf.exceptions import ValidationError
 
 
 def option_name(name: str) -> str:
-    """The API argument of a CLI flag or a parameter name:
-    ``--vertical-crs`` -> ``vertical_crs``, ``workers`` -> ``workers``."""
+    """Return the API argument of a CLI flag or a parameter name.
+
+    The API argument of a CLI flag or a parameter name:
+    ``--vertical-crs`` -> ``vertical_crs``, ``workers`` -> ``workers``.
+    """
     return name.removeprefix("--").replace("-", "_")
 
 
 def option_error(text: str, *names: str) -> ValidationError:
-    """The error ``text`` about one argument (``option``) or about several
-    that do not go together (``options``, in the order of the message)."""
+    """Build the error text about one argument or several that do not go together.
+
+    The error ``text`` about one argument (``option``) or about several
+    that do not go together (``options``, in the order of the message).
+    """
     if len(names) == 1:
         return ValidationError(text, option=names[0])
     return ValidationError(text, options=names)
@@ -40,8 +46,11 @@ def require_int(value: object, name: str) -> None:
 
 
 def require_workers(value: object, name: str = "--workers") -> None:
-    """``ValidationError`` unless ``value`` is an ``int`` of at least 1 (the
-    number of parallel transfers: ``0`` and negative values are not "one")."""
+    """Raise ``ValidationError`` unless ``value`` is an ``int`` of at least 1.
+
+    ``ValidationError`` unless ``value`` is an ``int`` of at least 1 (the
+    number of parallel transfers: ``0`` and negative values are not "one").
+    """
     require_int(value, name)
     assert isinstance(value, int)
     if value < 1:
@@ -51,8 +60,11 @@ def require_workers(value: object, name: str = "--workers") -> None:
 
 
 def require_str(value: object, name: str) -> None:
-    """``ValidationError`` unless ``value`` is a ``str`` (a code is never a number:
-    ``teryt=1261`` would lose leading zeros, e.g. ``0208``)."""
+    """Raise ``ValidationError`` unless ``value`` is a ``str``.
+
+    ``ValidationError`` unless ``value`` is a ``str`` (a code is never a number:
+    ``teryt=1261`` would lose leading zeros, e.g. ``0208``).
+    """
     if not isinstance(value, str):
         raise ValidationError(
             f"{name} musi byc napisem (str), otrzymano {value!r}",

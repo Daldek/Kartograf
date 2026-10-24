@@ -17,8 +17,9 @@ from kartograf.catalog.kinds import convert_arguments
 
 
 def library_arguments(args: argparse.Namespace) -> dict[str, Any]:
-    """The data options of a parsed data command as the arguments of its library
-    function.
+    """Return the data options of a parsed data command as library arguments.
+
+    They are the arguments of its library function.
 
     ``--bbox`` becomes a ``BBox`` (with the CRS of ``--bbox-crs``), a path a
     ``Path``, ``--layers`` and ``--direction`` tuples, ``pl=..,cz=..`` a mapping; a

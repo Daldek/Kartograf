@@ -97,6 +97,7 @@ class StoreEntries(Document):
     entries: tuple[StoreEntry, ...]
 
     def prepare_context(self, ctx: EncodeContext) -> None:
+        """Omit the raw sidecar from the encoded document."""
         ctx.omit = ctx.omit | {("Sidecar", "raw")}
 
 

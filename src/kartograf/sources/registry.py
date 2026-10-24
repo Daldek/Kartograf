@@ -11,8 +11,9 @@ import re
 from decimal import Decimal
 from typing import Literal
 
+from kartograf.core.bbox import BBox
 from kartograf.core.parser_2000 import ZONE_EPSG
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
     AccessChannel,
@@ -385,7 +386,7 @@ def _cz_image(service: str) -> AccessChannel:
 
 
 def _cz_files(directory: str, system: str) -> AccessChannel:
-    """openzu files of one sheet system (one ZIP per sheet, signal ``http``)."""
+    """Openzu files of one sheet system (one ZIP per sheet, signal ``http``)."""
     crs = CZ_SYSTEM_CRS[system]
     return AccessChannel(
         transport=TransportKind.DIRECT_FILES,
@@ -406,7 +407,9 @@ def _cz_raster_source(
     service: str,
     files: str | None,
 ) -> SourceDescriptor:
-    """A CUZK raster model: the rows of the route table (plan B, decision 2).
+    """Build the descriptor of a CUZK raster model.
+
+    The rows of the route table (plan B, decision 2).
 
     With files (``files`` = the openzu directory, e.g. ``DMR4G-TIFF``): SM5
     sheets from the S-JTSK file in Bpv and EVRF2007 (pinned operation), TM33
@@ -467,8 +470,11 @@ def _cz_raster_source(
 
 
 def _cz_laz_source(model: str, directory: str, name: str) -> SourceDescriptor:
-    """Point clouds of a CUZK model: S-JTSK sheets in Bpv, ETRS89 tiles in
-    EVRF2007 - the file as published, never transformed."""
+    """Build the descriptor of the point clouds of a CUZK model.
+
+    Point clouds of a CUZK model: S-JTSK sheets in Bpv, ETRS89 tiles in EVRF2007 - the
+    file as published, never transformed.
+    """
     key = f"cz.cuzk.{model}_laz"
     return SourceDescriptor(
         key=key,
@@ -745,8 +751,11 @@ def _orto_wcs(
     native_step: str,
     resolutions: tuple[str, ...],
 ) -> AccessChannel:
-    """WCS cutout channel of an orthophotomap (ADR-042 D14); ``notes`` = the
-    meaning of ``variant`` named in messages (abstract of the service)."""
+    """Build the WCS cutout channel of an orthophotomap (ADR-042 D14).
+
+    WCS cutout channel of an orthophotomap (ADR-042 D14); ``notes`` = the meaning of
+    ``variant`` named in messages (abstract of the service).
+    """
     return AccessChannel(
         transport=TransportKind.WCS,
         update_signal="none",
@@ -1598,7 +1607,7 @@ _RCN = f"{_OPENDATA}/InneDane/latest_exports/rcn_transakcje_ceny/GPKG"
 
 
 def _rcn_channel(unit: Literal["powiat", "woj"], text: str) -> AccessChannel:
-    """The RCN export of one TERYT unit (``powiat``: 4 digits, ``woj``: 2)."""
+    """Build the RCN export channel of one TERYT unit (``powiat`` or ``woj``)."""
     return AccessChannel(
         transport=TransportKind.DIRECT_FILES,
         horizontal_crs="EPSG:2180",
@@ -1749,124 +1758,118 @@ _E3_CZ_SOURCES = (_CZ_GEOMORPHOLOGY, _CZ_CADASTRAL_MAP)
 # 2024 every package has all 26. GML in ``.xml`` files up to 2023, ``.gml``
 # from 2024; EPSG:2180.
 _BDOO = f"{_OPENDATA}/bdoo"
-_BDOO_CLASSES_2015 = tuple(
-    [
-        "ADJA",
-        "ADMS",
-        "BUHD",
-        "BUIN",
-        "BUIT",
-        "BUTR",
-        "BUUO",
-        "BUWT",
-        "BUZM",
-        "KUHU",
-        "KUIK",
-        "KUKO",
-        "KUPG",
-        "KUSC",
-        "KUSK",
-        "KUZA",
-        "OIKM",
-        "OIMK",
-        "PTGN",
-        "PTKM",
-        "PTLZ",
-        "PTNZ",
-        "PTPL",
-        "PTRK",
-        "PTSO",
-        "PTTR",
-        "PTUT",
-        "PTWP",
-        "PTWZ",
-        "PTZB",
-        "SKDR",
-        "SKPP",
-        "SKRP",
-        "SKRW",
-        "SKTR",
-        "SULN",
-        "SUPR",
-        "SWKN",
-        "SWRM",
-        "SWRS",
-        "TCON",
-        "TCPK",
-        "TCPN",
-        "TCRZ",
-    ]
+_BDOO_CLASSES_2015 = (
+    "ADJA",
+    "ADMS",
+    "BUHD",
+    "BUIN",
+    "BUIT",
+    "BUTR",
+    "BUUO",
+    "BUWT",
+    "BUZM",
+    "KUHU",
+    "KUIK",
+    "KUKO",
+    "KUPG",
+    "KUSC",
+    "KUSK",
+    "KUZA",
+    "OIKM",
+    "OIMK",
+    "PTGN",
+    "PTKM",
+    "PTLZ",
+    "PTNZ",
+    "PTPL",
+    "PTRK",
+    "PTSO",
+    "PTTR",
+    "PTUT",
+    "PTWP",
+    "PTWZ",
+    "PTZB",
+    "SKDR",
+    "SKPP",
+    "SKRP",
+    "SKRW",
+    "SKTR",
+    "SULN",
+    "SUPR",
+    "SWKN",
+    "SWRM",
+    "SWRS",
+    "TCON",
+    "TCPK",
+    "TCPN",
+    "TCRZ",
 )
-_BDOO_CLASSES_2021 = tuple(
-    [
-        "ADJA",
-        "ADMS",
-        "BUHD",
-        "BUIN",
-        "BUIT",
-        "BUWT",
-        "BUZM",
-        "KUIK",
-        "KUKO",
-        "KUPG",
-        "KUSC",
-        "KUSK",
-        "OIKM",
-        "OIMK",
-        "PTGN",
-        "PTLZ",
-        "PTNZ",
-        "PTPL",
-        "PTRK",
-        "PTSO",
-        "PTTR",
-        "PTUT",
-        "PTWP",
-        "PTZB",
-        "SKDR",
-        "SKPP",
-        "SKRP",
-        "SKRW",
-        "SKTR",
-        "SULN",
-        "SWKN",
-        "SWRM",
-        "SWRS",
-        "TCON",
-        "TCPK",
-        "TCPN",
-        "TCRZ",
-    ]
+_BDOO_CLASSES_2021 = (
+    "ADJA",
+    "ADMS",
+    "BUHD",
+    "BUIN",
+    "BUIT",
+    "BUWT",
+    "BUZM",
+    "KUIK",
+    "KUKO",
+    "KUPG",
+    "KUSC",
+    "KUSK",
+    "OIKM",
+    "OIMK",
+    "PTGN",
+    "PTLZ",
+    "PTNZ",
+    "PTPL",
+    "PTRK",
+    "PTSO",
+    "PTTR",
+    "PTUT",
+    "PTWP",
+    "PTZB",
+    "SKDR",
+    "SKPP",
+    "SKRP",
+    "SKRW",
+    "SKTR",
+    "SULN",
+    "SWKN",
+    "SWRM",
+    "SWRS",
+    "TCON",
+    "TCPK",
+    "TCPN",
+    "TCRZ",
 )
-_BDOO_CLASSES_2024 = tuple(
-    [
-        "ADJA",
-        "ADMS",
-        "BUUO",
-        "KUKO",
-        "KUPG",
-        "KUPW",
-        "KUSC",
-        "OIKM",
-        "OIMK",
-        "PTGN",
-        "PTLZ",
-        "PTNZ",
-        "PTRK",
-        "PTTR",
-        "PTUT",
-        "PTWP",
-        "PTZB",
-        "SKDR",
-        "SKPP",
-        "SKTR",
-        "SULN",
-        "SWKN",
-        "SWRS",
-        "TCPK",
-        "TCPN",
-        "TCRZ",
-    ]
+_BDOO_CLASSES_2024 = (
+    "ADJA",
+    "ADMS",
+    "BUUO",
+    "KUKO",
+    "KUPG",
+    "KUPW",
+    "KUSC",
+    "OIKM",
+    "OIMK",
+    "PTGN",
+    "PTLZ",
+    "PTNZ",
+    "PTRK",
+    "PTTR",
+    "PTUT",
+    "PTWP",
+    "PTZB",
+    "SKDR",
+    "SKPP",
+    "SKTR",
+    "SULN",
+    "SWKN",
+    "SWRS",
+    "TCPK",
+    "TCPN",
+    "TCRZ",
 )
 _BDOO_RELEASES = (
     ("2015", ".xml", _BDOO_CLASSES_2015),
@@ -2119,8 +2122,11 @@ _DATA250_LAYERS = (
 def _cz_data_source(
     dataset: str, scale: str, layers: tuple[tuple[str, str], ...], sizes: str
 ) -> SourceDescriptor:
-    """Data50/Data250 of CUZK: the objects of an area (REST) or the national
-    SHP ZIP (ATOM feed, one file per CRS)."""
+    """Build the descriptor of the Data50/Data250 of CUZK.
+
+    Data50/Data250 of CUZK: the objects of an area (REST) or the national SHP ZIP (ATOM
+    feed, one file per CRS).
+    """
     feed = f"{_CUZK_ATOM}/{dataset}/{dataset}.xml"
     return SourceDescriptor(
         key=f"cz.cuzk.{dataset.lower()}",
@@ -2319,8 +2325,10 @@ _PL_CONTROL_SERVICES = (
 def _pl_control_wfs(
     network: str, service: str, layers: tuple[str, ...]
 ) -> AccessChannel:
-    """The WFS of one PL control network (the address without ``/WFS`` does
-    not answer)."""
+    """Build the channel of the WFS of one PL control network.
+
+    The WFS of one PL control network (the address without ``/WFS`` does not answer).
+    """
     return AccessChannel(
         transport=TransportKind.WFS,
         update_signal="none",
@@ -2987,8 +2995,11 @@ def get_source(key: str) -> SourceDescriptor:
 def _channels(
     key: str, transport: TransportKind, horizontal_crs: str | None
 ) -> list[AccessChannel]:
-    """Channels of ``key`` with ``transport`` (in ``horizontal_crs``, if given);
-    ``ValidationError`` for an unknown source or no such channel."""
+    """Return the channels of ``key`` with ``transport``.
+
+    Channels of ``key`` with ``transport`` (in ``horizontal_crs``, if given);
+    ``ValidationError`` for an unknown source or no such channel.
+    """
     source = _SOURCES.get(key)
     if source is None:
         raise ValidationError(f"Nieznane zrodlo: '{key}'. Dostepne: {sorted(_SOURCES)}")
@@ -3010,7 +3021,7 @@ def _channels(
 def channel_for(
     key: str, transport: TransportKind, horizontal_crs: str | None = None
 ) -> AccessChannel:
-    """The ONE channel of source ``key`` with ``transport`` and ``horizontal_crs``.
+    """Return the ONE channel of source ``key`` for ``transport`` and CRS.
 
     CZ descriptors publish one file channel per sheet system (SM5 in
     EPSG:5514, TM33 tiles in EPSG:3045): the CRS chooses the endpoint.
@@ -3119,7 +3130,7 @@ def horizontal_crs_for_sheet(sheet: str) -> str:
 
 
 def parse_pl_system(value: str | None) -> tuple[str, int | None] | None:
-    """The ONLY parser of GUGiK horizontal CRS values (review-1 D3, E11).
+    """Parse a GUGiK horizontal CRS value (the ONLY parser; review-1 D3, E11).
 
     The index fields ``ukladWspolrzednychPoziomych``/``ukladWspolrzednych``
     and WFS LAZ ``uklad_xy``: ``"PL-1992"`` -> ``("1992", None)``,

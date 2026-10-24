@@ -251,9 +251,10 @@ def _option_hint(
     command: str | None,
     given: Mapping[str, object] | None = None,
 ) -> str | None:
-    """The hint of a ``ValidationError`` that names an argument (spec 6.3, step
-    3): the allowed values with the CLI flag of the argument and an example
-    command line of the catalog that uses it (of the product of the call,
+    """Return the hint of a ``ValidationError`` that names an argument.
+
+    Spec 6.3, step 3: the allowed values with the CLI flag of the argument and an
+    example command line of the catalog that uses it (of the product of the call,
     ``given``).
 
     The flag and the example need the command (``command``); without it the flag
@@ -276,10 +277,11 @@ def _options_hint(
     command: str | None,
     given: Mapping[str, object] | None = None,
 ) -> str | None:
-    """The hint of a ``ValidationError`` that names several arguments (the area
-    is missing: ``sheet``, ``bbox``, ``geometry``; two arguments exclude each
-    other): their CLI flags and an example command line of the catalog that
-    uses the first of them (of the product of the call, ``given``).
+    """Return the hint of a ``ValidationError`` that names several arguments.
+
+    The area is missing (``sheet``, ``bbox``, ``geometry``) or two arguments
+    exclude each other: their CLI flags and an example command line of the catalog
+    that uses the first of them (of the product of the call, ``given``).
 
     Without the command (or for an argument it does not have) the name of the
     argument stands for the flag and there is no example; the example is left
@@ -296,8 +298,10 @@ def _options_hint(
 
 
 def _usage_hint(command: str | None) -> str | None:
-    """The hint of a ``UsageError`` about a command of the catalog: where its
-    parameters are and an example line (``None`` for an unknown command)."""
+    """Return the hint of a ``UsageError`` about a command of the catalog.
+
+    Where its parameters are and an example line (``None`` for an unknown command).
+    """
     from kartograf.catalog.hints import usage_hint  # loads the declarations
 
     return usage_hint(command, max_chars=HINT_MAX_CHARS)
@@ -308,7 +312,7 @@ def _library_hint(
     command: str | None,
     given: Mapping[str, object] | None = None,
 ) -> str | None:
-    """The hint of an exception of the package hierarchy (spec 6.3, steps 1-3)."""
+    """Return the hint of an exception of the package hierarchy (spec 6.3, 1-3)."""
     if exc.hint:
         return exc.hint
     if isinstance(exc, NoCoverageError | YearRangeError) and exc.hints:
@@ -331,7 +335,7 @@ def _library_hint(
 
 
 def _io_path(exc: OSError) -> str | None:
-    """The file name of an ``OSError`` as text (``None``: it has none)."""
+    """Return the file name of an ``OSError`` as text (``None``: it has none)."""
     filename = exc.filename
     if isinstance(filename, bytes):
         return os.fsdecode(filename)

@@ -27,7 +27,7 @@ def format_command_line(
     options: Mapping[str, object],
     run: Mapping[str, object] | None = None,
 ) -> str:
-    """The command line of a call.
+    """Return the command line of a call.
 
     Parameters
     ----------
@@ -74,8 +74,11 @@ def format_command_line(
 
 
 def example_command_line(command: Command, example: Example) -> str:
-    """The command line of a declared example; a command with a store directory
-    gets ``-o ./data`` unless the example names another one."""
+    """Return the command line of a declared example.
+
+    A command with a store directory gets ``-o ./data`` unless the example names another
+    one.
+    """
     run = dict(example.run)
     if any(param.name == "output_dir" for param in command.params):
         run.setdefault("output_dir", EXAMPLE_STORE)
@@ -83,7 +86,10 @@ def example_command_line(command: Command, example: Example) -> str:
 
 
 def _words(command: Command, param: Param, value: object, *, short: bool) -> list[str]:
-    """The words of one parameter: its flag and value, or a positional's values."""
+    """Return the words of one parameter.
+
+    They are its flag and value, or a positional's values.
+    """
     flag = param.cli_flag
     if flag is None and not param.positional:
         raise ValueError(f"{command.id}: {param.name} has no command line form")
@@ -138,7 +144,8 @@ def _text(param: Param, value: object) -> str:
             raise ValueError(f"{param.name}: expected a list of texts, got {value!r}")
         return ",".join(str(item) for item in value)
     if kind in ("path", "plan") and isinstance(value, os.PathLike):
-        return os.fspath(value)
+        path: str = os.fspath(value)
+        return path
     if isinstance(value, str):
         return value
     raise ValueError(f"{param.name}: cannot write {value!r} on a command line")

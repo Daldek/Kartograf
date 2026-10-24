@@ -133,10 +133,13 @@ class GpkgSummary:
 
 @dataclass
 class _Table:
-    """Unique features of one layer and the schema they are written with:
-    ``key`` = index of the id field, ``compared`` = indices of the fields
-    that make two features identical (all but ``drop_fields``), ``utc`` =
-    datetime fields holding UTC values, ``declared`` = schema geometry type."""
+    """Unique features of one layer and the schema they are written with.
+
+    Unique features of one layer and the schema they are written with: ``key`` = index
+    of the id field, ``compared`` = indices of the fields that make two features
+    identical (all but ``drop_fields``), ``utc`` = datetime fields holding UTC values,
+    ``declared`` = schema geometry type.
+    """
 
     names: list[str]
     dtypes: list[np.dtype]
@@ -205,9 +208,10 @@ def _gdal_config(options: dict[str, str]) -> Iterator[None]:
             pyogrio.set_gdal_config_options(previous)
 
 
-def _read_page(page: Path, context: str, **kwargs: Any) -> tuple:
+def _read_page(page: Path, context: str, **kwargs: Any) -> tuple[Any, ...]:
     try:
-        return pyogrio.raw.read(page, **kwargs)
+        result: tuple[Any, ...] = pyogrio.raw.read(page, **kwargs)
+        return result
     except (DataSourceError, DataLayerError) as e:
         raise DownloadError(
             f"{context}: GDAL nie odczytal strony {page.name}: {e}"
@@ -217,7 +221,7 @@ def _read_page(page: Path, context: str, **kwargs: Any) -> tuple:
 def _read_wfs(
     layer_pages: "LayerPages", params: "FeatureBBoxParams", dropped: dict[str, set[str]]
 ) -> _Table:
-    """Unique features of the GML pages read with the layer XSD.
+    """Return the unique features of the GML pages read with the layer XSD.
 
     GDAL types every page on its own. With a full XSD (MapServer PRG, EGiB)
     all pages have one schema; an XSD that only includes a remote schema
@@ -292,9 +296,11 @@ _XSD = "{http://www.w3.org/2001/XMLSchema}"
 
 
 def _declares_types(schema: Path) -> bool:
-    """Whether a ``DescribeFeatureType`` XSD declares the types itself
-    (MapServer) rather than only including a remote schema (GeoServer
-    INSPIRE, module docstring)."""
+    """Check whether a ``DescribeFeatureType`` XSD declares the types itself.
+
+    Whether a ``DescribeFeatureType`` XSD declares the types itself (MapServer) rather
+    than only including a remote schema (GeoServer INSPIRE, module docstring).
+    """
     try:
         root = ET.parse(schema).getroot()
     except ET.ParseError:
@@ -310,9 +316,12 @@ def _merge_fields(
     page: Path,
     context: str,
 ) -> list[int | None]:
-    """Fields of a page into the layer schema: new fields appended (null in
-    the rows read so far); the page column of every layer field (``None``:
-    the page has no such field)."""
+    """Merge the fields of a page into the layer schema.
+
+    Fields of a page into the layer schema: new fields appended (null in the rows read
+    so far); the page column of every layer field (``None``: the page has no such
+    field).
+    """
     for name, dtype in zip(names, dtypes, strict=True):
         if name in table.names:
             known = table.dtypes[table.names.index(name)]
@@ -335,7 +344,7 @@ def _merge_fields(
 def _read_arcgis(
     layer_pages: "LayerPages", params: "FeatureBBoxParams", dropped: dict[str, set[str]]
 ) -> _Table:
-    """Unique features of the GeoJSON pages typed by the layer ``fields``."""
+    """Return the unique features of the GeoJSON pages typed by ``fields``."""
     layer = layer_pages.layer
     context = f"ArcGIS {layer.source}"
     columns = [
@@ -369,8 +378,11 @@ def _read_arcgis(
 def _read_ogcapi(
     layer_pages: "LayerPages", params: "FeatureBBoxParams", dropped: dict[str, set[str]]
 ) -> _Table:
-    """Unique features of the OGC API GeoJSON pages: one pass over every page
-    types the fields (module docstring), a second one reads the rows."""
+    """Return the unique features of the OGC API GeoJSON pages.
+
+    Unique features of the OGC API GeoJSON pages: one pass over every page types the
+    fields (module docstring), a second one reads the rows.
+    """
     layer = layer_pages.layer
     context = f"OGC API {layer.source}"
     kinds: dict[str, set[str]] = {layer.id_field: set()}
@@ -403,8 +415,11 @@ def _read_ogcapi(
 
 
 def _ogcapi_values(page: Path, id_field: str, context: str) -> list[dict[str, Any]]:
-    """Attributes of every feature of a saved page; with ``id_field="id"`` the
-    GeoJSON ``id`` is the attribute ``id`` (a property ``id`` must equal it)."""
+    """Return the attributes of every feature of a saved page.
+
+    Attributes of every feature of a saved page; with ``id_field="id"`` the GeoJSON
+    ``id`` is the attribute ``id`` (a property ``id`` must equal it).
+    """
     rows = []
     for feature in json.loads(page.read_bytes())["features"]:
         properties = feature.get("properties")
@@ -427,8 +442,11 @@ def _ogcapi_values(page: Path, id_field: str, context: str) -> list[dict[str, An
 
 
 def _json_kind(value: Any) -> str:
-    """Kind of a non-null JSON value: ``bool``, ``int`` (int64 range),
-    ``float`` or ``text`` (strings, objects, arrays, larger integers)."""
+    """Return the kind of a non-null JSON value.
+
+    Kind of a non-null JSON value: ``bool``, ``int`` (int64 range), ``float`` or
+    ``text`` (strings, objects, arrays, larger integers).
+    """
     if isinstance(value, bool):
         return "bool"
     if isinstance(value, int):
@@ -439,8 +457,11 @@ def _json_kind(value: Any) -> str:
 
 
 def _json_dtype(kinds: set[str]) -> np.dtype:
-    """Column type from the kinds of every value of a field: int -> int64,
-    int+float -> float64, bool -> bool, anything else (also no value) -> text."""
+    """Return the column type for the kinds of every value of a field.
+
+    Column type from the kinds of every value of a field: int -> int64, int+float ->
+    float64, bool -> bool, anything else (also no value) -> text.
+    """
     if kinds == {"bool"}:
         return np.dtype(bool)
     if kinds == {"int"}:
@@ -451,8 +472,11 @@ def _json_dtype(kinds: set[str]) -> np.dtype:
 
 
 def _json_value(value: Any, dtype: np.dtype) -> Any:
-    """JSON value as the column type (``None`` = null); a text column keeps
-    strings and holds any other value as JSON text."""
+    """Convert a JSON value to the column type (``None`` = null).
+
+    JSON value as the column type (``None`` = null); a text column keeps strings and
+    holds any other value as JSON text.
+    """
     if value is None or dtype.kind in "bi":
         return value
     if dtype.kind == "f":
@@ -523,7 +547,7 @@ def _is_null(value: Any) -> bool:
 
 
 def _canonical(value: Any) -> Any:
-    """Comparable, hashable form of a value (null and NaN/NaT -> ``None``)."""
+    """Return a comparable, hashable form of a value (null and NaN/NaT -> ``None``)."""
     if _is_null(value):
         return None
     if isinstance(value, np.ndarray):
@@ -540,8 +564,11 @@ def _add(
     dropped: dict[str, set[str]],
     context: str,
 ) -> None:
-    """Add one feature: identical duplicates skipped, conflicting ones rejected
-    (``drop_fields`` do not count: their value is the moment of the answer)."""
+    """Add one feature: skip identical duplicates, reject conflicting ones.
+
+    Add one feature: identical duplicates skipped, conflicting ones rejected
+    (``drop_fields`` do not count: their value is the moment of the answer).
+    """
     ident = _canonical(row[table.key])
     if ident is None or ident == "":
         raise DownloadError(
@@ -610,8 +637,11 @@ def _wkb_kind(wkb: bytes) -> tuple[int, bool, bool]:
 
 
 def _geometry_type(geometries: Sequence[bytes | None], declared: str) -> str:
-    """Layer type after ``promote_to_multi``: one family -> its Multi type,
-    mixed families -> ``Unknown``; no geometries -> the declared type."""
+    """Return the layer type after ``promote_to_multi``.
+
+    Layer type after ``promote_to_multi``: one family -> its Multi type, mixed families
+    -> ``Unknown``; no geometries -> the declared type.
+    """
     kinds = {_wkb_kind(wkb) for wkb in geometries if wkb}
     if not kinds:
         if declared in _MULTI:
@@ -671,9 +701,12 @@ def _write_layer(
 
 
 def _description(layer_pages: "LayerPages", params: "FeatureBBoxParams") -> str:
-    """``gpkg_contents.description`` of a layer: the WFS type name, the
-    ArcGIS layer name of the service with its id (``Vodni tok (93)``, the
-    name as the service spells it) or the OGC API collection id."""
+    """Return the ``gpkg_contents.description`` of a layer.
+
+    ``gpkg_contents.description`` of a layer: the WFS type name, the ArcGIS layer name
+    of the service with its id (``Vodni tok (93)``, the name as the service spells it)
+    or the OGC API collection id.
+    """
     layer = layer_pages.layer
     if params.protocol == "arcgis" and layer_pages.schema is not None:
         name = json.loads(layer_pages.schema.read_bytes()).get("name")

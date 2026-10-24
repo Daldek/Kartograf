@@ -10,10 +10,9 @@ PL-2000 uses dot-separated numeric format: zone.row.column[.subdivisions]
 import math
 import re
 
-from kartograf.core.bbox import transform_bbox, validate_bbox
+from kartograf.core.bbox import BBox, transform_bbox, validate_bbox
 from kartograf.core.sheet_parser import (
     _DEGENERATE_EPS_DEG,
-    BBox,
     _axis_overlaps,
     _expand_degenerate,
 )

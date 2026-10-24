@@ -53,22 +53,29 @@ _running = threading.local()
 
 
 def current_stop() -> threading.Event | None:
-    """The stop flag of the pool the current thread works for (``None`` outside
-    a pool: the main thread, which gets its interrupt as ``KeyboardInterrupt``)."""
+    """Return the stop flag of the pool the current thread works for.
+
+    ``None`` outside a pool: the main thread, which gets its interrupt as
+    ``KeyboardInterrupt``.
+    """
     return getattr(_running, "stop", None)
 
 
 def check_stop() -> None:
-    """Raise ``Stopped`` in a pool thread whose pool is stopping; do nothing
-    elsewhere."""
+    """Raise ``Stopped`` in a pool thread whose pool is stopping.
+
+    Do nothing elsewhere.
+    """
     stop = current_stop()
     if stop is not None and stop.is_set():
         raise Stopped
 
 
 def _run_unit[T, R](stop: threading.Event, work: Callable[[T], R], item: T) -> R:
-    """One unit in a pool thread: it does not start once the pool is stopping and
-    sees the stop flag while it runs."""
+    """One unit in a pool thread.
+
+    It does not start once the pool is stopping and sees the stop flag while it runs.
+    """
     if stop.is_set():
         raise Stopped
     _running.stop = stop
@@ -85,8 +92,9 @@ def run_parallel[T, R](
     workers: int,
     on_done: Callable[[int, T, R], None] | None = None,
 ) -> list[R]:
-    """Run ``work(item)`` for every item in ``workers`` threads; the results in
-    the order of ``items``.
+    """Run ``work(item)`` for every item in ``workers`` threads.
+
+    The results in the order of ``items``.
 
     ``on_done(ended, item, result)`` is called in the calling thread for every
     unit that ended normally, in completion order; ``ended`` counts the units
@@ -127,8 +135,9 @@ def run_parallel[T, R](
 
 @contextmanager
 def sigterm_interrupts() -> Iterator[None]:
-    """Within the block SIGTERM raises ``Terminated`` in the main thread, as
-    Ctrl-C raises ``KeyboardInterrupt``.
+    """Make SIGTERM raise ``Terminated`` in the main thread within the block.
+
+    It works as Ctrl-C raises ``KeyboardInterrupt``.
 
     The first SIGTERM restores the default action: a second one kills the
     process at once (a stuck cleanup can always be forced). Nothing changes

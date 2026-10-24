@@ -33,8 +33,11 @@ _ZTM_PATTERNS = (
 
 
 def ztm_sheet_system(sheet: str) -> str | None:
-    """``sjtsk``/``etrs89``: the sheet system (``--sheet-system``) of a ZTM map
-    sheet code; ``None`` for any other code (whitespace stripped)."""
+    """Return the sheet system of a ZTM map sheet code, or None.
+
+    ``sjtsk``/``etrs89``: the sheet system (``--sheet-system``) of a ZTM map sheet code;
+    ``None`` for any other code (whitespace stripped).
+    """
     cleaned = sheet.strip()
     return next((name for name, p in _ZTM_PATTERNS if p.match(cleaned)), None)
 
@@ -124,7 +127,9 @@ _IMW_ROW = re.compile(r"[A-Za-z]+")
 
 
 def cuzk_map_path_parts(mapnom: str) -> list[str]:
-    """Directory path parts of a CUZK map sheet code (``MAPNOM`` of a
+    """Return the directory path parts of a CUZK map sheet code.
+
+    Directory path parts of a CUZK map sheet code (``MAPNOM`` of a
     ``KladyMapovychListu`` layer: the ZTM sheets), whitespace stripped.
 
     The same hierarchy as every sheet code (ADR-044 D7): each part between

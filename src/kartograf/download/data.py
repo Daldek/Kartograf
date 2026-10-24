@@ -1,4 +1,6 @@
-"""``download_data`` / ``check_data``: the ``elevation download`` and
+"""Download and check elevation data and imagery for the commands.
+
+``download_data`` / ``check_data``: the ``elevation download`` and
 ``imagery download`` commands (R1, R11).
 
 The whole data logic of the command lives here (Z1): recognizing the sheet
@@ -54,11 +56,12 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
+from kartograf.core.bbox import BBox
+from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox
 from kartograf.download.area import (
     cz_geometry_bbox,
     emit_clipping_notices,
@@ -138,12 +141,16 @@ from kartograf.notices import (
     NoticeSink,
     count_text,
 )
+from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
 from kartograf.providers.pl.gugik_orto import image_directions, image_source
 from kartograf.serialization import Document
 from kartograf.sources.registry import horizontal_crs_for_sheet, sources_for
 from kartograf.sources.variants import cz_model_text, cz_models, cz_sheet_system
+
+if TYPE_CHECKING:
+    from kartograf.download.storage import FileStorage
 
 FailureKind = Literal["no_coverage", "year_out_of_range", "download", "country"]
 MAX_HINT_LINES = 5
@@ -174,10 +181,13 @@ DOWNLOAD_FILL: Mapping[str, object] = {
 
 @dataclass(frozen=True)
 class UnitFile:
-    """One file of the request: ``unit`` = sheet code, LAZ file name, TERYT
+    """Describe one file of the request.
+
+    One file of the request: ``unit`` = sheet code, LAZ file name, TERYT
     or bbox coordinates (``<coords>`` of a cutout or of a collection area);
     ``country`` = ``"PL"``/``"CZ"`` (``"EU"`` CORINE, ``"GLOBAL"``
-    SoilGrids and HSG - the country of the source)."""
+    SoilGrids and HSG - the country of the source).
+    """
 
     unit: str
     country: str
@@ -269,11 +279,14 @@ class _Run:
 
     @property
     def refresh(self) -> bool:
-        """Metadata cache refreshed, not read: the check (``--check-updates``
-        always asks the source), ``--upgrade`` and ``--force``."""
+        """Return True when the metadata cache is refreshed, not read.
+
+        Metadata cache refreshed, not read: the check (``--check-updates``
+        always asks the source), ``--upgrade`` and ``--force``.
+        """
         return self.check or refreshes_cache(self.update)
 
-    def add_stale(self, stale) -> int:
+    def add_stale(self, stale: Sequence[PlanItem]) -> int:
         self.stale.extend(stale)
         return 1 if stale else 0
 
@@ -285,8 +298,11 @@ class _Run:
         kind: FailureKind,
         cause: DownloadError | None = None,
     ) -> int:
-        """Record a failed part; ``cause`` (the error it comes from) is kept for
-        ``check_data``, which raises it when no plan came out."""
+        """Record a failed part.
+
+        ``cause`` (the error it comes from) is kept for
+        ``check_data``, which raises it when no plan came out.
+        """
         failure = UnitFailure(unit, country, error, kind)
         self.failed.append(failure)
         if cause is not None:
@@ -303,9 +319,12 @@ def _error_text(error: Exception) -> str:
 def _failure_kind(
     error: DownloadError, default: FailureKind = "download"
 ) -> FailureKind:
-    """The ``UnitFailure.kind`` of an error: the states of the data keep the
+    """Return the failure kind of an error.
+
+    The ``UnitFailure.kind`` of an error: the states of the data keep the
     name of their error code (``no_coverage``, ``year_out_of_range``), any other
-    ``DownloadError`` gets ``default``."""
+    ``DownloadError`` gets ``default``.
+    """
     if isinstance(error, NoCoverageError):
         return "no_coverage"
     if isinstance(error, YearRangeError):
@@ -314,9 +333,12 @@ def _failure_kind(
 
 
 def _check_error(run: _Run) -> DownloadError:
-    """The error of a check that planned nothing: the error of its first
+    """Return the error of a check that planned nothing.
+
+    The error of a check that planned nothing: the error of its first
     failure (its class says why: no data, data outside the years), else a
-    ``DownloadError`` of its text."""
+    ``DownloadError`` of its text.
+    """
     if not run.failed:
         return DownloadError("brak pozycji planu")
     failure = run.failed[0]
@@ -328,7 +350,7 @@ def _check_error(run: _Run) -> DownloadError:
     return DownloadError(failure.error)
 
 
-def _task(**kwargs) -> SimpleNamespace:
+def _task(**kwargs: Any) -> SimpleNamespace:
     task = SimpleNamespace(**kwargs)
     task.output_dir = Path(task.output_dir) if task.output_dir is not None else None
     task.geometry = Path(task.geometry) if task.geometry is not None else None
@@ -342,7 +364,7 @@ def _task(**kwargs) -> SimpleNamespace:
 
 
 def _start(
-    kwargs: dict,
+    kwargs: dict[str, Any],
     *,
     update: UpdateMode | None,
     plan: UpdatePlan | None,
@@ -404,7 +426,9 @@ def download_data(
     on_progress: Callable[[DownloadProgress], None] | None = None,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> DataReport:
-    """Download NMT/NMPT/LAZ, the CZ contours and the images
+    """Download elevation data or images for a sheet, bbox or geometry.
+
+    Download NMT/NMPT/LAZ, the CZ contours and the images
     (orthophotomap, intensity images, true and oblique orthophotomap) for a
     sheet, bbox or geometry (spec 4.1).
 
@@ -555,7 +579,9 @@ def validate_data_request(
     full_sheet: bool = False,
     min_density: int | None = None,
 ) -> None:
-    """Every check ``download_data``/``check_data`` make before their first
+    """Check a request completely before its first network access.
+
+    Every check ``download_data``/``check_data`` make before their first
     request, without network and without writing (``project add``, ADR-040).
 
     The same dispatch as ``download_data`` with every track stopping right
@@ -611,7 +637,7 @@ _SELECTION = (
 )
 
 
-def _selection_kwargs(values: dict) -> dict:
+def _selection_kwargs(values: dict[str, Any]) -> dict[str, Any]:
     return {name: values[name] for name in _SELECTION}
 
 
@@ -687,8 +713,11 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
 def _reject_campaign_opts_without_pl(
     task: SimpleNamespace, countries: tuple[str, ...]
 ) -> None:
-    """PL-only campaign/year choices are rejected for a CZ-only request (a
-    PL+CZ area is a cutout, which rejects them itself, ADR-038)."""
+    """Reject PL-only campaign/year choices for a CZ-only request.
+
+    PL-only campaign/year choices are rejected for a CZ-only request (a
+    PL+CZ area is a cutout, which rejects them itself, ADR-038).
+    """
     names = campaign_option_names(task)
     if names and "PL" not in countries:
         raise option_error(
@@ -918,9 +947,12 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
 
 
 def _product_label(product: str, resolution: str | None, fmt: str | None = None) -> str:
-    """Request label in messages (``Pobieranie <godlo> (<label>)...``):
+    """Return the request label used in messages.
+
+    Request label in messages (``Pobieranie <godlo> (<label>)...``):
     images have no resolution (K5), archives name their format, the CZ
-    contours only their format."""
+    contours only their format.
+    """
     if image_source(product) is not None:
         return f"produkt: {product}"
     if product == CONTOURS:
@@ -931,14 +963,24 @@ def _product_label(product: str, resolution: str | None, fmt: str | None = None)
 
 
 def _create_provider_and_storage(
-    product, output_dir, vertical_crs, resolution, cache=None, fmt=None, direction=None
-):
-    """Provider and storage of a PL sheet product (``cache``: ``MetadataCache``
+    product: str,
+    output_dir: str | Path,
+    vertical_crs: str,
+    resolution: str | None,
+    cache: MetadataCache | None = None,
+    fmt: str | None = None,
+    direction: str | None = None,
+) -> "tuple[BaseProvider, FileStorage]":
+    """Create the provider and storage of a PL sheet product.
+
+    Provider and storage of a PL sheet product (``cache``: ``MetadataCache``
     or ``None``; GUGiK index records go through it, N6). ``fmt``: ``None``
     = ASC grids, else an archive format of the variant registry;
-    ``direction``: the view direction of an oblique orthophotomap sheet."""
+    ``direction``: the view direction of an oblique orthophotomap sheet.
+    """
     from kartograf.download.storage import storage_for_provider
 
+    provider: BaseProvider
     if product == "nmpt":
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
@@ -974,7 +1016,7 @@ def _manager(
     task: SimpleNamespace,
     run: _Run,
     metadata: MetadataCache | None,
-    parent_request: dict | None,
+    parent_request: dict[str, Any] | None,
     direction: str | None,
 ) -> DownloadManager:
     provider, storage = _create_provider_and_storage(
@@ -1006,11 +1048,14 @@ def _managers(
     task: SimpleNamespace,
     run: _Run,
     metadata: MetadataCache | None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
 ) -> list[DownloadManager]:
-    """The managers of a PL sheet request: one per view direction of the
+    """Create the managers of a PL sheet request.
+
+    The managers of a PL sheet request: one per view direction of the
     oblique orthophotomap (its sheet is one file per direction, the chosen
-    ``direction`` or all of them), else one."""
+    ``direction`` or all of them), else one.
+    """
     directions = image_directions(task.product)
     chosen: tuple[str | None, ...] = (
         (task.direction or directions) if directions else (None,)
@@ -1042,8 +1087,11 @@ def _prefix(manager: DownloadManager) -> str:
 def _progress(
     run: _Run, manager: DownloadManager
 ) -> Callable[[DownloadProgress], None] | None:
-    """``on_progress`` of a manager: the events of a view direction name it
-    after the sheet (``7.125.11.08 n``)."""
+    """Build the ``on_progress`` callback of a manager.
+
+    ``on_progress`` of a manager: the events of a view direction name it
+    after the sheet (``7.125.11.08 n``).
+    """
     direction = _direction_of(manager)
     progress = run.on_progress
     if progress is None or direction is None:
@@ -1089,10 +1137,13 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
 def _check_no_coverage(
     run: _Run, prefix: str
 ) -> Callable[[Mapping[str, NoCoverageError], int], None]:
-    """``on_no_coverage`` of ``DownloadManager.check_sheets``: the sheets
+    """Build the ``on_no_coverage`` callback of ``check_sheets``.
+
+    ``on_no_coverage`` of ``DownloadManager.check_sheets``: the sheets
     without data are reported as the download reports them
     (``_finish_pl_sheets``) - a ``NO_COVERAGE_SOME`` warning when the rest has
-    positions, the hints of the provider always."""
+    positions, the hints of the provider always.
+    """
 
     def report(no_data: Mapping[str, NoCoverageError], total: int) -> None:
         kept = total - len(no_data)
@@ -1118,8 +1169,11 @@ def _announcer(
 
 
 def _download_pl_sheet(task: SimpleNamespace, run: _Run) -> int:
-    """PL sheet code (validated): one sheet, a coarser code or a ``scale``
-    list; the view directions of an oblique sheet one after another."""
+    """Download or check a PL sheet code request.
+
+    PL sheet code (validated): one sheet, a coarser code or a ``scale``
+    list; the view directions of an oblique sheet one after another.
+    """
     if run.dry:
         return 0
     with open_cache(run.cache, force=run.refresh, on_notice=run.sink.add) as metadata:
@@ -1132,7 +1186,7 @@ def _download_pl_sheet(task: SimpleNamespace, run: _Run) -> int:
 def _download_pl_code(
     task: SimpleNamespace, run: _Run, manager: DownloadManager
 ) -> int:
-    """The files of one manager of a PL sheet code request."""
+    """Handle the files of one manager of a PL sheet code request."""
     label = _product_label(task.product, task.resolution)
     prefix = _prefix(manager)
     on_progress = _progress(run, manager)
@@ -1195,17 +1249,20 @@ def _download_pl_code(
 
 
 def _result_paths(result: DownloadResult) -> list[Path]:
-    """Standard paths of successful sheets, including already-local sheets."""
+    """Return the standard paths of successful and already-local sheets."""
     if result.files:
         return [files[0].path for files in result.files.values() if files]
     return list(result.succeeded)
 
 
 def _download_pl_bbox(
-    task: SimpleNamespace, run: _Run, bbox: BBox, parent_request: dict
+    task: SimpleNamespace, run: _Run, bbox: BBox, parent_request: dict[str, Any]
 ) -> int:
-    """PL part of a bbox request: a cutout (``cutout``), a sheet list or the
-    voivodeship files of a file variant."""
+    """Download or check the PL part of a bbox request.
+
+    PL part of a bbox request: a cutout (``cutout``), a sheet list or the
+    voivodeship files of a file variant.
+    """
     if pl_file_variant(task) is not None:
         return _download_pl_files(task, run, bbox, parent_request)
     resolve_pl_options(task)
@@ -1236,12 +1293,15 @@ def _download_pl_geometry(
     task: SimpleNamespace,
     run: _Run,
     filepath: Path,
-    parent_request: dict,
+    parent_request: dict[str, Any],
     bbox: BBox,
 ) -> int:
-    """PL part of a geometry request: sheets per feature, a cutout of the
+    """Download or check the PL part of a geometry request.
+
+    PL part of a geometry request: sheets per feature, a cutout of the
     (clipped) envelope with ``cutout``, or the voivodeship files of a file
-    variant for that envelope."""
+    variant for that envelope.
+    """
     from kartograf.core.geometry import find_sheets_for_geometry
 
     if pl_file_variant(task) is not None:
@@ -1283,13 +1343,16 @@ def _download_pl_sheet_list(
     task: SimpleNamespace,
     run: _Run,
     sheets: list[str],
-    parent_request: dict,
+    parent_request: dict[str, Any],
     *,
     what: str,
     target_scale: str,
 ) -> int:
-    """PL sheet list (area without ``cutout``): managers + finish (D15; the
-    view directions of the oblique orthophotomap one after another)."""
+    """Download or check a PL sheet list.
+
+    PL sheet list (area without ``cutout``): managers + finish (D15; the
+    view directions of the oblique orthophotomap one after another).
+    """
     if run.dry:
         return 0
     _emit_sheet_list(run, task, sheets, f"w skali {target_scale}", what)
@@ -1334,8 +1397,8 @@ def _emit_sheet_list(
 def _download_pl_archive(
     task: SimpleNamespace,
     run: _Run,
-    areas: list,
-    parent_request: dict | None,
+    areas: list[Any],
+    parent_request: dict[str, Any] | None,
     *,
     what: str,
 ) -> int:
@@ -1389,7 +1452,7 @@ def _download_pl_archive(
 
 
 def _download_pl_files(
-    task: SimpleNamespace, run: _Run, area: BBox, parent_request: dict
+    task: SimpleNamespace, run: _Run, area: BBox, parent_request: dict[str, Any]
 ) -> int:
     """PL voivodeship files of an ATOM feed (NMT 100 m, ADR-043 D10).
 
@@ -1492,10 +1555,13 @@ def _finish_pl_sheets(
 def _no_coverage_warning(
     run: _Run, missing: Sequence[str], total: int, outcome: str, prefix: str
 ) -> None:
-    """``NO_COVERAGE_SOME``: sheets without GUGiK data of a request that goes on
+    """Report sheets without GUGiK data (``NO_COVERAGE_SOME``).
+
+    ``NO_COVERAGE_SOME``: sheets without GUGiK data of a request that goes on
     with the others (R5) - the download and ``--check-updates`` say it the same
     way; ``outcome`` is what became of the rest (``pobrano 3``,
-    ``sprawdzono 3``), ``prefix`` the view direction (``kierunek n: ``)."""
+    ``sprawdzono 3``), ``prefix`` the view direction (``kierunek n: ``).
+    """
     shown = ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
     run.sink.emit(
         "warning",
@@ -1509,8 +1575,11 @@ def _no_coverage_warning(
 
 
 def _coverage_hints(run: _Run, hints_by_sheet: Mapping[str, Sequence[str]]) -> None:
-    """``NO_COVERAGE_HINT``: provider hints without duplicates, at most
-    ``MAX_HINT_LINES`` (full list: ``DownloadResult.no_coverage_hints``)."""
+    """Report provider hints for sheets without data.
+
+    ``NO_COVERAGE_HINT``: provider hints without duplicates, at most
+    ``MAX_HINT_LINES`` (full list: ``DownloadResult.no_coverage_hints``).
+    """
     hints = list(dict.fromkeys(h for hs in hints_by_sheet.values() for h in hs))
     # the view directions of one oblique request share their hints
     shown = {n.text for n in run.sink.notices if n.code == NO_COVERAGE_HINT}
@@ -1527,7 +1596,7 @@ def _coverage_hints(run: _Run, hints_by_sheet: Mapping[str, Sequence[str]]) -> N
         )
 
 
-def _read_sheet_sidecar(path: Path) -> dict | None:
+def _read_sheet_sidecar(path: Path) -> dict[str, Any] | None:
     """Sheet sidecar ``<file>.meta.json``; ``None`` if missing/unreadable."""
     import json
 
@@ -1633,8 +1702,8 @@ def _crs_mismatch(run: _Run, paths: list[Path]) -> None:
     )
 
 
-def _flight_description(flight: dict) -> str:
-    """A flight's sidecar date, ID, completeness and measured coverage."""
+def _flight_description(flight: dict[str, Any]) -> str:
+    """Describe a flight's sidecar date, ID, completeness and measured coverage."""
     flight_id = flight["id"]
     date = flight.get("date")
     name = f"{date}_{flight_id}" if isinstance(date, str) else str(flight_id)
@@ -1744,15 +1813,20 @@ def _link_outside_range(
 
 
 def _cutout_unit(path: Path) -> str:
-    """Unit of a cutout: the coordinates of its grid (``bbox/<coords>.tif``),
-    as the area units of the other tracks."""
+    """Return the unit of a cutout.
+
+    Unit of a cutout: the coordinates of its grid (``bbox/<coords>.tif``),
+    as the area units of the other tracks.
+    """
     return Path(path).stem
 
 
 def _download_pl_cutout(
-    task: SimpleNamespace, run: _Run, bbox: BBox, parent_request: dict
+    task: SimpleNamespace, run: _Run, bbox: BBox, parent_request: dict[str, Any]
 ) -> int:
-    """PL cutout (``cutout``) from GUGiK WCS: NMT/NMPT (ADR-035) or an image
+    """Download a PL cutout from GUGiK WCS.
+
+    PL cutout (``cutout``) from GUGiK WCS: NMT/NMPT (ADR-035) or an image
     (the orthophotomap with ``coverage``, ADR-042 D14; the true
     orthophotomap).
 
@@ -1821,10 +1895,13 @@ def _download_cz(
     run: _Run,
     *,
     bbox: BBox | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
 ) -> int:
-    """CZ request: a sheet code (TM33 tile / SM5 sheet) or an area cutout;
-    the orthophoto and the contours have their own tracks."""
+    """Download or check a CZ request.
+
+    CZ request: a sheet code (TM33 tile / SM5 sheet) or an area cutout;
+    the orthophoto and the contours have their own tracks.
+    """
     from kartograf.download.cz_cutout import check_cz_cutout, download_cz_cutout
     from kartograf.download.cz_sheets import (
         check_cz_sheet,
@@ -1914,7 +1991,7 @@ def _download_cz_laz(
     run: _Run,
     *,
     bbox: BBox | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
 ) -> int:
     """CUZK LAZ files for an SM5/TM33 code or the index sheets of an area."""
     from kartograf.download.cz_laz import check_cz_laz, download_cz_laz
@@ -1971,11 +2048,14 @@ def _download_cz_orto(
     run: _Run,
     *,
     bbox: BBox | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
 ) -> int:
-    """CZ orthophoto (ADR-042 D13): an SM5 sheet or the SM5 sheets of an area
+    """Download or check the CZ orthophoto.
+
+    CZ orthophoto (ADR-042 D13): an SM5 sheet or the SM5 sheets of an area
     from the CUZK index, four files each; a failed sheet does not stop the
-    others (one ``UnitFailure`` per sheet)."""
+    others (one ``UnitFailure`` per sheet).
+    """
     from kartograf.download.cz_orto import (
         check_cz_orto_sheet,
         cz_orto_area_sheets,
@@ -2050,12 +2130,15 @@ def _download_cz_contours(
     run: _Run,
     *,
     bbox: BBox | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
 ) -> int:
-    """CZ contours (plan E1): an SM5 sheet or the SM5 sheets of an area from
+    """Download or check the CZ contours.
+
+    CZ contours (plan E1): an SM5 sheet or the SM5 sheets of an area from
     the CUZK index, one ZIP each; a failed sheet does not stop the others
     (one ``UnitFailure`` per sheet). The choices were checked by
-    ``validate_request`` (a CZ-only product)."""
+    ``validate_request`` (a CZ-only product).
+    """
     from kartograf.download.cz_contours import (
         check_cz_contours_sheet,
         cz_contours_area_sheets,
@@ -2123,12 +2206,15 @@ def _download_cz_contours(
 def _download_pl_laz(
     task: SimpleNamespace,
     run: _Run,
-    area: dict,
-    parent_request: dict | None = None,
+    area: dict[str, Any],
+    parent_request: dict[str, Any] | None = None,
 ) -> int:
-    """GUGiK LAZ tiles for the PL part of a sheet or area request (ADR-029);
+    """Download or check GUGiK LAZ tiles for the PL part of a request.
+
+    GUGiK LAZ tiles for the PL part of a sheet or area request (ADR-029);
     ``area``: ``{"sheet": code}`` (tiles of the sheet frame) or
-    ``{"bbox": part}``."""
+    ``{"bbox": part}``.
+    """
     from kartograf.download.laz import check_laz_area, download_laz_area
 
     resolve_pl_options(task)

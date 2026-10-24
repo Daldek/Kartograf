@@ -28,9 +28,9 @@ def create_cz_raster_provider(
     *,
     vertical_crs: str,
 ) -> CuzkRasterProvider:
-    """Build the CZ raster of a product and resolution (variant registry):
-    ``nmt`` ``2m`` DMR 5G / ``5m`` DMR 4G, ``nmpt`` ``0.5m`` DMP OK / ``2m``
-    DMP 1G.
+    """Build the CZ raster of a product and resolution (variant registry).
+
+    ``nmt`` ``2m`` DMR 5G / ``5m`` DMR 4G, ``nmpt`` ``0.5m`` DMP OK / ``2m`` DMP 1G.
 
     ``vertical_crs`` is "Bpv" (native Baltic heights) or "EVRF2007" (native
     for the ETRS89 files, otherwise the pinned operation). ``horizontal_crs``

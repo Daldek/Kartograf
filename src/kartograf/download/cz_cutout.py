@@ -11,7 +11,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
@@ -40,7 +40,12 @@ from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import ValidationError
 from kartograf.notices import ALL_NODATA, Notice, NoticeSink
 from kartograf.providers.cuzk.client import wkid
-from kartograf.providers.cuzk.raster import CUZK_NODATA, NATIVE_CRS
+from kartograf.providers.cuzk.raster import (
+    CUZK_NODATA,
+    NATIVE_CRS,
+    CuzkRasterProvider,
+    CzRasterRoute,
+)
 from kartograf.sources.registry import get_source
 
 logger = logging.getLogger(__name__)
@@ -78,13 +83,14 @@ def read_tif_nodata(path: Path) -> float | None:
         import rasterio
 
         with rasterio.open(path) as src:
-            return src.nodata
+            nodata: float | None = src.nodata
+            return nodata
     except Exception:  # noqa: BLE001 — enriching metadata < data
         return None
 
 
 def _all_nodata(path: Path, nodata: float | None) -> bool:
-    """True when the raster has no valid pixel (no tag: CUZK writes -9999).
+    """Return True when the raster has no valid pixel (no tag: CUZK writes -9999).
 
     Best-effort like ``read_tif_nodata``: an unreadable file gives False
     (debug log) - the check never aborts a finished download.
@@ -99,16 +105,16 @@ def _all_nodata(path: Path, nodata: float | None) -> bool:
 
 
 def write_cz_sidecar(
-    provider,
-    route,
+    provider: CuzkRasterProvider,
+    route: CzRasterRoute,
     target: Path,
     *,
-    request: dict,
+    request: dict[str, Any],
     nodata: float | None,
-    extra: dict | None,
+    extra: dict[str, Any] | None,
     version: VersionRef,
     digest: ContentDigest,
-    http: dict | None,
+    http: dict[str, Any] | None,
 ) -> None:
     """Write the mandatory, exclusive sidecar of a versioned CZ cutout.
 
@@ -144,7 +150,10 @@ def write_cz_sidecar(
 
 
 def _cutout_slot(
-    provider, bbox: BBox, output_dir: str | Path, image_crs: str | None
+    provider: CuzkRasterProvider,
+    bbox: BBox,
+    output_dir: str | Path,
+    image_crs: str | None,
 ) -> tuple[BBox, str, FileSlot]:
     """Normalize to the result CRS before choosing the stable bbox file name."""
     from kartograf.providers.cuzk.raster import bbox_to_crs  # CLI patch point
@@ -152,7 +161,7 @@ def _cutout_slot(
     image_sr = image_crs or NATIVE_CRS
     if wkid(bbox.crs) != wkid(image_sr):
         bbox = bbox_to_crs(bbox, image_sr)
-    descriptor = get_source(provider.descriptor_key)
+    descriptor = get_source(cast(str, provider.descriptor_key))
     slot = bbox_slot(
         output_dir,
         descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
@@ -175,7 +184,7 @@ def _result(
 
 
 def _check_cutout(
-    provider,
+    provider: CuzkRasterProvider,
     bbox: BBox,
     *,
     output_dir: str | Path,
@@ -193,14 +202,14 @@ def _check_cutout(
 
 
 def _run_cz_cutout(
-    provider,
+    provider: CuzkRasterProvider,
     bbox: BBox,
     *,
     output_dir: str | Path,
     image_crs: str | None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
     on_download: Callable[[], None] | None = None,
 ) -> CzCutoutResult:
     """Fetch or reuse a CZ cutout; planned upgrades fetch only selected files.
@@ -240,11 +249,11 @@ def _run_cz_cutout(
         provider.download_bbox(bbox, staged, on_download=on_download)
 
     def sidecar(
-        data: Path, ref: VersionRef, digest: ContentDigest, http: dict | None
+        data: Path, ref: VersionRef, digest: ContentDigest, http: dict[str, Any] | None
     ) -> None:
         nodata = read_tif_nodata(data)
         empty = _all_nodata(data, nodata)
-        extra: dict = {"all_nodata": empty}
+        extra: dict[str, Any] = {"all_nodata": empty}
         if parent_request:
             extra["parent_request"] = parent_request
         write_cz_sidecar(
@@ -285,7 +294,7 @@ def _cz_provider(
     vertical_crs: str,
     resolution: str,
     cache: MetadataCache | None,
-):
+) -> CuzkRasterProvider:
     """CZ raster provider of a cutout (``TransformError`` before any network)."""
     from kartograf.download.cutout import CUTOUT_CRS
     from kartograf.providers.cuzk import create_cz_raster_provider
@@ -355,8 +364,9 @@ def download_cz_cutout(
     on_notice: Callable[[Notice], None] | None = None,
     on_download: Callable[[], None] | None = None,
 ) -> CzCutoutResult:
-    """CZ cutout of the ImageServer in ``horizontal_crs`` (e.g. EPSG:2180 +
-    EVRF2007, A6).
+    """Download a CZ cutout of the ImageServer in ``horizontal_crs``.
+
+    E.g. EPSG:2180 + EVRF2007, A6.
 
     No configuration defaults (A8): output directory, product, CRSs and
     resolution are explicit (``product="nmt"``: ``"2m"`` DMR 5G / ``"5m"``
