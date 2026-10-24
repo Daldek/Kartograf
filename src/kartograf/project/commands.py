@@ -129,12 +129,15 @@ class TaskFiles:
 
     ``complete``: full success of the result family (only then a task is
     pinned or re-pinned); ``files``: ``(role, unit, file)`` in result order;
-    ``errors``: the failed parts when not complete.
+    ``errors``: the failed parts when not complete, ``code`` and ``reason`` the
+    registry code of the first of them (``None``: no failed part).
     """
 
     complete: bool
     files: tuple[tuple[PinRole, str, VersionedFile], ...]
     errors: tuple[str, ...]
+    code: str | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -176,6 +179,13 @@ class UnitReport(Protocol):
         ...
 
 
+def _first_failure(failed: Sequence[UnitFailure]) -> tuple[str | None, str | None]:
+    """Return the registry ``(code, reason)`` of the first failed unit, if any."""
+    if not failed:
+        return None, None
+    return failed[0].code, failed[0].reason
+
+
 def unit_report_files(report: UnitReport) -> TaskFiles:
     """Files of a ``DataReport``-like result: each file is an ``output``.
 
@@ -183,10 +193,13 @@ def unit_report_files(report: UnitReport) -> TaskFiles:
     country failed is ``ok`` for the CLI, but a project never pins half of
     a task.
     """
+    code, reason = _first_failure(report.failed)
     return TaskFiles(
         complete=report.ok and not report.failed,
         files=tuple(("output", item.unit, item.file) for item in report.files),
         errors=tuple(failure.error for failure in report.failed),
+        code=code,
+        reason=reason,
     )
 
 
@@ -199,15 +212,19 @@ def _landcover_files(result: LandCoverReport) -> TaskFiles:
         if item.unit in raw:
             files.append(("raw", item.unit, raw.pop(item.unit)))
     files.extend(("raw", unit, file) for unit, file in raw.items())
+    code, reason = _first_failure(result.failed)
     return TaskFiles(
         complete=result.ok and not result.failed,
         files=tuple(files),
         errors=tuple(f"{failure.unit}: {failure.error}" for failure in result.failed),
+        code=code,
+        reason=reason,
     )
 
 
 def _hsg_files(result: HsgReport) -> TaskFiles:
     """HSG raster and its SoilGrids inputs (``<property> <unit>``)."""
+    code, reason = _first_failure(result.failed)
     return TaskFiles(
         complete=(
             result.ok
@@ -220,6 +237,8 @@ def _hsg_files(result: HsgReport) -> TaskFiles:
             *(("input", item.unit, item.file) for item in result.inputs),
         ),
         errors=tuple(f"{failure.unit}: {failure.error}" for failure in result.failed),
+        code=code,
+        reason=reason,
     )
 
 

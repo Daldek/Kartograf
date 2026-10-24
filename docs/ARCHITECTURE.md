@@ -1798,7 +1798,7 @@ pierwszym kluczem, dalej klucze `JSON_KEYS` w stalej kolejnosci (domyslnie pola
 dataclass; klucz bez pola i bez wlasciwosci bierze `JSON_FILL`). `to_json()` =
 `json.dumps(to_dict(), ensure_ascii=False, indent=2, allow_nan=False)` i `\n` na
 koncu (`indent=None`: postac zwarta serwera MCP, bez nowej linii). CLI `--json` drukuje
-`to_json()` (`cli/_json.py::emit_document`), serwer MCP zwraca `to_dict()` i
+`to_json()` w kopercie `kartograf-result/1` (`cli/_json.py::emit_result`, 9.1 USAGE), serwer MCP zwraca `to_dict()` i
 `to_json(indent=None)`; zaden inny modul nie zamienia wynikow na JSON (Z8).
 
 Koder (`encode`, sprawdzane w tej kolejnosci): `Enum` -> wartosc; `float` skonczony
@@ -1818,7 +1818,8 @@ schematu oraz to, ze kazdy `result_schema` katalogu jest w rejestrze.
 |---|---|---|---|
 | `kartograf-download/1` | `DataReport`, `CollectionReport`, `LandCoverReport`, `SoilReport`, `HsgReport` | `download.data`, `download.collections`, `landcover.manager`, `hydrology.hsg` | `files, raw, inputs, failed, stale, superseded, summary, notices, ok` |
 | `kartograf-plan/1` | `UpdatePlan` | `download.plan` | `store, checked_at, kartograf_version, items, notices, ok` |
-| `kartograf-availability/1` | `AvailabilityReport` | `download.availability` | `request, checked_at, areas, combinations, notices, ok` |
+| `kartograf-result/1` | `CommandResult` | `envelope` | `tool, version, command, check, status, result, items, notices` |
+| `kartograf-availability/1` | `AvailabilityReport` | `download.availability` | `request, checked_at, areas, combinations, failed, notices, ok` |
 | `kartograf-sheet/1` | `SheetInfo` | `sheet_info` | `sheet, system, country, sheet_system, scale, components, zone, crs, bounds, commands, hierarchy, children, descendants` |
 | `kartograf-sheets/1` | `SheetList` | `sheet_info` | `request, sheets, count` |
 | `kartograf-sources/1` | `SourceList` | `source_info` | `group, products, sources` |
@@ -1832,7 +1833,7 @@ schematu oraz to, ze kazdy `result_schema` katalogu jest w rejestrze.
 | `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `output_dir, segments` |
 | `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `output_dir, segment, units, limit, truncated, entries` |
 | `kartograf-store-sidecar/1` | `StoreSidecar` | `store_documents` | `path, sidecar` |
-| `kartograf-error/1` | `ErrorReport` | `error_report` | `code, message, hint, exception, exit_code, command, details` |
+| `kartograf-error/1` | `ErrorReport` | `error_report` | `code, title, message, hint, details, exit_code, command` |
 
 Zasady dokumentow (zrodlo: `docs/superpowers/specs/2026-10-18-agent-interface-design.md`,
 sekcja 5; uzycie: USAGE 9.1):
@@ -1850,8 +1851,9 @@ sekcja 5; uzycie: USAGE 9.1):
 - klucz jest zawsze obecny (brak wartosci `null`, brak elementow `[]`), listy nie sa
   ucinane po cichu (`kartograf-store-entries/1` niesie `limit` i `truncated`);
 - `ok` maja dokumenty wyniku (`-download/1`, `-plan/1`, `-availability/1`,
-  `-project-report/1`, `-project-check/1`): kod wyjscia CLI to 0 przy `ok: true` albo bez
-  pola `ok`, inaczej 1; `ok: false` jest wynikiem, nie bledem (blad to `kartograf-error/1`);
+  `-project-report/1`, `-project-check/1`): `envelope.py` czyta je (`_READERS`, po typie) i
+  daje status koperty `ok`, `partial` albo `failed` (kod wyjscia CLI 0, 10, 11);
+  `ok: false` jest wynikiem, nie bledem (blad to `kartograf-error/1`, ostatnia linia stderr);
 - w obrebie `/1` tylko zmiany addytywne (nowe klucze, nowe wartosci wyliczen); usuniecie
   klucza albo zmiana typu to `/2`. Nowy dokument = klasa z `Document` w module wyniku,
   wpis w tabeli wyzej i wiersz w `tests/contract/test_json_contract.py` (dokladna lista kluczy w

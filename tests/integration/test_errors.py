@@ -99,6 +99,8 @@ def test_error_table_equals_the_spec():
         (7, "data_error"),
         (8, "store_unavailable"),
         (9, "io_error"),
+        (10, "partial"),
+        (11, "failed"),
         (13, "calculation_error"),
         (14, "no_data"),
         (15, "unsupported"),

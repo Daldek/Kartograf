@@ -14,7 +14,7 @@ import textwrap
 from collections.abc import Sequence
 
 from kartograf.catalog.commands import declared
-from kartograf.cli._json import emit_document, wants_json
+from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.source_info import SelectValue, list_sources
 
 _HEADER = ("WYBOR", "KRAJ", "DOSTAWCA", "KATALOG", "KLUCZ", "NAZWA")
@@ -70,7 +70,7 @@ def cmd_list_sources(args: argparse.Namespace, group: str) -> int:
     """Print the sources of ``group`` (``--json``: the document of ``list_sources``)."""
     sources = list_sources(group=group)
     if wants_json(args):
-        return emit_document(sources)
+        return emit_result(command_id(args), sources)
     metavars = _metavars(group)
     rows = [
         (

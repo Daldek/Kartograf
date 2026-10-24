@@ -927,7 +927,7 @@ class TestCli:
             GugikProvider(session=failing, vertical_crs="EVRF2007", resolution="1m"),
         )
 
-        assert rc == 1
+        assert rc == 11
         err = capsys.readouterr().err
         assert err.startswith("Error:") and "Traceback" not in err
         assert not (tmp_path / "nmt").exists()
@@ -965,7 +965,7 @@ class TestCli:
                 + ["-o", str(tmp_path), "-q"]
             )
 
-        assert rc == 1
+        assert rc == 11
         assert "PRG" in capsys.readouterr().err
         session.get.assert_not_called()
 
@@ -978,7 +978,7 @@ class TestCli:
             mask=abroad,
         )
 
-        assert rc == 1
+        assert rc == 11
         err = capsys.readouterr().err
         assert err.startswith("Error:") and "w calosci poza ladem PL" in err
         session.get.assert_not_called()

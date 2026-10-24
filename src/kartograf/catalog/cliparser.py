@@ -10,7 +10,8 @@ value in its own words (rule Z1); only positional arguments are.
 ``usage_errors=True`` makes every parser raise ``UsageError`` instead of printing
 ``usage:`` and exiting with 2 (``parse_command``, the ``--json`` mode of the
 CLI). The module needs only the standard library, the library's exceptions and
-the declarations; it never imports ``kartograf.cli``.
+the declarations (and ``kartograf.error_report`` when a usage error ends the
+process, which prints the error document).
 
 ``parsed_options`` is the way back: the flags of a parsed line, read by the
 declarations, as the JSON form of the options (what ``parse_command`` returns and
@@ -80,7 +81,9 @@ class _Parser(argparse.ArgumentParser):
 
     ``usage_errors``: an error raises ``UsageError`` (the argparse message, and the
     id of the command whose parser found it) instead of printing the usage and
-    exiting with 2.
+    exiting with 2. Otherwise the usage and the message are printed as argparse does
+    and the compact error document ``kartograf-error/1`` follows as the last line of
+    stderr (AGI-3.3) before the exit.
     """
 
     def __init__(self, *args: Any, usage_errors: bool = False, **kwargs: Any) -> None:
@@ -90,11 +93,18 @@ class _Parser(argparse.ArgumentParser):
         self.usage_errors = usage_errors
 
     def error(self, message: str) -> NoReturn:
+        # only the parser of a command knows its id: a group or the root parser
+        # has none, and the error is not about one command
+        error = UsageError(message, command=self.get_default("_command_id"))
         if self.usage_errors:
-            # only the parser of a command knows its id: a group or the root parser
-            # has none, and the error is not about one command
-            raise UsageError(message, command=self.get_default("_command_id"))
-        super().error(message)
+            raise error
+        try:
+            super().error(message)
+        except SystemExit:
+            from kartograf.error_report import error_line, error_report
+
+            print(error_line(error_report(error)), file=sys.stderr, flush=True)
+            raise
 
 
 class _LazyVersionAction(argparse.Action):

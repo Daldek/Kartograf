@@ -15,11 +15,12 @@ exception (``internal_error``: a program error).
 """
 
 import errno
+import json
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from kartograf._errors import BY_CODE
+from kartograf._errors import BY_CODE, OUTCOME_MEANINGS, OUTCOMES
 from kartograf.exceptions import (
     KartografError,
     NoCoverageError,
@@ -186,12 +187,17 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
 
 
 def _exit_codes() -> tuple[ExitCodeSpec, ...]:
-    """Return the exit codes of ``ERROR_CODES`` and 0, by number.
+    """Return the exit codes of the outcomes and of ``ERROR_CODES``, by number.
 
-    Each is named by the registry code that owns it; the meaning is the one of
-    the registry.
+    The outcomes ``ok``, ``partial`` and ``failed`` (0, 10, 11) are named by their
+    status, every other code by the registry code that owns it; the meaning is the
+    one of the registry. The outcome ``cancelled`` is the error ``cancelled`` (130).
     """
-    rows = {0: ExitCodeSpec(0, "ok", "Operation completed for every unit.")}
+    rows = {
+        code: ExitCodeSpec(code, status, OUTCOME_MEANINGS[status])
+        for status, code in OUTCOMES.items()
+        if status != "cancelled"
+    }
     for row in ERROR_CODES:
         rows.setdefault(
             row.exit_code,
@@ -252,6 +258,19 @@ class ErrorReport(Document):
             if document[key] is None:
                 del document[key]
         return document
+
+
+def error_line(report: ErrorReport) -> str:
+    """Return the error document as the one line the CLI ends stderr with (AGI-3.3).
+
+    Compact JSON and ASCII: a non-ASCII character is a JSON escape (``u`` and four
+    hex digits), which every JSON reader resolves, because stderr has whatever
+    encoding the terminal or the pipe has and an error must never fail to be
+    reported.
+    """
+    return json.dumps(
+        report.to_dict(), ensure_ascii=True, separators=(",", ":"), allow_nan=False
+    )
 
 
 def allowed_values_hint(flag: str, allowed: Sequence[str]) -> str:

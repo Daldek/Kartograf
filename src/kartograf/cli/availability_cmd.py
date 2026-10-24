@@ -20,7 +20,7 @@ a failure), a report with a part that could not be checked (``auto``,
 import argparse
 
 from kartograf.catalog.kinds import parse_bbox_arg
-from kartograf.cli._json import emit_document
+from kartograf.cli._json import command_id, emit_result
 from kartograf.cli.download_cmd import notice_printer
 from kartograf.download.availability import (
     AvailabilityArea,
@@ -29,6 +29,7 @@ from kartograf.download.availability import (
     check_availability,
 )
 from kartograf.download.data import MAX_HINT_LINES
+from kartograf.envelope import exit_code_of
 from kartograf.sources.variants import CZ_MODELS, variants
 
 _HEADER = (
@@ -71,12 +72,12 @@ def cmd_availability(args: argparse.Namespace) -> int:
         on_notice=notice_printer(args),
     )
     if args.json:
-        return emit_document(report)
+        return emit_result(command_id(args), report)
     _print_tables(report)
     if args.details:
         _print_details(report)
     _print_footer(report)
-    return 0 if report.ok else 1
+    return exit_code_of(report)
 
 
 def area_text(value_m2: float) -> str:

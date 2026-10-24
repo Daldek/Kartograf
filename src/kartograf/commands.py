@@ -49,6 +49,7 @@ from kartograf.catalog.spec import Command, Kind
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import UpdatePlan
+from kartograf.envelope import CommandResult, wrap
 from kartograf.exceptions import UsageError, ValidationError
 from kartograf.notices import Notice
 from kartograf.project.commands import data_commands_text, task_command
@@ -292,13 +293,15 @@ def run_command(
     cache: MetadataCache | bool = True,
     on_progress: Callable[[DownloadProgress], None] | None = None,
     on_notice: Callable[[Notice], None] | None = None,
-) -> Document:
+) -> CommandResult[Document]:
     """Run a data command: the library function of the command with the options.
 
     The options are checked first (``validate_command``); the function is then
     ``download_data``, ``download_collection``, ``download_landcover``,
-    ``download_soil`` or ``calculate_hsg``, so the result is what that function
-    returns (``kartograf-download/1``).
+    ``download_soil`` or ``calculate_hsg``. The result is the envelope
+    ``kartograf-result/1`` of the command (``to_dict()`` is the document the CLI
+    ``--json`` prints), and ``result`` is what that function returns
+    (``kartograf-download/1``).
 
     Parameters
     ----------
@@ -311,7 +314,7 @@ def run_command(
     update : {"upgrade", "force"}, optional
         The update mode of the function (``None``: local versions are kept).
     plan : UpdatePlan, optional
-        The plan of ``check_command`` for ``update="upgrade"``.
+        The plan of ``check_command`` (its ``result``) for ``update="upgrade"``.
     workers : int, optional
         Parallel transfers (``None``: the default of the function).
     summary : bool
@@ -337,7 +340,7 @@ def run_command(
         )
     store = _store(output_dir)
     entry.validate(store, arguments)
-    return entry.download(
+    report = entry.download(
         store,
         arguments,
         update=update,
@@ -348,6 +351,7 @@ def run_command(
         on_progress=on_progress,
         on_notice=on_notice,
     )
+    return wrap(command, report)
 
 
 def check_command(
@@ -357,7 +361,7 @@ def check_command(
     output_dir: str | Path,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
-) -> UpdatePlan:
+) -> CommandResult[UpdatePlan]:
     """Check whether the local versions of a data command are up to date.
 
     Nothing is downloaded: ``check_data``, ``check_collection``,
@@ -365,9 +369,10 @@ def check_command(
 
     Returns
     -------
-    UpdatePlan
-        The plan (``kartograf-plan/1``); ``ok`` is false when a position could
-        not be checked.
+    CommandResult
+        The envelope ``kartograf-result/1`` with ``check`` true; ``result`` is the
+        plan (``kartograf-plan/1``), whose ``ok`` is false when a position could
+        not be checked (status ``partial`` or ``failed``).
 
     Raises
     ------
@@ -378,4 +383,5 @@ def check_command(
     arguments = convert_arguments(entry.options, options)
     store = _store(output_dir)
     entry.validate(store, arguments)
-    return entry.check(store, arguments, cache=cache, on_notice=on_notice)
+    plan = entry.check(store, arguments, cache=cache, on_notice=on_notice)
+    return wrap(command, plan, check=True)

@@ -134,7 +134,9 @@ class TaskResult:
     to do), ``restored`` (missing pinned versions back with the same
     SHA-256), ``updated`` (re-pinned by ``upgrade``/``force``) or ``failed``
     (``errors``; the pins of the task are unchanged, except restored ones).
-    ``pinned``: new pins, ``unpinned``: pins replaced or dropped.
+    ``pinned``: new pins, ``unpinned``: pins replaced or dropped. A failed task
+    has the registry ``code`` of its failure and, where the code does not say
+    enough, its ``reason`` (``details.reason``); both are ``None`` otherwise.
     """
 
     name: str
@@ -142,6 +144,8 @@ class TaskResult:
     pinned: tuple[PinnedFile, ...]
     unpinned: tuple[PinnedFile, ...]
     errors: tuple[str, ...]
+    code: str | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)

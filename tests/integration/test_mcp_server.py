@@ -32,6 +32,7 @@ from kartograf.catalog.tools import tool_specs
 from kartograf.core.bbox import BBox
 from kartograf.download.data import DataReport
 from kartograf.download.manager import DownloadProgress
+from kartograf.envelope import wrap
 from kartograf.mcp_server import INSTRUCTIONS, _parser, default_cache_file, main
 from tests.integration.test_hsg import RasterSoilGrids
 from tests.integration.test_manager_campaigns import C14, REC, FakeCampaignProvider
@@ -334,19 +335,27 @@ DISCOVERY = [
         "get_catalog",
         {"command": "elevation download"},
         lambda: kartograf.get_catalog(command="elevation download"),
+        "commands list",
     ),
-    ("get_catalog", {}, lambda: kartograf.get_catalog()),
+    ("get_catalog", {}, lambda: kartograf.get_catalog(), "commands list"),
     (
         "parse_sheet",
         {"sheet": SHEET, "hierarchy": True, "descendants": "1:5000"},
         lambda: kartograf.describe_sheet(SHEET, hierarchy=True, descendants="1:5000"),
+        "sheet parse",
     ),
     (
         "list_sources",
         {"group": "elevation", "product": "nmt"},
         lambda: kartograf.list_sources(group="elevation", product="nmt"),
+        "elevation list-sources",
     ),
-    ("list_layers", {"group": "soil"}, lambda: kartograf.list_layers(group="soil")),
+    (
+        "list_layers",
+        {"group": "soil"},
+        lambda: kartograf.list_layers(group="soil"),
+        "soil list-layers",
+    ),
     (
         "find_sheets",
         {
@@ -356,18 +365,21 @@ DISCOVERY = [
             "sheet_system": "1992",
         },
         lambda: kartograf.find_sheets(bbox=AREA, scale="1:200000", sheet_system="1992"),
+        "sheet find",
     ),
 ]
 
 
 @needs_mcp
 @pytest.mark.parametrize(
-    ("tool", "arguments", "document"),
+    ("tool", "arguments", "document", "command"),
     DISCOVERY,
     ids=lambda x: x if isinstance(x, str) else "",
 )
-def test_discovery_tools_return_library_documents(tool, arguments, document):
-    expected = document()
+def test_discovery_tools_return_the_envelope_of_the_library_documents(
+    tool, arguments, document, command
+):
+    expected = wrap(command, document())
 
     result = call(tool, arguments)
 
@@ -379,18 +391,23 @@ def test_discovery_tools_return_library_documents(tool, arguments, document):
 
 @needs_mcp
 @pytest.mark.usefixtures("frozen_clock")
-def test_data_tool_result_equals_the_library_document(tmp_path):
+def test_data_tool_result_equals_the_envelope_of_the_library_document(tmp_path):
     with pl_sheets():
-        direct = download_data(**PL_SHEET, output_dir=tmp_path / "lib", cache=False)
+        direct = wrap(
+            "elevation download",
+            download_data(**PL_SHEET, output_dir=tmp_path / "lib", cache=False),
+        )
     with pl_sheets():
         result = call(
             "elevation_download", {**PL_SHEET, "output_dir": str(tmp_path / "mcp")}
         )
 
     assert result.is_error is False
-    document = result.structured_content
+    envelope = result.structured_content
+    document = envelope["result"]
+    assert envelope["schema"] == "kartograf-result/1" and envelope["status"] == "ok"
     assert document["schema"] == "kartograf-download/1" and document["ok"] is True
-    assert normal(document, tmp_path / "mcp") == normal(
+    assert normal(envelope, tmp_path / "mcp") == normal(
         direct.to_dict(), tmp_path / "lib"
     )
     assert result.content[0].text.replace(str(tmp_path / "mcp"), "<store>") == (
@@ -403,20 +420,23 @@ def test_data_tool_result_equals_the_library_document(tmp_path):
 
 @needs_mcp
 @pytest.mark.usefixtures("frozen_clock")
-def test_ok_false_is_an_error_result_carrying_the_report(tmp_path):
+def test_ok_false_is_a_result_with_the_status_of_its_units(tmp_path):
     failing = FakeCampaignProvider(C14, fail_urls={C14["newest"][0].url})
     with pl_sheets(failing):
-        direct = download_data(**PL_SHEET, output_dir=tmp_path / "lib", cache=False)
+        report = download_data(**PL_SHEET, output_dir=tmp_path / "lib", cache=False)
         result = call(
             "elevation_download", {**PL_SHEET, "output_dir": str(tmp_path / "mcp")}
         )
 
-    assert direct.ok is False  # the CLI exits with 1 for this report
-    assert result.is_error is True
-    document = result.structured_content
+    direct = wrap("elevation download", report)
+    assert report.ok is False and direct.exit_code == 11  # the CLI exits with 11
+    assert result.is_error is False  # an outcome, not an error (AGI-5.7)
+    envelope = result.structured_content
+    document = envelope["result"]
+    assert (envelope["status"], envelope["items"][0]["status"]) == ("failed", "failed")
     assert document["schema"] == "kartograf-download/1" and document["ok"] is False
     assert document["failed"]
-    assert normal(document, tmp_path / "mcp") == normal(
+    assert normal(envelope, tmp_path / "mcp") == normal(
         direct.to_dict(), tmp_path / "lib"
     )
 
@@ -444,10 +464,14 @@ def test_check_updates_equals_check_command(tmp_path):
         )
 
     assert result.is_error is False
-    plan = result.structured_content
+    envelope = result.structured_content
+    plan = envelope["result"]
+    assert envelope["check"] is True and envelope["command"] == "elevation download"
     assert plan["schema"] == "kartograf-plan/1" and plan["ok"] is True
     assert [item["status"] for item in plan["items"]] == ["newer"]
-    assert normal(plan, tmp_path / "mcp") == normal(direct.to_dict(), tmp_path / "lib")
+    assert normal(envelope, tmp_path / "mcp") == normal(
+        direct.to_dict(), tmp_path / "lib"
+    )
     assert result.content[0].text.replace(str(tmp_path / "mcp"), "<store>") == (
         direct.to_json(indent=None).replace(str(tmp_path / "lib"), "<store>")
     )
@@ -472,7 +496,7 @@ def test_a_plan_document_and_update_upgrade_reach_the_library(tmp_path):
             PL_SHEET,
             output_dir=tmp_path / "lib",
             update="upgrade",
-            plan=library_plan,
+            plan=library_plan.result,
             cache=False,
         )
         checked = call(
@@ -488,12 +512,12 @@ def test_a_plan_document_and_update_upgrade_reach_the_library(tmp_path):
                 **PL_SHEET,
                 "output_dir": str(tmp_path / "mcp"),
                 "update": "upgrade",
-                "plan": checked.structured_content,
+                "plan": checked.structured_content["result"],
             },
         )
 
     assert upgraded.is_error is False
-    (new,) = upgraded.structured_content["files"]
+    (new,) = upgraded.structured_content["result"]["files"]
     assert new["file"]["status"] == "new"
     assert new["file"]["label"].startswith("2025-10-21_84183")
     assert normal(upgraded.structured_content, tmp_path / "mcp") == normal(
@@ -514,15 +538,15 @@ def test_summary_is_an_argument_of_the_run_not_of_the_task(tmp_path):
         without = call("soil_hsg", {**hsg, "output_dir": str(tmp_path / "b")})
 
     assert with_summary.is_error is False
-    assert with_summary.structured_content["summary"] == direct.summary
-    assert set(with_summary.structured_content["summary"]) == {
+    assert with_summary.structured_content["result"]["summary"] == direct.summary
+    assert set(with_summary.structured_content["result"]["summary"]) == {
         "A",
         "B",
         "C",
         "D",
         "nodata",
     }
-    assert without.structured_content["summary"] is None
+    assert without.structured_content["result"]["summary"] is None
 
 
 @needs_mcp
@@ -1068,32 +1092,45 @@ def test_project_and_store_tools_work_on_real_files(tmp_path):
     after = call("project_status", here)
     verified = call("project_verify", here)
 
-    assert init.structured_content["schema"] == "kartograf-project-state/1"
-    assert [t["name"] for t in added.structured_content["tasks"]] == ["area"]
-    # a task that is not downloaded is ok: false, so an error like the CLI's exit 1
-    assert before.is_error is True and before.structured_content["ok"] is False
-    assert before.structured_content["not_downloaded"] == ["area"]
+    assert init.structured_content["result"]["schema"] == "kartograf-project-state/1"
+    assert [t["name"] for t in added.structured_content["result"]["tasks"]] == ["area"]
+    # a task that is not downloaded is ok: false, a result with the status failed
+    # (the CLI's exit 11), not an error
+    assert before.is_error is False
+    assert before.structured_content["status"] == "failed"
+    assert before.structured_content["result"]["ok"] is False
+    assert before.structured_content["result"]["not_downloaded"] == ["area"]
     assert downloaded.is_error is False
-    assert downloaded.structured_content["schema"] == "kartograf-project-report/1"
-    assert checked.structured_content["schema"] == "kartograf-project-check/1"
+    result_schema = downloaded.structured_content["result"]["schema"]
+    assert result_schema == "kartograf-project-report/1"
+    assert checked.structured_content["result"]["schema"] == "kartograf-project-check/1"
     assert checked.is_error is False
     assert (after.is_error, verified.is_error) == (False, False)
-    assert verified.structured_content["ok"] is True
+    assert verified.structured_content["result"]["ok"] is True
 
     overview = call("store_overview", {"output_dir": str(store)})
-    segment = overview.structured_content["segments"][0]["segment"]
+    segment = overview.structured_content["result"]["segments"][0]["segment"]
     entries = call(
         "store_entries", {"output_dir": str(store), "segment": segment, "limit": 5}
     )
-    path = entries.structured_content["entries"][0]["path"]
+    path = entries.structured_content["result"]["entries"][0]["path"]
     sidecar = call("store_sidecar", {"path": path})
 
-    assert overview.structured_content == kartograf.describe_store(store).to_dict()
+    assert (
+        overview.structured_content
+        == wrap("store overview", kartograf.describe_store(store)).to_dict()
+    )
     assert (
         entries.structured_content
-        == kartograf.list_store_entries(store, segment=segment, limit=5).to_dict()
+        == wrap(
+            "store entries",
+            kartograf.list_store_entries(store, segment=segment, limit=5),
+        ).to_dict()
     )
-    assert sidecar.structured_content == kartograf.read_store_sidecar(path).to_dict()
+    assert (
+        sidecar.structured_content
+        == wrap("store sidecar", kartograf.read_store_sidecar(path)).to_dict()
+    )
     for result in (overview, entries, sidecar):
         assert result.is_error is False
     # the store tools take a list of units too, and a limit of one entry truncates
@@ -1104,7 +1141,7 @@ def test_project_and_store_tools_work_on_real_files(tmp_path):
     assert one.is_error is False
 
     removed = call("project_remove", {**here, "name": "area"})
-    assert removed.structured_content["tasks"] == []
+    assert removed.structured_content["result"]["tasks"] == []
 
 
 @needs_mcp
@@ -1317,7 +1354,10 @@ def test_stdio_server_lists_tools_and_parses_a_sheet(tmp_path):
 
     assert [t.name for t in tools] == [s.name for s in tool_specs()]
     assert parsed.is_error is False
-    assert parsed.structured_content == kartograf.describe_sheet(SHEET).to_dict()
+    assert (
+        parsed.structured_content
+        == wrap("sheet parse", kartograf.describe_sheet(SHEET)).to_dict()
+    )
     assert (
         failed.is_error is True
         and failed.structured_content["code"] == "validation_error"
@@ -1413,5 +1453,5 @@ def test_stdio_stdout_has_only_protocol_frames():
     schema = tools["elevation_download"]["inputSchema"]
     assert schema["dependentRequired"] == {"bbox": ["bbox_crs"]}
     assert not any("outputSchema" in tool for tool in tools.values())
-    assert by_id[3]["structuredContent"]["schema"] == "kartograf-catalog/1"
+    assert by_id[3]["structuredContent"]["result"]["schema"] == "kartograf-catalog/1"
     assert by_id[3]["isError"] is False

@@ -19,6 +19,7 @@ from kartograf.cli._parser import create_parser
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.project.commands import COMMANDS
 from tests.integration.test_cli import _cz_provider_mock
+from tests.support.errors import without_error_document
 from tests.support.parity import assert_notices_printed, assert_same_store
 from tests.support.project_fixtures import (
     AUTO_CUTOUT,
@@ -359,7 +360,10 @@ def test_project_download_rejects_workers_below_one(tmp_path, capsys):
     with pytest.raises(ValidationError, match="--workers musi byc >= 1, podano 0"):
         download_project(project, workers=0)
     assert main(["project", "download", "--project", str(project), "-w", "0"]) == 2
-    assert capsys.readouterr().err == "Error: --workers musi byc >= 1, podano 0\n"
+    assert (
+        without_error_document(capsys.readouterr().err)
+        == "Error: --workers musi byc >= 1, podano 0\n"
+    )
 
 
 def test_project_download_has_no_store_plan_file_option(tmp_path, capsys):
@@ -460,7 +464,9 @@ def test_add_selection_error_matches_public_api_without_store_changes(tmp_path, 
         )
         == 2
     )
-    assert capsys.readouterr().err.splitlines() == [f"Error: {api_error.value}"]
+    assert without_error_document(capsys.readouterr().err).splitlines() == [
+        f"Error: {api_error.value}"
+    ]
     assert _manifest_bytes(project) == manifest
     assert list((project / "data").iterdir()) == []
 
@@ -632,9 +638,9 @@ def test_status_errors_and_remove_leave_store_versions(tmp_path, capsys):
     assert f"pobierz: kartograf project download --project {project} teren" in (
         capsys.readouterr().out
     )
-    assert main(["project", "status", "--project", str(project), "-q"]) == 1
+    assert main(["project", "status", "--project", str(project), "-q"]) == 11
     assert capsys.readouterr() == ("", "")  # a state: exit code only under -q
-    assert main(["project", "status", "--project", str(project)]) == 1
+    assert main(["project", "status", "--project", str(project)]) == 11
     text = capsys.readouterr()
     assert text.err == ""
     assert text.out.splitlines()[-1] == (
@@ -649,7 +655,7 @@ def test_status_errors_and_remove_leave_store_versions(tmp_path, capsys):
     assert store_file.is_file()
     store_file.write_bytes(b"broken")
     for command in ("status", "verify"):
-        assert main(["project", command, "--project", str(project), "-q"]) == 1
+        assert main(["project", command, "--project", str(project), "-q"]) == 11
         assert "Error: teren:" in capsys.readouterr().err
     assert main(["project", "remove", "--project", str(project), "teren"]) == 0
     assert open_project(project).tasks == ()
@@ -679,7 +685,9 @@ def test_project_error_same_as_public_api(tmp_path, capsys):
     with pytest.raises(ValidationError) as api_error:
         download_project(project, tasks=["literowka"])
     assert main(["project", "download", "--project", str(project), "literowka"]) == 2
-    assert capsys.readouterr().err.splitlines() == [f"Error: {api_error.value}"]
+    assert without_error_document(capsys.readouterr().err).splitlines() == [
+        f"Error: {api_error.value}"
+    ]
     assert open_project(project).tasks == ()
 
 
@@ -710,7 +718,7 @@ def test_quiet_still_prints_project_warnings(tmp_path, capsys):
     cz = _cz_provider_mock()
     cz.download_bbox.side_effect = DownloadError("CUZK 503")
     with auto_pl_cz(cz):
-        assert main(["project", "download", "--project", str(project), "-q"]) == 1
+        assert main(["project", "download", "--project", str(project), "-q"]) == 11
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "Warning: teren: " in captured.err

@@ -21,6 +21,7 @@ from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from tests.conftest import FakeCorine, FakeSoilGrids
 from tests.integration.test_hsg import RasterSoilGrids
+from tests.support.errors import without_error_document
 from tests.support.project_fixtures import landcover_sources
 
 BBOX_ARG = "770000,509000,772000,511000"
@@ -118,7 +119,7 @@ def test_landcover_upgrade_plan_stale_exit_1(tmp_path, capsys):
     fake = FakeSoilGrids("2.2")
     with _session(fake):
         rc = _soil(tmp_path, *SOIL, "--upgrade", "--plan", str(plan_file))
-    assert rc == 1
+    assert rc == 10
     assert fake.coverages == 0
     assert f"Error: {CLAY}: zrodlo zmienilo sie od planu (2.1)" in (
         capsys.readouterr().err
@@ -140,7 +141,7 @@ def test_landcover_status_lines_and_summary(tmp_path, capsys, caplog):
         patch.object(Bdot10kProvider, "download_package", side_effect=package),
     ):
         rc = _lc(tmp_path, "--product", "bdot10k", "--bbox", BBOX_ARG)
-    assert rc == 1
+    assert rc == 10
     captured = capsys.readouterr()
     assert "landcover/pl_bdot10k_gpkg/teryt/0208.gpkg: nowa wersja " in captured.out
     error = "Error: 0224: BDOT10k TERYT 0224: HTTP 500"
@@ -225,7 +226,7 @@ def test_corine_preview_not_emitted_for_invalid_sheet(tmp_path, capsys):
         )
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == f"Error: {exc.value}\n"
+    assert without_error_document(captured.err) == f"Error: {exc.value}\n"
 
 
 def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
@@ -250,7 +251,7 @@ def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
     )
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == f"Error: {exc.value}\n"
+    assert without_error_document(captured.err) == f"Error: {exc.value}\n"
 
 
 @pytest.mark.parametrize("mode", ["check", "download"])
@@ -266,7 +267,7 @@ def test_invalid_teryt_matches_cli_and_api(tmp_path, capsys, mode):
     assert _lc(tmp_path, "--product", "bdot10k", "--teryt", "14", *flags) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == f"Error: {exc.value}\n"
+    assert without_error_document(captured.err) == f"Error: {exc.value}\n"
 
 
 @pytest.mark.parametrize(
@@ -287,7 +288,7 @@ def test_invalid_landcover_bbox_matches_cli_and_api(
     assert _lc(tmp_path, "--product", "bdot10k", "--bbox", coordinates, *flags) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == f"Error: {exc.value}\n"
+    assert without_error_document(captured.err) == f"Error: {exc.value}\n"
 
 
 @pytest.mark.parametrize(
@@ -323,7 +324,7 @@ def test_invalid_hsg_bbox_matches_cli_and_api(
     )
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == f"Error: {exc.value}\n"
+    assert without_error_document(captured.err) == f"Error: {exc.value}\n"
 
 
 @pytest.mark.parametrize("mode", ["check", "download"])
@@ -356,7 +357,7 @@ def test_hsg_cli_output_tif_rejected(tmp_path, capsys):
     assert fake.capabilities == 0
     with pytest.raises(ValidationError) as error:
         HSGCalculator(tmp_path / "hsg.tif")
-    assert capsys.readouterr().err == f"Error: {error.value}\n"
+    assert without_error_document(capsys.readouterr().err) == f"Error: {error.value}\n"
 
 
 def test_hsg_cli_keep_intermediate_removed(tmp_path):
@@ -456,7 +457,7 @@ def test_hsg_cli_summary_from_store_path(tmp_path, capsys):
 def test_hsg_unexpected_error_uses_main_barrier(tmp_path, capsys, monkeypatch):
     with patch(_HSG, side_effect=RuntimeError("nieoczekiwany blad")):
         assert _hsg(tmp_path) == 1
-        (line, hint) = capsys.readouterr().err.splitlines()
+        (line, hint) = without_error_document(capsys.readouterr().err).splitlines()
         assert line == "Error: RuntimeError: nieoczekiwany blad"
         assert hint == "Ustaw KARTOGRAF_DEBUG=1, aby zobaczyc pelny traceback."
         monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
@@ -489,7 +490,7 @@ def test_layers_bad_code_is_library_error_before_network(tmp_path, capsys):
         rc = main(_bdot(tmp_path, "--teryt", "1465", "--layers", "SWRS,swrs1"))
     assert rc == 2
     get.assert_not_called()
-    (line,) = capsys.readouterr().err.splitlines()
+    (line,) = without_error_document(capsys.readouterr().err).splitlines()
     assert line.startswith("Error: ") and "SWRS1" in line
 
 
@@ -586,7 +587,7 @@ def test_hsg_bbox_crs_and_layer_reach_the_api(tmp_path):
 
 def test_soil_download_failure_line_and_exit_code(tmp_path, capsys):
     with _session(FakeSoilGrids(404)):
-        assert _soil(tmp_path, "--bbox", BBOX_ARG, *SOIL) == 1
+        assert _soil(tmp_path, "--bbox", BBOX_ARG, *SOIL) == 11
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err.startswith(
@@ -598,7 +599,7 @@ def test_soil_download_failure_line_and_exit_code(tmp_path, capsys):
 def test_hsg_failed_input_no_legend_no_raster(tmp_path, capsys):
     provider = RasterSoilGrids({"silt": DownloadError("WCS 500")})
     with landcover_sources(soilgrids=lambda: provider):
-        assert _hsg(tmp_path, "--summary") == 1
+        assert _hsg(tmp_path, "--summary") == 11
     captured = capsys.readouterr()
     assert captured.err == f"Error: silt {COORDS}: WCS 500\n"
     assert captured.out.count("nowa wersja") == 2

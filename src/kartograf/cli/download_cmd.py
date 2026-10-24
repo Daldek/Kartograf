@@ -21,12 +21,13 @@ from pathlib import Path
 from typing import Any
 
 from kartograf.cli._args import library_arguments
-from kartograf.cli._json import emit_document, wants_json
+from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.download.data import DataReport, check_data, download_data
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.options import require_product
 from kartograf.download.plan import PlanItem, UpdatePlan
+from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
 from kartograf.notices import CACHE_DISABLED, SHEET_LIST, Notice
 from kartograf.serialization import Document
@@ -304,7 +305,8 @@ def run_with_plan_file(
     if wants_json(args):
         if ctx.document is None:
             raise RuntimeError("--json: the command left no document to print")
-        return emit_document(ctx.document)
+        check = bool(getattr(args, "check_updates", False))
+        return emit_result(command_id(args), ctx.document, check=check)
     if wrote_plan:
         print(f"Info: zapisano plan aktualizacji {plan_file}", file=sys.stderr)
     elif getattr(args, "upgrade", False) and plan_file and _ran_nothing(ctx.document):
@@ -358,7 +360,7 @@ def _report_plan(args: argparse.Namespace, plan: UpdatePlan) -> int:
     def render() -> int:
         for item in plan.items:
             print(_plan_line(item))
-        return 0 if plan.ok else 1
+        return exit_code_of(plan, check=True)
 
     return _present(args, plan, render)
 
@@ -554,4 +556,4 @@ def _print_report(
     for failure in report.failed:
         print(f"Error: {failure.error}", file=sys.stderr)
     _report_stale(report.stale)
-    return 0 if report.ok else 1
+    return exit_code_of(report)

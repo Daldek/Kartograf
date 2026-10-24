@@ -716,7 +716,7 @@ def test_result_schemas_are_registered(command):
         assert command.id in described[schema].produced_by
 
 
-def test_every_described_schema_has_a_producer_but_the_error_document():
+def test_every_described_schema_has_a_producer_but_the_error_and_the_envelope():
     """A document nobody returns is a dead type or a missing command."""
     from kartograf.catalog import get_catalog
 
@@ -724,7 +724,7 @@ def test_every_described_schema_has_a_producer_but_the_error_document():
         info.schema for info in get_catalog(tables=True).schemas if not info.produced_by
     }
 
-    assert unproduced == {"kartograf-error/1"}
+    assert unproduced == {"kartograf-error/1", "kartograf-result/1"}
 
 
 def test_declaration_modules_do_not_call_providers_at_import(monkeypatch):

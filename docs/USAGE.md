@@ -3156,8 +3156,41 @@ Krotki spis dla agentow, czytany poza repozytorium, to `llms.txt` (9.7).
 
 ### 9.1 Dokumenty JSON i komendy
 
-| Dokument (`schema`) | Komenda CLI (narzedzie MCP) | Funkcja biblioteki | Kod 1, gdy |
+Every command answers with one **result envelope** `kartograf-result/1` (AGI-4.2). The
+document of the command (a row of the table below) is its `result`. The CLI prints the
+envelope with `--json`, every MCP tool returns it, and `run_command` and `check_command`
+of the library return it as `CommandResult` (`to_dict()` is the same document).
+
+| Key | Meaning |
+|---|---|
+| `schema`, `tool`, `version` | `kartograf-result/1`, `kartograf` and the package version |
+| `command` | the catalog id of the command (`elevation download`) |
+| `check` | `true` when the run was a plan without effects (`--check-updates`) |
+| `status` | `ok`, `partial` or `failed` (a cancelled command is the error `cancelled`) |
+| `result` | the domain document of the table below |
+| `items` | one entry per unit of a batch, `{id, status, code?, reason?, message?}`: `status` is `ok` or `failed`, a failed unit has the registry `code` of its failure (`reason` where the code is not precise enough); `[]` for a command with no batch |
+| `notices` | `{level, code, message}` of the run (the notices of `result`) |
+
+`status` follows the verdict `ok` of the domain document: `ok` when it is true (or the
+document has no verdict), `partial` when it is false and a unit succeeded, `failed` when
+it is false and no unit did. The exit code of the CLI follows it: 0, 10, 11 (9.3). They
+are outcomes, not errors: the envelope is printed all the same and nothing is written to
+the error line. In MCP only an error is `isError`. The units, by document:
+
+| Document (`kartograf` prefix left out) | A unit is | A failed unit |
+|---|---|---|
+| `-download/1` | a unit with a file | a failed unit (`no_data` with the reason `no_coverage` or `year_out_of_range`, else `source_unavailable`), or a planned position the source changed since the plan (`conflict`, reason `stale_plan`); a failed part of a successful report (`--country auto` with one country down) stays a notice |
+| `-plan/1` | a position, named by its path below the store | a position the source could not be asked about (`source_unavailable`, reason `check_failed`) |
+| `-availability/1` | a country | a country that could not be checked |
+| `-project-report/1` | a task | a failed task, with the `code` and `reason` of `TaskResult` |
+| `-project-check/1` | a task | `status` and `verify`: a task with no pins (`not_found`, reason `not_downloaded`), a missing file (`not_found`, `missing_file`), a corrupt one (`data_error`, `corrupt_file`); a check: only `check_failed` |
+
+A document with no verdict (a sheet, sources, layers, the cache, the settings, the store,
+the catalog, a project that was changed) is `ok` with no items. The documents:
+
+| Dokument (`schema`) | Komenda CLI (narzedzie MCP) | Funkcja biblioteki | Status `partial` albo `failed`, gdy |
 |---|---|---|---|
+| `kartograf-result/1` | kazda komenda z `--json` (MCP: kazde narzedzie), wokol dokumentu swojego wiersza | `run_command`, `check_command` (`CommandResult`) | nigdy: `status` jest werdyktem |
 | `kartograf-download/1` | `elevation download`, `imagery download`, `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download`, `landcover download`, `soil download`, `soil hsg` (MCP: `<grupa>_download`, `soil_hsg`) | `download_data`, `download_collection`, `download_landcover`, `download_soil`, `calculate_hsg` | `ok: false` |
 | `kartograf-plan/1` | kazda z powyzszych z `--check-updates` (MCP: `check_updates`) | `check_data`, `check_collection`, `check_landcover`, `check_soil`, `check_hsg` | pozycja `check_failed` (`ok: false`) |
 | `kartograf-availability/1` | `elevation availability` (MCP: `elevation_availability`) | `check_availability` | `ok: false` |
@@ -3174,7 +3207,7 @@ Krotki spis dla agentow, czytany poza repozytorium, to `llms.txt` (9.7).
 | `kartograf-store-overview/1` | tylko API i MCP: `store overview` (MCP: `store_overview`) | `describe_store` | - |
 | `kartograf-store-entries/1` | tylko API i MCP: `store entries` (MCP: `store_entries`) | `list_store_entries` | - |
 | `kartograf-store-sidecar/1` | tylko API i MCP: `store sidecar` (MCP: `store_sidecar`) | `read_store_sidecar` | - |
-| `kartograf-error/1` | kazda komenda przy bledzie (9.3) | `error_report` | - |
+| `kartograf-error/1` | kazda komenda przy bledzie: ostatnia linia stderr (9.3) | `error_report` | - |
 
 Zasady wspolne dokumentow:
 
@@ -3184,17 +3217,18 @@ Zasady wspolne dokumentow:
   (`2026-10-18T12:00:00+00:00`), daty danych `RRRR-MM-DD`; `bbox` to
   `[min_x, min_y, max_x, max_y]` obok klucza z ukladem (`bbox_crs`, `crs`);
 - komunikaty (`Info:` i `Warning:` trybu tekstowego) sa w tablicy `notices` jako
-  `{level, code, message}` (klucz tekstu to `message`, jak w bledzie);
-- `ok` maja dokumenty wyniku do oceny (`-download/1`, `-plan/1`,
-  `-availability/1`, `-project-report/1`, `-project-check/1`). `ok: false` to
-  **wynik** z czesciowa porazka (kod wyjscia 1: jednostki w `failed`, nieaktualne
-  pozycje w `stale`, pozycja `check_failed`), a nie blad; blad to `kartograf-error/1`,
-  wiec agent odroznia je po `schema`;
+  `{level, code, message}` (klucz tekstu to `message`, jak w bledzie), w dokumencie komendy
+  i w kopercie;
+- `ok` have the documents of `-download/1`, `-plan/1`, `-availability/1`,
+  `-project-report/1` and `-project-check/1`. `ok: false` is a **result** (units in
+  `failed`, stale positions in `stale`, a `check_failed` position), not an error: the
+  status of the envelope is `partial` or `failed` and the CLI exits with 10 or 11. An error
+  is `kartograf-error/1`, on the last line of stderr, never an envelope;
 - `ok` w `kartograf-project-check/1` zalezy od komendy: `project status` i
   `project verify` daja `ok: false`, gdy zadanie nie jest pobrane
   (`not_downloaded`) albo plik nie ma statusu `ok`; `project download
   --check-updates` ocenia tylko swiezosc zrodla (`ok: false` = pozycja
-  `check_failed`), wiec projekt bez przypiec ma tam `ok: true` i kod 0, a
+  `check_failed`), wiec projekt bez przypiec ma tam `ok: true` i status `ok`, a
   `not_downloaded` wymienia wszystkie zadania. Kompletnosc i cala
   zawartosc projektu ocenia `status`/`verify` (idiom `project status -q ||
   project download`);
@@ -3214,11 +3248,12 @@ istnieje. W `project add` podaj ja przed nazwa zadania (`kartograf project add -
 teren elevation download ...`): po nazwie zadania jest opcja uruchomienia i konczy sie
 bledem `invalid_input` z `details.option` rownym `json`.
 
-1. **stdout** to dokladnie jeden dokument JSON (UTF-8 niezaleznie od lokalizacji, wciecie
-   2 spacje, `\n` na koncu) i nic wiecej: ani pasek postepu, ani linie statusu, ani
+1. **stdout** is exactly one JSON document, the envelope `kartograf-result/1` (UTF-8
+   whatever the locale, indent of 2 spaces, `\n` at the end), and nothing else; an error writes
+   nothing to it: ani pasek postepu, ani linie statusu, ani
    naglowek listy arkuszy. Wyjatek: przeglad katalogu (`kartograf commands list --json` bez
    grupy) drukuje rekord grupy i komendy w jednej linii.
-2. **stderr** jest pusty, z dwoma wyjatkami spoza kontraktu: linie ponowien transportu HTTP
+2. **stderr** is empty, with two exceptions outside the contract (and the error document, 4): linie ponowien transportu HTTP
    (`Warning:`) i traceback przy `KARTOGRAF_DEBUG=1` (wyjatek jest wtedy podnoszony takze
    w trybie JSON; z ta zmienna przechodza tez ostrzezenia diagnostyczne biblioteki). Inne
    ostrzezenia diagnostyczne biblioteki (np. `Pominieto wersje o niezgodnym sha256`,
@@ -3231,11 +3266,13 @@ bledem `invalid_input` z `details.option` rownym `json`.
    efektu. `--plan PLIK` dziala jak dotad, a plik planu to ten sam dokument co stdout
    (zapisany przed wydrukiem; linia `Info: zapisano plan` nie jest drukowana).
    `soil hsg --json --summary` zwraca statystyki w polu `summary`.
-4. **Exit code** as in 9.3: 0 when the document has no `ok` or `ok` is true; 1 when
-   `ok: false` (the document is printed all the same); the registry exit code of the
-   error otherwise (2 for an input error, 5 for a source failure, ...); 130 after Ctrl-C,
-   143 after SIGTERM. An error is a `kartograf-error/1` document on stdout, also a
-   syntax error (`reason` `usage`); stderr stays empty.
+4. **Exit code** (9.3): 0 for the status `ok`, 10 for `partial` and 11 for `failed` (the
+   envelope is printed all the same: they are outcomes, ERR §1), the registry exit code of the
+   error otherwise (2 for an input error, 5 for a source failure, ...), 130 after Ctrl-C, 143
+   after SIGTERM. An error is the compact `kartograf-error/1` document on the **last line of
+   stderr**, in both modes (AGI-3.3; ASCII: a character outside ASCII is a JSON escape), also
+   a syntax error (`reason` `usage`); stdout stays empty. In text mode the `Error:` line, and
+   the usage of argparse for a syntax error, come first.
 5. Bez `--json` zachowanie jest bez zmian (tekst), z wyjatkami: kod wyjscia 2 dla bledow
    wejscia, tabele `list-sources` i `list-layers` oraz `sheet parse` sa renderowane z dokumentow
    biblioteki (ten sam tekst), a `cache path` drukuje sama sciezke.
@@ -3248,41 +3285,53 @@ kartograf sheet parse N-34-130-D-d-2-4 --json
 
 ```json
 {
-  "schema": "kartograf-sheet/1",
-  "sheet": "N-34-130-D-d-2-4",
-  "system": "pl1992",
-  "country": "PL",
-  "sheet_system": "1992",
-  "scale": "1:10000",
-  "components": {
-    "pas": "N",
-    "slup": "34",
-    "arkusz_200k": "130",
-    "arkusz_100k": "D",
-    "arkusz_50k": "d",
-    "arkusz_25k": "2",
-    "arkusz_10k": "4"
+  "schema": "kartograf-result/1",
+  "tool": "kartograf",
+  "version": "0.8.0",
+  "command": "sheet parse",
+  "check": false,
+  "status": "ok",
+  "result":
+  {
+    "schema": "kartograf-sheet/1",
+    "sheet": "N-34-130-D-d-2-4",
+    "system": "pl1992",
+    "country": "PL",
+    "sheet_system": "1992",
+    "scale": "1:10000",
+    "components": {
+      "pas": "N",
+      "slup": "34",
+      "arkusz_200k": "130",
+      "arkusz_100k": "D",
+      "arkusz_50k": "d",
+      "arkusz_25k": "2",
+      "arkusz_10k": "4"
+    },
+    "zone": null,
+    "crs": "EPSG:2180",
+    "bounds": {
+      "bbox": [769911.0902514459, 508419.16283969115, 772163.7346478042, 510851.5730979936],
+      "crs": "EPSG:2180"
+    },
+    "commands": ["elevation download", "elevation availability", "imagery download", "..."],
+    "hierarchy": null,
+    "children": null,
+    "descendants": null
   },
-  "zone": null,
-  "crs": "EPSG:2180",
-  "bounds": {
-    "bbox": [769911.0902514459, 508419.16283969115, 772163.7346478042, 510851.5730979936],
-    "crs": "EPSG:2180"
-  },
-  "commands": ["elevation download", "elevation availability", "imagery download", "..."],
-  "hierarchy": null,
-  "children": null,
-  "descendants": null
+  "items": [],
+  "notices": []
 }
 ```
 
-(`bounds.bbox` i `commands` zapisano w jednej linii i skrocono; prawdziwy wydruk ma
+(`result` is the document of the command; `bounds.bbox` i `commands` zapisano w jednej linii i skrocono; prawdziwy wydruk ma
 wciecie 2 spacje i kazda wartosc listy w osobnej linii; `commands` to komendy, ktore
 przyjmuja to godlo w `--sheet`.) Zrodla z rejestru, bez sieci: `kartograf elevation
 list-sources --json` (`kartograf-sources/1`: `group`, `products`, `sources` z kluczem,
 katalogiem w magazynie, wyborem flag w `select`, licencja i sygnalami aktualnosci).
 
-An input error (missing `--vertical-crs`) is a `kartograf-error/1` document and exit code 2:
+An input error (missing `--vertical-crs`) is a `kartograf-error/1` document on the last line of
+stderr and exit code 2, stdout is empty:
 
 ```bash
 kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --output /dane/kartograf --json
@@ -3305,7 +3354,7 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
 }
 ```
 
-(`allowed` is written on one line.)
+(The document is one compact line on stderr; `allowed` is written on one line here.)
 
 ### 9.3 Exit codes and error codes
 
@@ -3314,7 +3363,9 @@ Every error has a `code` of the shared Nogat
 the CLI exits with the exit code the registry gives that code, in every Nogat tool.
 The finer distinction of Kartograf is `details.reason` (snake_case English). `code`,
 `reason` and the keys never change with the language. Both tables are generated from the
-code by `scripts/generate_docs.py` and a contract test checks them.
+code by `scripts/generate_docs.py` and a contract test checks them. The exit codes 10
+(`partial`) and 11 (`failed`) are outcomes, not errors (ERR §1): a batch that finished with
+failed units; the result lists them (`items`) and no error document is written.
 
 <!-- generated: exit-codes from kartograf.error_report by scripts/generate_docs.py; do not edit -->
 | Exit | Name | Meaning |
@@ -3326,6 +3377,8 @@ code by `scripts/generate_docs.py` and a contract test checks them.
 | 7 | `data_error` | Data read by the tool (input file, archive, sidecar, stored series) is malformed or violates its format. |
 | 8 | `store_unavailable` | Data store or cache cannot be used: missing marker, locked, unreadable, network share disconnected. |
 | 9 | `io_error` | Reading or writing files failed: permissions, no space, path missing. |
+| 10 | `partial` | Batch operation completed for some units; per-unit status in items[]. |
+| 11 | `failed` | Batch operation ran but no unit succeeded; per-unit codes in items[]. |
 | 13 | `calculation_error` | Input is valid but no result can be computed: no convergence, series too short, numerical failure, transformation failed. |
 | 14 | `no_data` | Request is valid but the source has no data for the area, period or product requested. |
 | 15 | `unsupported` | Request is valid but this combination is not supported: no safe CRS transformation, product not offered for the country, operation outside the tool's scope. |
@@ -3410,7 +3463,7 @@ KartografError` still catches everything, and `code`, `reason`, `exit_code`, `hi
 attributes of the exceptions. `error_report(exc, command=None)` turns any exception into an
 `ErrorReport` (the document above): the CLI and the MCP server use it, and a library script
 can write an error to its log with it. Without `--json` an error is `Error: <message>` on
-stderr with the same exit code (the CLI prints `Remedium:` below a transform error for every
+stderr, then the document as the last line, with the same exit code (the CLI prints `Remedium:` below a transform error for every
 command).
 
 ### 9.4 Katalog komend
@@ -3527,8 +3580,8 @@ znajomosci funkcji per produkt:
 | `parse_command(argv)` | linia polecenia (lista slow albo napis, takze z poczatkowym `kartograf`, tak jak ja pisze `format_command`) -> `CommandCall(command, options, run)`: `options` to postac JSON opcji zadania (jak w `kartograf-project.json`, `bbox` zawsze z `bbox_crs`), `run` to pozostale flagi linii pod nazwami parametrow (`output_dir`, `upgrade`, `force`, `check_updates`, `plan`, `workers`, `quiet`, `json`, `summary`; nie ma klucza `update`); blad skladni to `UsageError`, komenda spoza komend danych `ValidationError(option="command")` |
 | `validate_command(command, options, output_dir=None)` | walidacja bez sieci i bez zapisu tymi samymi regulami co pobranie: `ValidationError` z `option`/`allowed` |
 | `format_command(command, options, run=None)` | kanoniczna linia `kartograf <grupa> <komenda> --flaga ...` (odwrotnosc `parse_command`) |
-| `run_command(command, options, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | wywoluje funkcje komendy (`download_data`, ...), wynik jak ta funkcja: `kartograf-download/1`; tryb to `update="upgrade"` albo `"force"` (z `run` robi go wywolujacy: `upgrade`/`force` -> `update`, `check_updates` -> `check_command`) |
-| `check_command(command, options, output_dir=, cache=, on_notice=)` | `check_*` komendy: `kartograf-plan/1` (bez pobierania) |
+| `run_command(command, options, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | calls the function of the command (`download_data`, ...) and returns its envelope `CommandResult` (9.1; `result` is the report, `kartograf-download/1`); the mode is `update="upgrade"` or `"force"` (the caller makes it of `run`: `upgrade`/`force` -> `update`, `check_updates` -> `check_command`), `plan` is `check_command(...).result` |
+| `check_command(command, options, output_dir=, cache=, on_notice=)` | the `check_*` of the command, without downloading: the envelope with `check: true`, `result` is `kartograf-plan/1` |
 
 ```python
 from kartograf import (
@@ -3549,7 +3602,8 @@ validate_command(call.command, call.options, output_dir=call.run["output_dir"])
 print(format_command(call.command, call.options, run=call.run))
 plan = check_command(call.command, call.options, output_dir="/dane/kartograf")  # siec
 report = run_command(call.command, call.options, output_dir="/dane/kartograf",
-                     update="upgrade", plan=plan)                              # siec
+                     update="upgrade", plan=plan.result)                       # siec
+print(report.status, report.exit_code, [item.id for item in report.items])
 try:
     validate_command("elevation download", {"product": "nmt", "sheet": "N-34-130-D-d-2-4",
                                              "resolution": "1m"})

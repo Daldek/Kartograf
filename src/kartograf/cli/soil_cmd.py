@@ -24,6 +24,7 @@ from kartograf.cli.download_cmd import (
 )
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.options import output_required
+from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
 from kartograf.hydrology import calculate_hsg, check_hsg
 from kartograf.hydrology.hsg import HSG_OUTPUT_FILES, HsgReport
@@ -65,7 +66,7 @@ def _print_soil(
     for failure in report.failed:
         print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
     _report_stale(report.stale)
-    return 0 if report.ok else 1
+    return exit_code_of(report)
 
 
 def cmd_soil_hsg(args: argparse.Namespace) -> int:
@@ -130,7 +131,7 @@ def _print_hsg(
         print("Legenda: 1=A (duza infiltracja), 2=B (umiarkowana),")
         print("         3=C (mala), 4=D (bardzo mala)")
         print("Metoda SCS-CN: HSG + uzytkowanie terenu -> Curve Number")
-    return 0 if result.ok else 1
+    return exit_code_of(result)
 
 
 def _print_summary(summary: dict[str, Any]) -> None:

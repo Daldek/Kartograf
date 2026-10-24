@@ -1,5 +1,9 @@
-"""``main``: the exit codes 0/1/2/130/143 and the ``kartograf-error/1`` document of
-every kind of failure, in text and in the ``--json`` mode (spec 6.5, 6.6, 7.1)."""
+"""``main``: the exit codes and the ``kartograf-error/1`` document of every kind of
+failure, in text and in the ``--json`` mode (spec 6.5, 6.6, 7.1; AGI-3.2, AGI-3.3).
+
+An error writes nothing to stdout; the last line of stderr is its document in both
+modes. The outcomes 10 and 11 (a result with ``ok: false``) are no errors: no error
+document, the report on stdout with ``--json``."""
 
 import io
 import json
@@ -13,12 +17,15 @@ from unittest.mock import Mock, patch
 import pytest
 
 from kartograf.cli._handlers import HANDLERS
+from kartograf.cli._json import emit_result
 from kartograf.cli.commands import main
 from kartograf.commands import parse_command
 from kartograf.download.data import DataReport, UnitFailure
 from kartograf.download.plan import new_plan
 from kartograf.exceptions import DownloadError, UsageError, ValidationError
+from kartograf.source_info import SourceList
 from kartograf.transform.crs import TransformError, TransformUnavailableError
+from tests.support.errors import error_document, without_error_document
 from tests.support.interrupt_fakes import PATIENCE_S
 
 SHEET = "N-34-130-D-d-2-4"
@@ -58,7 +65,8 @@ def test_input_error_exits_2_in_text_mode(capsys):
 
     assert code == 2
     assert out == ""
-    assert err == f"Error: {OUTPUT_REQUIRED}\n"
+    assert without_error_document(err) == f"Error: {OUTPUT_REQUIRED}\n"
+    assert error_document(err)["message"] == OUTPUT_REQUIRED
 
 
 def test_source_failure_exits_5(capsys, tmp_path):
@@ -67,10 +75,13 @@ def test_source_failure_exits_5(capsys, tmp_path):
         code, out, err = _run(capsys, [*ELEVATION, "-o", str(tmp_path)])
 
     assert code == 5
-    assert err == "Error: HTTP 503 dla https://example.org/zrodlo\n"
+    assert without_error_document(err) == (
+        "Error: HTTP 503 dla https://example.org/zrodlo\n"
+    )
+    assert error_document(err)["code"] == "source_unavailable"
 
 
-def test_ok_false_exits_1(capsys, tmp_path):
+def test_ok_false_exits_11_and_prints_no_error_document(capsys, tmp_path):
     report = DataReport(
         files=(),
         failed=(UnitFailure(SHEET, "PL", "brak odpowiedzi zrodla", "download"),),
@@ -82,7 +93,9 @@ def test_ok_false_exits_1(capsys, tmp_path):
     with patch("kartograf.cli.download_cmd.download_data", return_value=report):
         code, out, err = _run(capsys, [*ELEVATION, "-o", str(tmp_path)])
 
-    assert code == 1
+    assert code == 11
+    assert out == ""
+    # a failed unit is an outcome (ERR §1), not an error: its line, no document
     assert err == "Error: brak odpowiedzi zrodla\n"
 
 
@@ -95,6 +108,13 @@ def test_text_usage_error_is_unchanged(capsys):
     assert captured.out == ""
     assert captured.err.startswith("usage: kartograf elevation download")
     assert "error: nieznana opcja --bogus" in captured.err
+    # the usage and the line of argparse stay; the document is the last line
+    document = error_document(captured.err)
+    assert (document["code"], document["details"]["reason"]) == (
+        "validation_error",
+        "usage",
+    )
+    assert document["command"] == "elevation download"
 
 
 @pytest.mark.parametrize(
@@ -118,7 +138,8 @@ def test_transform_failure_exits_13_or_15_and_text_has_the_remedy(
 
     assert code == exit_code
     assert out == ""
-    assert err == text
+    assert without_error_document(err) == text
+    assert error_document(err)["exit_code"] == exit_code
 
 
 # -- the --json mode ---------------------------------------------------------
@@ -127,8 +148,8 @@ def test_transform_failure_exits_13_or_15_and_text_has_the_remedy(
 def test_json_input_error_is_an_error_document(capsys):
     code, out, err = _run(capsys, [*ELEVATION, "--json"])
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["schema"] == "kartograf-error/1"
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "invalid_input"
@@ -146,8 +167,8 @@ def test_json_input_error_lists_allowed_values_and_an_example(capsys, tmp_path):
     argv = [x for x in ELEVATION if x not in ("--vertical-crs", "EVRF2007")]
     code, out, err = _run(capsys, [*argv, "-o", str(tmp_path), "--json"])
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["details"] == {
         "reason": "invalid_input",
         "option": "vertical_crs",
@@ -169,8 +190,8 @@ def test_json_input_error_hint_example_is_of_the_product_and_country_of_the_line
 
     code, out, err = _run(capsys, argv)
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["details"]["option"] == "level"
     example = parse_command(document["hint"].split("Przyklad: kartograf ", 1)[1])
     assert example.command == "boundaries download"
@@ -181,8 +202,8 @@ def test_json_input_error_hint_example_is_of_the_product_and_country_of_the_line
 def test_json_argparse_error_is_usage_error(capsys):
     code, out, err = _run(capsys, ["elevation", "download", "--bogus", "--json"])
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "usage"
     assert document["exit_code"] == 2
@@ -203,8 +224,8 @@ def test_json_usage_error_of_a_known_command_names_it_and_gives_an_example(
 ):
     code, out, err = _run(capsys, ["elevation", "download", *flags, "--json"])
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "usage"
     assert message in document["message"]
@@ -217,8 +238,8 @@ def test_json_usage_error_of_a_known_command_names_it_and_gives_an_example(
 def test_json_usage_error_without_a_command_has_the_generic_hint(capsys):
     code, out, err = _run(capsys, ["elevation", "frobnicate", "--json"])
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "usage"
     assert "command" not in document
@@ -231,8 +252,8 @@ def test_json_usage_error_in_a_task_line_is_about_the_line_not_the_task(
     argv = ["project", "add", "--json", "--project", str(tmp_path), "teren"]
     code, out, err = _run(capsys, [*argv, "elevation", "download", "--bogus"])
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "usage"
     assert document["command"] == "project add"
@@ -244,8 +265,8 @@ def test_json_usage_error_in_a_task_line_is_about_the_line_not_the_task(
 def test_json_removed_command_is_usage_error(capsys):
     code, out, err = _run(capsys, ["download", "--product", "nmt", "--json"])
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "usage"
     assert "kartograf elevation download" in document["message"]
@@ -254,8 +275,8 @@ def test_json_removed_command_is_usage_error(capsys):
 def test_json_flag_before_the_command_is_a_usage_error(capsys):
     code, out, err = _run(capsys, ["--json", "elevation", "list-sources"])
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "usage"
     # one short hint: where the flag goes, not the list of all 37 commands
@@ -267,8 +288,8 @@ def test_json_flag_before_the_command_is_a_usage_error(capsys):
 def test_json_parse_error_uses_invalid_sheet_code(capsys):
     code, out, err = _run(capsys, ["sheet", "parse", "NIE-GODLO", "--json"])
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "invalid_sheet_code"
     assert document["command"] == "sheet parse"
@@ -280,8 +301,8 @@ def test_json_interrupt_is_130(capsys):
     with _handler_fails(KeyboardInterrupt):
         code, out, err = _run(capsys, ["sheet", "parse", "N-34-130-D", "--json"])
 
-    document = json.loads(out)
-    assert code == 130 and err == ""
+    document = error_document(err)
+    assert code == 130 and out == ""
     assert document["code"] == "cancelled"
     assert document["exit_code"] == 130
     assert document["message"] == "przerwano (Ctrl-C)"
@@ -312,8 +333,8 @@ def test_sigterm_is_143_with_the_error_document_in_json_mode(
 ):
     code, out, err = _run(capsys, ["sheet", "parse", "N-34-130-D", "--json"])
 
-    document = json.loads(out)
-    assert code == 143 and err == ""
+    document = error_document(err)
+    assert code == 143 and out == ""
     assert document["code"] == "terminated"
     assert document["exit_code"] == 143
     assert document["message"] == "przerwano (SIGTERM)"
@@ -324,7 +345,8 @@ def test_sigterm_is_143_with_one_error_line_in_text_mode(capsys, sigterm_during_
     code, out, err = _run(capsys, ["sheet", "parse", "N-34-130-D"])
 
     assert code == 143 and out == ""
-    assert err == "Error: przerwano (SIGTERM)\n"
+    assert without_error_document(err) == "Error: przerwano (SIGTERM)\n"
+    assert error_document(err)["code"] == "terminated"
 
 
 def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):
@@ -342,8 +364,8 @@ def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):
     ):
         code, out, err = _run(capsys, [*argv, "--plan", str(plan_file)])
 
-    document = json.loads(out)
-    assert code == 9 and err == ""
+    document = error_document(err)
+    assert code == 9 and out == ""
     assert document["code"] == "io_error"
     assert document["exit_code"] == 9
     assert document["details"] == {"errno": "EISDIR", "path": str(plan_file)}
@@ -353,8 +375,8 @@ def test_internal_error_in_json_mode_and_debug_reraises(capsys, monkeypatch):
     with _handler_fails(RuntimeError("boom")):
         code, out, err = _run(capsys, ["sheet", "parse", "N-34", "--json"])
 
-    document = json.loads(out)
-    assert code == 1 and err == ""
+    document = error_document(err)
+    assert code == 1 and out == ""
     assert document["code"] == "internal_error"
     assert document["message"] == "RuntimeError: boom"
     assert "KARTOGRAF_DEBUG" in document["hint"]
@@ -369,15 +391,31 @@ def test_internal_error_in_json_mode_and_debug_reraises(capsys, monkeypatch):
 
 
 def test_json_mode_sets_utf8_stdout(monkeypatch):
-    """The document is UTF-8 whatever the locale of the stream (spec 7.1)."""
+    """The envelope is UTF-8 whatever the locale of the stream (spec 7.1)."""
     raw = io.BytesIO()
     monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="ascii"))
-    with _handler_fails(ValidationError("zly znak: \u017c")):
+    sources = SourceList(group="elevation", products=("zl\u0105d",), sources=())
+
+    def handler(args):
+        return emit_result("elevation list-sources", sources)
+
+    with patch.dict(HANDLERS, {"sheet parse": handler}):
         code = main(["sheet", "parse", "N-34", "--json"])
     sys.stdout.flush()
 
-    assert code == 2
-    assert json.loads(raw.getvalue().decode("utf-8"))["message"] == "zly znak: \u017c"
+    assert code == 0
+    envelope = json.loads(raw.getvalue().decode("utf-8"))
+    assert envelope["result"]["products"] == ["zl\u0105d"]
+
+
+def test_the_error_document_is_ascii_whatever_the_encoding_of_stderr(capsys):
+    """A character outside ASCII is a JSON escape: stderr cannot refuse it."""
+    with _handler_fails(ValidationError("zly znak: \u017c")):
+        code, out, err = _run(capsys, ["sheet", "parse", "N-34", "--json"])
+
+    assert code == 2 and out == ""
+    assert err.isascii()
+    assert error_document(err)["message"] == "zly znak: \u017c"
 
 
 def test_http_retry_lines_stay_on_stderr(capsys):
@@ -391,9 +429,9 @@ def test_http_retry_lines_stay_on_stderr(capsys):
     with patch.dict(HANDLERS, {"sheet parse": retried_then_failed}):
         code, out, err = _run(capsys, ["sheet", "parse", "N-34", "--json"])
 
-    assert code == 2
-    assert json.loads(out)["message"] == "zle"
-    assert err == "Warning: HTTP 503, ponawiam 1/3\n"
+    assert code == 2 and out == ""
+    assert error_document(err)["message"] == "zle"
+    assert without_error_document(err) == "Warning: HTTP 503, ponawiam 1/3\n"
 
 
 def _skipped_version_listing(tmp_path):
@@ -413,17 +451,18 @@ def _skipped_version_listing(tmp_path):
 
 
 def test_library_warnings_are_not_on_stderr_in_json_mode(capsys, tmp_path, monkeypatch):
-    """USAGE 9.2: with ``--json`` stderr is empty - a library log record (here the
-    skipped version of a store listing) is not printed as a bare line."""
+    """USAGE 9.2: with ``--json`` stderr is the error document alone - a library log
+    record (here the skipped version of a store listing) is not printed as a bare
+    line."""
     # no handler above the 'kartograf' branch -> logging.lastResort writes to
     # stderr, as in a real CLI run (pytest's root handler would hide it)
     monkeypatch.setattr(logging.getLogger("kartograf"), "propagate", False)
     with patch.dict(HANDLERS, {"sheet parse": _skipped_version_listing(tmp_path)}):
         code, out, err = _run(capsys, ["sheet", "parse", "N-34", "--json"])
 
-    assert code == 2
-    assert json.loads(out)["message"] == "zle"
-    assert err == ""
+    assert code == 2 and out == ""
+    assert error_document(err)["message"] == "zle"
+    assert without_error_document(err) == ""
 
 
 def test_library_warnings_are_prefixed_in_text_mode(capsys, tmp_path, monkeypatch):
@@ -433,9 +472,10 @@ def test_library_warnings_are_prefixed_in_text_mode(capsys, tmp_path, monkeypatc
         code, out, err = _run(capsys, ["sheet", "parse", "N-34"])
 
     assert code == 2
-    lines = err.splitlines()
+    lines = without_error_document(err).splitlines()
     assert lines[0].startswith("Warning: Pominieto wersje bez czytelnego sidecara")
-    assert lines[1] == "Error: zle"
+    assert lines[1:] == ["Error: zle"]
+    assert error_document(err)["message"] == "zle"
 
 
 def test_library_warnings_pass_with_debug_in_json_mode(capsys, tmp_path, monkeypatch):
@@ -472,8 +512,8 @@ def test_library_warnings_pass_with_debug_in_json_mode(capsys, tmp_path, monkeyp
 def test_input_errors_of_the_handlers_name_the_option(capsys, argv, option):
     code, out, err = _run(capsys, [*argv, "--json"])
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["exit_code"] == 2
     assert document["details"]["option"] == option
 
@@ -500,7 +540,7 @@ def test_plan_file_errors_are_input_errors_of_the_plan(capsys, tmp_path, plan_er
         capsys, [*ELEVATION, *store, *mode, "--plan", str(plan_file), "--json"]
     )
 
-    document = json.loads(out)
-    assert code == 2 and err == ""
+    document = error_document(err)
+    assert code == 2 and out == ""
     assert document["code"] == "validation_error"
     assert document["details"] == {"reason": "invalid_input", "option": "plan"}

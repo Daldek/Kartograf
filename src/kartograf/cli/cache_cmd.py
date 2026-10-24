@@ -17,7 +17,7 @@ from kartograf.cache_info import (
     get_cache_info,
     get_cache_path,
 )
-from kartograf.cli._json import emit_document, wants_json
+from kartograf.cli._json import command_id, emit_result, wants_json
 
 
 def _print_stats(info: CacheInfo) -> None:
@@ -63,12 +63,12 @@ def cmd_cache(args: argparse.Namespace, action: str) -> int:
     if action == "path":
         info = get_cache_path()
         if wants_json(args):
-            return emit_document(info)
+            return emit_result(command_id(args), info)
         print(info.path)
         return 0
     info = clear_cache() if action == "clear" else get_cache_info()
     if wants_json(args):
-        return emit_document(info)
+        return emit_result(command_id(args), info)
     if action == "clear":
         if info.removed_unreadable:
             print(f"Usunieto nieczytelny plik cache: {info.path}")

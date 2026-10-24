@@ -412,8 +412,15 @@ def test_run_command_equals_download_data(tmp_path):
     with pl_sheets():
         direct = download_data(**PL_SHEET, output_dir=tmp_path / "b", cache=False)
 
-    assert [f.file.status for f in called.files] == ["new"]  # type: ignore[attr-defined]
-    assert _normal(called, tmp_path / "a") == _normal(direct, tmp_path / "b")
+    assert [f.file.status for f in called.result.files] == ["new"]  # type: ignore[attr-defined]
+    assert (called.command, called.check, called.status) == (
+        "elevation download",
+        False,
+        "ok",
+    )
+    assert [item.id for item in called.items] == ["N-34-139-C-a-3-1"]
+    assert _normal(called.result, tmp_path / "a") == _normal(direct, tmp_path / "b")
+    assert called.to_dict()["result"] == called.result.to_dict()
 
 
 @pytest.mark.usefixtures("frozen_clock")
@@ -429,9 +436,10 @@ def test_check_command_equals_check_data(tmp_path):
     with pl_sheets(fake):
         direct = check_data(**PL_SHEET, output_dir=tmp_path, cache=False)
 
-    assert isinstance(plan, UpdatePlan)
-    assert [item.status for item in plan.items] == ["newer"]
-    assert _normal(plan, tmp_path) == _normal(direct, tmp_path)
+    assert isinstance(plan.result, UpdatePlan)
+    assert (plan.command, plan.check, plan.status) == ("elevation download", True, "ok")
+    assert [item.status for item in plan.result.items] == ["newer"]
+    assert _normal(plan.result, tmp_path) == _normal(direct, tmp_path)
 
 
 @pytest.mark.usefixtures("frozen_clock")
@@ -453,16 +461,20 @@ def test_run_command_passes_update_and_plan_to_the_function(tmp_path):
             PL_SHEET,
             output_dir=tmp_path,
             update="upgrade",
-            plan=plan,
+            plan=plan.result,
             cache=False,
         )
 
-    assert [f.file.status for f in kept.files] == ["local"]  # type: ignore[attr-defined]
-    (new,) = upgraded.files  # type: ignore[attr-defined]
+    assert [f.file.status for f in kept.result.files] == ["local"]  # type: ignore[attr-defined]
+    (new,) = upgraded.result.files  # type: ignore[attr-defined]
     assert new.file.status == "new" and new.file.label.startswith("2025-10-21_84183")
     with pl_sheets(fake), pytest.raises(ValidationError) as without_upgrade:
         run_command(
-            "elevation download", PL_SHEET, output_dir=tmp_path, plan=plan, cache=False
+            "elevation download",
+            PL_SHEET,
+            output_dir=tmp_path,
+            plan=plan.result,
+            cache=False,
         )
     assert without_upgrade.value.options == ("plan", "update")
 
@@ -481,9 +493,9 @@ def test_run_command_summary_is_for_soil_hsg_only(tmp_path):
     with pytest.raises(ValidationError) as caught:
         run_command("elevation download", PL_SHEET, output_dir=tmp_path, summary=True)
 
-    assert without.summary is None  # type: ignore[attr-defined]
-    assert with_summary.summary == direct.summary  # type: ignore[attr-defined]
-    assert set(with_summary.summary) == {"A", "B", "C", "D", "nodata"}  # type: ignore[attr-defined]
+    assert without.result.summary is None  # type: ignore[attr-defined]
+    assert with_summary.result.summary == direct.summary  # type: ignore[attr-defined]
+    assert set(with_summary.result.summary) == {"A", "B", "C", "D", "nodata"}  # type: ignore[attr-defined]
     assert caught.value.option == "summary"
     assert not (tmp_path / "data").exists()
 

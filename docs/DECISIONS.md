@@ -72,6 +72,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-048](#adr-048-adoption-of-the-nogat-standard-21-layout-tooling-and-versions) | Adoption of the Nogat standard 2.1: layout, tooling and versions | 2026-10-24 | Przyjeta |
 | [ADR-049](decisions/0049-nogat-error-registry-mapping.md) | Error codes and exit codes follow the Nogat registry | 2026-10-24 | Accepted |
 | [ADR-050](decisions/0050-nogat-user-environment.md) | User environment: nogat.toml, variables, user directories and `config show` | 2026-10-24 | Accepted |
+| [ADR-051](decisions/0051-result-envelope-and-outcome-exit-codes.md) | Result envelope kartograf-result/1, outcome exit codes 10 and 11, error document on stderr | 2026-10-24 | Accepted |
 
 ---
 

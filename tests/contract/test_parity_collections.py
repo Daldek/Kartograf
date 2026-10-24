@@ -18,6 +18,7 @@ from kartograf.core.bbox import BBox
 from kartograf.download import collections as col
 from kartograf.download.collections import check_collection, download_collection
 from kartograf.download.plan import UpdatePlan
+from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
 from kartograf.notices import UNIT_LIST, WHOLE_COUNTRY_SIZE
 from tests.integration.test_collections_cz import NATIONAL, FakeCuzk, _page_size
@@ -49,7 +50,7 @@ def _serve(monkeypatch, *routes) -> FakePackageSession:
 def _same(run, *, statuses: list[str]) -> None:
     report = run.api_result
     assert_same_store(run.cli_store, run.api_store)
-    assert run.cli_code == (0 if report.ok else 1)
+    assert run.cli_code == exit_code_of(report)
     assert_notices_printed(run.cli_stderr, report.notices)
     assert [item.file.status for item in report.files] == statuses
 
@@ -309,6 +310,6 @@ def test_input_errors_same_type_and_text(tmp_path, monkeypatch, argv, kwargs):
     )
     assert isinstance(run.api_error, ValidationError)
     assert run.cli_code == 2
-    assert run.cli_stderr == f"Error: {run.api_error}\n"
+    assert run.cli_text == f"Error: {run.api_error}\n"
     assert session.calls == []
     assert not run.cli_store.exists() and not run.api_store.exists()
