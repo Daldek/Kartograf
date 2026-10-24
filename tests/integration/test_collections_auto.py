@@ -103,7 +103,7 @@ def test_pl_only_area_downloads_pl_when_cz_has_no_cadastral_area(tmp_path, route
     assert "katastralniho uzemi (RUIAN)" in failure.error
     (partial,) = [n for n in report.notices if n.code == AUTO_PARTIAL_SUCCESS]
     assert partial.level == "warning"
-    assert "czesc CZ" in partial.text and "pobrano PL" in partial.text
+    assert "czesc CZ" in partial.message and "pobrano PL" in partial.message
 
 
 def test_pl_only_area_check_plans_pl_and_warns_about_cz(tmp_path, router):
@@ -115,8 +115,8 @@ def test_pl_only_area_check_plans_pl_and_warns_about_cz(tmp_path, router):
     assert {item.segment for item in plan.items} == {"cadastre/pl_egib"}
     warnings = [n for n in plan.notices if n.level == "warning"]
     assert [n.code for n in warnings] == [CHECK_FAILED, AUTO_PARTIAL_SUCCESS]
-    assert warnings[0].text.startswith("CZ: map: obszar nie przecina")
-    assert "nie mogla zostac sprawdzona" in warnings[1].text
+    assert warnings[0].message.startswith("CZ: map: obszar nie przecina")
+    assert "nie mogla zostac sprawdzona" in warnings[1].message
 
 
 def test_cz_only_area_keeps_cz_when_the_pl_part_fails(tmp_path, monkeypatch):
@@ -137,7 +137,7 @@ def test_cz_only_area_keeps_cz_when_the_pl_part_fails(tmp_path, monkeypatch):
     (failure,) = report.failed
     assert (failure.country, failure.kind) == ("PL", "download")
     (partial,) = [n for n in report.notices if n.code == AUTO_PARTIAL_SUCCESS]
-    assert "czesc PL" in partial.text and "pobrano CZ" in partial.text
+    assert "czesc PL" in partial.message and "pobrano CZ" in partial.message
 
 
 def test_every_country_failing_is_a_failure(tmp_path, monkeypatch):

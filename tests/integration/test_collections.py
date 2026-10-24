@@ -468,7 +468,7 @@ def test_whole_country_requires_flag_and_reports_size(tmp_path, session, frozen_
     )
     assert report.ok
     assert seen == [(WHOLE_COUNTRY_SIZE, 0)]  # announced before the transfer
-    assert "377419459" in report.notices[0].text
+    assert "377419459" in report.notices[0].message
     assert session.calls == [("HEAD", url), ("GET", url)]
     (unit_file,) = report.files
     assert unit_file.unit == "pl"

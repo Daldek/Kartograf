@@ -155,10 +155,10 @@ _cache_warnings_shown: set[str] = set()
 
 def _warn_cache_disabled(notice: Notice) -> None:
     """Print one disabled-cache warning per CLI command."""
-    if notice.text in _cache_warnings_shown:
+    if notice.message in _cache_warnings_shown:
         return
-    _cache_warnings_shown.add(notice.text)
-    print(f"Warning: {notice.text}", file=sys.stderr, flush=True)
+    _cache_warnings_shown.add(notice.message)
+    print(f"Warning: {notice.message}", file=sys.stderr, flush=True)
 
 
 def _print_notice(notice: Notice) -> None:
@@ -171,7 +171,7 @@ def _print_notice(notice: Notice) -> None:
         _warn_cache_disabled(notice)
         return
     prefix = "Info" if notice.level == "info" else "Warning"
-    print(f"{prefix}: {notice.text}", file=sys.stderr)
+    print(f"{prefix}: {notice.message}", file=sys.stderr)
 
 
 def notice_printer(args: argparse.Namespace) -> Callable[[Notice], None] | None:
@@ -330,16 +330,6 @@ _PLAN_TEXT = {
 }
 
 
-def store_path_label(item: PlanItem) -> str:
-    """Return the subject of a plan line.
-
-    The position's path below ``--output``, as in the status lines of the download (one
-    format in both modes; a derived file and its raw ZIP of the same TERYT get different
-    lines).
-    """
-    return "/".join(part for part in (item.segment, item.hierarchy, item.name) if part)
-
-
 def _plan_line(item: PlanItem) -> str:
     if item.status == "newer":
         signal = item.available_signal or {}
@@ -354,7 +344,7 @@ def _plan_line(item: PlanItem) -> str:
         label = item.local_label or item.available_label
         if label:
             text += f" ({label})"
-    return f"{store_path_label(item)}: {text}"
+    return f"{item.store_path}: {text}"
 
 
 def _report_plan(args: argparse.Namespace, plan: UpdatePlan) -> int:
@@ -377,7 +367,7 @@ def _report_stale(stale: Sequence[PlanItem]) -> int:
     """``--upgrade --plan``: positions whose source changed since the plan."""
     for item in stale:
         print(
-            f"Error: {store_path_label(item)}: zrodlo zmienilo sie od planu "
+            f"Error: {item.store_path}: zrodlo zmienilo sie od planu "
             f"({item.available_label or item.available_signal}) - sprawdz "
             "ponownie (--check-updates)",
             file=sys.stderr,
@@ -500,7 +490,7 @@ def _data_notices(args: argparse.Namespace) -> Callable[[Notice], None] | None:
     def on_notice(notice: Notice) -> None:
         if notice.code == SHEET_LIST:
             if not quiet:
-                print(notice.text)
+                print(notice.message)
                 print()
             return
         _print_notice(notice)

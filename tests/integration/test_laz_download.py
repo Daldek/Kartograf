@@ -814,7 +814,7 @@ class TestDownloadLazArea:
         (notice,) = result.notices
         assert seen == [notice]
         assert notice.level == "info" and notice.code == LAZ_SUPERSEDED
-        lines = notice.text.split("\n")
+        lines = notice.message.split("\n")
         assert lines[0] == (
             "pominieto 2 kafle LAZ - obszar pokrywaja nowsze kafle (domyslnie "
             "najnowszy rocznik per obszar; inny rocznik: --year/--min-year/--max-year)"

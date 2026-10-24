@@ -363,7 +363,7 @@ def test_orto_cutout_grid_and_chunks(tmp_path):
     assert result.file.path.name == "566000_243000_566001_243001.tif"
     notice, *subsets = seen
     assert isinstance(notice, Notice) and notice.code == CUTOUT_SIZE
-    assert "4 x 4 px" in notice.text and "4 zapytan" in notice.text
+    assert "4 x 4 px" in notice.message and "4 zapytan" in notice.message
     assert subsets == [  # N->S, W->E: q1, q2, q3, q4
         (566000.0, 566000.5, 243000.5, 243001.0),
         (566000.5, 566001.0, 243000.5, 243001.0),
@@ -588,7 +588,7 @@ def test_auto_narrows_orto_cutout_to_pl(tmp_path):
         **ARGS,
     )
     (narrowed,) = [n for n in seen if n.code == AUTO_NARROWED_TO_PL]
-    assert "--coverage standard" in narrowed.text
+    assert "--coverage standard" in narrowed.message
     assert [item.segment for item in plan.items] == [SEGMENT]
 
 

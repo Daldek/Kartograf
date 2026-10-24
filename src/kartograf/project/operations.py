@@ -254,7 +254,7 @@ def _prefixed(sink: NoticeSink, task: str) -> Callable[[Notice], None]:
     """Notices of the library call of a task: same code, ``<task>: `` text."""
 
     def forward(notice: Notice) -> None:
-        sink.add(Notice(notice.level, notice.code, f"{task}: {notice.text}"))
+        sink.add(Notice(notice.level, notice.code, f"{task}: {notice.message}"))
 
     return forward
 

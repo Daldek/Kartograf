@@ -224,7 +224,7 @@ def test_auto_partial_success_not_pinned(tmp_path):
     # library notices pass with their code, prefixed with the task name
     (notice,) = seen
     assert report.notices == (notice,) and notice.code == "auto_partial_success"
-    assert notice.text.startswith("teren: czesc CZ zadania zakonczyla sie bledem")
+    assert notice.message.startswith("teren: czesc CZ zadania zakonczyla sie bledem")
 
 
 def test_written_after_each_task(tmp_path):
@@ -526,7 +526,9 @@ def test_upgrade_without_signal_keeps_pin(tmp_path):
     assert report.tasks[0].outcome == "unchanged" and packages.calls == []
     (notice,) = report.notices
     assert notice.code == "unverified_local"
-    assert notice.text.startswith("pokrycie: landcover/pl_bdot10k_gpkg/teryt/1465.gpkg")
+    assert notice.message.startswith(
+        "pokrycie: landcover/pl_bdot10k_gpkg/teryt/1465.gpkg"
+    )
     assert _manifest_bytes(project) == before
 
 

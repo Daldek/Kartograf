@@ -78,8 +78,8 @@ def assert_notices_printed(stderr: str, notices) -> None:
         if notice.code == SHEET_LIST:
             continue
         prefix = "Info" if notice.level == "info" else "Warning"
-        found = text.find(f"\n{prefix}: {notice.text}\n", position)
-        assert found >= 0, f"Not on stderr (whole line, in order): {notice.text!r}"
+        found = text.find(f"\n{prefix}: {notice.message}\n", position)
+        assert found >= 0, f"Not on stderr (whole line, in order): {notice.message!r}"
         position = found + 1
 
 

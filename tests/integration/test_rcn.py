@@ -139,7 +139,7 @@ def test_rcn_voivodeship_export_and_size_notice(tmp_path, monkeypatch):
         "cadastre/pl_rcn/teryt/12.gpkg"
     )
     assert seen == [(DOWNLOAD_SIZE, 0)]
-    assert "604038367 B" in report.notices[0].text
+    assert "604038367 B" in report.notices[0].message
     with pytest.raises(ValidationError, match="Nieprawidlowy kod TERYT"):
         download_collection(product="prices", teryt="126", output_dir=tmp_path)
     assert fake.calls == [("HEAD", url), ("GET", url)]

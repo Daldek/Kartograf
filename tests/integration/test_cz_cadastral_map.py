@@ -139,8 +139,9 @@ def test_cz_cadastral_map_area_ku_discovery_and_etag(tmp_path, router):
         f"cadastre/cz_cadastral-map_shp/ku/{code}.zip" for code in AREA_KU
     ]
     (listed,) = [n for n in first.notices if n.code == UNIT_LIST]
-    assert listed.text == "map: katastralni uzemi obszaru wg RUIAN (3): " + ", ".join(
-        AREA_KU
+    assert (
+        listed.message
+        == "map: katastralni uzemi obszaru wg RUIAN (3): " + ", ".join(AREA_KU)
     )
     meta = _meta(first.files[0].file.version_path)
     assert meta["request"] == {"ku": "652954", "format": "SHP"}

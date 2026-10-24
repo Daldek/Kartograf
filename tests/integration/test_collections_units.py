@@ -655,7 +655,7 @@ def test_sheet_without_record_is_not_a_unit(tmp_path, router, monkeypatch):
             on_notice=notices.append,
         )
     assert [n.code for n in notices] == [UNIT_LIST]
-    assert "bez rekordu w indeksie (1): M-34-64-D-d-1" in notices[0].text
+    assert "bez rekordu w indeksie (1): M-34-64-D-d-1" in notices[0].message
 
 
 def test_cuzk_layer_sheet_units(tmp_path, router, monkeypatch):
@@ -858,7 +858,7 @@ def test_national_file_of_several_themes(tmp_path, router, monkeypatch, frozen_c
         "names/pl_test_gml/country/pl_miejscowosci.zip",
         "names/pl_test_gml/country/pl_obiekty-fizjograficzne.zip",
     ]
-    sizes = [n.text for n in notices if n.code == WHOLE_COUNTRY_SIZE]
+    sizes = [n.message for n in notices if n.code == WHOLE_COUNTRY_SIZE]
     assert len(sizes) == 2 and "20358653 B" in sizes[0] and "26414682 B" in sizes[1]
 
 
@@ -1014,7 +1014,7 @@ def test_size_notice_before_get(tmp_path, router, monkeypatch, frozen_clock):
     assert report.ok, report.failed
     assert seen == [(DOWNLOAD_SIZE, 0)]
     assert "301623607 B" in next(
-        n.text for n in report.notices if n.code == DOWNLOAD_SIZE
+        n.message for n in report.notices if n.code == DOWNLOAD_SIZE
     )
 
     gets = router.gets()

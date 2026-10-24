@@ -70,6 +70,17 @@ class PlanItem:
     status: ItemStatus
     error: str | None = None
 
+    @property
+    def store_path(self) -> str:
+        """The path of the position below the store (``nmt/pl_1992/N-34.asc``).
+
+        It is the subject of the status lines of the CLI and the ``id`` of the
+        position in the ``items`` of the result envelope.
+        """
+        return "/".join(
+            part for part in (self.segment, self.hierarchy, self.name) if part
+        )
+
 
 @dataclass(frozen=True)
 class UpdatePlan(Document):
@@ -185,7 +196,7 @@ def _notice(raw: Mapping[str, object]) -> Notice:
     level = raw["level"]
     if level not in ("info", "warning"):
         raise ValidationError(f"Nieznany poziom komunikatu planu {level!r}")
-    return Notice(level, str(raw["code"]), str(raw["text"]))
+    return Notice(level, str(raw["code"]), str(raw["message"]))
 
 
 def store_id(output_dir: str | Path) -> str:

@@ -175,7 +175,7 @@ def test_unusable_clms_credentials_are_a_warning_naming_the_reason(tmp_path):
             manager._corine_preview({"year": year}, sink)
         (notice,) = sink.notices
         assert (notice.level, notice.code) == (level, "corine_preview")
-        assert ("nie jest poprawnym JSON" in notice.text) == (level == "warning")
+        assert ("nie jest poprawnym JSON" in notice.message) == (level == "warning")
 
 
 def test_proxy_names_why_the_variable_is_unusable(monkeypatch):
@@ -430,8 +430,8 @@ def test_absent_class_of_a_powiat_is_an_info_and_the_others_are_saved(tmp_path):
     assert report.ok and not report.failed
     (info,) = [n for n in notices if n.code == "classes_absent"]
     assert info.level == "info"
-    assert "paczka nie ma plikow klas SWKN" in info.text
-    assert "zapisano klasy PTWP" in info.text
+    assert "paczka nie ma plikow klas SWKN" in info.message
+    assert "zapisano klasy PTWP" in info.message
     meta = json.loads(Path(f"{report.files[0].file.path}.meta.json").read_text())
     assert meta["request"]["layers"] == ["PTWP", "SWKN"]
     assert meta["extra"]["source"]["classes"] == ["PTWP"]
@@ -460,8 +460,8 @@ def test_bdot10k_area_over_the_volume_limit_is_refused_before_any_download(tmp_p
     assert str(refused.value).startswith("bdot10k: obszar daje 101 plikow do pobrania")
     assert "wybierz jednostke (--teryt <4 cyfry>)" in str(refused.value)
     (listed,) = [n for n in notices if n.code == "unit_list"]
-    assert "bdot10k: powiaty obszaru wg PRG (101): 0201, 0202" in listed.text
-    assert listed.text.endswith("i 91 innych")
+    assert "bdot10k: powiaty obszaru wg PRG (101): 0201, 0202" in listed.message
+    assert listed.message.endswith("i 91 innych")
     assert not list(tmp_path.rglob("*.gpkg"))
 
 

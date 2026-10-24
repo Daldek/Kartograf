@@ -514,7 +514,9 @@ def test_download_report_equals_the_spec_example():
         "stale": [],
         "superseded": [],
         "summary": None,
-        "notices": [{"level": "info", "code": "sheet_list", "text": sheet_list.text}],
+        "notices": [
+            {"level": "info", "code": "sheet_list", "message": sheet_list.message}
+        ],
         "ok": True,
     }
 
@@ -727,7 +729,7 @@ def test_project_report_nests_project_without_schema():
     assert updated["unpinned"][0]["version"] == f"/srv/dane/kartograf/{_PIN_VERSION}"
     assert failed["errors"] == ["brak danych: N-34-130-D"]
     assert data["notices"] == [
-        {"level": "info", "code": "newer_available", "text": "teren: nowsza wersja"}
+        {"level": "info", "code": "newer_available", "message": "teren: nowsza wersja"}
     ]
     assert data["ok"] is False
 

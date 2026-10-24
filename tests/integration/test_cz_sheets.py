@@ -858,7 +858,7 @@ def test_existing_tm33_warp_kept_locally(tmp_path):
     assert upgraded.file.unverified == "none"
     assert [n.code for n in upgraded.notices] == [UNVERIFIED_LOCAL]
     assert upgraded.notices[0].level == "info"
-    assert "--force" in upgraded.notices[0].text
+    assert "--force" in upgraded.notices[0].message
     assert session.of("GET") == [TM33_TIFF_URL]
     assert forced.file is not None and forced.file.status == "new"
     assert forced.file.version_path != warped.version_path
@@ -887,4 +887,4 @@ def test_existing_tm33_warp_upgrade_reported_once(tmp_path):
         )
     assert report.ok
     assert [notice.code for notice in report.notices] == [UNVERIFIED_LOCAL]
-    assert "bez sygnalu HTTP pliku CUZK" in report.notices[0].text
+    assert "bez sygnalu HTTP pliku CUZK" in report.notices[0].message

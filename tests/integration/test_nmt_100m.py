@@ -138,8 +138,10 @@ def test_area_selects_voivodeships(tmp_path, gugik, area, units):
     assert {item.status for item in plan.items} == {"missing"}
     assert {item.track for item in plan.items} == {"collection"}
     assert [n.code for n in notices] == [UNIT_LIST]
-    assert notices[0].text.startswith(f"nmt: wojewodztwa obszaru wg PRG ({len(units)})")
-    assert "12 (malopolskie)" in notices[0].text
+    assert notices[0].message.startswith(
+        f"nmt: wojewodztwa obszaru wg PRG ({len(units)})"
+    )
+    assert "12 (malopolskie)" in notices[0].message
     assert gugik.file_gets() == 0
 
 

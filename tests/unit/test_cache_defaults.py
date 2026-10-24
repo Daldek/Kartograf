@@ -121,8 +121,8 @@ def test_disabled_cache_emits_notice(tmp_path, monkeypatch, directory):
     assert len(notices) == 1
     assert notices[0].level == "warning"
     assert notices[0].code == CACHE_DISABLED
-    assert "readonly database" in notices[0].text
-    assert notices[0].text.isascii()
+    assert "readonly database" in notices[0].message
+    assert notices[0].message.isascii()
 
 
 def test_the_first_write_makes_the_cache_directory(tmp_path, monkeypatch):
@@ -152,5 +152,5 @@ def test_a_cache_directory_that_cannot_be_made_disables_the_cache(
         assert isinstance(cache.error.__cause__, OSError)
 
     assert [notice.code for notice in notices] == [CACHE_DISABLED]
-    assert "niedostepny do otwarcia lub zapisu" in notices[0].text
-    assert notices[0].text.isascii()
+    assert "niedostepny do otwarcia lub zapisu" in notices[0].message
+    assert notices[0].message.isascii()

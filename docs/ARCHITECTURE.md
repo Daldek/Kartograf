@@ -513,7 +513,7 @@ kartograf/
 │   └── soilgrids.py     # SoilGrids z ISRIC (WCS)
 ├── _clock.py            # now() — jedno zrodlo czasu wynikow (sidecar, etykiety wersji,
 │                        # plan); testy zgodnosci je zamrazaja (frozen_clock)
-├── notices.py           # Notice(level, code, text), NoticeSink, kody komunikatow (Z3, ADR-037)
+├── notices.py           # Notice(level, code, message), NoticeSink, kody komunikatow (Z3, ADR-037)
 ├── sheet_info.py        # describe_sheet -> SheetInfo, find_sheets -> SheetList
 │                        # (kartograf-sheet/1, -sheets/1; logika `parse` przeniesiona z CLI)
 ├── source_info.py       # list_sources -> SourceList, list_layers -> LayerList

@@ -135,7 +135,7 @@ def test_mesh_tiles_from_bbox(tmp_path, router, monkeypatch):
     assert sorted(item.unit for item in report.files) == [
         f"2000/7/{name}" for name in sorted(bodies)
     ]
-    units = [n.text for n in notices if n.code == UNIT_LIST]
+    units = [n.message for n in notices if n.code == UNIT_LIST]
     assert len(units) == 1 and "kafle obszaru (4)" in units[0]
     item = next(f for f in report.files if f.unit == "2000/7/78944_6777_74230_55482")
     path = item.file.path
@@ -319,7 +319,7 @@ def test_trees_size_notice_and_stream(tmp_path, router):
     )
     assert report.ok, report.failed
     assert seen == [(DOWNLOAD_SIZE, 0)]
-    (size,) = [n.text for n in report.notices if n.code == DOWNLOAD_SIZE]
+    (size,) = [n.message for n in report.notices if n.code == DOWNLOAD_SIZE]
     assert "324674789 B" in size and entry["url"] in size
     assert transfer.chunks > 1
     (item,) = report.files
@@ -389,6 +389,6 @@ def test_trees_powiat_choice_has_no_volume_limit(tmp_path, router):
         product="trees", teryt="0208", output_dir=tmp_path, cache=False
     )
     assert report.ok, report.failed
-    (size,) = [n.text for n in report.notices if n.code == DOWNLOAD_SIZE]
+    (size,) = [n.message for n in report.notices if n.code == DOWNLOAD_SIZE]
     assert "24707968358 B" in size
     assert report.files[0].file.path.name == "0208.zip"

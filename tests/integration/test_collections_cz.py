@@ -290,8 +290,8 @@ def test_zabaged_bbox_gpkg(tmp_path, monkeypatch, frozen_clock):
     # the land cover source names the message, not the "landcover" group
     (omitted,) = [n for n in area.notices if n.code == AREA_OMITTED]
     assert omitted.level == "info"
-    assert omitted.text.startswith("zabaged: wynik obszaru ma 22 warstwy")
-    assert "--whole-country --horizontal-crs EPSG:5514|EPSG:3045" in omitted.text
+    assert omitted.message.startswith("zabaged: wynik obszaru ma 22 warstwy")
+    assert "--whole-country --horizontal-crs EPSG:5514|EPSG:3045" in omitted.message
     assert notices == list(area.notices)
 
     path = item.file.path
@@ -367,7 +367,7 @@ def test_national_file_http_signal(tmp_path, monkeypatch, name, product, stored,
     assert item.file.path == tmp_path / stored
     assert item.file.path.read_bytes() == body
     assert seen == [(WHOLE_COUNTRY_SIZE, 0)]
-    assert head["Content-Length"] in report.notices[0].text
+    assert head["Content-Length"] in report.notices[0].message
     meta = _meta(item.file.version_path)
     assert meta["horizontal_crs"] == crs
     assert meta["extra"]["http"]["etag"] == head["ETag"]
@@ -413,9 +413,9 @@ def test_hynet_links_and_nodes_and_misleading_next(tmp_path, monkeypatch, frozen
     assert report.ok, report.failed
     (omitted,) = [n for n in report.notices if n.code == AREA_OMITTED]
     assert omitted.level == "info"
-    assert omitted.text.startswith("network: wynik obszaru bez skrzyzowan")
-    assert "WatercourseSeparatedCrossing" in omitted.text
-    assert "--whole-country --country cz" in omitted.text
+    assert omitted.message.startswith("network: wynik obszaru bez skrzyzowan")
+    assert "WatercourseSeparatedCrossing" in omitted.message
+    assert "--whole-country --country cz" in omitted.message
     (item,) = report.files
     path = item.file.path
     assert (

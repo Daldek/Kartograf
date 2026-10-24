@@ -9444,7 +9444,7 @@ class TestCampaignOptions:
         _better_coverage(run, result, [tmp_path / f"{code}.asc" for code in coverage])
 
         (notice,) = run.sink.notices
-        lines = notice.text.splitlines()
+        lines = notice.message.splitlines()
         assert "dla 12 arkuszy" in lines[0]
         assert len(lines) == 12
         assert "N-34-139-C-a-3-00" in lines[1]

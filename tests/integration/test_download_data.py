@@ -334,7 +334,7 @@ def test_partial_success_auto_ok_true_with_notice(tmp_path):
     assert [(f.country, f.kind) for f in report.failed] == [("CZ", "download")]
     assert "CUZK 503" in report.failed[0].error
     partial = [n for n in report.notices if n.code == AUTO_PARTIAL_SUCCESS]
-    assert len(partial) == 1 and "pobrano PL" in partial[0].text
+    assert len(partial) == 1 and "pobrano PL" in partial[0].message
     assert seen == list(report.notices)
 
 
@@ -569,7 +569,7 @@ def test_pl_sheet_list_failure_contains_per_sheet_cause(tmp_path):
     assert report.failed[0].kind == "download"
     assert f"{failed}: zrodlo HTTP 503" in report.failed[0].error
     assert "GUGiK nie ma danych" in next(
-        n.text for n in report.notices if n.code == NO_COVERAGE_SOME
+        n.message for n in report.notices if n.code == NO_COVERAGE_SOME
     )
 
 
@@ -588,9 +588,9 @@ def test_check_data_auto_partial_names_failed_country_without_download_claim(tmp
         )
     assert [item.track for item in plan.items] == ["pl_cutout"]
     partial = next(n for n in notices if n.code == AUTO_PARTIAL_SUCCESS)
-    assert "sprawdzono PL" in partial.text and "pobrano" not in partial.text
+    assert "sprawdzono PL" in partial.message and "pobrano" not in partial.message
     failed = [n for n in notices if n.code == CHECK_FAILED]
-    assert len(failed) == 1 and failed[0].text == "CZ: CUZK 503"
+    assert len(failed) == 1 and failed[0].message == "CZ: CUZK 503"
 
 
 # --- no data / data outside the years: one outcome in the download and the check ---
@@ -632,9 +632,11 @@ def test_check_data_partial_coverage_is_a_plan_with_the_warning_of_the_download(
     check = next(n for n in plan.notices if n.code == NO_COVERAGE_SOME)
     download = next(n for n in report.notices if n.code == NO_COVERAGE_SOME)
     assert check.level == download.level == "warning"
-    assert check.text.rsplit("; ", 1)[0] == download.text.rsplit("; ", 1)[0]
-    assert "GUGiK nie ma danych dla 1 z 2 arkuszy" in check.text
-    assert check.text.endswith("sprawdzono 1") and download.text.endswith("pobrano 1")
+    assert check.message.rsplit("; ", 1)[0] == download.message.rsplit("; ", 1)[0]
+    assert "GUGiK nie ma danych dla 1 z 2 arkuszy" in check.message
+    assert check.message.endswith("sprawdzono 1") and download.message.endswith(
+        "pobrano 1"
+    )
 
 
 def test_every_sheet_without_data_fails_the_check_like_the_download(tmp_path):

@@ -93,6 +93,7 @@ from kartograf.download.countries import (
     outside_country,
     split_bbox_by_country,
 )
+from kartograf.download.data import UnitFailure, failure_kind
 from kartograf.download.options import (
     canonical_bbox,
     canonical_country,
@@ -326,16 +327,26 @@ class AvailabilityReport(Document):
     combinations newest year first, then sheet system, resolution, height
     system and format; CZ in registry order (model, then S-JTSK before
     ETRS89-TM33). ``ok`` is ``False`` only when a part of the request could
-    not be checked (``country="auto"``: its ``CHECK_FAILED`` notice).
+    not be checked (``country="auto"``: its ``CHECK_FAILED`` notice); ``failed``
+    names those parts (``UnitFailure``: the country and the error).
     """
 
     SCHEMA = AVAILABILITY_SCHEMA
-    JSON_KEYS = ("request", "checked_at", "areas", "combinations", "notices", "ok")
+    JSON_KEYS = (
+        "request",
+        "checked_at",
+        "areas",
+        "combinations",
+        "failed",
+        "notices",
+        "ok",
+    )
 
     request: dict[str, Any]
     checked_at: str
     areas: tuple[AvailabilityArea, ...]
     combinations: tuple[AvailabilityCombination, ...]
+    failed: tuple[UnitFailure, ...]
     notices: tuple[Notice, ...]
     ok: bool
 
@@ -560,6 +571,15 @@ def check_availability(
         checked_at=_clock.now().isoformat(timespec="seconds"),
         areas=tuple(areas),
         combinations=tuple(combinations),
+        failed=tuple(
+            UnitFailure(
+                code,
+                code,
+                str(error).encode("ascii", "replace").decode(),
+                failure_kind(error, "country"),
+            )
+            for code, error in failed
+        ),
         notices=sink.notices,
         ok=not failed,
     )

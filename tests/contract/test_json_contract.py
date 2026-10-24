@@ -253,6 +253,7 @@ def _availability() -> Document:
         checked_at="2026-10-18T10:15:02+00:00",
         areas=(_area(),),
         combinations=(_combination(),),
+        failed=(_unit_failure(),),
         notices=(_notice(),),
         ok=True,
     )
@@ -589,6 +590,7 @@ CONTRACT: dict[str, list[str]] = {
         "checked_at",
         "areas",
         "combinations",
+        "failed",
         "notices",
         "ok",
     ],
@@ -689,7 +691,7 @@ CONTRACT: dict[str, list[str]] = {
 
 # type name -> (a value, the keys of its object in order); spec 5.3 and 5.4
 NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
-    "Notice": (_notice, ["level", "code", "text"]),
+    "Notice": (_notice, ["level", "code", "message"]),
     "VersionedFile": (
         _versioned_file,
         [
