@@ -145,7 +145,7 @@ class ValidationError(KartografError):
 
     code = "validation_error"
     reason = "invalid_input"
-    DETAIL_FIELDS = ("option", "options", "allowed")
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("option", "options", "allowed")
 
     def __init__(
         self,
@@ -220,6 +220,53 @@ class ParseError(ValidationError):
         "Formaty godel: PL-1992 N-34-130-D-d-2-4, PL-2000 6.179.12.20, "
         "SM5 CTES96, TM33 302_5550; wiecej: kartograf parse --help"
     )
+
+
+class ConfigError(ValidationError):
+    """
+    The user settings cannot be used (DEV-18.1).
+
+    Raised by ``kartograf.config.check_config`` for a ``nogat.toml`` that is
+    unreadable, not UTF-8 text, not valid TOML or has a section that is not a
+    table (or that ``NOGAT_CONFIG`` names but is missing), and for a setting
+    whose value is not valid (``lang`` other than ``pl`` or ``en``). A
+    subclass of ``ValidationError``: settings that cannot be used are invalid
+    input, so ``except ValidationError`` catches it too. ``kartograf config
+    show`` reports the same problem without raising.
+
+    Attributes
+    ----------
+    path : Path, optional
+        The settings file that cannot be used.
+    value : str, optional
+        The value of ``option`` that is not valid.
+
+    Examples
+    --------
+    >>> raise ConfigError("nogat.toml is not UTF-8 text", option="NOGAT_CONFIG")
+    """
+
+    code = "validation_error"
+    reason = "invalid_config"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("option", "value", "allowed", "path")
+    DEFAULT_HINT = (
+        "Fix or remove the settings file, or point NOGAT_CONFIG at another one; "
+        "kartograf config show reports the problem"
+    )
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        option: str | None = None,
+        path: Path | None = None,
+        value: str | None = None,
+        allowed: Sequence[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, option=option, allowed=allowed, hint=hint)
+        self.path = path
+        self.value = value
 
 
 class DownloadError(KartografError):

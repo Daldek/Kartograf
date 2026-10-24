@@ -29,7 +29,6 @@ import copy
 import functools
 import inspect
 import logging
-import os
 import sys
 import threading
 from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
@@ -39,6 +38,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import kartograf
+from kartograf.cache.defaults import default_cache_path
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.kinds import convert_arguments
 from kartograf.catalog.tools import (
@@ -49,9 +49,10 @@ from kartograf.catalog.tools import (
     tool_specs,
 )
 from kartograf.commands import check_command, run_command, validate_command
+from kartograf.config import check_config
 from kartograf.download.manager import DownloadProgress
 from kartograf.error_report import error_report
-from kartograf.exceptions import KartografError, ValidationError
+from kartograf.exceptions import ConfigError, KartografError, ValidationError
 from kartograf.serialization import Document
 
 if TYPE_CHECKING:
@@ -130,36 +131,22 @@ class _Plan:
 def default_cache_file() -> Path:
     """Return the metadata cache of the server.
 
-    ``<user cache directory>/kartograf/metadata.db`` (``$XDG_CACHE_HOME`` or
-    ``~/.cache``; ``%LOCALAPPDATA%`` on Windows). It is not
-    ``<cwd>/.kartograf_cache.db``: the client chooses the working directory of the
-    server.
+    The cache of the CLI and the library, ``<cache_dir>/kartograf/metadata.db``
+    (``cache_dir``: ``KARTOGRAF_CACHE_DIR``, ``NOGAT_CACHE_DIR``, ``nogat.toml``,
+    else the user cache directory of ``nogat``; DEV-18.2). The path does not depend
+    on the working directory the client chose for the server.
     """
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
-    else:
-        xdg = os.environ.get("XDG_CACHE_HOME", "")
-        base = Path(xdg) if xdg and Path(xdg).is_absolute() else Path.home() / ".cache"
-    return base / "kartograf" / "metadata.db"
+    return default_cache_path()
 
 
 def _open_cache(path: Path) -> MetadataCache:
     """Return the cache at ``path``.
 
-    Its directory is made here, the file by the first write of the library. A directory
+    Its directory and file are made by the first write of the library. A directory
     that cannot be made (a read-only home, a file in the way) does not stop the server:
     like the CLI and the library with a cache they cannot open, it warns and works
     without the cache.
     """
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as error:
-        logger.warning(
-            "Cache metadanych: nie mozna utworzyc katalogu %s: %s - praca bez cache "
-            "(--cache-file z zapisywalnej sciezki albo --no-cache)",
-            path.parent,
-            error,
-        )
     return MetadataCache(path)
 
 
@@ -596,11 +583,15 @@ def create_server(
 
     Raises
     ------
+    ConfigError
+        ``nogat.toml`` or a setting cannot be used (``kartograf.config.check_config``);
+        checked first, before the SDK is imported.
     ImportError
         The ``mcp`` package is not installed.
     ValueError
         An unknown family, ``cache=True`` or a relative directory in ``allow_dirs``.
     """
+    check_config()  # unusable settings stop the server instead of being ignored
     try:
         import anyio
         import mcp_types as types
@@ -768,8 +759,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     -------
     int
         0 after a normal end, 1 when the ``mcp`` package is missing (the install
-        command is printed on stderr), 130 after Ctrl-C; a wrong argument exits
-        with 2.
+        command is printed on stderr), 2 when the settings cannot be used (the
+        ``kartograf-error/1`` document is the last line of stderr), 130 after
+        Ctrl-C; a wrong argument exits with 2.
     """
     args = _parser().parse_args(argv)
     cache: Path | bool | None = False if args.no_cache else args.cache_file
@@ -780,6 +772,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ImportError as error:
         print(error, file=sys.stderr)
         return 1
+    except ConfigError as error:
+        print(error_report(error).to_json(indent=None), file=sys.stderr)
+        return error.exit_code
     import anyio
 
     try:

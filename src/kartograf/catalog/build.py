@@ -72,6 +72,9 @@ SCHEMA_DESCRIPTIONS = {
     "sprawdzenie aktualnosci): pliki zadan z wynikiem",
     "kartograf-cache/1": "Cache metadanych: sciezka, rozmiar i liczby wpisow "
     "wg rodzaju",
+    "kartograf-config/1": "Ustawienia w mocy: plik nogat.toml, klucze z wartoscia "
+    "i zrodlem, dane uwierzytelniajace (ustawione albo brak) i katalog magazynu "
+    "z rozmiarem",
     "kartograf-store-overview/1": "Przeglad magazynu: segmenty i liczby wpisow",
     "kartograf-store-entries/1": "Wpisy magazynu: pliki z sidecarami",
     "kartograf-store-sidecar/1": "Sidecar jednego pliku magazynu (kartograf-meta/1)",

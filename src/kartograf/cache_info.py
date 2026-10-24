@@ -2,11 +2,12 @@
 The metadata cache as a document (``kartograf-cache/1``, spec 5.4.9).
 
 The default cache of the library and the CLI is the SQLite database
-``<cwd>/.kartograf_cache.db`` (the index records, campaign lists, TERYT codes,
-sheet indexes, index areas and ATOM feed indexes it keeps are lookups that save
-network requests, never downloaded data). ``get_cache_info`` reports it,
-``get_cache_path`` only says where it is, ``clear_cache`` empties it. None of
-them creates a missing database.
+``<cache_dir>/kartograf/metadata.db``, in the user cache directory of ``nogat``
+and never in the current directory (DEV-18.2; the index records, campaign lists,
+TERYT codes, sheet indexes, index areas and ATOM feed indexes it keeps are
+lookups that save network requests, never downloaded data). ``get_cache_info``
+reports it, ``get_cache_path`` only says where it is, ``clear_cache`` empties
+it. None of them creates a missing database.
 
 An unreadable database is a ``CacheError`` for ``get_cache_info``; ``clear_cache``
 repairs it by deleting the file with its ``-wal`` and ``-shm`` companions. A
@@ -19,7 +20,7 @@ Examples
 >>> from kartograf.cache_info import get_cache_info
 >>> info = get_cache_info()
 >>> info.action, info.path.name
-('info', '.kartograf_cache.db')
+('info', 'metadata.db')
 """
 
 from dataclasses import dataclass
@@ -62,7 +63,7 @@ class CacheInfo(Document):
         ``info`` (``get_cache_info``), ``path`` (``get_cache_path``) or ``clear``
         (``clear_cache``).
     path : Path
-        The database file (``<cwd>/.kartograf_cache.db``), absolute.
+        The database file (``<cache_dir>/kartograf/metadata.db``), absolute.
     exists : bool
         Whether the file exists (the first write creates it).
     size_bytes : int, optional
@@ -88,7 +89,7 @@ class CacheInfo(Document):
 
 
 def get_cache_info() -> CacheInfo:
-    """Report the metadata cache of the current directory.
+    """Report the default metadata cache.
 
     The database is opened only when its file exists: a missing file is reported
     (``exists`` false, no ``entries``), never created. As with every use of the
@@ -133,7 +134,7 @@ def get_cache_info() -> CacheInfo:
 
 
 def get_cache_path() -> CacheInfo:
-    """Say where the metadata cache of the current directory is, without opening it.
+    """Say where the default metadata cache is, without opening it.
 
     The path is what is needed to repair a cache that cannot be read, so it is
     given when ``get_cache_info`` is a ``CacheError``: the file is looked at
@@ -150,7 +151,7 @@ def get_cache_path() -> CacheInfo:
     --------
     >>> from kartograf.cache_info import get_cache_path
     >>> get_cache_path().path.name
-    '.kartograf_cache.db'
+    'metadata.db'
     """
     path = default_cache_path()
     try:
@@ -161,7 +162,7 @@ def get_cache_path() -> CacheInfo:
 
 
 def clear_cache() -> CacheInfo:
-    """Empty the metadata cache of the current directory and reclaim its space.
+    """Empty the default metadata cache and reclaim its space.
 
     A missing database is not created. An unreadable one is deleted together
     with its ``-wal`` and ``-shm`` files (``removed_unreadable`` is then true):

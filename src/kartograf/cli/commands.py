@@ -9,6 +9,10 @@ the ``*_cmd`` modules. This module re-exports public names only
 (``create_parser``, ``cmd_*``, formatters); private helpers are imported from
 the target module (e.g. ``kartograf.cli.download_cmd``).
 
+Every command except ``config show`` first checks the user settings
+(``kartograf.config.check_config``: a ``nogat.toml`` that cannot be used is a
+``ConfigError``, exit code 2).
+
 Exit codes come from the shared Nogat registry (``kartograf._errors``): 0 ok, 1
 ``internal_error`` (a program error, or a result with ``ok: false``), 2
 ``validation_error`` (argparse, ``ValidationError`` and its subclasses), 5
@@ -21,7 +25,6 @@ stderr stays empty.
 
 import argparse
 import logging
-import os
 import sys
 
 from kartograf.cli._handlers import HANDLERS
@@ -34,6 +37,7 @@ from kartograf.cli._parser import (
 from kartograf.cli.cache_cmd import cmd_cache
 from kartograf.cli.download_cmd import cmd_download, create_progress_callback
 from kartograf.cli.parse_cmd import cmd_parse, format_sheet
+from kartograf.config import check_config, debug
 from kartograf.error_report import error_report
 from kartograf.exceptions import KartografError, ValidationError
 from kartograf.interrupt import sigterm_interrupts
@@ -58,6 +62,8 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
         # typo must not "pass")
         getattr(parsed_args, "_group_parser", parser).print_help(sys.stderr)
         return 2
+    if command != _CONFIG_SHOW:  # `config show` reports unusable settings itself
+        check_config()
     # --plan needs a mode in every store command
     if getattr(parsed_args, "plan", None) is not None and not (
         parsed_args.check_updates or parsed_args.upgrade
@@ -69,6 +75,7 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
 
 
 _HTTP_LOGGER = "kartograf.transport.http"
+_CONFIG_SHOW = "config show"
 
 
 class _StderrLines(logging.Handler):
@@ -89,11 +96,7 @@ class _StderrLines(logging.Handler):
         self.as_json = False
 
     def emit(self, record: logging.LogRecord) -> None:
-        if (
-            self.as_json
-            and record.name != _HTTP_LOGGER
-            and not os.environ.get("KARTOGRAF_DEBUG")
-        ):
+        if self.as_json and record.name != _HTTP_LOGGER and not debug():
             return
         prefix = "Error" if record.levelno >= logging.ERROR else "Warning"
         print(f"{prefix}: {record.getMessage()}", file=sys.stderr)
@@ -187,7 +190,7 @@ def main(args: list[str] | None = None) -> int:
         except KeyboardInterrupt as e:
             return _fail(e, command, as_json)
         except Exception as e:  # noqa: BLE001 - last-resort barrier for the CLI user
-            if os.environ.get("KARTOGRAF_DEBUG"):
+            if debug():
                 raise
             return _fail(e, command, as_json, given)
 

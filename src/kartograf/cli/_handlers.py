@@ -16,6 +16,7 @@ from kartograf.cli.availability_cmd import cmd_availability
 from kartograf.cli.cache_cmd import cmd_cache
 from kartograf.cli.catalog_cmd import cmd_catalog
 from kartograf.cli.collection_cmd import cmd_collection_download
+from kartograf.cli.config_cmd import cmd_config_show
 from kartograf.cli.download_cmd import cmd_download
 from kartograf.cli.landcover_cmd import cmd_landcover_download
 from kartograf.cli.layers_cmd import cmd_list_layers
@@ -74,4 +75,5 @@ HANDLERS: dict[str, Handler] = {
     "cache stats": partial(cmd_cache, action="stats"),
     "cache clear": partial(cmd_cache, action="clear"),
     "cache path": partial(cmd_cache, action="path"),
+    "config show": cmd_config_show,
 }

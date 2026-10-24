@@ -36,7 +36,7 @@ has a stable ``code``, an ``exit_code`` and a ``hint``). ``get_catalog`` and
 and ``check_command`` work on a data command as data. Other reports of the
 document family: ``describe_sheet``, ``find_sheets``, ``list_sources``,
 ``list_layers``, ``get_cache_info``, ``get_cache_path``, ``clear_cache``,
-``describe_store``, ``list_store_entries`` and ``read_store_sidecar``.
+``get_config``, ``describe_store``, ``list_store_entries`` and ``read_store_sidecar``.
 
 Example usage::
 
@@ -119,6 +119,7 @@ from kartograf.commands import (
     run_command,
     validate_command,
 )
+from kartograf.config import Config, get_config
 from kartograf.core.bbox import BBox, transform_bbox
 from kartograf.core.geometry import find_sheets_for_geometry, get_overall_bbox
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
@@ -196,6 +197,7 @@ from kartograf.download.versions import VersionRef
 from kartograf.error_report import ErrorReport, error_report
 from kartograf.exceptions import (
     CacheError,
+    ConfigError,
     DownloadError,
     InvalidSidecarError,
     KartografError,
@@ -455,6 +457,7 @@ __all__ = [
     "NoCoverageError",
     "YearRangeError",
     "CacheError",
+    "ConfigError",
     "InvalidSidecarError",
     # Sources, layers and the metadata cache as data (spec 5.4.6-5.4.9)
     "list_sources",
@@ -465,6 +468,9 @@ __all__ = [
     "get_cache_path",
     "clear_cache",
     "CacheInfo",
+    # The user settings as data (DEV-18.6)
+    "get_config",
+    "Config",
     # Sheet codes and the catalog of the commands as data (spec 5.4.4, 5.4.5, 8.5)
     "describe_sheet",
     "SheetInfo",

@@ -124,7 +124,7 @@ danych w zrodle; 15 = nieobslugiwane (brak bezpiecznej transformacji); 130 = prz
 `message`, `hint`, `details` (z `details.reason`), `exit_code`, `command`. Kody:
 
 - `internal_error` (wyjscie 1): blad programu
-- `validation_error` (wyjscie 2): `reason` `invalid_input` (zla wartosc, brak argumentu), `usage` (nieznana komenda lub flaga), `invalid_sheet_code` (godlo spoza nomenklatury PL i CZ)
+- `validation_error` (wyjscie 2): `reason` `invalid_input` (zla wartosc, brak argumentu), `usage` (nieznana komenda lub flaga), `invalid_sheet_code` (godlo spoza nomenklatury PL i CZ), `invalid_config` (nogat.toml albo ustawienie nie do uzycia: popraw plik wg `details.path`, `kartograf config show` go opisze)
 - `source_unavailable` (wyjscie 5): siec, HTTP, timeout albo odpowiedz zrodla
 - `no_data` (wyjscie 14): `reason` `no_coverage` (zrodlo nie ma danych dla arkusza, ponowienie nie pomoze), `year_out_of_range` (dane sa, ale poza przedzialem lat)
 - `store_unavailable` (wyjscie 8): `reason` `cache` (cache metadanych niedostepny lub zablokowany)

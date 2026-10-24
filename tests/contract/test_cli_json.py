@@ -33,6 +33,7 @@ from kartograf import (
     download_soil,
     get_cache_info,
     get_cache_path,
+    get_config,
     get_project_status,
     init_project,
     list_layers,
@@ -40,6 +41,7 @@ from kartograf import (
     remove_project_task,
     verify_project,
 )
+from kartograf.cache.defaults import default_cache_path
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.commands import declared
 from kartograf.cli import main
@@ -558,6 +560,7 @@ def _offline_lines(project: Path, base: Path) -> dict[str, list[str]]:
         "cache stats": ["cache", "stats"],
         "cache path": ["cache", "path"],
         "cache clear": ["cache", "clear"],
+        "config show": ["config", "show"],
         "project init": [
             *("project", "init", "--project", str(base / "nowy")),
             *("--output", str(base / "nowy" / "dane")),
@@ -636,8 +639,17 @@ def test_every_cli_command_has_a_json_test():
             lambda: list_layers(group="landcover", product="bdoo"),
         ),
         (["soil", "list-layers"], lambda: list_layers(group="soil")),
+        (["config", "show"], get_config),
     ],
-    ids=["parse-pl", "parse-cz", "elevation", "geodesy", "bdoo-layers", "soil-layers"],
+    ids=[
+        "parse-pl",
+        "parse-cz",
+        "elevation",
+        "geodesy",
+        "bdoo-layers",
+        "soil-layers",
+        "config",
+    ],
 )
 def test_json_is_the_document_of_the_library_function(argv, document, capsys):
     assert main([*argv, "--json"]) == 0
@@ -657,7 +669,7 @@ def test_parse_prints_no_text_before_an_error(capsys):
 
 def test_cache_documents(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    cache = MetadataCache(db_path=tmp_path / ".kartograf_cache.db")
+    cache = MetadataCache(db_path=default_cache_path())
     cache.set_record("nmt", "1m", "EVRF2007", "A", {"source": {"url": "https://x/a"}})
     cache.close()
 
@@ -687,7 +699,8 @@ def test_cache_path_is_given_when_the_database_cannot_be_read(
     """``cache path`` does not open the database: the path of a cache that cannot
     be read is what is needed to repair it, in the text and in the document."""
     monkeypatch.chdir(tmp_path)
-    db = Path.cwd() / ".kartograf_cache.db"
+    db = default_cache_path()
+    db.parent.mkdir(parents=True)
     db.write_bytes(b"to nie jest baza SQLite\n" * 200)
 
     assert main(["cache", "stats", "--json"]) == 8

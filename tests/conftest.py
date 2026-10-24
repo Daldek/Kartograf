@@ -9,6 +9,7 @@ import functools
 import gzip
 import ipaddress
 import json
+import os
 import socket
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
@@ -96,33 +97,28 @@ def _block_network(request, monkeypatch):
     yield
 
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
 @pytest.fixture(autouse=True)
-def _isolated_default_cache(monkeypatch, tmp_path_factory):
-    """Keep the default metadata cache (``cache=True``) out of the repository.
+def user_environment(monkeypatch, tmp_path_factory):
+    """Keep the user environment of the machine out of every test (DEV-18).
 
-    Library functions and the CLI open ``<cwd>/.kartograf_cache.db`` by
-    default (Z6). Tests run from the repository root, where the user's real
-    cache lives, and must not write fake index records into it: there the
-    default points at a per-test directory. A test that changes the working
-    directory still sees the real cwd default.
+    No ``KARTOGRAF_*`` or ``NOGAT_*`` variable of the machine applies, and the user
+    directories (``nogat.toml``, data, cache) point into a per-test directory: the
+    default metadata cache (``cache=True``) and the settings file never touch the
+    real ones. A test that wants a setting sets the variable or writes the file; the
+    fixture gives the directory of the three (``config``, ``data``, ``cache``).
     """
-    from kartograf.cache import defaults
+    import platformdirs
 
-    real = defaults.default_cache_path
-    isolated: list[Path] = []
-
-    def default_cache_path() -> Path:
-        if Path.cwd().resolve() != _REPO_ROOT:
-            return real()
-        if not isolated:
-            isolated.append(tmp_path_factory.mktemp("default-cache"))
-        return isolated[0] / defaults.DEFAULT_CACHE_FILENAME
-
-    monkeypatch.setattr(defaults, "default_cache_path", default_cache_path)
-    yield
+    for name in list(os.environ):
+        if name.startswith(("KARTOGRAF_", "NOGAT_")):
+            monkeypatch.delenv(name)
+    home = tmp_path_factory.mktemp("user")
+    monkeypatch.setattr(
+        platformdirs, "user_config_path", lambda *a, **k: home / "config"
+    )
+    monkeypatch.setattr(platformdirs, "user_data_path", lambda *a, **k: home / "data")
+    monkeypatch.setattr(platformdirs, "user_cache_path", lambda *a, **k: home / "cache")
+    yield home
 
 
 @pytest.fixture(autouse=True)

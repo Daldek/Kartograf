@@ -15,8 +15,9 @@ Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
 - Python wylacznie z `.venv`: `.venv/bin/python`, `.venv/bin/kartograf`
   (STANDARDS 6.1; zmienne srodowiskowe: 6.2).
 - Pobrane dane zapisuj poza repo i poza `/tmp`, zawsze z jawnym `--output`;
-  cache metadanych SQLite zostaje lokalnie, CLI uruchamiaj z korzenia repo
-  (STANDARDS 6.4).
+  cache metadanych SQLite lezy w katalogu cache uzytkownika
+  (`<cache_dir>/kartograf/metadata.db`, nigdy w biezacym katalogu), ustawienia
+  pokazuje `kartograf config show` (STANDARDS 6.4, `docs/USAGE.md` 10).
 - Testy sa offline: `-m "not live"`; testy `live` tylko swiadomie
   (STANDARDS 6.3, 10.4).
 - Brama przed commitem/merge: `scripts/gate.sh` (ruff check, ruff format
@@ -60,7 +61,7 @@ repozytoriach, ktorzy edytuja Kartografa:
 |---|---|
 | Stan prac, ostatnia sesja, backlog | `docs/PROGRESS.md` |
 | Workflow sesji, kolejnosc lektury | `docs/DEVELOPMENT_STANDARDS.md` 15 |
-| Srodowisko, zmienne (`CLMS_CREDENTIALS`, `KARTOGRAF_DEBUG`), komendy testow/lint/mypy | STANDARDS 6.1-6.3, 8.3 |
+| Srodowisko, zmienne (`KARTOGRAF_*`, `NOGAT_*`, `CLMS_CREDENTIALS`), `nogat.toml`, komendy testow/lint/mypy | `docs/USAGE.md` 10; `.env.example`; STANDARDS 6.1-6.3, 8.3 |
 | Gdzie zapisywac pobrane dane | STANDARDS 6.4 |
 | Git, commity, jezyk, testy, wyjatki, timeouty i retry (zasady) | STANDARDS 1-2, 9.4, 10-11, 13.4 |
 | Roadmapa do v1.0.0 (podprojekty, kolejnosc, zasady) | `docs/SCOPE.md` 3.3 |

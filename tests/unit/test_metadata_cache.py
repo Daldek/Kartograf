@@ -28,6 +28,7 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
+from kartograf.cache.defaults import default_cache_path
 from kartograf.cache.metadata import MetadataCache
 from kartograf.cli.commands import create_parser, main
 from kartograf.core.bbox import BBox
@@ -748,7 +749,7 @@ class TestCLICacheCommands:
     def test_cmd_cache_stats(self, tmp_path, monkeypatch, capsys):
         """Test that 'cache stats' prints statistics."""
         monkeypatch.chdir(tmp_path)
-        c = MetadataCache(db_path=tmp_path / ".kartograf_cache.db")
+        c = MetadataCache(db_path=default_cache_path())
         c.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
         c.close()
 
@@ -763,7 +764,7 @@ class TestCLICacheCommands:
         """Test that 'cache clear' clears and vacuums."""
         monkeypatch.chdir(tmp_path)
         # First populate some data
-        c = MetadataCache(db_path=tmp_path / ".kartograf_cache.db")
+        c = MetadataCache(db_path=default_cache_path())
         c.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
         c.close()
 
@@ -772,7 +773,7 @@ class TestCLICacheCommands:
         captured = capsys.readouterr()
         assert "wyczyszczony" in captured.out.lower()
 
-        c = MetadataCache(db_path=tmp_path / ".kartograf_cache.db")
+        c = MetadataCache(db_path=default_cache_path())
         try:
             assert c.stats()["record_count"] == 0
         finally:
@@ -784,7 +785,8 @@ class TestCLICacheCommands:
         result = main(["cache", "path"])
         assert result == 0
         captured = capsys.readouterr()
-        assert ".kartograf_cache.db" in captured.out
+        assert captured.out == f"{default_cache_path()}\n"
+        assert "kartograf" in default_cache_path().parts
 
     def test_cmd_cache_no_subcommand(self, capsys):
         """Test that 'cache' without subcommand shows usage."""
@@ -1187,7 +1189,7 @@ class TestCampaignsCache:
         self, tmp_path, monkeypatch, capsys
     ):
         monkeypatch.chdir(tmp_path)
-        c = MetadataCache(db_path=tmp_path / ".kartograf_cache.db")
+        c = MetadataCache(db_path=default_cache_path())
         c.set_campaigns(*_CAMP, _CAMP_PAYLOAD)
         c.close()
         assert main(["cache", "stats"]) == 0
@@ -1427,8 +1429,9 @@ class TestCLICacheCommandsWithoutDatabase:
         monkeypatch.chdir(tmp_path)
         assert main(["cache", "path"]) == 0
         out = capsys.readouterr().out
-        assert out == f"{tmp_path / '.kartograf_cache.db'}\n"
+        assert out == f"{default_cache_path()}\n"
         assert list(tmp_path.iterdir()) == []
+        assert not default_cache_path().parent.exists()
 
     def test_cache_stats_does_not_create_db(self, tmp_path, monkeypatch, capsys):
         monkeypatch.chdir(tmp_path)
@@ -1439,14 +1442,16 @@ class TestCLICacheCommandsWithoutDatabase:
         assert "Wpisy TERYT: 0" in out
         assert "Wpisy arkuszy: 0" in out
         assert "Rozmiar bazy: - (plik jeszcze nie utworzony)" in out
-        assert f"Sciezka bazy: {tmp_path / '.kartograf_cache.db'}" in out
+        assert f"Sciezka bazy: {default_cache_path()}" in out
         assert list(tmp_path.iterdir()) == []
+        assert not default_cache_path().parent.exists()
 
     def test_cache_clear_does_not_create_db(self, tmp_path, monkeypatch, capsys):
         monkeypatch.chdir(tmp_path)
         assert main(["cache", "clear"]) == 0
         assert "nie ma pliku cache" in capsys.readouterr().out
         assert list(tmp_path.iterdir()) == []
+        assert not default_cache_path().parent.exists()
 
 
 # =========================================================================
@@ -1637,8 +1642,11 @@ class TestCLICacheCommandsUnreadable:
     """``kartograf cache stats|clear|path`` with an unreadable database file."""
 
     @staticmethod
-    def _db(tmp_path: Path) -> Path:
-        return tmp_path / ".kartograf_cache.db"
+    def _db(_tmp_path: Path) -> Path:
+        """The default cache file; its directory is made for the broken file."""
+        path = default_cache_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
 
     @pytest.mark.parametrize("make_broken", BROKEN_DBS)
     def test_clear_removes_unreadable_file_with_wal_shm(
@@ -1655,7 +1663,7 @@ class TestCLICacheCommandsUnreadable:
         captured = capsys.readouterr()
         assert captured.out == f"Usunieto nieczytelny plik cache: {db}\n"
         assert captured.err == ""
-        assert list(tmp_path.iterdir()) == []
+        assert list(db.parent.iterdir()) == []
         # the regular path works again: a fresh database is created
         c = MetadataCache(db_path=db)
         c.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
@@ -1666,16 +1674,14 @@ class TestCLICacheCommandsUnreadable:
     def test_clear_without_delete_permission_is_error(
         self, tmp_path, monkeypatch, capsys
     ):
-        work = tmp_path / "ro"
-        work.mkdir()
-        monkeypatch.chdir(work)
-        db = self._db(work)
+        monkeypatch.setenv("KARTOGRAF_CACHE_DIR", str(tmp_path / "ro"))
+        db = self._db(tmp_path)
         _garbage_db(db)
-        work.chmod(0o500)
+        db.parent.chmod(0o500)
         try:
             rc = main(["cache", "clear"])
         finally:
-            work.chmod(0o700)
+            db.parent.chmod(0o700)
 
         assert rc == 8
         err = capsys.readouterr().err

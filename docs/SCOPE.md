@@ -1251,7 +1251,7 @@ kartograf/
 │   ├── corine.py             # CorineProvider
 │   └── soilgrids.py          # SoilGridsProvider
 ├── cache/                 # Cache metadanych
-│   ├── defaults.py           # open_cache — wspólny cache CLI i biblioteki (<cwd>/.kartograf_cache.db)
+│   ├── defaults.py           # open_cache — wspólny cache CLI i biblioteki (<cache_dir>/kartograf/metadata.db)
 │   └── metadata.py           # MetadataCache — SQLite WAL: record_cache, campaigns_cache, teryt_cache, teryt_bbox_cache, index_area_cache, atom_cache (TTL 7d), sheet_cache (TTL 30d)
 ├── download/              # Pobieranie: komenda download w bibliotece (data.py) i tory
 │   ├── data.py               # download_data/check_data = `kartograf elevation download` / `imagery download` (ADR-037)

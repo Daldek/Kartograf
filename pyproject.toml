@@ -33,6 +33,7 @@ dependencies = [
     "numpy>=1.24.0",
     "pyshp>=2.3.0",
     "pyogrio>=0.10",
+    "platformdirs>=4",
 ]
 
 [project.scripts]

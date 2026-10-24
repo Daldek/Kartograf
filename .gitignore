@@ -61,7 +61,8 @@ data/
 # Python version
 .python-version
 
-# Kartograf metadata cache
+# Metadata cache of the development versions before the user cache directory
+# (now <cache_dir>/kartograf/metadata.db, outside the working tree)
 .kartograf_cache.db
 .kartograf_cache.db-wal
 .kartograf_cache.db-shm
