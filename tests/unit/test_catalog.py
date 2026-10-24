@@ -812,9 +812,12 @@ def test_example_for_positional_api_only_and_example_less_commands():
         None,
         "kartograf sheet parse N-34-130-D-d-2-4",
     )
-    # a command only the API has: no flag and no command line
-    assert example_for("sheet find", "scale") == (None, None)
-    assert example_for("sheet find", "nope") == (None, None)
+    # an unknown argument has no flag; the first example of the command is shown
+    assert example_for("sheet find", "scale")[0] == "--scale"
+    assert example_for("sheet find", "nope") == (
+        None,
+        example_for("sheet find", "bbox")[1],
+    )
     # a command without examples: the flag only
     assert example_for("project status", "project_dir") == ("--project", None)
 
@@ -869,11 +872,11 @@ _GROUPS = (
     "project",
     "sheet",
     "soil",
+    "store",
     "cache",
     "commands",
     "config",
 )
-_API_ONLY = ("sheet find", "store overview", "store entries", "store sidecar")
 
 
 def _leaf_parsers(parser, path=()):
@@ -901,7 +904,7 @@ def test_real_parser_matches_the_catalog():
     commands = {c.id: c for c in get_catalog(params=True).commands if c.cli}
     declarations = {c.id: c for c in _DECLARED.commands}
 
-    assert len(commands) == 38 and set(leaves) == set(commands)
+    assert len(commands) == 42 and set(leaves) == set(commands)
     for command_id, command in commands.items():
         leaf, declaration = leaves[command_id], declarations[command_id]
         expected_flags = {
@@ -981,7 +984,7 @@ def test_catalog_has_every_group_and_command():
 
     assert [g.name for g in short.groups] == list(_GROUPS)
     assert len(short.commands) == len(full.commands) == 42
-    assert [c.id for c in short.commands if c.cli is None] == list(_API_ONLY)
+    assert all(c.cli for c in short.commands)
     assert all(c.params is None for c in short.commands)
     assert all(
         c.params is not None and c.constraints is not None and c.examples is not None
@@ -995,15 +998,15 @@ def test_catalog_has_every_group_and_command():
 
 
 def test_overview_is_a_short_and_complete_list_of_groups_products_and_commands():
-    """What an agent reads first is under 8000 characters (it was 47 807; the CLI
+    """What an agent reads first is under 8500 characters (it was 47 807; the CLI
     prints the same document, indented: it was 62 389), and nothing is lost: every
     group, product and command is in it, the rest is one query away."""
     catalog = get_catalog()
     document = catalog.to_dict()
     everything = get_catalog(params=True)
 
-    assert len(catalog.to_json(indent=None)) <= 8000
-    assert len(catalog.to_json()) <= 8000
+    assert len(catalog.to_json(indent=None)) <= 8500
+    assert len(catalog.to_json()) <= 8500
     assert [g["name"] for g in document["groups"]] == list(_GROUPS)
     for group, row in zip(catalog.groups, document["groups"], strict=True):
         assert row["products"] == [p.name for p in group.products]
@@ -1043,7 +1046,7 @@ def test_catalog_filters_and_errors():
     assert all(c.params for c in get_catalog(group="soil", params=True).commands)
     # one command: with its parameters, whether it has a group or a CLI or not
     assert one["sheet parse"].group == "sheet" and one["sheet parse"].params
-    assert one["sheet find"].cli is None and one["sheet find"].params
+    assert one["sheet find"].cli == "sheet find" and one["sheet find"].params
     assert get_catalog(command="sheet parse", params=False).commands[0].params is None
     # the tables only on request: not in a group, a command or the overview
     for view in (soil, get_catalog(command="sheet parse"), get_catalog()):

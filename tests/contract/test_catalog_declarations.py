@@ -293,10 +293,15 @@ _PROJECT_COMMANDS = (
     "project status",
     "project verify",
 )
-_API_ONLY = ("sheet find", "store overview", "store entries", "store sidecar")
+_STORE_AND_SHEET_SEARCH = (
+    "sheet find",
+    "store overview",
+    "store entries",
+    "store sidecar",
+)
 
 
-def test_project_cache_parse_catalog_and_api_only_commands_are_declared():
+def test_project_cache_parse_catalog_sheet_search_and_store_commands_are_declared():
     assert {
         *_PROJECT_COMMANDS,
         "cache stats",
@@ -304,10 +309,15 @@ def test_project_cache_parse_catalog_and_api_only_commands_are_declared():
         "cache clear",
         "sheet parse",
         "commands list",
-        *_API_ONLY,
+        *_STORE_AND_SHEET_SEARCH,
     } <= set(_IDS)
-    # only the API has these four: no CLI words, no flag, no parser
-    assert [c.id for c in _DECLARED.commands if c.cli is None] == list(_API_ONLY)
+    # every command has a CLI: the four that began as API-only functions have flags
+    assert all(c.cli is not None for c in _DECLARED.commands)
+    assert [c.cli_words for c in _DECLARED.commands if c.group == "store"] == [
+        "store overview",
+        "store entries",
+        "store sidecar",
+    ]
     assert [g.name for g in _DECLARED.groups if g.name in ("project", "cache")] == [
         "project",
         "cache",
@@ -392,7 +402,8 @@ def test_the_sheet_search_requires_the_choice_of_sheets_and_one_area():
         ("requires", ("geometry",)),
     ]
     assert (params["bbox"].kind, params["bbox_crs"].kind) == ("bbox", "bbox_crs")
-    assert find.cli is None and not find.examples
+    assert (params["bbox"].cli_flag, params["scale"].cli_flag) == ("--bbox", "--scale")
+    assert find.examples
 
 
 def test_the_store_reads_require_what_the_spec_requires():

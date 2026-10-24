@@ -41,13 +41,13 @@ def test_catalog_text_lists_groups_commands_summaries(capsys):
     for command in catalog.commands:
         line = next(line for line in lines if line.lstrip().startswith(command.id))
         assert command.kind in line and command.summary in line
-        assert ("[tylko API]" in line) == (command.cli is None)
+        assert "[tylko API]" not in line
     for group in catalog.groups:
         header = next(line for line in lines if line.startswith(f"{group.name}: "))
         assert group.summary in header
         for product in group.products:
             assert f"{product.name} - {product.summary}" in flat
-    assert "Komendy tylko API:" in text
+    assert "Komendy tylko API:" not in text  # every command has a CLI
     assert "Parametry:" not in text  # the short view has no parameters
 
 
@@ -88,17 +88,18 @@ def test_catalog_params_flag_adds_params_to_group_view(capsys):
     assert detailed.count("Parametry:") == 4  # download, hsg, list-sources, list-layers
     assert "--depth" in detailed and "elevation download" not in detailed
     assert "elevation download" in everything and "sheet find" in everything
-    # a command only the API has carries its parameters too
-    assert "<sheet>" in everything
+    # every command carries its parameters
+    assert "<sheet>" in everything and "--scale" in everything
 
 
-def test_catalog_command_of_the_sheet_group_and_one_only_the_api_has(capsys):
+def test_catalog_command_of_the_sheet_group(capsys):
     parse = _catalog_text(capsys, group="sheet", command="parse")
-    api_only = _catalog_text(capsys, group="sheet", command="find")
+    find = _catalog_text(capsys, group="sheet", command="find")
 
     assert parse.startswith("sheet parse: ") and "<sheet>" in parse
     assert "kartograf sheet parse N-34-130-D-d-2-4" in parse
-    assert api_only.startswith("sheet find: ") and "tylko API" in api_only
+    assert find.startswith("sheet find: ") and "tylko API" not in find
+    assert "kartograf sheet find --bbox" in find
 
 
 @pytest.mark.parametrize(
@@ -181,7 +182,7 @@ def test_every_catalog_cli_command_has_a_handler():
     parsed = _command_ids(create_parser())
     declared = {c.id for c in get_catalog().commands if c.cli is not None}
 
-    assert len(parsed) == 38 and None not in parsed
+    assert len(parsed) == 42 and None not in parsed
     assert parsed == declared
     assert parsed <= set(HANDLERS)
 

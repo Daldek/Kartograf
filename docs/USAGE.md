@@ -63,8 +63,9 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 | `maps` | `download`, `list-sources` | mapy topograficzne (`topographic`): wizualizacje BDOT10k (PL), ZTM (CZ) |
 | `geodesy` | `download`, `list-sources` | osnowy geodezyjne (`control`): PL (GUGiK) i CZ (Bodove pole); quasi-geoidy (`geoid`): PL-geoid2021 i QGZU-2013 |
 | `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
+| `store` | `overview`, `entries`, `sidecar` | odczyt magazynu (bez sieci i bez zapisu): segmenty, wpisy z sidecarami, sidecar jednego pliku |
 
-Poza grupami danych są `kartograf sheet parse` (grupa `sheet`), `kartograf cache`, `kartograf config` (ustawienia, sekcja 10)
+Poza grupami danych są `kartograf sheet parse` i `kartograf sheet find` (grupa `sheet`), `kartograf cache`, `kartograf config` (ustawienia, sekcja 10)
 i `kartograf commands list` (grupa `commands`: katalog komend dla agentów, sekcja 9.4). `kartograf <grupa>
 --help` wypisuje komendy grupy, `<grupa> <komenda> --help` — opcje i przykłady
 poleceń, `list-sources` — źródła grupy z rejestru (bez sieci): `WYBOR` (komplet
@@ -559,6 +560,22 @@ download`, godła ZTM — `kartograf maps download --country cz`. Od 0.8.0
 działają też dwuliterowe godła SM5
 (99 arkuszy As, `AS22`…`AS94`, np. `AS91`) — wcześniej kończyły się
 błędem godła PL, także dla DMR.
+
+`kartograf sheet find` robi odwrotnie: wypisuje godła arkuszy PL, które pokrywają obszar
+(`--bbox` z `--bbox-crs` albo plik `--geometry` z `--layer`), w skali `--scale` i układzie
+`--sheet-system` (obie opcje są wymagane, bez domyślnych), bez sieci i bez ucinania listy:
+
+```bash
+kartograf sheet find --bbox 565000,242000,566000,243000 --scale 1:10000 --sheet-system 1992
+kartograf sheet find --geometry zlewnia.gpkg --scale 1:2000 --sheet-system 2000 --json
+```
+
+`kartograf store overview -o ./data` wypisuje segmenty magazynu (produkt, kraj, klucz zbioru),
+`kartograf store entries -o ./data --segment nmt/pl_1992_1m_evrf2007 --limit 20 [--units N-34-130-D-d-2-4]`
+— pierwsze wpisy segmentu (pliki wersji z sidecarami; `truncated` w `--json` mówi, czy były dalsze),
+a `kartograf store sidecar --path ./data/nmt/.../plik.asc` — sidecar jednego pliku z polem `raw`.
+Oba odczyty pomijają dane (nic nie jest zapisywane ani pobierane); w bibliotece to
+`describe_store`, `list_store_entries` i `read_store_sidecar`.
 
 **Wartości per kraj.** `--resolution` i `--vertical-crs` przyjmują jedną
 wartość dla każdego kraju zadania (`--resolution 5m`) albo pary
@@ -3195,7 +3212,7 @@ the catalog, a project that was changed) is `ok` with no items. The documents:
 | `kartograf-plan/1` | kazda z powyzszych z `--check-updates` (MCP: `check_updates`) | `check_data`, `check_collection`, `check_landcover`, `check_soil`, `check_hsg` | pozycja `check_failed` (`ok: false`) |
 | `kartograf-availability/1` | `elevation availability` (MCP: `elevation_availability`) | `check_availability` | `ok: false` |
 | `kartograf-sheet/1` | `sheet parse` (MCP: `parse_sheet`) | `describe_sheet` | - |
-| `kartograf-sheets/1` | tylko API i MCP: `sheet find` (MCP: `find_sheets`) | `find_sheets` | - |
+| `kartograf-sheets/1` | `sheet find` (MCP: `find_sheets`) | `find_sheets` | - |
 | `kartograf-sources/1` | `<grupa> list-sources` (11 grup; MCP: `list_sources`) | `list_sources` | - |
 | `kartograf-layers/1` | `landcover list-layers`, `soil list-layers` (MCP: `list_layers`) | `list_layers` | - |
 | `kartograf-project-state/1` | `project init`, `project add`, `project remove` | `init_project`, `add_project_task`, `remove_project_task` | - |
@@ -3204,9 +3221,9 @@ the catalog, a project that was changed) is `ok` with no items. The documents:
 | `kartograf-cache/1` | `cache stats`, `cache path`, `cache clear` | `get_cache_info`, `get_cache_path`, `clear_cache` | - |
 | `kartograf-config/1` | `config show` | `get_config` | - |
 | `kartograf-catalog/1` | `commands list` (MCP: `get_catalog`) | `get_catalog` | - |
-| `kartograf-store-overview/1` | tylko API i MCP: `store overview` (MCP: `store_overview`) | `describe_store` | - |
-| `kartograf-store-entries/1` | tylko API i MCP: `store entries` (MCP: `store_entries`) | `list_store_entries` | - |
-| `kartograf-store-sidecar/1` | tylko API i MCP: `store sidecar` (MCP: `store_sidecar`) | `read_store_sidecar` | - |
+| `kartograf-store-overview/1` | `store overview` (MCP: `store_overview`) | `describe_store` | - |
+| `kartograf-store-entries/1` | `store entries` (MCP: `store_entries`) | `list_store_entries` | - |
+| `kartograf-store-sidecar/1` | `store sidecar` (MCP: `store_sidecar`) | `read_store_sidecar` | - |
 | `kartograf-error/1` | kazda komenda przy bledzie: ostatnia linia stderr (9.3) | `error_report` | - |
 
 Zasady wspolne dokumentow:
@@ -3674,7 +3691,7 @@ nieniszczacy (`destructiveHint=false`: magazyn jest niezmienny, nic nie jest nad
 |---|---|---|---|---|---|
 | `discovery` | `get_catalog` | `commands list` | `get_catalog` | `kartograf-catalog/1` | RO |
 | `discovery` | `parse_sheet` | `sheet parse` | `describe_sheet` | `kartograf-sheet/1` | RO |
-| `discovery` | `find_sheets` | `sheet find` (tylko API) | `find_sheets` | `kartograf-sheets/1` | RO |
+| `discovery` | `find_sheets` | `sheet find` | `find_sheets` | `kartograf-sheets/1` | RO |
 | `discovery` | `list_sources` | `<grupa> list-sources` (parametr `group`) | `list_sources` | `kartograf-sources/1` | RO |
 | `discovery` | `list_layers` | `landcover list-layers`, `soil list-layers` (parametr `group`) | `list_layers` | `kartograf-layers/1` | RO |
 | `availability` | `elevation_availability` | `elevation availability` | `check_availability` | `kartograf-availability/1` | RO, OW |
@@ -3698,9 +3715,9 @@ nieniszczacy (`destructiveHint=false`: magazyn jest niezmienny, nic nie jest nad
 | `project` | `project_check_updates` | `project download --check-updates` | `check_project` | `kartograf-project-check/1` | RO, OW |
 | `project` | `project_status` | `project status` | `get_project_status` | `kartograf-project-check/1` | RO |
 | `project` | `project_verify` | `project verify` | `verify_project` | `kartograf-project-check/1` | RO |
-| `store` | `store_overview` | `store overview` (tylko API) | `describe_store` | `kartograf-store-overview/1` | RO |
-| `store` | `store_entries` | `store entries` (tylko API) | `list_store_entries` | `kartograf-store-entries/1` | RO |
-| `store` | `store_sidecar` | `store sidecar` (tylko API) | `read_store_sidecar` | `kartograf-store-sidecar/1` | RO |
+| `store` | `store_overview` | `store overview` | `describe_store` | `kartograf-store-overview/1` | RO |
+| `store` | `store_entries` | `store entries` | `list_store_entries` | `kartograf-store-entries/1` | RO |
+| `store` | `store_sidecar` | `store sidecar` | `read_store_sidecar` | `kartograf-store-sidecar/1` | RO |
 
 Poza serwerem zostaja `cache *` (cache serwera to jego wewnetrzna sprawa; `update="force"`
 odswieza wpisy) i `open_project` (stan projektu zwracaja `project_status` i pozostale narzedzia

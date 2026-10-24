@@ -1,8 +1,10 @@
 """Declare the commands outside the data groups.
 
-``parse``, ``catalog``, the ``cache`` group and the commands only the API (and so the
-MCP server) has - the sheet search and the read access to the store.
+``sheet parse`` and ``sheet find``, ``commands list``, the ``cache`` group and the
+read access to the store (``store overview``, ``store entries``, ``store sidecar``).
 """
+
+from dataclasses import replace
 
 from kartograf.catalog import shared
 from kartograf.catalog.commands import declared
@@ -120,50 +122,55 @@ _FIND_SHEETS_PARAMS = (
     Param(
         "bbox",
         "bbox",
-        "Prostokat obszaru: min_x, min_y, max_x, max_y w ukladzie bbox_crs; "
-        "dokladnie jeden z bbox i geometry",
-        flag=None,
+        "Prostokat obszaru: min_x,min_y,max_x,max_y w ukladzie --bbox-crs "
+        "(domyslnie EPSG:2180); dokladnie jeden z --bbox i --geometry",
+        metavar="BBOX",
     ),
     Param(
-        "bbox_crs", "bbox_crs", _bbox_crs_help, flag=None, allowed=lambda: PL_BBOX_CRS
+        "bbox_crs",
+        "bbox_crs",
+        _bbox_crs_help,
+        allowed=lambda: PL_BBOX_CRS,
+        choices=True,
+        normalize="upper",
+        cli_default="EPSG:2180",
     ),
     Param(
         "geometry",
         "path",
-        "Plik geometrii (SHP albo GPKG; sciezka bezwzgledna): godla "
-        "przecinajace obiekty pliku; dokladnie jeden z bbox i geometry",
-        flag=None,
+        "Plik geometrii (SHP albo GPKG): godla przecinajace obiekty pliku; "
+        "dokladnie jeden z --bbox i --geometry",
+        metavar="PLIK",
     ),
     Param(
         "layer",
         "str",
-        "Warstwa GPKG pliku geometry (domyslnie pierwsza)",
-        flag=None,
+        "Warstwa GPKG pliku --geometry (domyslnie pierwsza)",
+        metavar="NAZWA",
     ),
     Param(
         "scale",
         "str",
         _scale_help,
-        flag=None,
         required=True,
         allowed=_scales,
+        metavar="SKALA",
     ),
     Param(
         "sheet_system",
         "str",
         "Uklad godel (wymagany): 1992 (PL-1992) albo 2000 (PL-2000)",
-        flag=None,
         required=True,
         allowed=lambda: SheetParser.VALID_SYSTEMS,
+        choices=True,
     ),
+    shared.JSON,
 )
 
-_OUTPUT_DIR = Param(
-    "output_dir",
-    "path",
-    "Katalog magazynu (wymagany; sciezka bezwzgledna)",
-    flag=None,
-    required=True,
+_OUTPUT_DIR = replace(
+    shared.OUTPUT_DIR,
+    description="Katalog magazynu (wymagany): katalog z segmentami produktow",
+    section=None,
 )
 
 _STORE_ENTRIES_PARAMS = (
@@ -172,37 +179,38 @@ _STORE_ENTRIES_PARAMS = (
         "segment",
         "str",
         "Segment magazynu (wymagany): katalog produktu, np. "
-        "nmt/pl_1992_1m_evrf2007; lista: store_overview",
-        flag=None,
+        "nmt/pl_1992_1m_evrf2007; lista: kartograf store overview",
         required=True,
+        metavar="SEGMENT",
     ),
     Param(
         "units",
         "str_list",
-        "Tylko te jednostki segmentu: nazwy jak w sidecar.unit wpisu (nie "
-        "prefiksy); nazwy zarezerwowane (versions, full_sheet, kampanie) to "
+        "Tylko te jednostki segmentu po przecinku: nazwy jak w sidecar.unit wpisu "
+        "(nie prefiksy); nazwy zarezerwowane (versions, full_sheet, kampanie) to "
         "blad; domyslnie wszystkie",
-        flag=None,
+        metavar="JEDNOSTKI",
     ),
     Param(
         "limit",
         "int",
         "Najwyzej tyle wpisow (liczba >= 1, wymagana); truncated w wyniku "
         "mowi, czy byly dalsze",
-        flag=None,
         required=True,
+        metavar="N",
     ),
+    shared.JSON,
 )
 
 _STORE_SIDECAR_PARAMS = (
     Param(
         "path",
         "path",
-        "Plik danych magazynu albo jego sidecar <plik>.meta.json (wymagany; "
-        "sciezka bezwzgledna)",
-        flag=None,
+        "Plik danych magazynu albo jego sidecar <plik>.meta.json (wymagany)",
         required=True,
+        metavar="PLIK",
     ),
+    shared.JSON,
 )
 
 COMMANDS = (
@@ -305,7 +313,6 @@ COMMANDS = (
         "ktore pokrywaja obszar: bbox (z bbox_crs) albo plik geometrii "
         "(arkusze przecinajace obiekty); skala i uklad godel sa wymagane. "
         "Bez sieci; wynik: lista godel w kolejnosci biblioteki, bez ucinania.",
-        cli=None,
         tool="find_sheets",
         constraints=(
             Constraint(
@@ -320,6 +327,25 @@ COMMANDS = (
                 "layer",
             ),
         ),
+        examples=(
+            Example(
+                {
+                    "bbox": [565000, 242000, 566000, 243000],
+                    "bbox_crs": "EPSG:2180",
+                    "scale": "1:10000",
+                    "sheet_system": "1992",
+                },
+                title="Arkusze PL-1992 1:10000 dla prostokata",
+            ),
+            Example(
+                {
+                    "geometry": "zlewnia.gpkg",
+                    "scale": "1:2000",
+                    "sheet_system": "2000",
+                },
+                title="Arkusze PL-2000 1:2000 dla geometrii",
+            ),
+        ),
     ),
     Command(
         "store overview",
@@ -327,12 +353,12 @@ COMMANDS = (
         "query",
         "describe_store",
         "kartograf-store-overview/1",
-        (_OUTPUT_DIR,),
+        (_OUTPUT_DIR, shared.JSON),
         description="Przeglad magazynu (tylko odczyt, bez sieci): segmenty "
         "(katalogi produktow) z produktem, krajem, kluczem zbioru, nazwa i "
         "znacznikiem, czy segment jest w rejestrze zrodel.",
-        cli=None,
         tool="store_overview",
+        examples=(Example({}, title="Segmenty magazynu w ./data"),),
     ),
     Command(
         "store entries",
@@ -346,8 +372,21 @@ COMMANDS = (
         "sa wymagane, bo pelny skan magazynu nie jest odpowiedzia. "
         "truncated: byly dalsze wpisy; sidecar.unit wpisu jest wartoscia "
         "units tego samego segmentu.",
-        cli=None,
         tool="store_entries",
+        examples=(
+            Example(
+                {"segment": "nmt/pl_1992_1m_evrf2007", "limit": 20},
+                title="Pierwsze 20 wpisow segmentu",
+            ),
+            Example(
+                {
+                    "segment": "nmt/pl_1992_1m_evrf2007",
+                    "limit": 5,
+                    "units": ["N-34-130-D-d-2-4"],
+                },
+                title="Wpisy jednego arkusza",
+            ),
+        ),
     ),
     Command(
         "store sidecar",
@@ -359,8 +398,13 @@ COMMANDS = (
         description="Sidecar pliku danych magazynu albo pliku <plik>.meta.json "
         "(tylko odczyt, bez sieci), wraz z polem raw; brak albo nieczytelny "
         "sidecar to blad invalid_sidecar.",
-        cli=None,
         tool="store_sidecar",
+        examples=(
+            Example(
+                {"path": "./data/nmt/pl_1992_1m_evrf2007/N-34-130-D-d-2-4.asc"},
+                title="Sidecar pliku z magazynu",
+            ),
+        ),
     ),
 )
 
@@ -386,5 +430,11 @@ GROUPS = (
         "Godla arkuszy",
         "Godlo arkusza PL-1992, PL-2000 albo CZ (SM5, TM33, ZTM) i jego "
         "wlasciwosci, bez sieci.",
+    ),
+    Group(
+        "store",
+        "Odczyt magazynu",
+        "Odczyt magazynu wersji (tylko odczyt, bez sieci): segmenty, wpisy "
+        "z sidecarami i sidecar jednego pliku.",
     ),
 )

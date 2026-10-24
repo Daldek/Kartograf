@@ -20,7 +20,7 @@ from kartograf.cli.config_cmd import cmd_config_show
 from kartograf.cli.download_cmd import cmd_download
 from kartograf.cli.landcover_cmd import cmd_landcover_download
 from kartograf.cli.layers_cmd import cmd_list_layers
-from kartograf.cli.parse_cmd import cmd_parse
+from kartograf.cli.parse_cmd import cmd_find_sheets, cmd_parse
 from kartograf.cli.project_cmd import (
     cmd_project_add,
     cmd_project_download,
@@ -31,6 +31,11 @@ from kartograf.cli.project_cmd import (
 )
 from kartograf.cli.soil_cmd import cmd_soil_download, cmd_soil_hsg
 from kartograf.cli.sources_cmd import cmd_list_sources
+from kartograf.cli.store_cmd import (
+    cmd_store_entries,
+    cmd_store_overview,
+    cmd_store_sidecar,
+)
 from kartograf.download.options import ELEVATION_PRODUCTS, IMAGERY_PRODUCTS
 from kartograf.source_info import SOURCE_GROUPS
 
@@ -49,6 +54,7 @@ COLLECTION_GROUPS = (
 
 HANDLERS: dict[str, Handler] = {
     "sheet parse": cmd_parse,
+    "sheet find": cmd_find_sheets,
     "commands list": cmd_catalog,
     "elevation download": partial(cmd_download, products=ELEVATION_PRODUCTS),
     "elevation availability": cmd_availability,
@@ -72,6 +78,9 @@ HANDLERS: dict[str, Handler] = {
     "project download": cmd_project_download,
     "project status": cmd_project_status,
     "project verify": cmd_project_verify,
+    "store overview": cmd_store_overview,
+    "store entries": cmd_store_entries,
+    "store sidecar": cmd_store_sidecar,
     "cache stats": partial(cmd_cache, action="stats"),
     "cache clear": partial(cmd_cache, action="clear"),
     "cache path": partial(cmd_cache, action="path"),

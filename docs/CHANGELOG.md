@@ -57,9 +57,9 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - `platformdirs>=4` is a dependency.
 - Every command id is `<group> <verb>` (AGI-2.2, the `command` of the result envelope):
   `kartograf parse` is `kartograf sheet parse`, `kartograf catalog` is
-  `kartograf commands list`, and the commands only the API has are `sheet find` (was
-  `find_sheets`), `store overview`, `store entries` and `store sidecar` (were
-  `store_overview`, `store_entries` and `store_sidecar`). The CLI words, the catalog ids
+  `kartograf commands list`, `sheet find` is the former `find_sheets` and `store overview`,
+  `store entries` and `store sidecar` are the former `store_overview`, `store_entries` and
+  `store_sidecar` (commands that only the API had: they have a CLI now, see Added). The CLI words, the catalog ids
   (`get_catalog(command=...)`), the `command` of `kartograf-error/1` and the hints that
   name a command change; the MCP tool names and the library functions are unchanged (the
   tools are renamed with the MCP server rebuild).
@@ -86,6 +86,11 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 
 **Added**
 
+- `kartograf sheet find`, `kartograf store overview`, `kartograf store entries` and
+  `kartograf store sidecar`: the CLI of the four commands that only the API had
+  (`find_sheets`, `describe_store`, `list_store_entries`, `read_store_sidecar`), so that every
+  command of the catalog has a CLI form and an example call (AGI-1.2, AGI-2.2). The store reads
+  take the store with `-o`/`--output` like the data commands (the data-output change renames it).
 - `kartograf config show [--json]` (library: `get_config`, `Config`) reports the settings in
   force: `nogat.toml`, every key (`root`, `data_dir`, `cache_dir`, `lang`, `debug`) with its
   value and source, `CLMS_CREDENTIALS` as present or missing, and the store root with its size
