@@ -1,5 +1,5 @@
 """
-``kartograf sheet parse``: ``describe_sheet`` as text, or as its document.
+``kartograf sheet parse`` and ``sheet find``: the sheet functions as text or documents.
 
 The library says what a sheet code is (``describe_sheet``: PL-1992 and PL-2000
 codes - scale, parts, hierarchy; CZ codes - SM5 sheets, TM33 tiles and ZTM map
@@ -7,18 +7,25 @@ sheets - system, CRS and the commands that take them, all offline). The CLI
 renders that document as text, or with ``--json`` prints it
 (``kartograf-sheet/1``). A wrong code or option is the ``ParseError`` or
 ``ValidationError`` of the library that ``main`` reports (exit code 2).
+
+``sheet find`` is ``find_sheets``: the sheet codes that cover a ``--bbox`` or the
+features of a ``--geometry`` file (``kartograf-sheets/1``), one code per line in the
+text.
 """
 
 import argparse
 from collections.abc import Sequence
 
 from kartograf.catalog.commands import declared_commands
+from kartograf.catalog.kinds import parse_bbox_arg
 from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.sheet_info import (
     SheetDescendants,
     SheetInfo,
     SheetLevel,
+    SheetList,
     describe_sheet,
+    find_sheets,
 )
 
 # Longer lists of descendants are shortened in the text (the document has all).
@@ -166,4 +173,43 @@ def cmd_parse(args: argparse.Namespace) -> int:
     if wants_json(args):
         return emit_result(command_id(args), info)
     print(format_sheet(info))
+    return 0
+
+
+def format_sheets(found: SheetList) -> str:
+    """Return the text of ``kartograf sheet find`` from the document.
+
+    A header with the system, scale and number of the sheets, then one code per line.
+    """
+    request = found.request
+    system = f"PL-{request.sheet_system}"
+    header = f"Arkusze {system} {request.scale} ({found.count}):"
+    return "\n".join([header, "", *(f"  {code}" for code in found.sheets)])
+
+
+def cmd_find_sheets(args: argparse.Namespace) -> int:
+    """
+    Execute the ``sheet find`` command.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments
+
+    Returns
+    -------
+    int
+        Exit code (0 for success); a wrong area, scale or sheet system is the
+        ``ValidationError`` of the library that ``main`` reports (exit code 2).
+    """
+    found = find_sheets(
+        bbox=parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None,
+        geometry=args.geometry,
+        layer=args.layer,
+        scale=args.scale,
+        sheet_system=args.sheet_system,
+    )
+    if wants_json(args):
+        return emit_result(command_id(args), found)
+    print(format_sheets(found))
     return 0

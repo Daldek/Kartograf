@@ -59,6 +59,7 @@ from kartograf.providers.pl.gugik_laz import SupersededLazTile
 from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.serialization import SCHEMAS
 from kartograf.source_info import SOURCE_GROUPS
+from kartograf.testing import PL_SEGMENT, build_fixture_store
 from tests.conftest import FakeSoilGrids, RecordedIndex
 from tests.contract.test_parity import (
     PL_SHEET_ARGS,
@@ -591,11 +592,25 @@ def _offline_lines(project: Path, base: Path) -> dict[str, list[str]]:
     """The command line of every leaf command that runs offline, by command id
     (``project`` has the task ``teren``; ``project init`` makes ``base/nowy``)."""
     here = str(project)
+    store = base / "store"
     return {
         **{f"{group} list-sources": [group, "list-sources"] for group in SOURCE_GROUPS},
         "landcover list-layers": ["landcover", "list-layers", "--product", "corine"],
         "soil list-layers": ["soil", "list-layers"],
         "sheet parse": ["sheet", "parse", "N-34-130-D", "--hierarchy", "--children"],
+        "sheet find": [
+            *("sheet", "find", "--bbox", "565000,242000,566000,243000"),
+            *("--scale", "1:10000", "--sheet-system", "1992"),
+        ],
+        "store overview": ["store", "overview", "--output", str(store)],
+        "store entries": [
+            *("store", "entries", "--output", str(store)),
+            *("--segment", PL_SEGMENT, "--limit", "3"),
+        ],
+        "store sidecar": [
+            *("store", "sidecar", "--path"),
+            str(next(store.rglob("*.asc"), store / "none.asc")),
+        ],
         "commands list": ["commands", "list", "soil"],
         "cache stats": ["cache", "stats"],
         "cache path": ["cache", "path"],
@@ -622,6 +637,7 @@ def _project(tmp_path: Path) -> Path:
     add_project_task(
         project, name="teren", command="elevation download", options=NMT_SHEET
     )
+    build_fixture_store(tmp_path / "store")  # what the store commands read
     return project
 
 
