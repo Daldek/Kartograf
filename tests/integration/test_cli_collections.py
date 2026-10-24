@@ -12,6 +12,7 @@ from kartograf.core.bbox import BBox
 from kartograf.download.collections import CollectionReport
 from kartograf.download.data import UnitFailure
 from kartograf.download.plan import new_plan
+from tests.support.errors import without_error_document
 
 _DOWNLOAD = "kartograf.cli.collection_cmd.download_collection"
 _CHECK = "kartograf.cli.collection_cmd.check_collection"
@@ -124,7 +125,7 @@ def test_missing_product_names_only_the_group_products(tmp_path, capsys):
         rc = main(["models3d", "download", "--teryt", "1261", "-o", str(tmp_path)])
     assert rc == 2
     download.assert_not_called()
-    (line,) = capsys.readouterr().err.splitlines()
+    (line,) = without_error_document(capsys.readouterr().err).splitlines()
     assert line.startswith("Error: --product wymagane: buildings (")
     assert "admin" not in line and "map" not in line
 
@@ -149,7 +150,7 @@ def test_failed_unit_is_error_line_and_exit_1(tmp_path, capsys):
                 str(tmp_path),
             ]
         )
-    assert rc == 1
+    assert rc == 11
     assert capsys.readouterr().err.splitlines() == [
         "Error: 0224: brak paczki powiatu 0224"
     ]

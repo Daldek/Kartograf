@@ -45,6 +45,7 @@ from tests.conftest import (
     wfs_response,
     wfs_types,
 )
+from tests.support.errors import without_error_document
 
 SHEET = "N-34-130-D-d-2-4"
 
@@ -1716,7 +1717,7 @@ class TestCLICacheCommandsUnreadable:
 
         captured = capsys.readouterr()
         assert captured.out == ""
-        lines = captured.err.splitlines()
+        lines = without_error_document(captured.err).splitlines()
         assert len(lines) == 1
         assert lines[0].startswith(f"Error: cache nieczytelny: {db} (")
         assert lines[0].endswith("- uzyj `kartograf cache clear`")

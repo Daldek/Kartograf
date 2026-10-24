@@ -40,6 +40,7 @@ from kartograf.sources.registry import sources_for
 from kartograf.sources.variants import UNKNOWN_VERTICAL, ProductVariant, variants
 from tests.conftest import WCS_FIXTURES, recorded_response, write_gpkg_layers
 from tests.support.cz_fakes import cz_factory, route_of
+from tests.support.errors import without_error_document
 
 
 @pytest.fixture(autouse=True)
@@ -409,7 +410,10 @@ class TestMain:
         with _parse_fails(KeyboardInterrupt):
             result = main(["sheet", "parse", "N-34-130-D"])
         assert result == 130
-        assert capsys.readouterr().err == "Error: przerwano (Ctrl-C)\n"
+        assert (
+            without_error_document(capsys.readouterr().err)
+            == "Error: przerwano (Ctrl-C)\n"
+        )
 
     def test_help_flag(self, capsys):
         """Test --help flag."""
@@ -1065,7 +1069,7 @@ class TestCmdDownload:
             ]
         )
 
-        assert result == 1
+        assert result == 11
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
@@ -1186,7 +1190,7 @@ class TestCmdDownload:
             ]
         )
 
-        assert result == 1
+        assert result == 11
         err = capsys.readouterr().err
         assert "Error: 4 z 4 arkuszy nie pobrano" in err
         assert all(f"{sheet}: zrodlo 503" in err for sheet in ("A", "B", "C", "D"))
@@ -1225,7 +1229,7 @@ class TestCmdDownload:
             ]
         )
 
-        assert result == 1
+        assert result == 11
         assert "Error: 1 z 4 arkuszy nie pobrano" in capsys.readouterr().err
 
     @patch("kartograf.download.data.DownloadManager")
@@ -1302,7 +1306,7 @@ class TestCmdDownload:
             ]
         )
 
-        assert result == 1
+        assert result == 11
         err = capsys.readouterr().err
         assert "Error: GUGiK nie ma danych dla zadnego z 2 arkuszy" in err
         assert "ponow pobranie" not in err
@@ -1391,7 +1395,7 @@ class TestCmdDownload:
             ]
         )
 
-        assert result == 1
+        assert result == 11
         assert "Error: 4 z 4 arkuszy nie pobrano" in capsys.readouterr().err
 
 
@@ -2151,7 +2155,7 @@ class TestNmt5mKron86Rejected:
 
         assert result == 2
         err = capsys.readouterr().err
-        assert err.splitlines()[-1] == _5M_KRON86_ERROR
+        assert without_error_document(err).splitlines()[-1] == _5M_KRON86_ERROR
         assert "zamieniony" not in err
         mock_manager_cls.assert_not_called()
         mock_create.assert_not_called()
@@ -2333,7 +2337,7 @@ class TestRegistryVariantsCli:
         )
 
         assert rc == 2
-        err = capsys.readouterr().err
+        err = without_error_document(capsys.readouterr().err)
         prefix = f"Error: PL nie ma rozdzielczosci {label} dla NMT - dostepne: "
         assert err.startswith(prefix)
         listed = _labels_by_system(err.removeprefix(prefix).rstrip("\n"))
@@ -2362,7 +2366,7 @@ class TestRegistryVariantsCli:
             )
 
         message = str(exc.value)
-        assert err == f"Error: {message}\n"
+        assert without_error_document(err) == f"Error: {message}\n"
         prefix = "--resolution wymagane dla NMPT PL: "
         assert message.startswith(prefix)
         listed = _labels_by_system(message.removeprefix(prefix))
@@ -3081,7 +3085,7 @@ class TestSheetListExitCode:
             tmp_path, {"-1": "no_coverage", "-3": "fail"}, "--workers", workers
         )
 
-        assert rc == 1
+        assert rc == 10
         assert sorted(provider.calls) == self._SHEETS
         assert files == ["N-34-130-D-d-2-2.asc", "N-34-130-D-d-2-4.asc"]
         err = capsys.readouterr().err
@@ -3111,7 +3115,7 @@ class TestSheetListExitCode:
         """Zero files and all without data = exit code 1 (nothing to download)."""
         rc, provider, files = self._run_bbox(tmp_path, {"": "no_coverage"})
 
-        assert rc == 1
+        assert rc == 11
         assert files == []
         assert len(provider.calls) == 4
         err = capsys.readouterr().err
@@ -3124,7 +3128,7 @@ class TestSheetListExitCode:
             tmp_path, {"-1": "no_coverage", "-3": "fail"}, "-q"
         )
 
-        assert rc == 1
+        assert rc == 10
         captured = capsys.readouterr()
         assert captured.out == ""
         assert "Warning:" in captured.err and "Error:" in captured.err
@@ -3137,7 +3141,7 @@ class TestSheetListExitCode:
             sheets=["N-34-130-D-d-2"],
         )
 
-        assert rc == 1
+        assert rc == 10
         assert sorted(provider.calls) == self._SHEETS
         assert len(files) == 3
         err = capsys.readouterr().err
@@ -4458,7 +4462,7 @@ class TestCmdDownloadLaz:
         )
 
         err = capsys.readouterr().err
-        assert result == 1
+        assert result == 10
         assert "Warning:" not in err
         assert "Error: 7 z 8 kafli LAZ nie pobrano" in err
         for tile in tiles[1:]:
@@ -5599,7 +5603,7 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             result = _cmd_download_cz(_cz_args(tmp_path))
 
-        assert result == 1
+        assert result == 11
         assert "404 openzu" in capsys.readouterr().err
         assert not (tmp_path / "nmt" / "cz_dmr5g_bpv").exists()
 
@@ -5674,7 +5678,7 @@ class TestCmdDownloadCz:
         ):
             result = _cmd_download_cz(_cz_args(tmp_path))
 
-        assert result == 1
+        assert result == 11
         assert "deskryptor padl" in capsys.readouterr().err
         assert not list((tmp_path / "nmt").rglob("*.tif"))
 
@@ -5731,7 +5735,7 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             result = _cmd_download_cz(_cz_args(tmp_path, sheet=None), bbox=bbox)
 
-        assert result == 1
+        assert result == 11
         assert "exportImage 500" in capsys.readouterr().err
         assert not (tmp_path / "nmt").exists()
 
@@ -5853,7 +5857,7 @@ class TestCmdDownloadCz:
         failing.download_bbox.side_effect = DownloadError("boom")
         with patch(_CZ_FACTORY_PATCH, return_value=failing):
             rc = _cmd_download_cz(_cz_args(tmp_path / "b", sheet=None), bbox=bbox)
-        assert rc == 1
+        assert rc == 11
         assert log.disabled is False
 
         crashing = _cz_provider_mock()
@@ -6531,7 +6535,12 @@ class TestCountryDispatch:
                 resolution=resolution,
                 vertical_crs=vertical_crs,
             )
-        assert str(exc.value) == capsys.readouterr().err.removeprefix("Error: ").strip()
+        assert (
+            str(exc.value)
+            == without_error_document(capsys.readouterr().err)
+            .removeprefix("Error: ")
+            .strip()
+        )
         assert expected in str(exc.value)
         assert not (tmp_path / "laz").exists() and not (tmp_path / "nmpt").exists()
 
@@ -7517,7 +7526,7 @@ class TestAutoSplitBBox:
 
         result = main(self._PRAGUE + ["-o", str(tmp_path)])
 
-        assert result == 1
+        assert result == 11
         assert "Warning:" not in capsys.readouterr().err
 
     @patch("kartograf.download.data._download_cz")
@@ -7530,7 +7539,7 @@ class TestAutoSplitBBox:
 
         result = main(self._PRAGUE + ["--country", "pl", "-o", str(tmp_path)])
 
-        assert result == 1
+        assert result == 11
         mock_pl.assert_called_once()
         mock_cz.assert_not_called()
         assert "Warning:" not in capsys.readouterr().err
@@ -9352,7 +9361,7 @@ class TestCampaignOptions:
                 "-q",
             ]
         )
-        assert rc == 1
+        assert rc == 11
         lines = capsys.readouterr().err.splitlines()
         assert lines[0].startswith("Error: brak danych z roku 2024 dla 2 z 4 arkuszy")
         assert lines[1] == ("  N-34-139-C-a-3-1: dostepne roczniki 2019, 2023, 2025")
@@ -10321,7 +10330,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 11
         err = capsys.readouterr().err
         assert "Error:" in err and "2019-05-21" in err
 
@@ -10356,7 +10365,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 11
         err = capsys.readouterr().err
         assert "Error:" in err and "format 'X' nieobslugiwany" in err
 
@@ -10604,7 +10613,7 @@ class TestCampaignOptions:
             assert err.count(f"Warning: {sheet}: skorowidz GUGiK niedostepny") == 1
 
             fake.resolve_error = DownloadError("raport wyjatku OGC")
-            assert main(argv) == 1
+            assert main(argv) == 11
             assert "Error:" in capsys.readouterr().err
 
     # -------------------------------------------------------------------------
@@ -10688,7 +10697,7 @@ class TestListMessagesUx:
             ]
         )
 
-        assert rc == 1
+        assert rc == 11
         captured = capsys.readouterr()
         assert "Error: brak" in captured.err
         assert "Pobieranie" not in captured.out
@@ -10760,7 +10769,7 @@ class TestListMessagesUx:
 
         rc = main([*self._BBOX_ARGS, "-o", str(tmp_path)])
 
-        assert rc == 1
+        assert rc == 11
         captured = capsys.readouterr()
         assert "nie ma danych dla zadnego z 2 arkuszy" in captured.err
         info = [x for x in captured.err.splitlines() if x.startswith("Info:")]
@@ -10823,7 +10832,7 @@ class TestListMessagesUx:
 
         rc = main([*self._BBOX_ARGS, "-o", str(tmp_path)])
 
-        assert rc == 1
+        assert rc == 11
         assert "Info:" not in capsys.readouterr().err
 
     @pytest.mark.parametrize("all_campaigns", [False, True])
@@ -10843,7 +10852,7 @@ class TestListMessagesUx:
         flags = ["--all-campaigns"] if all_campaigns else []
         rc = main([*self._BBOX_ARGS, *flags, "-q", "-o", str(tmp_path)])
 
-        assert rc == 1
+        assert rc == 11
         captured = capsys.readouterr()
         assert "nie ma danych dla zadnego z 1 arkusza" in captured.err
         assert "Info: Dostepny potomek 7.173.21.01" in captured.err
@@ -10860,7 +10869,7 @@ class TestListMessagesUx:
         flags = ["--all-campaigns"] if all_campaigns else []
         rc = main([*self._BBOX_ARGS, *flags, "-o", str(tmp_path)])
 
-        assert rc == 1
+        assert rc == 11
         assert "Downloaded" not in capsys.readouterr().out
 
     @patch("kartograf.download.data.DownloadManager")
@@ -10896,7 +10905,7 @@ class TestListMessagesUx:
             ]
         )
 
-        assert rc == 1
+        assert rc == 11
         captured = capsys.readouterr()
         assert "uzyj --scale 1:2000" in captured.err
         assert "Downloaded 0" not in captured.out
@@ -10934,7 +10943,7 @@ class TestErrorWithoutBlankLine:
             ]
         )
 
-        assert rc == 1
+        assert rc == 11
         err = capsys.readouterr().err
         assert err.startswith("Error: brak kampanii od 2024")
 
@@ -11043,7 +11052,7 @@ class TestLazOnlyOptions:
             ]
         )
         assert rc == 2
-        assert capsys.readouterr().err == (
+        assert without_error_document(capsys.readouterr().err) == (
             _LAZ_ONLY_DENSITY_ERROR.format(product=product) + "\n"
         )
         for guard in guards:

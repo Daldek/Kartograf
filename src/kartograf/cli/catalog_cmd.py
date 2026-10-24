@@ -15,7 +15,7 @@ import textwrap
 
 from kartograf.catalog import get_catalog
 from kartograf.catalog.model import Catalog, CommandInfo, GroupInfo, ParamInfo
-from kartograf.cli._json import emit_document
+from kartograf.cli._json import command_id, emit_result
 from kartograf.exceptions import ValidationError
 
 _WIDTH = 78
@@ -210,6 +210,6 @@ def cmd_catalog(args: argparse.Namespace) -> int:
         group=group, command=command, params=True if args.params else None
     )
     if args.json:
-        return emit_document(catalog)
+        return emit_result(command_id(args), catalog)
     sys.stdout.write(format_catalog(catalog, command=command))
     return 0

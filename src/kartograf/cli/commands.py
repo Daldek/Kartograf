@@ -13,14 +13,16 @@ Every command except ``config show`` first checks the user settings
 (``kartograf.config.check_config``: a ``nogat.toml`` that cannot be used is a
 ``ConfigError``, exit code 2).
 
-Exit codes come from the shared Nogat registry (``kartograf._errors``): 0 ok, 1
-``internal_error`` (a program error, or a result with ``ok: false``), 2
-``validation_error`` (argparse, ``ValidationError`` and its subclasses), 5
-``source_unavailable``, 7 ``data_error``, 8 ``store_unavailable``, 9
-``io_error``, 13 ``calculation_error``, 14 ``no_data``, 15 ``unsupported``, 130
-``cancelled`` (Ctrl-C), 143 ``terminated`` (SIGTERM, handled like Ctrl-C). With
-``--json`` every error is the document ``kartograf-error/1`` on stdout and
-stderr stays empty.
+Exit codes come from the shared Nogat registry (``kartograf._errors``): 0 ok, 10
+``partial`` and 11 ``failed`` (a result with ``ok: false``: some or no unit
+succeeded, the outcomes of ERR §1), and for an error 1 ``internal_error`` (a
+program error), 2 ``validation_error`` (argparse, ``ValidationError`` and its
+subclasses), 5 ``source_unavailable``, 7 ``data_error``, 8 ``store_unavailable``, 9
+``io_error``, 12 ``forbidden``, 13 ``calculation_error``, 14 ``no_data``, 15
+``unsupported``, 130 ``cancelled`` (Ctrl-C), 143 ``terminated`` (SIGTERM, handled
+like Ctrl-C). With ``--json`` the result is the envelope ``kartograf-result/1`` on
+stdout (also for the outcomes 10 and 11). An error writes nothing to stdout: the last
+line of stderr is the document ``kartograf-error/1`` in both modes (AGI-3.3).
 """
 
 import argparse
@@ -28,7 +30,7 @@ import logging
 import sys
 
 from kartograf.cli._handlers import HANDLERS
-from kartograf.cli._json import emit_document, json_mode, use_utf8_stdout
+from kartograf.cli._json import emit_error, json_mode, use_utf8_stdout
 from kartograf.cli._parser import (
     create_parser,
     parse_command_line,
@@ -39,7 +41,7 @@ from kartograf.cli.download_cmd import cmd_download, create_progress_callback
 from kartograf.cli.parse_cmd import cmd_parse, format_sheet
 from kartograf.config import check_config, debug
 from kartograf.error_report import error_report
-from kartograf.exceptions import KartografError, ValidationError
+from kartograf.exceptions import KartografError, UsageError, ValidationError
 from kartograf.interrupt import sigterm_interrupts
 
 __all__ = [
@@ -59,9 +61,9 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
     if command is None:
         # no command, or a group without its command: that level's help on
         # stderr and exit 2, like any other missing argument (a script with a
-        # typo must not "pass")
+        # typo must not "pass"); the error document is the last line (AGI-3.3)
         getattr(parsed_args, "_group_parser", parser).print_help(sys.stderr)
-        return 2
+        return emit_error(error_report(UsageError("nie podano komendy")))
     if command != _CONFIG_SHOW:  # `config show` reports unusable settings itself
         check_config()
     # --plan needs a mode in every store command
@@ -127,29 +129,28 @@ def _fail(
     ``KartografError``, 9 for ``OSError``, 130 for Ctrl-C, 143 for SIGTERM, 1
     for every other exception.
 
-    ``--json``: the document ``kartograf-error/1`` on stdout (``given``: the
-    arguments the line gave, for the example of its hint). Text: one
-    ``Error:`` line on stderr - the message of a ``KartografError`` (its hint is
-    not printed twice: the texts of ``hints`` are in the message), with the
-    remedy of an unavailable coordinate transformation; any other exception
-    with its class and the way to a traceback.
+    The last line of stderr is the document ``kartograf-error/1`` in both modes
+    (``given``: the arguments the line gave, for the example of its hint); stdout
+    stays empty. Text mode first prints one ``Error:`` line - the message of a
+    ``KartografError`` (its hint is not printed twice: the texts of ``hints`` are in
+    the message), with the remedy of an unavailable coordinate transformation; any
+    other exception with its class and the way to a traceback.
     """
+    report = error_report(error, command=command, given=given)
     if as_json:
-        return emit_document(error_report(error, command=command, given=given))
+        return emit_error(report)
     if isinstance(error, KeyboardInterrupt):
         # versions are committed atomically from .incoming/ staging (a stale
         # leftover is removed by a later run): no half-written file is kept
-        report = error_report(error)
         print(f"Error: {report.message}", file=sys.stderr)
-        return report.exit_code
-    if isinstance(error, KartografError):
+    elif isinstance(error, KartografError):
         remedy = getattr(error, "remedy", None)  # TransformUnavailableError
         text = f"Error: {error}" + (f" Remedium: {remedy}" if remedy else "")
         print(text, file=sys.stderr)
-        return error.exit_code
-    print(f"Error: {type(error).__name__}: {error}", file=sys.stderr)
-    print("Ustaw KARTOGRAF_DEBUG=1, aby zobaczyc pelny traceback.", file=sys.stderr)
-    return error_report(error).exit_code
+    else:
+        print(f"Error: {type(error).__name__}: {error}", file=sys.stderr)
+        print("Ustaw KARTOGRAF_DEBUG=1, aby zobaczyc pelny traceback.", file=sys.stderr)
+    return emit_error(report)
 
 
 def main(args: list[str] | None = None) -> int:
@@ -163,11 +164,11 @@ def main(args: list[str] | None = None) -> int:
     Returns
     -------
     int
-        Exit code: 0 ok, 1 ``internal_error`` (or a result with ``ok: false``), 2
-        wrong use or wrong input, another registry code for a failure of that kind
-        (5, 7, 8, 9, 13, 14, 15), 130 cancelled (Ctrl-C), 143 terminated
-        (SIGTERM). ``--help`` and ``--version`` end the process (``SystemExit``)
-        as argparse does.
+        Exit code: 0 ok, 10 partial and 11 failed (a result with ``ok: false``), 1
+        ``internal_error``, 2 wrong use or wrong input, another registry code for a
+        failure of that kind (5, 7, 8, 9, 12, 13, 14, 15), 130 cancelled (Ctrl-C),
+        143 terminated (SIGTERM). ``--help`` and ``--version`` end the process
+        (``SystemExit``) as argparse does.
     """
     argv = sys.argv[1:] if args is None else args
     as_json = json_mode(argv)

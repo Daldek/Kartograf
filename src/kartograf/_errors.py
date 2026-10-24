@@ -17,6 +17,16 @@ OUTCOMES: Final[dict[str, int]] = {
     "cancelled": 130,
 }
 
+# What each outcome says (ERR §1): status -> meaning.
+OUTCOME_MEANINGS: Final[dict[str, str]] = {
+    "ok": ("Operation completed for every unit."),
+    "partial": (
+        "Batch operation completed for some units; per-unit status in items[]."
+    ),
+    "failed": ("Batch operation ran but no unit succeeded; per-unit codes in items[]."),
+    "cancelled": ("Cancelled by the user (Ctrl+C, declined plan, MCP cancellation)."),
+}
+
 
 @dataclass(frozen=True)
 class RegistryCode:

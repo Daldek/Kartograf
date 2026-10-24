@@ -710,7 +710,15 @@ def test_project_report_nests_project_without_schema():
         project=_project(),
         tasks=(
             TaskResult("teren", "updated", (_pin(),), (replaced,), ()),
-            TaskResult("gleby", "failed", (), (), ("brak danych: N-34-130-D",)),
+            TaskResult(
+                "gleby",
+                "failed",
+                (),
+                (),
+                ("brak danych: N-34-130-D",),
+                "no_data",
+                "no_coverage",
+            ),
         ),
         notices=(Notice("info", "newer_available", "teren: nowsza wersja"),),
         ok=False,
@@ -722,7 +730,17 @@ def test_project_report_nests_project_without_schema():
     assert data["schema"] == "kartograf-project-report/1"
     assert data["project"] == _PROJECT_DOCUMENT  # no ``schema`` key when nested
     updated, failed = data["tasks"]  # type: ignore[misc]
-    assert list(updated) == ["name", "outcome", "pinned", "unpinned", "errors"]
+    assert list(updated) == [
+        "name",
+        "outcome",
+        "pinned",
+        "unpinned",
+        "errors",
+        "code",
+        "reason",
+    ]
+    assert (updated["code"], updated["reason"]) == (None, None)
+    assert (failed["code"], failed["reason"]) == ("no_data", "no_coverage")
     # the pins of a result are encoded with the store of the project, too
     assert updated["pinned"][0]["path"] == f"/srv/dane/kartograf/{_PIN_PATH}"
     assert updated["unpinned"][0]["role"] == "raw"

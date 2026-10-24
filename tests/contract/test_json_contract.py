@@ -34,6 +34,7 @@ from kartograf.download.collections import CollectionReport
 from kartograf.download.data import DataReport, UnitFailure, UnitFile
 from kartograf.download.fetch import VersionedFile
 from kartograf.download.plan import PlanItem, UpdatePlan
+from kartograf.envelope import ResultItem, wrap
 from kartograf.error_report import error_report
 from kartograf.exceptions import ValidationError
 from kartograf.hydrology.hsg import HsgReport
@@ -536,9 +537,14 @@ def _catalog_example() -> object:
     return get_catalog(command="elevation download").commands[0].examples[0]  # type: ignore[index]
 
 
+def _result_envelope() -> Document:
+    return wrap("elevation download", _data_report())
+
+
 # schema -> a document of every class of that schema, built without a network
 DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-error/1": (_error_document,),
+    "kartograf-result/1": (_result_envelope,),
     "kartograf-plan/1": (_plan,),
     "kartograf-availability/1": (_availability,),
     "kartograf-download/1": (
@@ -565,6 +571,17 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
 
 # schema -> the keys of the document in order (``schema`` first)
 CONTRACT: dict[str, list[str]] = {
+    "kartograf-result/1": [
+        "schema",
+        "tool",
+        "version",
+        "command",
+        "check",
+        "status",
+        "result",
+        "items",
+        "notices",
+    ],
     "kartograf-error/1": [
         "schema",
         "code",
@@ -809,7 +826,11 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
     ),
     "TaskResult": (
         _task_result,
-        ["name", "outcome", "pinned", "unpinned", "errors"],
+        ["name", "outcome", "pinned", "unpinned", "errors", "code", "reason"],
+    ),
+    "ResultItem": (
+        lambda: ResultItem("N-34-130-D", "failed", "no_data", "no_coverage", "text"),
+        ["id", "status", "code", "reason", "message"],
     ),
     "SourceInfo": (
         _source,

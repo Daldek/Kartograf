@@ -11,6 +11,8 @@ from kartograf import ConfigError, error_report, get_config
 from kartograf import config as environment
 from kartograf.cache.defaults import default_cache_path
 from kartograf.cli import main
+from kartograf.envelope import wrap
+from tests.support.errors import error_document
 
 
 def write_config(tmp_path: Path, monkeypatch, text: str) -> Path:
@@ -248,10 +250,12 @@ def test_a_file_that_is_not_utf_8_is_a_validation_error_with_a_snake_case_reason
     assert reason in str(document["message"])
 
     assert main(["cache", "path", "--json"]) == 2
-    printed = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    printed = error_document(captured.err)
     assert printed["details"]["reason"] == "invalid_config"
     assert main(["config", "show", "--json"]) == 0
-    shown = json.loads(capsys.readouterr().out)
+    shown = json.loads(capsys.readouterr().out)["result"]
     assert shown["config_file"]["error"] == reason
     assert shown["config_file"]["exists"] is True
 
@@ -317,8 +321,9 @@ def test_config_show_json_gives_every_key_its_source_and_the_store_size(
     assert main(["config", "show", "--json"]) == 0
 
     out = capsys.readouterr().out
-    report = json.loads(out)  # exactly one document
-    assert out == get_config().to_json()  # the library document, byte for byte
+    envelope = json.loads(out)  # exactly one document
+    assert out == wrap("config show", get_config()).to_json()  # byte for byte
+    report = envelope["result"]
     assert (report["schema"], report["tool"], report["version"]) == (
         "kartograf-config/1",
         "kartograf",

@@ -46,6 +46,7 @@ from kartograf.download import cz_orto
 from kartograf.download.cutout import PlCutoutResult
 from kartograf.download.data import check_data, download_data
 from kartograf.download.plan import UpdatePlan
+from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
 from kartograf.notices import AUTO_CLIPPED
 from kartograf.providers.pl.gugik import GugikProvider
@@ -70,7 +71,7 @@ CZ_ORTO_ARGS += ["--sheet", "CTES96"]
 
 def _same(run, report, *, statuses: list[str] | None = None) -> None:
     assert_same_store(run.cli_store, run.api_store)
-    assert run.cli_code == (0 if report.ok else 1)
+    assert run.cli_code == exit_code_of(report)
     assert_notices_printed(run.cli_stderr, report.notices)
     if statuses is not None:
         assert [f.file.status for f in report.files] == statuses
@@ -685,7 +686,7 @@ def test_input_errors_same_type_and_text(tmp_path, argv, kwargs):
     )
     assert run.cli_code == 2
     assert type(run.api_error).__name__ == "ValidationError"
-    assert run.cli_stderr.strip() == f"Error: {run.api_error}"
+    assert run.cli_text.strip() == f"Error: {run.api_error}"
     assert not run.cli_store.exists() and not run.api_store.exists()
 
 
@@ -732,7 +733,7 @@ def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
     run = run_both(argv, lambda out: operation(output_dir=out, **options), tmp_path)
     assert run.cli_code == 2
     assert type(run.api_error) is ValidationError
-    assert run.cli_stderr == f"Error: {run.api_error}\n"
+    assert run.cli_text == f"Error: {run.api_error}\n"
     assert run.cli_stdout == ""
     assert not run.cli_store.exists() and not run.api_store.exists()
 
@@ -1098,7 +1099,7 @@ def test_laz_bbox_4326_min_density(tmp_path):
 
 @pytest.mark.usefixtures("frozen_clock")
 def test_upgrade_with_stale_plan(tmp_path):
-    """The source changed after the check: same stale positions, code 1."""
+    """The source changed after the check: same stale positions, code 11."""
     fake = FakeCampaignProvider({"newest": [REC["83233"]], "all": C14["all"]})
     plan_file = tmp_path / "plan.json"
     sheet = ["--sheet", G, *PL_SHEET_ARGS]
@@ -1127,4 +1128,4 @@ def test_upgrade_with_stale_plan(tmp_path):
         )
     report = upgraded.api_result
     _same(upgraded, report)
-    assert report.stale and not report.ok and upgraded.cli_code == 1
+    assert report.stale and not report.ok and upgraded.cli_code == 11

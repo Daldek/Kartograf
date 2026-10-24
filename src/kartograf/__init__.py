@@ -33,8 +33,10 @@ output and the MCP server ``kartograf-mcp``; an exception becomes a
 has a stable ``code``, an ``exit_code`` and a ``hint``). ``get_catalog`` and
 ``data_commands`` describe every command, its parameters and allowed values;
 ``parse_command``, ``validate_command``, ``format_command``, ``run_command``
-and ``check_command`` work on a data command as data. Other reports of the
-document family: ``describe_sheet``, ``find_sheets``, ``list_sources``,
+and ``check_command`` work on a data command as data: the last two return the
+``kartograf-result/1`` envelope (``CommandResult``: ``status``, ``items``,
+``notices`` and the report as ``result``), as the CLI ``--json`` prints it. Other
+reports of the document family: ``describe_sheet``, ``find_sheets``, ``list_sources``,
 ``list_layers``, ``get_cache_info``, ``get_cache_path``, ``clear_cache``,
 ``get_config``, ``describe_store``, ``list_store_entries`` and ``read_store_sidecar``.
 
@@ -194,6 +196,7 @@ from kartograf.download.orto_cutout import (
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import VersionRef
+from kartograf.envelope import CommandResult, ResultItem
 from kartograf.error_report import ErrorReport, error_report
 from kartograf.exceptions import (
     CacheError,
@@ -488,6 +491,8 @@ __all__ = [
     "format_command",
     "run_command",
     "check_command",
+    "CommandResult",
+    "ResultItem",
     # Errors as data (`kartograf-error/1`, spec 6)
     "ErrorReport",
     "error_report",

@@ -13,7 +13,7 @@ import argparse
 from collections.abc import Sequence
 
 from kartograf.catalog.commands import declared_commands
-from kartograf.cli._json import emit_document, wants_json
+from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.sheet_info import (
     SheetDescendants,
     SheetInfo,
@@ -164,6 +164,6 @@ def cmd_parse(args: argparse.Namespace) -> int:
         descendants=args.descendants or None,
     )
     if wants_json(args):
-        return emit_document(info)
+        return emit_result(command_id(args), info)
     print(format_sheet(info))
     return 0

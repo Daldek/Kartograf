@@ -38,6 +38,7 @@ from kartograf.download.collections import (
     require_collection_product,
 )
 from kartograf.download.fetch import UpdateMode
+from kartograf.envelope import exit_code_of
 
 
 def cmd_collection_download(args: argparse.Namespace, group: str) -> int:
@@ -96,4 +97,4 @@ def _print_collection(
     for failure in report.failed:
         print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
     _report_stale(report.stale)
-    return 0 if report.ok else 1
+    return exit_code_of(report)

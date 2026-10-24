@@ -27,11 +27,12 @@ from kartograf import (
     verify_project,
 )
 from kartograf.catalog.kinds import convert_arguments
-from kartograf.cli._json import emit_document, wants_json
+from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.cli._parser import create_parser
 from kartograf.cli.download_cmd import notice_printer, progress_printer
 from kartograf.commands import CommandCall, parse_command
 from kartograf.download.fetch import UpdateMode
+from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
 from kartograf.project.commands import project_command, task_command
 
@@ -40,7 +41,7 @@ def cmd_project_init(args: argparse.Namespace) -> int:
     """Create a manifest and its store with the public API."""
     project = init_project(args.project, output_dir=args.output)
     if wants_json(args):
-        return emit_document(project)
+        return emit_result(command_id(args), project)
     print(f"Utworzono projekt: {project.directory / 'kartograf-project.json'}")
     print(f"Magazyn: {project.output_dir}")
     print(
@@ -128,7 +129,7 @@ def cmd_project_add(args: argparse.Namespace) -> int:
         options=convert_arguments(task_command(call.command).options, call.options),
     )
     if wants_json(args):
-        return emit_document(project)
+        return emit_result(command_id(args), project)
     print(
         f"Dodano zadanie {args.name} ({call.command}); pobierz: "
         f"{project_command(args.project, 'download', args.name)}"
@@ -140,7 +141,7 @@ def cmd_project_remove(args: argparse.Namespace) -> int:
     """Remove one task, leaving its store versions untouched."""
     project = remove_project_task(args.project, name=args.name)
     if wants_json(args):
-        return emit_document(project)
+        return emit_result(command_id(args), project)
     print(f"Usunieto zadanie {args.name}; pliki zostaly w magazynie")
     return 0
 
@@ -223,7 +224,7 @@ def _render_check(report: ProjectCheck, *, quiet: bool, checking_updates: bool) 
             print(f"Error: {line}", file=sys.stderr)
         elif not quiet:
             print(line)
-    return 0 if report.ok else 1
+    return exit_code_of(report, check=checking_updates)
 
 
 def _print_download(
@@ -267,7 +268,7 @@ def _print_download(
             f"zaktualizowane {counts['updated']}, bez zmian {counts['unchanged']}, "
             f"bledy {counts['failed']}"
         )
-    return 0 if report.ok else 1
+    return exit_code_of(report)
 
 
 def cmd_project_download(args: argparse.Namespace) -> int:
@@ -278,7 +279,7 @@ def cmd_project_download(args: argparse.Namespace) -> int:
             args.project, tasks=_selected_tasks(args), on_notice=on_notice
         )
         if wants_json(args):
-            return emit_document(checked)
+            return emit_result(command_id(args), checked, check=True)
         return _render_check(checked, quiet=args.quiet, checking_updates=True)
     mode: UpdateMode | None = (
         "upgrade" if args.upgrade else "force" if args.force else None
@@ -294,14 +295,14 @@ def cmd_project_download(args: argparse.Namespace) -> int:
         on_notice=on_notice,
     )
     if wants_json(args):
-        return emit_document(report)
+        return emit_result(command_id(args), report)
     return _print_download(args, report, progress)
 
 
 def _check(args: argparse.Namespace, report: ProjectCheck) -> int:
     """Return the result of ``status``/``verify``: the text or the document."""
     if wants_json(args):
-        return emit_document(report)
+        return emit_result(command_id(args), report)
     return _render_check(report, quiet=args.quiet, checking_updates=False)
 
 

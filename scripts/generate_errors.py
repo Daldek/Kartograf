@@ -60,6 +60,18 @@ def render(registry: dict[str, Any]) -> str:
     lines += [
         "}",
         "",
+        "# What each outcome says (ERR §1): status -> meaning.",
+        "OUTCOME_MEANINGS: Final[dict[str, str]] = {",
+    ]
+    for outcome in registry["outcomes"]:
+        lines += [
+            f'    "{outcome["status"]}": (',
+            *_literal(outcome["meaning"], 8),
+            "    ),",
+        ]
+    lines += [
+        "}",
+        "",
         "",
         "@dataclass(frozen=True)",
         "class RegistryCode:",

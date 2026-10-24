@@ -26,6 +26,7 @@ from kartograf.cli.download_cmd import (
 )
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.options import output_required
+from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
 from kartograf.landcover.manager import (
     LandCoverReport,
@@ -88,4 +89,4 @@ def _print_landcover(
     _report_stale(result.stale)
     if args.product in _UNIT_SOURCES and args.teryt is None and not args.quiet:
         _print_version_summary(statuses, len(result.failed), out)
-    return 0 if result.ok else 1
+    return exit_code_of(result)

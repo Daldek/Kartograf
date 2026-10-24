@@ -71,6 +71,18 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - `kartograf-availability/1` has the new key `failed` (before `notices`): the countries a
   `--country auto` check could not examine, as `UnitFailure` (`unit`, `country`, `error`,
   `kind`); it is `[]` when `ok` is true.
+- Every `--json` output and every MCP result is the result envelope `kartograf-result/1`
+  (AGI-4.2, ADR-051): `tool`, `version`, `command`, `check`, `status`, `result` (the document
+  that was printed before, with its own `schema`), `items` (one entry per unit of a batch) and
+  `notices`. Consumers read the old document from `result` (Retman, Archiwista).
+- A result with `ok: false` exits with 10 (`partial`: a unit succeeded) or 11 (`failed`: none
+  did) instead of 1; exit code 1 is only `internal_error`. The MCP server returns such a
+  result without `isError`; only an error document is an error (AGI-5.7).
+- The error document `kartograf-error/1` is the last line of stderr in both modes (AGI-3.3,
+  compact and ASCII); with `--json` it is no longer on stdout, which stays empty. A syntax
+  error of argparse in text mode ends with it too.
+- `run_command` and `check_command` return `CommandResult` (the envelope); the report is
+  `.result`, and `run_command(plan=)` takes `check_command(...).result`.
 
 **Added**
 
@@ -90,6 +102,10 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   and `country` are `source_unavailable`; `kartograf.download.data.FAILURE_CODES`),
   `PlanItem.store_path` (the path of a position below the store, the subject of a plan
   line) and the public `kartograf.download.data.failure_kind`.
+- `kartograf.envelope` (`CommandResult`, `ResultItem`, `wrap`, `outcome_of`, `exit_code_of`):
+  the status and the units of each document with a verdict; `TaskResult.code` and `.reason`
+  (the registry code of a failed task of `download_project`) and `kartograf._errors.OUTCOMES`
+  with `OUTCOME_MEANINGS` (the exit codes 10 and 11 are in the table of USAGE 9.3).
 
 - `kartograf.testing`: `build_fixture_store`, `build_project` and `make_sidecar`
   build offline fixtures of the store, the project manifest and the

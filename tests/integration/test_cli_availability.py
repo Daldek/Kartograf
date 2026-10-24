@@ -24,6 +24,7 @@ from tests.integration.test_availability import (
     _FailingHead,
 )
 from tests.integration.test_cuzk_laz import CuzkSession
+from tests.support.errors import without_error_document
 
 SESSION = "kartograf.transport.http.make_gugik_session"
 KRAKOW = ["--bbox", "565000,242000,569000,246000"]
@@ -179,13 +180,16 @@ def test_exit_codes(capsys):
         code, out, err = _run(capsys, ["--country", "pl", *KRAKOW, "--force"], failing)
     assert code == 5 and out == ""
     # retries are Warning lines; the result is one Error line, the last
-    *retries, error = err.splitlines()
+    *retries, error = without_error_document(err).splitlines()
     assert all(line.startswith("Warning: ") for line in retries)
     assert error.startswith("Error: ") and "wynik bylby niepelny" in error
 
     code, _, err = _run(capsys, KRAKOW, RecordedIndex())
     assert code == 2
-    assert err == f"Error: --country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}\n"
+    assert (
+        without_error_document(err)
+        == f"Error: --country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}\n"
+    )
 
     with pytest.raises(SystemExit) as error:
         _run(capsys, ["--country", "de", *KRAKOW], RecordedIndex())
@@ -393,7 +397,7 @@ def test_auto_part_failed_exit_code(capsys):
     with patch("time.sleep"):
         code, out, err = _run(capsys, ["--country", "auto", *CIESZYN], session, "nmpt")
 
-    assert code == 1
+    assert code == 10
     assert out.startswith("Dostepnosc NMPT PL wg skorowidza GUGiK")
     assert "Dostepnosc NMPT CZ" not in out
     assert "Warning: --country auto: nie udalo sie sprawdzic czesci CZ" in err

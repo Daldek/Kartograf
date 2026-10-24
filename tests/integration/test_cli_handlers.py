@@ -13,11 +13,18 @@ from kartograf.cli._handlers import HANDLERS
 from kartograf.cli._parser import create_parser
 from kartograf.cli.catalog_cmd import cmd_catalog
 from kartograf.cli.commands import main
+from kartograf.envelope import wrap
 from kartograf.exceptions import ValidationError
 
 
 def _catalog_text(capsys, **given) -> str:
-    words = {"group": None, "command": None, "params": False, "json": False}
+    words = {
+        "group": None,
+        "command": None,
+        "params": False,
+        "json": False,
+        "_command_id": "commands list",  # what the parser puts on a parsed line
+    }
     code = cmd_catalog(argparse.Namespace(**{**words, **given}))
     assert code == 0
     captured = capsys.readouterr()
@@ -118,7 +125,7 @@ def test_catalog_json_is_the_library_document(capsys, given):
 
     printed = _catalog_text(capsys, json=True, **given)
 
-    assert printed == get_catalog(**view).to_json()
+    assert printed == wrap("commands list", get_catalog(**view)).to_json()
 
 
 def test_text_footer_commands_run_and_one_of_them_gives_the_tables(capsys):
@@ -132,7 +139,7 @@ def test_text_footer_commands_run_and_one_of_them_gives_the_tables(capsys):
     documents = []
     for flags in lines:
         assert main(["commands", "list", *flags.split()]) == 0
-        documents.append(json.loads(capsys.readouterr().out))
+        documents.append(json.loads(capsys.readouterr().out)["result"])
     assert any(document["errors"] for document in documents)
     assert any(document["exit_codes"] and document["schemas"] for document in documents)
 

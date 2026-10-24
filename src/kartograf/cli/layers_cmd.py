@@ -11,7 +11,7 @@ network, nothing written.
 import argparse
 import textwrap
 
-from kartograf.cli._json import emit_document, wants_json
+from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.landcover.manager import soil_choices
 from kartograf.source_info import LayerList, PropertyInfo, list_layers
 
@@ -162,6 +162,6 @@ def cmd_list_layers(args: argparse.Namespace, group: str) -> int:
     """
     layers = list_layers(group=group, product=getattr(args, "product", None))
     if wants_json(args):
-        return emit_document(layers)
+        return emit_result(command_id(args), layers)
     print(format_layers(layers))
     return 0

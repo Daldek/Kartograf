@@ -14,6 +14,7 @@ import pytest
 
 from kartograf.cli import main
 from kartograf.exceptions import KartografError
+from tests.support.errors import without_error_document
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,11 @@ class ParityRun:
     cli_stderr: str
     api_result: object | None
     api_error: KartografError | TypeError | None
+
+    @property
+    def cli_text(self) -> str:
+        """The stderr of the CLI without the error document of its last line."""
+        return without_error_document(self.cli_stderr)
 
 
 def run_both(

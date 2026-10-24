@@ -9,7 +9,7 @@ refuses it, ``check_config``): the report says what is wrong with the file.
 
 import argparse
 
-from kartograf.cli._json import emit_document, wants_json
+from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.config import Config, Setting, get_config
 
 _SOURCE_TEXT = {"default": "domyslnie", "env": "zmienna", "file": "plik"}
@@ -63,6 +63,6 @@ def cmd_config_show(args: argparse.Namespace) -> int:
     """Print the settings in force (``--json``: the document ``kartograf-config/1``)."""
     report = get_config()
     if wants_json(args):
-        return emit_document(report)
+        return emit_result(command_id(args), report)
     print(render(report), end="")
     return 0

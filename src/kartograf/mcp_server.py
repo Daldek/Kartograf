@@ -2,10 +2,11 @@
 
 The tools of ``kartograf.catalog.tools`` over stdio, for AI agents.
 
-Every tool calls one function of the library and returns the document that
-function's result serializes to (``to_dict()``, the same document as the CLI
-``--json``); a failure is the ``kartograf-error/1`` document. The module is the
-only one that touches the MCP SDK, and it imports the SDK lazily:
+Every tool calls one function of the library and returns the envelope
+``kartograf-result/1`` of its command (``to_dict()``, the same document as the CLI
+``--json``; the domain document is its ``result``); a failure that stops the call is
+the ``kartograf-error/1`` document with ``isError``. The module is the only one that
+touches the MCP SDK, and it imports the SDK lazily:
 ``import kartograf.mcp_server`` works without the ``mcp`` package,
 ``create_server`` and ``main`` report its absence with the install command.
 
@@ -51,9 +52,9 @@ from kartograf.catalog.tools import (
 from kartograf.commands import check_command, run_command, validate_command
 from kartograf.config import check_config
 from kartograf.download.manager import DownloadProgress
-from kartograf.error_report import error_report
+from kartograf.envelope import CommandResult, wrap
+from kartograf.error_report import ErrorReport, error_report
 from kartograf.exceptions import ConfigError, KartografError, ValidationError
-from kartograf.serialization import Document
 
 if TYPE_CHECKING:
     import anyio
@@ -124,7 +125,7 @@ class _Plan:
     """
 
     validate: Callable[[], None] | None
-    run: Callable[[Callable[[DownloadProgress], None] | None], Document]
+    run: Callable[[Callable[[DownloadProgress], None] | None], CommandResult[Any]]
     progress: bool
 
 
@@ -424,7 +425,9 @@ class _Toolbox:
         def validate() -> None:
             validate_command(command, options, output_dir=output_dir)
 
-        def call(on_progress: Callable[[DownloadProgress], None] | None) -> Document:
+        def call(
+            on_progress: Callable[[DownloadProgress], None] | None,
+        ) -> CommandResult[Any]:
             return run_command(
                 command,
                 options,
@@ -459,7 +462,9 @@ class _Toolbox:
         def validate() -> None:
             validate_command(data_command, options, output_dir=output_dir)
 
-        def call(_on_progress: Callable[[DownloadProgress], None] | None) -> Document:
+        def call(
+            _on_progress: Callable[[DownloadProgress], None] | None,
+        ) -> CommandResult[Any]:
             return check_command(
                 data_command, options, output_dir=output_dir, cache=self._cache
             )
@@ -473,11 +478,14 @@ class _Toolbox:
         if _takes(spec.function, "cache"):
             converted["cache"] = self._cache
         takes_progress = _takes(spec.function, "on_progress")
+        command = self.command_of(spec, arguments)
+        assert command is not None  # the schema checked the group of a shared tool
 
-        def call(on_progress: Callable[[DownloadProgress], None] | None) -> Document:
+        def call(
+            on_progress: Callable[[DownloadProgress], None] | None,
+        ) -> CommandResult[Any]:
             extra = {"on_progress": on_progress} if takes_progress else {}
-            result: Document = function(**converted, **extra)
-            return result
+            return wrap(command, function(**converted, **extra), check=spec.check)
 
         return _Plan(None, call, takes_progress)
 
@@ -505,20 +513,19 @@ def _wire_tool(spec: ToolSpec) -> types.Tool:
     )
 
 
-def _result(document: Document, *, failed: bool | None = None) -> types.CallToolResult:
+def _result(document: CommandResult[Any] | ErrorReport) -> types.CallToolResult:
     """Return the result of a tool.
 
-    The document as compact JSON text and as structured content. It is an error exactly
-    when the CLI would exit with a code other than 0 for the document: ``ok`` is false
-    (``failed=True`` forces it for an error document, which has no ``ok``).
+    The document as compact JSON text and as structured content. Only an error
+    document is an error (AGI-5.7): the outcomes ``partial`` and ``failed`` of a
+    command are results, as the CLI prints their envelope.
     """
     import mcp_types as types
 
-    data = document.to_dict()
     return types.CallToolResult(
         content=[types.TextContent(text=document.to_json(indent=None))],
-        structured_content=data,
-        is_error=data.get("ok") is False if failed is None else failed,
+        structured_content=document.to_dict(),
+        is_error=isinstance(document, ErrorReport),
     )
 
 
@@ -646,9 +653,7 @@ def create_server(
         except Exception as exc:
             if not isinstance(exc, KartografError | OSError):
                 logger.exception("Narzedzie %s: blad programu", spec.name)
-            return _result(
-                error_report(exc, command=command, given=arguments), failed=True
-            )
+            return _result(error_report(exc, command=command, given=arguments))
 
     return Server(
         "kartograf",

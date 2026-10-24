@@ -17,7 +17,7 @@ import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, NamedTuple
 
 from kartograf import _clock
 from kartograf._version import build_version
@@ -349,19 +349,41 @@ def _pins(store: Path, files: TaskFiles) -> tuple[list[PinnedFile], list[str]]:
     return pins, errors
 
 
-def _failed(task: ProjectTask, errors: Sequence[str]) -> TaskResult:
-    return TaskResult(task.name, "failed", (), (), tuple(errors))
+class _Problem(NamedTuple):
+    """What went wrong in a task: the text and the registry code (and reason) of it."""
+
+    text: str
+    code: str
+    reason: str | None = None
 
 
-def _commit(project: Project, before: dict[str, Any], task: ProjectTask) -> str | None:
-    """Write one task; the error text when it could not be written."""
+def _failed(task: ProjectTask, problems: Sequence[_Problem]) -> TaskResult:
+    """Return the failed result of a task: every text, the code of the first problem."""
+    first = problems[0]
+    return TaskResult(
+        task.name,
+        "failed",
+        (),
+        (),
+        tuple(problem.text for problem in problems),
+        first.code,
+        first.reason,
+    )
+
+
+def _commit(
+    project: Project, before: dict[str, Any], task: ProjectTask
+) -> _Problem | None:
+    """Write one task; the problem when it could not be written."""
     try:
         conflicts = commit_tasks(
             project.directory, {task.name: (before, task_to_json(task))}
         )
     except ValidationError as e:
-        return str(e)
-    return _concurrent(task.name) if conflicts else None
+        return _Problem(str(e), e.code, e.reason)
+    if conflicts:
+        return _Problem(_concurrent(task.name), "conflict", "concurrent_change")
+    return None
 
 
 def download_project(
@@ -455,7 +477,15 @@ def _download_task(
         corrupt = [pin for pin in task.files if states[pin.version] == "corrupt"]
         if corrupt:
             return _failed(
-                task, [_corrupt_text(project, task.name, pin) for pin in corrupt]
+                task,
+                [
+                    _Problem(
+                        _corrupt_text(project, task.name, pin),
+                        "data_error",
+                        "corrupt_pin",
+                    )
+                    for pin in corrupt
+                ],
             )
         restore = tuple(pin for pin in task.files if states[pin.version] == "missing")
         if not restore:
@@ -472,9 +502,13 @@ def _download_task(
         return _failed(
             task,
             [
-                f"plik geometrii {task.options['geometry']} zmienil sie od "
-                "przypiecia; przywroc go albo przyjmij nowy obszar: "
-                f"{_upgrade_hint(project, task.name)}"
+                _Problem(
+                    f"plik geometrii {task.options['geometry']} zmienil sie od "
+                    "przypiecia; przywroc go albo przyjmij nowy obszar: "
+                    f"{_upgrade_hint(project, task.name)}",
+                    "conflict",
+                    "geometry_changed",
+                )
             ],
         )
     repaired: tuple[PinnedFile, ...] = ()
@@ -482,7 +516,7 @@ def _download_task(
         try:
             repaired = _set_aside_corrupt(project, task)
         except (OSError, ValueError) as e:
-            return _failed(task, [str(e)])
+            return _failed(task, [_Problem(str(e), "io_error")])
     try:
         result = command.download(
             store,
@@ -496,19 +530,33 @@ def _download_task(
             on_notice=_prefixed(sink, task.name),
         )
     except KartografError as e:
-        return _failed(task, [_error_text(e)])
+        return _failed(task, [_Problem(_error_text(e), e.code, e.reason)])
     files = command.files(result)
     pins, pin_errors = _pins(store, files)
     if restore:
         return _restore(project, task, restore, files, pins, pin_errors)
-    errors = [
-        *files.errors,
-        *pin_errors,
-        *_repin_repaired(project.output_dir, repaired, pins),
+    problems = [
+        *(
+            _Problem(text, files.code or "internal_error", files.reason)
+            for text in files.errors
+        ),
+        *(_Problem(text, "data_error", "not_pinnable") for text in pin_errors),
+        *(
+            _Problem(text, "io_error", "repin_failed")
+            for text in _repin_repaired(project.output_dir, repaired, pins)
+        ),
     ]
-    if not files.complete or errors or not pins:
+    if not files.complete or problems or not pins:
         return _failed(
-            task, errors or ["zadanie nie dalo pelnego wyniku - nic nie przypieto"]
+            task,
+            problems
+            or [
+                _Problem(
+                    "zadanie nie dalo pelnego wyniku - nic nie przypieto",
+                    "internal_error",
+                    "incomplete_result",
+                )
+            ],
         )
     if task.files:
         # The same bytes keep their pin (a relabeled version of identical
@@ -531,9 +579,9 @@ def _download_task(
         geometry_sha256=geometry,
         files=tuple(pins),
     )
-    error = _commit(project, before, pinned)
-    if error is not None:
-        return _failed(task, [error])
+    problem = _commit(project, before, pinned)
+    if problem is not None:
+        return _failed(task, [problem])
     old, new = set(task.files), set(pins)
     return TaskResult(
         task.name,
@@ -681,7 +729,7 @@ def _restore(
     and the manifest never change.
     """
     restored: list[PinnedFile] = []
-    problems: list[str] = []
+    problems: list[_Problem] = []
     for pin in missing:
         candidates = [new for new in pins if new.path == pin.path]
         same = next((new for new in candidates if new.sha256 == pin.sha256), None)
@@ -690,28 +738,52 @@ def _restore(
                 _repin_version(project.output_dir, pin, same)
             except (OSError, ValueError, KeyError, TypeError) as e:
                 problems.append(
-                    f"{pin.unit}: nie udalo sie odtworzyc przypietej wersji "
-                    f"{pin.version}: {e}"
+                    _Problem(
+                        f"{pin.unit}: nie udalo sie odtworzyc przypietej wersji "
+                        f"{pin.version}: {e}",
+                        "io_error",
+                        "repin_failed",
+                    )
                 )
                 continue
             restored.append(pin)
         elif candidates:
             problems.append(
-                f"{pin.unit}: zrodlo ma inna tresc niz przypieta (przypieta "
-                f"{pin.label}, pobrana {candidates[0].label}); przypiecie bez "
-                "zmian - przywroc magazyn z kopii albo przyjmij nowa wersje: "
-                f"{_upgrade_hint(project, task.name)}"
+                _Problem(
+                    f"{pin.unit}: zrodlo ma inna tresc niz przypieta (przypieta "
+                    f"{pin.label}, pobrana {candidates[0].label}); przypiecie bez "
+                    "zmian - przywroc magazyn z kopii albo przyjmij nowa wersje: "
+                    f"{_upgrade_hint(project, task.name)}",
+                    "conflict",
+                    "pin_mismatch",
+                )
             )
         else:
             problems.append(
-                f"{pin.unit}: przypietego pliku {pin.path} nie ma w wyniku "
-                "zadania; przypiecie bez zmian - przywroc magazyn z kopii albo "
-                "przyjmij nowy wynik: "
-                f"{_upgrade_hint(project, task.name)}"
+                _Problem(
+                    f"{pin.unit}: przypietego pliku {pin.path} nie ma w wyniku "
+                    "zadania; przypiecie bez zmian - przywroc magazyn z kopii albo "
+                    "przyjmij nowy wynik: "
+                    f"{_upgrade_hint(project, task.name)}",
+                    "conflict",
+                    "pin_mismatch",
+                )
             )
     if problems:
-        errors = [*problems, *files.errors, *pin_errors]
-        return TaskResult(task.name, "failed", tuple(restored), (), tuple(errors))
+        errors = [
+            *(problem.text for problem in problems),
+            *files.errors,
+            *pin_errors,
+        ]
+        return TaskResult(
+            task.name,
+            "failed",
+            tuple(restored),
+            (),
+            tuple(errors),
+            problems[0].code,
+            problems[0].reason,
+        )
     return TaskResult(task.name, "restored", tuple(restored), (), ())
 
 

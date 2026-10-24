@@ -1,11 +1,12 @@
-"""The ``--json`` mode of the CLI: the document of stdout and the exit code of a
-result (spec 7.1).
+"""The ``--json`` mode of the CLI: the envelope of stdout and the exit code of a
+result (spec 7.1, AGI-3.2).
 
-The data commands print the document of the library call, byte for byte
-(``run_both`` runs the CLI and the call with two stores; the stores aside, the
-two documents are the same text), and nothing else: no progress bar, no status
-line, no notice line - the notices are in the document. Every other command of
-the CLI prints the document of its library function, too (the last part).
+The data commands print the envelope ``kartograf-result/1`` of the document of the
+library call, byte for byte (``run_both`` runs the CLI and the call with two stores;
+the stores aside, the two documents are the same text), and nothing else: no
+progress bar, no status line, no notice line - the notices are in the document.
+Every other command of the CLI prints the envelope of the document of its library
+function, too (the last part). An error writes nothing to stdout.
 """
 
 import contextlib
@@ -41,14 +42,16 @@ from kartograf import (
     remove_project_task,
     verify_project,
 )
+from kartograf._errors import OUTCOMES
 from kartograf.cache.defaults import default_cache_path
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.commands import declared
 from kartograf.cli import main
-from kartograf.cli._json import emit_document
+from kartograf.cli._json import emit_error, emit_result
 from kartograf.core.bbox import BBox
 from kartograf.download.data import DataReport, UnitFailure
 from kartograf.download.plan import PlanItem, UpdatePlan, new_plan
+from kartograf.envelope import wrap
 from kartograf.error_report import error_report
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.interrupt import Terminated
@@ -101,20 +104,40 @@ PL_KW: dict[str, Any] = dict(PL_SHEET_KW)
 NMT_SHEET: dict[str, Any] = {"product": "nmt", "sheet": G, **PL_KW}
 
 
-@pytest.mark.parametrize(
-    ("status", "code"),
-    [("current", 0), ("missing", 0), ("check_failed", 1)],
-)
-def test_emit_document_prints_the_document_and_returns_the_code_of_ok(
-    capsys, tmp_path, status, code
-):
-    item = PlanItem(
-        "pl_sheet", "nmt", "1992", SHEET, SHEET, None, None, None, None, status
+def _position(status: str) -> PlanItem:
+    return PlanItem(
+        "pl_sheet",
+        "nmt",
+        "1992",
+        SHEET,
+        SHEET,
+        None,
+        None,
+        None,
+        None,
+        status,  # type: ignore[arg-type]
     )
-    plan = new_plan(tmp_path, [item])
 
-    assert emit_document(plan) == code
-    assert capsys.readouterr().out == plan.to_json()
+
+@pytest.mark.parametrize(
+    ("statuses", "code"),
+    [
+        (["current"], 0),
+        (["missing"], 0),
+        (["current", "missing"], 0),
+        (["check_failed"], 11),
+        (["current", "check_failed"], 10),
+    ],
+)
+def test_emit_result_prints_the_envelope_and_returns_the_code_of_its_status(
+    capsys, tmp_path, statuses, code
+):
+    plan = new_plan(tmp_path, [_position(status) for status in statuses])
+    envelope = wrap("elevation download", plan, check=True)
+
+    assert emit_result("elevation download", plan, check=True) == code
+    assert capsys.readouterr().out == envelope.to_json()
+    assert json.loads(envelope.to_json())["result"] == plan.to_dict()
 
 
 @pytest.mark.parametrize(
@@ -126,11 +149,13 @@ def test_emit_document_prints_the_document_and_returns_the_code_of_ok(
         (Terminated(), 143),
     ],
 )
-def test_emit_document_returns_the_exit_code_of_an_error_document(capsys, error, code):
+def test_emit_error_writes_the_document_as_the_last_line_of_stderr(capsys, error, code):
     report = error_report(error)
 
-    assert emit_document(report) == code == report.exit_code
-    assert capsys.readouterr().out == report.to_json()
+    assert emit_error(report) == code == report.exit_code
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == report.to_json(indent=None) + "\n"
 
 
 # -- the data commands: the document of the library call ---------------------
@@ -143,18 +168,22 @@ def _without_store(text: str, store: Path) -> str:
     return text
 
 
-def _same_document(run, schema: str) -> dict:
-    """The CLI wrote the one document of the API call - the stores aside, the
-    same text -, nothing on stderr, and the exit code of its ``ok``."""
+def _same_document(run, schema: str, command: str, *, check: bool = False) -> dict:
+    """The CLI wrote the envelope of the API call - the stores aside, the same
+    text -, nothing on stderr, and the exit code of its status. The result is the
+    domain document of the envelope."""
+    envelope = wrap(command, run.api_result, check=check)
     cli = _without_store(run.cli_stdout, run.cli_store)
-    api = _without_store(run.api_result.to_json(), run.api_store)
+    api = _without_store(envelope.to_json(), run.api_store)
 
     assert run.cli_stderr == ""
     assert cli == api
-    assert run.cli_code == (0 if getattr(run.api_result, "ok", True) else 1)
+    assert run.cli_code == envelope.exit_code
     document = json.loads(run.cli_stdout)
-    assert document["schema"] == schema
-    return document
+    assert document["schema"] == "kartograf-result/1"
+    assert (document["command"], document["check"]) == (command, check)
+    assert document["result"]["schema"] == schema
+    return document["result"]
 
 
 @pytest.mark.usefixtures("frozen_clock")
@@ -166,7 +195,7 @@ def test_json_pl_sheet(tmp_path):
             tmp_path,
         )
 
-    document = _same_document(run, "kartograf-download/1")
+    document = _same_document(run, "kartograf-download/1", "elevation download")
     assert [f["unit"] for f in document["files"]] == [G]
     assert document["ok"] is True
 
@@ -200,7 +229,7 @@ def test_json_pl_area(tmp_path):
             tmp_path,
         )
 
-    document = _same_document(run, "kartograf-download/1")
+    document = _same_document(run, "kartograf-download/1", "elevation download")
     assert [f["unit"] for f in document["files"]] == [G]
     # the header of the sheet list is a notice of the document, not a line of stdout
     assert "sheet_list" in {notice["code"] for notice in document["notices"]}
@@ -229,7 +258,7 @@ def test_json_collection(tmp_path, monkeypatch):
         tmp_path,
     )
 
-    document = _same_document(run, "kartograf-download/1")
+    document = _same_document(run, "kartograf-download/1", "models3d download")
     assert len(document["files"]) == 1
 
 
@@ -253,7 +282,7 @@ def test_json_landcover(tmp_path):
             tmp_path,
         )
 
-    document = _same_document(run, "kartograf-download/1")
+    document = _same_document(run, "kartograf-download/1", "landcover download")
     assert len(document["files"]) == 1
 
 
@@ -266,7 +295,7 @@ def test_json_soil(tmp_path):
             tmp_path,
         )
 
-    document = _same_document(run, "kartograf-download/1")
+    document = _same_document(run, "kartograf-download/1", "soil download")
     assert len(document["files"]) == 1
 
 
@@ -293,7 +322,7 @@ def test_json_hsg_with_summary(tmp_path):
             tmp_path,
         )
 
-    document = _same_document(run, "kartograf-download/1")
+    document = _same_document(run, "kartograf-download/1", "soil hsg")
     assert set(document["summary"]) >= {"A", "B", "nodata"}
     assert document["summary"] == run.api_result.summary
     assert len(document["files"]) == 1
@@ -312,8 +341,8 @@ def test_json_check_updates_plan(tmp_path):
             tmp_path,
         )
 
-    document = _same_document(run, "kartograf-plan/1")
-    assert plan_file.read_text(encoding="utf-8") == run.cli_stdout
+    document = _same_document(run, "kartograf-plan/1", "elevation download", check=True)
+    assert json.loads(plan_file.read_text(encoding="utf-8")) == document
     assert document["items"] and document["ok"] is True
     assert isinstance(run.api_result, UpdatePlan)
 
@@ -340,7 +369,7 @@ def test_json_plan_file_feeds_the_upgrade(tmp_path):
             tmp_path,
         )
 
-    document = _same_document(upgraded, "kartograf-download/1")
+    document = _same_document(upgraded, "kartograf-download/1", "elevation download")
     assert [f["file"]["status"] for f in document["files"]] == ["new"]
 
 
@@ -395,9 +424,9 @@ def test_json_laz_superseded_tile_without_geometry(tmp_path):
     def refuse(constant: str):
         raise AssertionError(f"{constant} is no JSON")
 
-    document = json.loads(run.cli_stdout, parse_constant=refuse)
-    _same_document(run, "kartograf-download/1")
-    (entry,) = document["superseded"]
+    envelope = json.loads(run.cli_stdout, parse_constant=refuse)
+    _same_document(run, "kartograf-download/1", "elevation download")
+    (entry,) = envelope["result"]["superseded"]
     unknown = entry["covered_by"][1]
     assert [unknown[key] for key in ("min_x", "min_y", "max_x", "max_y")] == [None] * 4
     assert unknown["footprint"] is None
@@ -427,7 +456,7 @@ def test_json_mode_has_no_progress_and_no_notice_lines(tmp_path):
             tmp_path,
         )
 
-    document = _same_document(run, "kartograf-download/1")
+    document = _same_document(run, "kartograf-download/1", "elevation download")
     assert "no_coverage_some" in {notice["code"] for notice in document["notices"]}
 
 
@@ -448,15 +477,26 @@ def _with_report(report: DataReport, capsys, tmp_path, *flags: str):
     return code, captured.out, captured.err
 
 
-def test_json_ok_false_exits_1_with_the_report(capsys, tmp_path):
-    """A partial failure is a result, not an error: the document of the report
-    with ``ok: false`` - the failed unit in it, no ``Error:`` line - and code 1."""
+def test_json_ok_false_is_a_result_with_the_exit_code_of_its_status(capsys, tmp_path):
+    """A failure of every unit is a result, not an error: the envelope with the
+    status ``failed`` - the failed unit in it, no ``Error:`` line, no error
+    document - and code 11."""
     code, out, err = _with_report(FAILED, capsys, tmp_path, "--json")
 
-    assert code == 1
-    assert out == FAILED.to_json()
+    assert code == 11
+    assert out == wrap("elevation download", FAILED).to_json()
     assert err == ""
-    assert json.loads(out)["failed"][0]["error"] == "brak odpowiedzi zrodla"
+    envelope = json.loads(out)
+    assert envelope["status"] == "failed"
+    assert envelope["result"]["failed"][0]["error"] == "brak odpowiedzi zrodla"
+    assert envelope["items"] == [
+        {
+            "id": G,
+            "status": "failed",
+            "code": "source_unavailable",
+            "message": "brak odpowiedzi zrodla",
+        }
+    ]
 
 
 def test_quiet_with_json_is_allowed_and_has_no_effect(capsys, tmp_path):
@@ -514,7 +554,7 @@ def test_json_availability_bytes_equal_to_json(tmp_path, monkeypatch):
         )
 
     assert code == 0 and err == ""
-    assert out == report.to_json()
+    assert out == wrap("elevation availability", report).to_json()
 
 
 @pytest.mark.usefixtures("frozen_clock")
@@ -540,8 +580,8 @@ def test_json_availability_cz_has_its_notices_in_the_document(tmp_path, monkeypa
 
     assert code == 0 and report.combinations and report.notices
     assert err == ""
-    assert out == report.to_json()
-    assert json.loads(out)["notices"]
+    assert out == wrap("elevation availability", report).to_json()
+    assert json.loads(out)["result"]["notices"] == json.loads(out)["notices"] != []
 
 
 # -- the query and management commands: the document of the library function -
@@ -589,9 +629,9 @@ def _project(tmp_path: Path) -> Path:
 def test_query_and_management_commands_print_one_document(
     command, tmp_path, monkeypatch, capsys
 ):
-    """``--json``: all of stdout is one document of the schema of the command,
-    stderr is empty, the exit code is that of its ``ok`` (a project that is not
-    downloaded yet is a result with ``ok: false``)."""
+    """``--json``: all of stdout is one envelope whose result has the schema of the
+    command, stderr is empty, the exit code is that of its status (a project that is
+    not downloaded yet is a result with ``ok: false``)."""
     monkeypatch.chdir(tmp_path)
     argv = _offline_lines(_project(tmp_path), tmp_path)[command]
     declaration = next(c for c in declared().commands if c.id == command)
@@ -599,11 +639,14 @@ def test_query_and_management_commands_print_one_document(
         code = main([*argv, "--json"] if command != "project add" else _json_add(argv))
     captured = capsys.readouterr()
 
-    document = json.loads(captured.out)
+    envelope = json.loads(captured.out)
     assert captured.err == ""
-    assert document["schema"] in SCHEMAS
-    assert document["schema"] == declaration.result_schema
-    assert code == (0 if document.get("ok", True) else 1)
+    assert envelope["schema"] == "kartograf-result/1"
+    assert (envelope["command"], envelope["check"]) == (command, False)
+    assert envelope["result"]["schema"] in SCHEMAS
+    assert envelope["result"]["schema"] == declaration.result_schema
+    assert code == OUTCOMES[envelope["status"]]
+    assert (code == 0) == envelope["result"].get("ok", True)
 
 
 def _json_add(argv: list[str]) -> list[str]:
@@ -625,21 +668,39 @@ def test_every_cli_command_has_a_json_test():
 
 
 @pytest.mark.parametrize(
-    ("argv", "document"),
+    ("command", "argv", "document"),
     [
         (
+            "sheet parse",
             ["sheet", "parse", "N-34-130-D", "--hierarchy", "--descendants", "1:25000"],
             lambda: describe_sheet("N-34-130-D", hierarchy=True, descendants="1:25000"),
         ),
-        (["sheet", "parse", "CTES96"], lambda: describe_sheet("CTES96")),
-        (["elevation", "list-sources"], lambda: list_sources(group="elevation")),
-        (["geodesy", "list-sources"], lambda: list_sources(group="geodesy")),
         (
+            "sheet parse",
+            ["sheet", "parse", "CTES96"],
+            lambda: describe_sheet("CTES96"),
+        ),
+        (
+            "elevation list-sources",
+            ["elevation", "list-sources"],
+            lambda: list_sources(group="elevation"),
+        ),
+        (
+            "geodesy list-sources",
+            ["geodesy", "list-sources"],
+            lambda: list_sources(group="geodesy"),
+        ),
+        (
+            "landcover list-layers",
             ["landcover", "list-layers", "--product", "bdoo"],
             lambda: list_layers(group="landcover", product="bdoo"),
         ),
-        (["soil", "list-layers"], lambda: list_layers(group="soil")),
-        (["config", "show"], get_config),
+        (
+            "soil list-layers",
+            ["soil", "list-layers"],
+            lambda: list_layers(group="soil"),
+        ),
+        ("config show", ["config", "show"], get_config),
     ],
     ids=[
         "parse-pl",
@@ -651,10 +712,12 @@ def test_every_cli_command_has_a_json_test():
         "config",
     ],
 )
-def test_json_is_the_document_of_the_library_function(argv, document, capsys):
+def test_json_is_the_envelope_of_the_document_of_the_library_function(
+    command, argv, document, capsys
+):
     assert main([*argv, "--json"]) == 0
 
-    assert capsys.readouterr().out == document().to_json()
+    assert capsys.readouterr().out == wrap(command, document()).to_json()
 
 
 def test_parse_prints_no_text_before_an_error(capsys):
@@ -678,15 +741,15 @@ def test_cache_documents(tmp_path, monkeypatch, capsys):
     assert main(["cache", "path", "--json"]) == 0
     path = capsys.readouterr().out
     info = get_cache_info()
-    assert stats == info.to_json()
-    assert path == get_cache_path().to_json()
-    assert json.loads(stats)["entries"]["records"] == 1
+    assert stats == wrap("cache stats", info).to_json()
+    assert path == wrap("cache path", get_cache_path()).to_json()
+    assert json.loads(stats)["result"]["entries"]["records"] == 1
     # the path says where the cache is and does not count what is in it
-    assert json.loads(path)["action"] == "path"
-    assert json.loads(path)["entries"] is None
+    assert json.loads(path)["result"]["action"] == "path"
+    assert json.loads(path)["result"]["entries"] is None
 
     assert main(["cache", "clear", "--json"]) == 0
-    cleared = json.loads(capsys.readouterr().out)
+    cleared = json.loads(capsys.readouterr().out)["result"]
     assert cleared["action"] == "clear" and cleared["cleared"] is True
     assert cleared["removed_unreadable"] is False
     assert get_cache_info().entries.records == 0  # type: ignore[union-attr]
@@ -704,13 +767,15 @@ def test_cache_path_is_given_when_the_database_cannot_be_read(
     db.write_bytes(b"to nie jest baza SQLite\n" * 200)
 
     assert main(["cache", "stats", "--json"]) == 8
-    document = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    document = json.loads(captured.err.splitlines()[-1])
     assert (document["code"], document["details"]["reason"]) == (
         "store_unavailable",
         "cache",
     )
     assert main(["cache", "path", "--json"]) == 0
-    document = json.loads(capsys.readouterr().out)
+    document = json.loads(capsys.readouterr().out)["result"]
     assert (document["path"], document["exists"]) == (db.as_posix(), True)
     assert document["size_bytes"] == db.stat().st_size
     assert main(["cache", "path"]) == 0
@@ -734,41 +799,56 @@ def test_json_project_commands_print_the_documents_of_the_api(
     cli_dir, api_dir = tmp_path / "cli", tmp_path / "api"
     where = ["--project", str(cli_dir)]
 
-    def same(document, *argv: str) -> None:
-        """The CLI line printed the document of the API call (the project
-        directories aside) and returned the exit code of its ``ok``."""
+    def same(document, command: str, *argv: str, check: bool = False) -> None:
+        """The CLI line printed the envelope of the document of the API call (the
+        project directories aside) and returned the exit code of its status."""
         code = main(list(argv))
         captured = capsys.readouterr()
+        envelope = wrap(command, document, check=check)
         assert captured.err == ""
         assert _without_dir(captured.out, cli_dir) == _without_dir(
-            document.to_json(), api_dir
+            envelope.to_json(), api_dir
         )
-        assert code == (0 if getattr(document, "ok", True) else 1)
+        assert code == envelope.exit_code
 
     same(
         init_project(api_dir, output_dir="api/data"),
+        "project init",
         *("project", "init", *where, "--output", "cli/data", "--json"),
     )
     same(
         add_project_task(
             api_dir, name="teren", command="elevation download", options=NMT_SHEET
         ),
+        "project add",
         *("project", "add", "--json", *where, "teren", *ELEVATION),
     )
     with pl_sheets():
         same(
             download_project(api_dir),
+            "project download",
             *("project", "download", *where, "--json"),
         )
-    same(get_project_status(api_dir), "project", "status", *where, "--json")
-    same(verify_project(api_dir), "project", "verify", *where, "--json")
+    same(
+        get_project_status(api_dir),
+        "project status",
+        *("project", "status", *where, "--json"),
+    )
+    same(
+        verify_project(api_dir),
+        "project verify",
+        *("project", "verify", *where, "--json"),
+    )
     with pl_sheets():
         same(
             check_project(api_dir),
+            "project download",
             *("project", "download", "--check-updates", *where, "--json"),
+            check=True,
         )
     same(
         remove_project_task(api_dir, name="teren"),
+        "project remove",
         *("project", "remove", *where, "teren", "--json"),
     )
 
@@ -796,8 +876,8 @@ def test_project_add_uses_parse_command(tmp_path, capsys, flags, option):
     code = main([*argv, *ELEVATION, *flags])
     captured = capsys.readouterr()
 
-    document = json.loads(captured.out)
-    assert code == 2 and captured.err == ""
+    document = json.loads(captured.err.splitlines()[-1])
+    assert code == 2 and captured.out == ""
     assert document["schema"] == "kartograf-error/1"
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "invalid_input"

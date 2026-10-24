@@ -116,11 +116,12 @@ Wyjatki (`KartografError`) maja `code`, `exit_code`, `hint`; `error_report(exc)`
 
 ## Kody wyjscia i bledow
 Kody wyjscia i bledow sa wspolne dla narzedzi Nogat (rejestr bledow Nogat). Kod wyjscia:
-0 = ok; 1 = blad programu albo `ok: false` (sprawdz `failed` i `notices`); 2 = bledne
+0 = ok; 10 = czesciowy wynik (`status` `partial`: czesc jednostek w `items` nie powiodla sie); 11 = zadna jednostka
+sie nie powiodla (`status` `failed`); 1 = blad programu; 2 = bledne
 dane wejsciowe (popraw wg `hint` i `details.option`); 5 = zrodlo niedostepne; 7 = bledne
 dane (sidecar); 8 = cache niedostepny; 9 = blad plikow; 13 = blad przeliczenia; 14 = brak
 danych w zrodle; 15 = nieobslugiwane (brak bezpiecznej transformacji); 130 = przerwane
-(Ctrl-C); 143 = SIGTERM. Blad na stdout (`--json`) to `kartograf-error/1`: `code`, `title`,
+(Ctrl-C); 143 = SIGTERM. Wynik `--json` to koperta `kartograf-result/1` (`status`, `result`, `items`); blad to ostatnia linia stderr (nie stdout), `kartograf-error/1`: `code`, `title`,
 `message`, `hint`, `details` (z `details.reason`), `exit_code`, `command`. Kody:
 
 - `internal_error` (wyjscie 1): blad programu

@@ -24,6 +24,7 @@ from kartograf.download.plan import new_plan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import AUTO_CLIPPED, NO_COVERAGE_SOME, Notice
 from kartograf.project.commands import task_command
+from tests.support.errors import without_error_document
 
 _DOWNLOAD = "kartograf.cli.download_cmd.download_data"
 _CHECK = "kartograf.cli.download_cmd.check_data"
@@ -122,7 +123,7 @@ def test_malformed_per_country_value_is_one_error_line(tmp_path, capsys):
         )
     assert rc == 2
     download.assert_not_called()
-    (line,) = capsys.readouterr().err.splitlines()
+    (line,) = without_error_document(capsys.readouterr().err).splitlines()
     assert line.startswith("Error: --resolution: nieprawidlowa wartosc 'pl=1m,de=2m'")
 
 
@@ -205,7 +206,7 @@ def test_level_per_country_syntax(tmp_path, capsys):
     with patch(_COLLECTION) as download:
         assert main([*argv, "--level", "pl=gmina,de=obec"]) == 2
     download.assert_not_called()
-    (line,) = capsys.readouterr().err.splitlines()
+    (line,) = without_error_document(capsys.readouterr().err).splitlines()
     assert line.startswith("Error: --level: nieprawidlowa wartosc 'pl=gmina,de=obec'")
 
 
@@ -250,7 +251,7 @@ def test_report_ok_false_exit_1(tmp_path, capsys):
                 str(tmp_path),
             ]
         )
-    assert rc == 1
+    assert rc == 11
     assert "Error: 2 z 4 arkuszy nie pobrano" in capsys.readouterr().err
 
 
@@ -291,7 +292,9 @@ def test_validation_error_single_error_line(tmp_path, capsys):
             + ["-o", str(tmp_path)]
         )
     assert rc == 2
-    assert capsys.readouterr().err.splitlines() == ["Error: --vertical-crs wymagane: x"]
+    assert without_error_document(capsys.readouterr().err).splitlines() == [
+        "Error: --vertical-crs wymagane: x"
+    ]
 
 
 @pytest.mark.parametrize("check", [False, True], ids=["download", "check"])

@@ -78,6 +78,8 @@ SCHEMA_DESCRIPTIONS = {
     "kartograf-store-overview/1": "Przeglad magazynu: segmenty i liczby wpisow",
     "kartograf-store-entries/1": "Wpisy magazynu: pliki z sidecarami",
     "kartograf-store-sidecar/1": "Sidecar jednego pliku magazynu (kartograf-meta/1)",
+    "kartograf-result/1": "Koperta wyniku komendy: komenda, status (ok, partial, "
+    "failed), wynik (dokument komendy), jednostki (items) i komunikaty (notices)",
     "kartograf-error/1": "Blad komendy: kod rejestru, tytul, komunikat, "
     "podpowiedz, szczegoly (details.reason), kod wyjscia i komenda",
     "kartograf-catalog/1": "Katalog komend: grupy, komendy, parametry, "

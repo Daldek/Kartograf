@@ -1941,7 +1941,7 @@ class TestBdot10kSidecarSource:
                     str(out),
                 ]
             )
-        assert rc == 1
+        assert rc == 11
         err = capsys.readouterr().err
         assert "Error: 0262: Nie udalo sie rozpakowac" in err
         assert "Cannot allocate memory" in err

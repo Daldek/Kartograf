@@ -14,6 +14,7 @@ from kartograf.download.cz_sheets import CzSheetResult
 from tests.integration.test_cli import _CZ_FACTORY_PATCH, _cz_provider_mock
 from tests.integration.test_laz_download import FakeProvider, _selection, _tile
 from tests.integration.test_manager_campaigns import C14, REC, FakeCampaignProvider
+from tests.support.errors import without_error_document
 
 G = "N-34-139-C-a-3-1"
 # Subject of the status and plan lines: the path below --output (one format).
@@ -96,7 +97,7 @@ def test_check_updates_failure_is_partial_success_code(tmp_path, capsys):
 
     fake = FakeCampaignProvider(C14)
     fake.resolve_error = _transport_error(G, 503)
-    assert _run(fake, tmp_path, "--sheet", G, "--check-updates") == 1
+    assert _run(fake, tmp_path, "--sheet", G, "--check-updates") == 11
     assert f"{G_PATH}: nie udalo sie sprawdzic: " in capsys.readouterr().out
 
 
@@ -113,7 +114,7 @@ def test_check_updates_index_failure_names_no_download(tmp_path, capsys):
         grid = ["--resolution", "1m", "--vertical-crs", "EVRF2007"]
         argv = ["--sheet", G, "-o", str(tmp_path), "--check-updates"]
         rc = main(["elevation", "download", "--product", "nmt", *grid, *argv])
-    assert rc == 1
+    assert rc == 11
     line = next(
         text for text in capsys.readouterr().out.splitlines() if text.startswith(G_PATH)
     )
@@ -154,7 +155,7 @@ def test_plan_file_in_missing_directory_is_one_error_line(tmp_path, capsys):
         str(plan),
     )
     assert rc == 2
-    err = capsys.readouterr().err
+    err = without_error_document(capsys.readouterr().err)
     assert err == (
         f"Error: --plan {plan}: katalog {plan.parent} nie istnieje - utworz go "
         "albo podaj inny plik planu\n"
@@ -381,7 +382,7 @@ def test_sm5_check_failed_exit_code_default_asks_nothing(tmp_path, capsys):
         assert _download(tmp_path, *sm5, "-q") == 0
         cz.file_signal.side_effect = DownloadError("HEAD 503")
         capsys.readouterr()
-        assert _download(tmp_path, *sm5, "--check-updates") == 1
+        assert _download(tmp_path, *sm5, "--check-updates") == 11
         assert f"{SM5_PATH}: nie udalo sie sprawdzic: HEAD 503" in (
             capsys.readouterr().out
         )
