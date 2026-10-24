@@ -19,7 +19,9 @@ from kartograf.exceptions import (
     CacheError,
     ConfigError,
     DownloadError,
+    ForbiddenError,
     InvalidSidecarError,
+    MissingDependencyError,
     NoCoverageError,
     ParseError,
     UsageError,
@@ -105,6 +107,13 @@ def test_a_status_without_the_units_it_needs_does_not_validate():
         ),
         CacheError("cache"),
         InvalidSidecarError("sidecar", path=Path("/store/a.meta.json")),
+        MissingDependencyError("brak pakietu mcp", extra="mcp"),
+        ForbiddenError(
+            "sciezka poza katalogami",
+            option="output_dir",
+            path=Path("/poza"),
+            allowed=["/dane"],
+        ),
         TransformError("wynik nieskonczony"),
         TransformUnavailableError("brak operacji", remedy="zainstaluj siatki"),
         OSError(2, "No such file", "/nie/ma"),
@@ -119,4 +128,4 @@ def test_the_error_document_of_every_failure_validates(error):
 
     _validator("error-1").validate(document)
     # the exit code is the one of the registry for the code (also checked by the schema)
-    assert document["exit_code"] in {1, 2, 5, 7, 8, 9, 13, 14, 15, 130, 143}
+    assert document["exit_code"] in {1, 2, 5, 6, 7, 8, 9, 12, 13, 14, 15, 130, 143}

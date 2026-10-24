@@ -137,7 +137,7 @@ def test_instructions_are_ascii_short_and_say_what_the_tools_do_not_repeat():
         assert word in INSTRUCTIONS, word
 
 
-def test_main_without_mcp_prints_the_install_hint_and_exits_1():
+def test_main_without_mcp_reports_missing_dependency_and_exits_6():
     code = (
         "import sys\n"
         "sys.modules['mcp'] = None\n"
@@ -149,10 +149,13 @@ def test_main_without_mcp_prints_the_install_hint_and_exits_1():
         [sys.executable, "-c", code], cwd=REPO, capture_output=True, text=True
     )
 
-    assert done.returncode == 1
-    assert 'pip install "kartograf[mcp]"' in done.stderr
+    assert done.returncode == 6
     assert done.stdout == ""
     assert "Traceback" not in done.stderr
+    document = json.loads(done.stderr.splitlines()[-1])
+    assert (document["code"], document["exit_code"]) == ("missing_dependency", 6)
+    assert document["hint"] == 'uv add "kartograf[mcp]"'
+    assert document["details"] == {"extra": "mcp"}
 
 
 def test_import_kartograf_does_not_import_mcp():
@@ -893,9 +896,13 @@ def test_allow_dir_rejects_paths_outside_after_resolve(tmp_path):
 
     for path in (outside, allowed / "link", allowed / ".." / "outside"):
         report = error_of(
-            call("store_overview", {"output_dir": str(path)}, allow_dirs=[allowed])
+            call("store_overview", {"output_dir": str(path)}, allow_dirs=[allowed]),
+            code="forbidden",
         )
+        assert report["exit_code"] == 12
         assert report["details"]["option"] == "output_dir"
+        assert report["details"]["path"] == str(outside.resolve())
+        assert report["details"]["allowed"] == [str(allowed.resolve())]
         assert str(allowed) in report["hint"]
     # the same rule for the paths nested in a call
     nested = call(
@@ -906,7 +913,7 @@ def test_allow_dir_rejects_paths_outside_after_resolve(tmp_path):
         },
         allow_dirs=[allowed],
     )
-    assert error_of(nested)["details"]["option"] == "output_dir"
+    assert error_of(nested, code="forbidden")["details"]["option"] == "output_dir"
     task = call(
         "project_add",
         {
@@ -917,7 +924,7 @@ def test_allow_dir_rejects_paths_outside_after_resolve(tmp_path):
         },
         allow_dirs=[allowed],
     )
-    assert error_of(task)["details"]["option"] == "geometry"
+    assert error_of(task, code="forbidden")["details"]["option"] == "geometry"
 
 
 @needs_mcp

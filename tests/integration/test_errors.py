@@ -17,8 +17,10 @@ from kartograf.error_report import ERROR_CODES, EXIT_CODES, ErrorReport, error_r
 from kartograf.exceptions import (
     CacheError,
     DownloadError,
+    ForbiddenError,
     InvalidSidecarError,
     KartografError,
+    MissingDependencyError,
     NoCoverageError,
     ParseError,
     UsageError,
@@ -45,6 +47,8 @@ SPEC_ERROR_TABLE = [
     ("YearRangeError", "no_data", "year_out_of_range", 14),
     ("CacheError", "store_unavailable", "cache", 8),
     ("InvalidSidecarError", "data_error", "invalid_sidecar", 7),
+    ("MissingDependencyError", "missing_dependency", None, 6),
+    ("ForbiddenError", "forbidden", None, 12),
     ("TransformError", "calculation_error", "transform_failed", 13),
     ("TransformUnavailableError", "unsupported", "transform_unavailable", 15),
     ("OSError", "io_error", None, 9),
@@ -96,11 +100,13 @@ def test_error_table_equals_the_spec():
         (1, "internal_error"),
         (2, "validation_error"),
         (5, "source_unavailable"),
+        (6, "missing_dependency"),
         (7, "data_error"),
         (8, "store_unavailable"),
         (9, "io_error"),
         (10, "partial"),
         (11, "failed"),
+        (12, "forbidden"),
         (13, "calculation_error"),
         (14, "no_data"),
         (15, "unsupported"),
@@ -227,6 +233,56 @@ def test_usage_error_is_a_validation_error():
         "invalid_sheet_code",
     )
     assert ParseError("m").exit_code == 2
+
+
+def test_forbidden_error_document():
+    outside = Path("/data/elsewhere").resolve()
+    exc = ForbiddenError(
+        "output_dir lies outside the allowed directories",
+        option="output_dir",
+        path=outside,
+        allowed=("/data/kartograf", "/data/other"),
+        hint="Use a path inside an allowed directory.",
+    )
+
+    assert (exc.code, exc.exit_code, exc.reason) == ("forbidden", 12, None)
+    assert not isinstance(exc, ValidationError)
+    assert error_report(exc, command="store overview").to_dict() == {
+        "schema": "kartograf-error/1",
+        "code": "forbidden",
+        "title": "Not allowed",
+        "message": "output_dir lies outside the allowed directories",
+        "hint": "Use a path inside an allowed directory.",
+        "details": {
+            "option": "output_dir",
+            "path": outside.as_posix(),
+            "allowed": ["/data/kartograf", "/data/other"],
+        },
+        "exit_code": 12,
+        "command": "store overview",
+    }
+    assert ForbiddenError("m").details() == {}
+    with pytest.raises(TypeError, match="allowed"):
+        ForbiddenError("m", allowed="/data")
+
+
+def test_missing_dependency_error_names_the_install_command():
+    exc = MissingDependencyError("the MCP server needs the mcp package", extra="mcp")
+    own = MissingDependencyError("m", extra="mcp", hint="pip install mcp")
+
+    assert (exc.code, exc.exit_code, exc.reason) == ("missing_dependency", 6, None)
+    report = error_report(exc)
+    assert report.to_dict() == {
+        "schema": "kartograf-error/1",
+        "code": "missing_dependency",
+        "title": "Missing optional dependency",
+        "message": "the MCP server needs the mcp package",
+        "hint": 'uv add "kartograf[mcp]"',
+        "details": {"extra": "mcp"},
+        "exit_code": 6,
+    }
+    assert error_report(own).hint == "pip install mcp"
+    assert MissingDependencyError("m").hint is None  # no extra, no command to name
 
 
 def test_error_report_document():

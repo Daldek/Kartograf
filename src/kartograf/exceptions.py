@@ -415,3 +415,78 @@ class InvalidSidecarError(KartografError):
     def __init__(self, message: str, *, path: Path, hint: str | None = None) -> None:
         super().__init__(message, hint=hint)
         self.path = path
+
+
+class ForbiddenError(KartografError):
+    """
+    A call the server refuses (AGI-5.8, ERR registry ``forbidden``).
+
+    Raised by the MCP server before anything is read or written: a path outside the
+    directories the server allows (``--allow-dir``), or a write on a server that does
+    not write (``--allow-writes``). The library functions never raise it.
+
+    Attributes
+    ----------
+    option : str, optional
+        Name of the argument that was refused (``output_dir``, ``update``).
+    path : Path, optional
+        The resolved path that lies outside the allowed directories.
+    allowed : tuple[str, ...], optional
+        The directories the server allows.
+
+    Examples
+    --------
+    >>> raise ForbiddenError(
+    ...     "output_dir lies outside the allowed directories",
+    ...     option="output_dir",
+    ...     path=Path("/tmp/x"),
+    ...     allowed=["/data"],
+    ... )
+    """
+
+    code = "forbidden"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("option", "path", "allowed")
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        option: str | None = None,
+        path: Path | None = None,
+        allowed: Sequence[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.option = option
+        self.path = path
+        self.allowed = _names(allowed, "allowed")
+
+
+class MissingDependencyError(KartografError):
+    """
+    An optional extra is not installed (DEV-6.5).
+
+    Raised where a feature needs a package that only an extra brings (the MCP server
+    needs ``kartograf[mcp]``). The hint names the command that installs the extra.
+
+    Attributes
+    ----------
+    extra : str, optional
+        Name of the extra (``mcp``); without a ``hint`` the hint is ``uv add
+        "kartograf[<extra>]"``.
+
+    Examples
+    --------
+    >>> raise MissingDependencyError("the MCP server needs mcp", extra="mcp")
+    """
+
+    code = "missing_dependency"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("extra",)
+
+    def __init__(
+        self, message: str, *, extra: str | None = None, hint: str | None = None
+    ) -> None:
+        if hint is None and extra is not None:
+            hint = f'uv add "kartograf[{extra}]"'
+        super().__init__(message, hint=hint)
+        self.extra = extra

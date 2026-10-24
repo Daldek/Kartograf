@@ -139,6 +139,22 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "the kartograf-meta/1 sidecar is missing, unreadable or of another schema",
     ),
     ErrorCodeSpec(
+        "MissingDependencyError",
+        "missing_dependency",
+        None,
+        6,
+        "an optional extra is not installed (kartograf[mcp] for the MCP server); "
+        'the hint names the install command (uv add "kartograf[mcp]")',
+    ),
+    ErrorCodeSpec(
+        "ForbiddenError",
+        "forbidden",
+        None,
+        12,
+        "the MCP server refuses the call: a path outside its allowed directories "
+        "(--allow-dir), or a write on a server that does not write (--allow-writes)",
+    ),
+    ErrorCodeSpec(
         "TransformError",
         "calculation_error",
         "transform_failed",

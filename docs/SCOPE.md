@@ -513,7 +513,8 @@ from kartograf import (
     read_store_sidecar, StoreSidecar, ErrorReport, error_report,
     # Exceptions
     KartografError, ParseError, ValidationError, DownloadError, NoCoverageError,
-    YearRangeError, CacheError, InvalidSidecarError, UsageError,
+    YearRangeError, CacheError, InvalidSidecarError, UsageError, ForbiddenError,
+    MissingDependencyError,
     # Version
     __version__,
 )
@@ -1197,7 +1198,7 @@ kartograf/
 ├── mcp_server.py         # serwer MCP kartograf-mcp (stdio; opcjonalny extra `mcp`)
 ├── catalog/              # Katalog komend: deklaracje (commands/), get_catalog, parser CLI, narzędzia MCP (tools.py)
 ├── notices.py            # Notice, NoticeSink, kody komunikatów o danych (ADR-037)
-├── exceptions.py         # KartografError (code, exit_code, hint), ValidationError (option, allowed) -> UsageError/ParseError, DownloadError -> NoCoverageError/YearRangeError, CacheError, InvalidSidecarError
+├── exceptions.py         # KartografError (code, exit_code, hint), ValidationError (option, allowed) -> UsageError/ParseError, DownloadError -> NoCoverageError/YearRangeError, CacheError, InvalidSidecarError, ForbiddenError, MissingDependencyError (serwer MCP)
 ├── store.py              # Odczyt magazynu bez zapisu (ADR-045): list_segments, list_partitions, iter_store, read_sidecar, describe_segment, link_target
 ├── store_geometry.py     # file_footprint (obrys natywny i WGS84), pinned_transform (operacja przypięta, per wątek)
 ├── core/                 # Logika bazowa
