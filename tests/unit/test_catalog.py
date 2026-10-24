@@ -48,6 +48,7 @@ def _params() -> tuple[Param, ...]:
             required=True,
             task=True,
             section="Produkt i obszar",
+            description_pl=lambda: "Produkt (wymagany): nmt, nmpt",
         ),
         Param(
             "sheet",
@@ -58,8 +59,16 @@ def _params() -> tuple[Param, ...]:
             task=True,
             accepts=("pl1992", "pl2000"),
             section="Produkt i obszar",
+            description_pl="Godlo arkusza",
         ),
-        Param("bbox", "bbox", "Prostokat obszaru", task=True, metavar="BBOX"),
+        Param(
+            "bbox",
+            "bbox",
+            "Prostokat obszaru",
+            task=True,
+            metavar="BBOX",
+            description_pl="Prostokat obszaru",
+        ),
         Param(
             "bbox_crs",
             "bbox_crs",
@@ -67,6 +76,7 @@ def _params() -> tuple[Param, ...]:
             task=True,
             allowed=("EPSG:2180", "EPSG:4326"),
             cli_default="EPSG:2180",
+            description_pl="Uklad --bbox",
         ),
         Param(
             "output_dir",
@@ -76,8 +86,16 @@ def _params() -> tuple[Param, ...]:
             short="-o",
             dest="output",
             required=True,
+            description_pl="Katalog magazynu",
         ),
-        Param("quiet", "flag", "Bez paska postepu", argument=None, short="-q"),
+        Param(
+            "quiet",
+            "flag",
+            "Bez paska postepu",
+            argument=None,
+            short="-q",
+            description_pl="Bez paska postepu",
+        ),
     )
 
 
@@ -108,8 +126,11 @@ def _commands() -> tuple[Command, ...]:
                 Example(
                     {"product": "nmpt", "bbox": [1, 2, 3, 4], "bbox_crs": "EPSG:2180"},
                     title="Obszar",
+                    title_pl="Obszar",
                 ),
             ),
+            summary_pl="Pobierz NMT i NMPT",
+            description_pl="Pobierz dane do magazynu wersji",
         ),
         Command(
             "elevation list-sources",
@@ -119,6 +140,7 @@ def _commands() -> tuple[Command, ...]:
             "kartograf-sources/1",
             (Param("group", "str", flag=None, required=True, allowed=("elevation",)),),
             tool="list_sources",
+            summary_pl="Wypisz zrodla",
         ),
         Command(
             "cache stats",
@@ -127,6 +149,7 @@ def _commands() -> tuple[Command, ...]:
             "get_cache_info",
             "kartograf-cache/1",
             (),
+            summary_pl="Statystyki cache",
         ),
         Command(
             "sheet parse",
@@ -134,8 +157,18 @@ def _commands() -> tuple[Command, ...]:
             "query",
             "describe_sheet",
             "kartograf-sheet/1",
-            (Param("sheet", "str", "Godlo", positional=True, required=True),),
+            (
+                Param(
+                    "sheet",
+                    "str",
+                    "Godlo",
+                    positional=True,
+                    required=True,
+                    description_pl="Godlo",
+                ),
+            ),
             tool="parse_sheet",
+            summary_pl="Rozpoznaj godlo",
         ),
         Command(
             "sheet find",
@@ -143,9 +176,18 @@ def _commands() -> tuple[Command, ...]:
             "query",
             "find_sheets",
             "kartograf-sheets/1",
-            (Param("scale", "str", "Skala", flag=None, required=True),),
-            cli=None,
+            (
+                Param(
+                    "scale",
+                    "str",
+                    "Skala",
+                    flag=None,
+                    required=True,
+                    description_pl="Skala",
+                ),
+            ),
             tool="find_sheets",
+            summary_pl="Godla obszaru",
         ),
     )
 
@@ -160,9 +202,24 @@ def _groups() -> tuple[Group, ...]:
                 ("nmt", "Numeryczny Model Terenu; PL i CZ"),
                 ("nmpt", "Numeryczny Model Pokrycia Terenu; PL i CZ"),
             ],
+            summary_pl="Wysokosci",
+            description_pl="Dane wysokosciowe NMT i NMPT",
         ),
-        Group("sheet", "Godla arkuszy", "Godla arkuszy PL i CZ"),
-        Group("cache", "Cache metadanych", "Lokalny cache metadanych", position=2),
+        Group(
+            "sheet",
+            "Godla arkuszy",
+            "Godla arkuszy PL i CZ",
+            summary_pl="Godla arkuszy",
+            description_pl="Godla arkuszy PL i CZ",
+        ),
+        Group(
+            "cache",
+            "Cache metadanych",
+            "Lokalny cache metadanych",
+            position=2,
+            summary_pl="Cache metadanych",
+            description_pl="Lokalny cache metadanych",
+        ),
     )
 
 
@@ -472,12 +529,12 @@ def test_command_of_a_group_and_api_only_command():
     assert (parse.group, parse.name, parse.cli) == ("sheet", "parse", "sheet parse")
     assert (api_only.group, api_only.cli, api_only.tool) == (
         "sheet",
-        None,
+        "sheet find",
         "find_sheets",
     )
     assert [g.commands for g in _build().groups] == [
         ("elevation download", "elevation list-sources"),
-        ("sheet parse",),
+        ("sheet parse", "sheet find"),
         ("cache stats",),
     ]
 
@@ -666,7 +723,7 @@ _DECLARED = declared()
 _CLI_WITH_EXAMPLES = [
     (command, param)
     for command in _DECLARED.commands
-    if command.cli is not None and command.examples
+    if command.examples
     for param in command.params
 ]
 
@@ -806,7 +863,7 @@ def test_example_for_elevation_and_imagery_is_of_the_country_and_mode_of_the_cal
     assert orto_cutout["--country"] == "pl" and "--cutout" in orto_cutout
 
 
-def test_example_for_positional_api_only_and_example_less_commands():
+def test_example_for_positional_and_unknown_arguments():
     # a positional argument has no flag; its example shows the value
     assert example_for("sheet parse", "sheet") == (
         None,
@@ -818,8 +875,11 @@ def test_example_for_positional_api_only_and_example_less_commands():
         None,
         example_for("sheet find", "bbox")[1],
     )
-    # a command without examples: the flag only
-    assert example_for("project status", "project_dir") == ("--project", None)
+    # an argument the only example of a command does not show: its first example
+    assert example_for("project status", "project_dir") == (
+        "--project",
+        "kartograf project status",
+    )
 
 
 @pytest.mark.parametrize(

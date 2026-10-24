@@ -32,7 +32,7 @@ def format_command_line(
     Parameters
     ----------
     command : Command
-        The declaration; it must have a CLI.
+        The declaration.
     options : Mapping
         The task options in the JSON form of the manifest, by parameter name
         (``bbox`` as 4 numbers, a per-country value as a text or ``{"pl": ...,
@@ -52,11 +52,9 @@ def format_command_line(
     Raises
     ------
     ValueError
-        A command without a CLI, a name that is not a parameter (or has no CLI
-        form), a name in both mappings or a value of a wrong form.
+        A name that is not a parameter (or has no CLI form), a name in both
+        mappings or a value of a wrong form.
     """
-    if command.cli_words is None:
-        raise ValueError(f"{command.id}: a command without a CLI has no command line")
     run = {} if run is None else run
     known = {param.name: param for param in command.params}
     for name in (*options, *run):
@@ -64,7 +62,7 @@ def format_command_line(
             raise ValueError(f"{command.id}: {name!r} is not a parameter")
     for name in sorted(set(options) & set(run)):
         raise ValueError(f"{command.id}: {name!r} given as an option and as a run flag")
-    words = ["kartograf", *command.cli_words.split()]
+    words = ["kartograf", *command.id.split()]
     for param in command.params:
         if param.name in options:
             words += _words(command, param, options[param.name], short=False)

@@ -183,22 +183,11 @@ def test_a_value_without_a_command_line_form_is_refused(options, run):
         format_command_line(_ELEVATION, options, run)
 
 
-def test_api_only_parameter_and_command_have_no_command_line():
+def test_an_api_only_parameter_has_no_command_line_form():
     with_update = _declared(Param("product", "str"), Param("update", "str", flag=None))
-    api_only = Command(
-        "sheet find",
-        "Godla",
-        "query",
-        "find_sheets",
-        "kartograf-sheets/1",
-        (),
-        cli=None,
-    )
 
     with pytest.raises(ValueError, match="update"):
         format_command_line(with_update, {"update": "force"})
-    with pytest.raises(ValueError, match="sheet find"):
-        format_command_line(api_only, {})
 
 
 def test_example_command_line_adds_the_store_directory():

@@ -68,7 +68,7 @@ def _choice(select: dict[str, SelectValue], metavars: dict[str, str]) -> str:
 
 def cmd_list_sources(args: argparse.Namespace, group: str) -> int:
     """Print the sources of ``group`` (``--json``: the document of ``list_sources``)."""
-    sources = list_sources(group=group)
+    sources = list_sources(group=group, product=args.product)
     if wants_json(args):
         return emit_result(command_id(args), sources)
     metavars = _metavars(group)

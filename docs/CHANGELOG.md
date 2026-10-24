@@ -91,6 +91,16 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   (`find_sheets`, `describe_store`, `list_store_entries`, `read_store_sidecar`), so that every
   command of the catalog has a CLI form and an example call (AGI-1.2, AGI-2.2). The store reads
   take the store with `-o`/`--output` like the data commands (the data-output change renames it).
+- `<group> list-sources --product PRODUCT` (the `product` argument of `list_sources` had no flag).
+- The command declarations of the catalog (`kartograf.catalog.commands`) carry what AGI-2.2 and
+  AGI-2.3 ask of a command and its options: English `summary`, `description`, `rules`, option
+  descriptions and example titles, the Polish ones next to them in the fields ending in `_pl`
+  (`--help` and the text of the CLI are unchanged), the registry `errors` a command can raise,
+  its MCP `family` and `core` mark, `cardinality`, and per option `unit`, bounds, `path_role` and
+  `examples`; `kartograf.catalog.meanings` gives every allowed value its English meaning and
+  `kartograf.catalog.excerpts` the excerpt of each result document for the examples. Every command
+  has a CLI form (`Command.cli` is gone). The catalog documents that publish them follow in the
+  next step.
 - `kartograf config show [--json]` (library: `get_config`, `Config`) reports the settings in
   force: `nogat.toml`, every key (`root`, `data_dir`, `cache_dir`, `lang`, `debug`) with its
   value and source, `CLMS_CREDENTIALS` as present or missing, and the store root with its size

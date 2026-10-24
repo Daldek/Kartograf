@@ -25,7 +25,8 @@ from kartograf.exceptions import UsageError, ValidationError
 def _data(command_id: str, *params: Param, **fields) -> Command:
     values = {
         "id": command_id,
-        "summary": f"Podsumowanie {command_id}",
+        "summary": f"Summary {command_id}",
+        "summary_pl": f"Podsumowanie {command_id}",
         "kind": "data",
         "function": "download_data",
         "result_schema": "kartograf-download/1",
@@ -43,6 +44,7 @@ _PARAMS = (
         choices=True,
         required=True,
         section=SELECTION_TITLE,
+        description_pl="Produkt (wymagany): nmt, nmpt",
     ),
     Param(
         "country",
@@ -52,6 +54,7 @@ _PARAMS = (
         choices=True,
         normalize="lower",
         section=SELECTION_TITLE,
+        description_pl="Kraj zrodla",
     ),
     Param(
         "sheet",
@@ -60,8 +63,16 @@ _PARAMS = (
         metavar="GODLO",
         normalize="strip",
         section=SELECTION_TITLE,
+        description_pl="Godlo arkusza",
     ),
-    Param("bbox", "bbox", "Prostokat", metavar="BBOX", section=SELECTION_TITLE),
+    Param(
+        "bbox",
+        "bbox",
+        "Prostokat",
+        metavar="BBOX",
+        section=SELECTION_TITLE,
+        description_pl="Prostokat",
+    ),
     Param(
         "bbox_crs",
         "bbox_crs",
@@ -71,6 +82,7 @@ _PARAMS = (
         normalize="upper",
         cli_default="EPSG:2180",
         section=SELECTION_TITLE,
+        description_pl="Uklad --bbox (domyslnie EPSG:2180)",
     ),
     Param(
         "resolution",
@@ -79,6 +91,7 @@ _PARAMS = (
         short="-r",
         metavar="ROZDZIELCZOSC",
         section="Parametry produktu",
+        description_pl="Rozdzielczosc 100% siatki",
     ),
     Param(
         "layers",
@@ -86,9 +99,23 @@ _PARAMS = (
         "Kody po przecinku",
         metavar="KODY",
         section="Parametry produktu",
+        description_pl="Kody po przecinku",
     ),
-    Param("year", "int", "Rok", metavar="ROK", section="Parametry produktu"),
-    Param("cutout", "flag", "Wycinek", section="Parametry produktu"),
+    Param(
+        "year",
+        "int",
+        "Rok",
+        metavar="ROK",
+        section="Parametry produktu",
+        description_pl="Rok",
+    ),
+    Param(
+        "cutout",
+        "flag",
+        "Wycinek",
+        section="Parametry produktu",
+        description_pl="Wycinek",
+    ),
     Param(
         "output_dir",
         "path",
@@ -99,6 +126,7 @@ _PARAMS = (
         metavar="KATALOG",
         required=True,
         section=OUTPUT_TITLE,
+        description_pl="Katalog magazynu (wymagany)",
     ),
     Param(
         "check_updates",
@@ -107,6 +135,7 @@ _PARAMS = (
         argument=None,
         exclusive="update",
         section=OUTPUT_TITLE,
+        description_pl="Sprawdz",
     ),
     Param(
         "upgrade",
@@ -115,6 +144,7 @@ _PARAMS = (
         argument=None,
         exclusive="update",
         section=OUTPUT_TITLE,
+        description_pl="Pobierz nowsze",
     ),
     Param(
         "force",
@@ -123,9 +153,24 @@ _PARAMS = (
         argument=None,
         exclusive="update",
         section=OUTPUT_TITLE,
+        description_pl="Pobierz ponownie",
     ),
-    Param("update", "str", "Tryb", flag=None, allowed=("upgrade", "force")),
-    Param("plan", "plan", "Plan", metavar="PLIK", section=OUTPUT_TITLE),
+    Param(
+        "update",
+        "str",
+        "Tryb",
+        flag=None,
+        allowed=("upgrade", "force"),
+        description_pl="Tryb",
+    ),
+    Param(
+        "plan",
+        "plan",
+        "Plan",
+        metavar="PLIK",
+        section=OUTPUT_TITLE,
+        description_pl="Plan",
+    ),
     Param(
         "workers",
         "int",
@@ -134,8 +179,17 @@ _PARAMS = (
         metavar="N",
         default=4,
         section=OUTPUT_TITLE,
+        description_pl="Liczba pobran",
     ),
-    Param("quiet", "flag", "Cicho", argument=None, short="-q", section=OUTPUT_TITLE),
+    Param(
+        "quiet",
+        "flag",
+        "Cicho",
+        argument=None,
+        short="-q",
+        section=OUTPUT_TITLE,
+        description_pl="Cicho",
+    ),
 )
 
 
@@ -144,11 +198,13 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
         _data(
             "elevation download",
             *_PARAMS,
-            description="Pobierz dane do magazynu wersji",
+            description="Fetch the data into the versioned store",
+            description_pl="Pobierz dane do magazynu wersji",
             examples=(
                 Example(
                     {"product": "nmt", "sheet": "N-34-130-D-d-2-4", "year": 2020},
                     title="Arkusz",
+                    title_pl="Arkusz",
                 ),
                 Example({"product": "nmpt", "layers": ["A", "B"]}),
             ),
@@ -162,8 +218,20 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
         ),
         _data(
             "sheet parse",
-            Param("sheet", "str", "Godlo", metavar="GODLO", positional=True),
-            Param("hierarchy", "flag", "Pokaz hierarchie"),
+            Param(
+                "sheet",
+                "str",
+                "Godlo",
+                metavar="GODLO",
+                positional=True,
+                description_pl="Godlo",
+            ),
+            Param(
+                "hierarchy",
+                "flag",
+                "Pokaz hierarchie",
+                description_pl="Pokaz hierarchie",
+            ),
             kind="query",
             function="describe_sheet",
             result_schema="kartograf-sheet/1",
@@ -187,8 +255,16 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
                 default=None,
                 cli_default=".",
                 metavar="KATALOG",
+                description_pl="Katalog",
             ),
-            Param("name", "str", "Nazwa", metavar="NAZWA", positional=True),
+            Param(
+                "name",
+                "str",
+                "Nazwa",
+                metavar="NAZWA",
+                positional=True,
+                description_pl="Nazwa",
+            ),
             Param(
                 "arguments",
                 "str_list",
@@ -196,6 +272,7 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
                 metavar="<grupa> <komenda> [opcje]",
                 positional=True,
                 nargs="REMAINDER",
+                description_pl="Komenda i opcje",
             ),
             kind="manage",
             function="add_project_task",
@@ -211,6 +288,7 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
                 metavar="NAZWA",
                 positional=True,
                 nargs="*",
+                description_pl="Zadania",
             ),
             kind="query",
             function="get_project_status",
@@ -219,7 +297,15 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
         ),
         _data(
             "commands list",
-            Param("group", "str", "Grupa", metavar="GRUPA", positional=True, nargs="?"),
+            Param(
+                "group",
+                "str",
+                "Grupa",
+                metavar="GRUPA",
+                positional=True,
+                nargs="?",
+                description_pl="Grupa",
+            ),
             kind="query",
             function="get_catalog",
             result_schema="kartograf-catalog/1",
@@ -227,11 +313,43 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
         ),
     )
     groups = (
-        Group("elevation", "Wysokosci", "Dane wysokosciowe"),
-        Group("project", "Projekt", "Manifest projektu"),
-        Group("sheet", "Godla", "Godla arkuszy"),
-        Group("cache", "Cache", "Cache metadanych", position=2),
-        Group("commands", "Katalog", "Katalog komend", position=2),
+        Group(
+            "elevation",
+            "Wysokosci",
+            "Dane wysokosciowe",
+            summary_pl="Wysokosci",
+            description_pl="Dane wysokosciowe",
+        ),
+        Group(
+            "project",
+            "Projekt",
+            "Manifest projektu",
+            summary_pl="Projekt",
+            description_pl="Manifest projektu",
+        ),
+        Group(
+            "sheet",
+            "Godla",
+            "Godla arkuszy",
+            summary_pl="Godla",
+            description_pl="Godla arkuszy",
+        ),
+        Group(
+            "cache",
+            "Cache",
+            "Cache metadanych",
+            position=2,
+            summary_pl="Cache",
+            description_pl="Cache metadanych",
+        ),
+        Group(
+            "commands",
+            "Katalog",
+            "Katalog komend",
+            position=2,
+            summary_pl="Katalog",
+            description_pl="Katalog komend",
+        ),
     )
     return commands, groups
 

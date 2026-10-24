@@ -107,7 +107,7 @@ def example_for(
         or one only the API has); ``command_line`` is the first example of the
         command that shows the argument, else its first example - of the
         product of ``given`` when it has one (``None`` for a command without
-        examples, without a CLI or without an example of that product).
+        examples or without an example of that product).
     """
     found = declared_commands().get(command) if command is not None else None
     if found is None:
@@ -118,7 +118,7 @@ def example_for(
             (p for p in found.params if option in (p.name, p.api_argument)), None
         )
     flag = None if param is None else param.cli_flag
-    if found.cli is None or not found.examples:
+    if not found.examples:
         return flag, None
     chosen = _best(found, param, given)
     return flag, None if chosen is None else example_command_line(found, chosen)

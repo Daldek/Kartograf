@@ -119,7 +119,7 @@ def _param_info(param: Param) -> ParamInfo:
         cli_default=param.cli_default,
         accepts=param.accepts,
         section=param.section,
-        description=resolve(param.description),
+        description=resolve(param.description_pl),
     )
 
 
@@ -130,13 +130,13 @@ def _constraint_info(constraint: Constraint) -> ConstraintInfo:
         param=constraint.param,
         params=constraint.params,
         when=None if when is None else _frozen_mapping(when),
-        message=constraint.message,
+        message=constraint.message_pl,
     )
 
 
 def _example_info(command: Command, example: Example) -> ExampleInfo:
     return ExampleInfo(
-        title=example.title,
+        title=example.title_pl,
         options=_frozen_mapping(example.options),
         command_line=example_command_line(command, example),
     )
@@ -168,8 +168,8 @@ def _command_info(command: Command) -> CommandInfo:
         id=command.id,
         group=command.group,
         name=command.name,
-        summary=command.summary,
-        description=resolve(command.description) or command.summary,
+        summary=command.summary_pl,
+        description=resolve(command.description_pl) or command.summary_pl,
         kind=command.kind,
         effects=command.effects,
         idempotent=command.idempotent,
@@ -181,7 +181,7 @@ def _command_info(command: Command) -> CommandInfo:
         check_result_schema=command.check_result_schema,
         supports_check=command.supports_check,
         check_tool=command.check_tool,
-        cli=command.cli_words,
+        cli=command.id,
         tool=command.tool,
         params=tuple(_param_info(param) for param in command.params),
         constraints=tuple(_constraint_info(c) for c in command.constraints),
@@ -203,11 +203,11 @@ def _product_infos(group: Group) -> tuple[ProductInfo, ...]:
 
 
 def _group_info(group: Group, commands: Sequence[Command]) -> GroupInfo:
-    ids = tuple(c.id for c in commands if c.cli is not None and c.group == group.name)
+    ids = tuple(c.id for c in commands if c.group == group.name)
     return GroupInfo(
         name=group.name,
-        summary=group.summary,
-        description=group.description,
+        summary=group.summary_pl,
+        description=group.description_pl,
         products=_product_infos(group),
         commands=ids,
     )
@@ -276,7 +276,7 @@ def _select(
                 allowed=names,
             )
         groups = tuple(g for g in groups if g.name == group)
-        commands = tuple(c for c in commands if c.group == group and c.cli is not None)
+        commands = tuple(c for c in commands if c.group == group)
     if command is not None:
         ids = tuple(c.id for c in commands)
         if command not in ids:

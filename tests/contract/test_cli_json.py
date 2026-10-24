@@ -675,7 +675,7 @@ def test_every_cli_command_has_a_json_test():
     """A command added to the catalog is a data command (the parity tests above and
     ``tests/integration/test_project_cli.py``), ``elevation availability`` or one
     of ``OFFLINE``."""
-    leaves = {c.id for c in declared().commands if c.cli is not None}
+    leaves = {c.id for c in declared().commands}
     data = {c.id for c in declared().commands if c.project_task}
     data.add("elevation availability")
 
