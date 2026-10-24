@@ -3892,7 +3892,7 @@ SIGTERM: `sigterm_interrupts()` (CLI `main`) rzuca w watku glownym `Terminated` 
 deklaracje na specyfikacje 29 narzedzi (nazwa, krotki opis, schemat wejscia JSON Schema
 2020-12 bez `$ref`, adnotacje, funkcja) bez `mcp`; `mcp_server.py` wystawia je przez
 niskopoziomowy `mcp.server.Server` (stdio): wynik `CallToolResult(content=<zwarty JSON>,
-structured_content=<to_dict()>, is_error=<kod wyjscia != 0>)`, bledy jako `kartograf-error/1`,
+structured_content=<to_dict() koperty kartograf-result/1>, is_error=<blad>)`, bledy jako `kartograf-error/1`,
 walidacja wejscia schematem (`jsonschema`), regula sciezek bezwzglednych (`--allow-dir`),
 postep przez `report_progress`, najwyzej 4 jednoczesne wywolania sieciowe i cache serwera w
 katalogu cache uzytkownika. SDK `mcp` jest zaleznoscia opcjonalna (extra `mcp`), a dotyka go
