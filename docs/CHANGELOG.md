@@ -42,8 +42,33 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   `hint`, `details`, `exit_code`, `command`. The `exception` key is removed, `hint` and
   `command` are left out when there is none, and `details` always exists with `reason`
   first (`ErrorReport.exception` is gone, `ErrorReport.title` is new).
+- The default metadata cache is `<cache_dir>/kartograf/metadata.db` (by default
+  `~/.cache/nogat/kartograf/metadata.db`) for the CLI, the library and the MCP server
+  (ADR-050, DEV-18.2). Nothing is written to the current directory any more:
+  `<cwd>/.kartograf_cache.db` and the former cache file of the MCP server
+  (`~/.cache/kartograf/metadata.db`) are not read; delete them (the cache holds lookups and
+  is rebuilt on demand). `kartograf cache path` (`get_cache_path`) says where the file is;
+  `kartograf.cache.defaults.DEFAULT_CACHE_FILENAME` is `CACHE_FILENAME` (`metadata.db`).
+- Every CLI command except `config show`, and the start of `kartograf-mcp`, stop with a
+  `ConfigError` (`validation_error`, exit code 2, `details.reason` `invalid_config`) when
+  `nogat.toml` cannot be used (unreadable, not UTF-8 text, invalid TOML, a section that is
+  not a table, or missing when `NOGAT_CONFIG` names it) or `lang` is not `pl` or `en`.
+  `KARTOGRAF_DEBUG=0` (and `false`, `no`, `off`) is now off; any other non-empty value is on.
+- `platformdirs>=4` is a dependency.
 
 **Added**
+
+- `kartograf config show [--json]` (library: `get_config`, `Config`) reports the settings in
+  force: `nogat.toml`, every key (`root`, `data_dir`, `cache_dir`, `lang`, `debug`) with its
+  value and source, `CLMS_CREDENTIALS` as present or missing, and the store root with its size
+  (hard links counted once); the document is `kartograf-config/1` (ADR-050, DEV-18.6).
+- Settings from `nogat.toml` (`[kartograf]`, then the shared `[nogat]`) and the variables
+  `KARTOGRAF_ROOT`, `KARTOGRAF_DATA_DIR`, `KARTOGRAF_CACHE_DIR`, `KARTOGRAF_LANG`,
+  `KARTOGRAF_DEBUG`, `NOGAT_DATA_DIR`, `NOGAT_CACHE_DIR`, `NOGAT_LANG` and `NOGAT_CONFIG`
+  (DEV-18.1); `root` is only reported until the data-output change, and `lang` takes effect
+  with the message catalogue. `.env.example` and the README list every variable and give the
+  backup notes for a store (DEV-18.3, DEV-18.5).
+- `ConfigError` (a `ValidationError`, reason `invalid_config`).
 
 - `kartograf.testing`: `build_fixture_store`, `build_project` and `make_sidecar`
   build offline fixtures of the store, the project manifest and the

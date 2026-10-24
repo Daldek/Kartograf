@@ -34,6 +34,7 @@ MODULE_ORDER = (
     "geodesy",
     "project",
     "misc",
+    "config",
 )
 
 

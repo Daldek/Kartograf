@@ -39,6 +39,7 @@ SPEC_ERROR_TABLE = [
     ("ValidationError", "validation_error", "invalid_input", 2),
     ("UsageError", "validation_error", "usage", 2),
     ("ParseError", "validation_error", "invalid_sheet_code", 2),
+    ("ConfigError", "validation_error", "invalid_config", 2),
     ("DownloadError", "source_unavailable", None, 5),
     ("NoCoverageError", "no_data", "no_coverage", 14),
     ("YearRangeError", "no_data", "year_out_of_range", 14),

@@ -1,6 +1,7 @@
 """``get_cache_info`` and ``clear_cache``: the metadata cache as the document
-``kartograf-cache/1`` (spec 5.4.9). The cache is ``<cwd>/.kartograf_cache.db``:
-every test works in its own ``tmp_path`` as the current directory.
+``kartograf-cache/1`` (spec 5.4.9). The cache is the default one,
+``<cache_dir>/kartograf/metadata.db`` of the user environment of the test; the current
+directory is a ``tmp_path`` that no cache file ever lands in (DEV-18.2).
 """
 
 import json
@@ -11,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from kartograf.cache.defaults import default_cache_path
 from kartograf.cache.metadata import MetadataCache
 from kartograf.cache_info import CacheInfo, clear_cache, get_cache_info, get_cache_path
 from kartograf.core.bbox import BBox
@@ -18,15 +20,16 @@ from kartograf.error_report import error_report
 from kartograf.exceptions import CacheError
 from kartograf.serialization import SCHEMAS
 
-DB_NAME = ".kartograf_cache.db"
 ENTRY_KEYS = ["records", "campaigns", "teryt", "sheets", "index_areas", "atom_feeds"]
 
 
 @pytest.fixture
 def db(tmp_path, monkeypatch) -> Path:
-    """The default cache file of a test run in ``tmp_path`` (not created)."""
+    """The default cache file of a test run (not created; its directory is)."""
     monkeypatch.chdir(tmp_path)
-    return Path.cwd() / DB_NAME
+    path = default_cache_path()
+    path.parent.mkdir(parents=True)
+    return path
 
 
 def _populate(path: Path) -> None:
@@ -104,18 +107,18 @@ def short_lock_timeout(monkeypatch):
     monkeypatch.setattr(sqlite3, "connect", connect)
 
 
-@pytest.mark.usefixtures("db")
-def test_info_without_a_database_does_not_create_it(tmp_path):
+def test_info_without_a_database_does_not_create_it(db, tmp_path):
     info = get_cache_info()
 
     assert info.action == "info"
-    assert info.path == Path.cwd() / DB_NAME
+    assert info.path == db
     assert info.path.is_absolute()
     assert info.exists is False
     assert info.size_bytes is None
     assert info.entries is None
     assert info.cleared is None
     assert info.removed_unreadable is None
+    assert list(db.parent.iterdir()) == []
     assert list(tmp_path.iterdir()) == []
 
 
@@ -168,8 +171,7 @@ def test_clear_reclaims_the_space_of_the_entries(db):
     assert cleared.size_bytes < before.size_bytes
 
 
-@pytest.mark.usefixtures("db")
-def test_clear_without_a_database_does_not_create_it(tmp_path):
+def test_clear_without_a_database_does_not_create_it(db, tmp_path):
     cleared = clear_cache()
 
     assert cleared.action == "clear"
@@ -177,11 +179,12 @@ def test_clear_without_a_database_does_not_create_it(tmp_path):
     assert cleared.removed_unreadable is False
     assert cleared.exists is False
     assert cleared.size_bytes is None
+    assert list(db.parent.iterdir()) == []
     assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize("make_broken", UNREADABLE)
-def test_clear_removes_an_unreadable_file_with_wal_and_shm(db, tmp_path, make_broken):
+def test_clear_removes_an_unreadable_file_with_wal_and_shm(db, make_broken):
     make_broken(db)
     Path(f"{db}-wal").write_bytes(b"x")
     Path(f"{db}-shm").write_bytes(b"x")
@@ -193,7 +196,7 @@ def test_clear_removes_an_unreadable_file_with_wal_and_shm(db, tmp_path, make_br
     assert cleared.exists is False
     assert cleared.size_bytes is None
     assert cleared.entries is None
-    assert list(tmp_path.iterdir()) == []
+    assert list(db.parent.iterdir()) == []
     # the regular path works again: a fresh database is created
     cache = MetadataCache(db)
     cache.set_record("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4", {"a": 1})
@@ -203,17 +206,16 @@ def test_clear_removes_an_unreadable_file_with_wal_and_shm(db, tmp_path, make_br
 
 @_needs_non_root
 def test_clear_without_the_right_to_delete_is_a_cache_error(tmp_path, monkeypatch):
-    work = tmp_path / "ro"
-    work.mkdir()
-    monkeypatch.chdir(work)
-    target = Path.cwd() / DB_NAME
+    monkeypatch.setenv("KARTOGRAF_CACHE_DIR", str(tmp_path / "ro"))
+    target = default_cache_path()
+    target.parent.mkdir(parents=True)
     _garbage(target)
-    work.chmod(0o500)
+    target.parent.chmod(0o500)
     try:
         with pytest.raises(CacheError) as error:
             clear_cache()
     finally:
-        work.chmod(0o700)
+        target.parent.chmod(0o700)
 
     assert str(error.value).startswith(
         f"nie mozna usunac nieczytelnego pliku cache {target}: "
@@ -296,15 +298,15 @@ def test_info_of_an_unreadable_database_is_cache_error(db, make_broken):
         assert db.read_bytes() == content
 
 
-@pytest.mark.usefixtures("db")
-def test_path_of_a_missing_database_is_reported_and_not_created(tmp_path):
+def test_path_of_a_missing_database_is_reported_and_not_created(db, tmp_path):
     info = get_cache_path()
 
     assert info.action == "path"
-    assert info.path == Path.cwd() / DB_NAME
+    assert info.path == db
     assert info.path.is_absolute()
     assert (info.exists, info.size_bytes, info.entries) == (False, None, None)
     assert (info.cleared, info.removed_unreadable) == (None, None)
+    assert list(db.parent.iterdir()) == []
     assert list(tmp_path.iterdir()) == []
 
 

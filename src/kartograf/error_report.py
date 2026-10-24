@@ -93,6 +93,15 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "the sheet code is not a PL or CZ code or lies outside the nomenclature",
     ),
     ErrorCodeSpec(
+        "ConfigError",
+        "validation_error",
+        "invalid_config",
+        2,
+        "the user settings cannot be used: nogat.toml is unreadable, not UTF-8 "
+        "text, not valid TOML or has a section that is not a table, or a setting "
+        "has a value that is not valid",
+    ),
+    ErrorCodeSpec(
         "DownloadError",
         "source_unavailable",
         None,

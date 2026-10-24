@@ -75,12 +75,15 @@ def is_unwritable_error(error: BaseException, path: Path) -> bool:
     """Return True when SQLite could not open, create or write the cache file.
 
     The cause is not damage of the file ``path``: a read-only directory or file,
-    a full disk, a directory in place of the file, a file that cannot be created.
-    (A file that exists and cannot be opened, e.g. no read permission, is the
-    unreadable one that ``cache clear`` removes.)
+    a full disk, a directory in place of the file, a file that cannot be created,
+    a directory that cannot be made (the error then has the ``OSError`` as its
+    cause). (A file that exists and cannot be opened, e.g. no read permission, is
+    the unreadable one that ``cache clear`` removes.)
     """
     if not isinstance(error, sqlite3.OperationalError):
         return False
+    if isinstance(error.__cause__, OSError):
+        return True
     name = getattr(error, "sqlite_errorname", None) or ""
     if name.startswith("SQLITE_CANTOPEN"):
         return path.is_dir() or not path.exists()
@@ -104,9 +107,10 @@ class MetadataCache:
     Parameters
     ----------
     db_path : str or Path
-        Explicit path to the SQLite database file. It is created by the
-        first write, not by the constructor. Callers wishing to use the
-        conventional local cache may pass ``".kartograf_cache.db"``.
+        Explicit path to the SQLite database file. The file and its directory
+        are created by the first write, not by the constructor. The cache of
+        the library and the CLI is ``kartograf.cache.defaults.default_cache_path()``,
+        ``<cache_dir>/kartograf/metadata.db`` (DEV-18.2).
     ttl_seconds : int, optional
         Time-to-live for cache entries in seconds. Default is 7 days
         (604800 seconds). Entries older than TTL are considered stale.
@@ -136,7 +140,7 @@ class MetadataCache:
 
     Examples
     --------
-    >>> cache = MetadataCache(".kartograf_cache.db")
+    >>> cache = MetadataCache("metadata.db")
     >>> cache.set_record("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4",
     ...                  {"no_coverage": True})
     >>> record = cache.get_record("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4")
@@ -251,8 +255,12 @@ class MetadataCache:
         ``sqlite3.Error`` (turned into the disabled state by ``_db_errors``).
 
         Caller must hold ``_write_lock`` - this makes the check-and-open
-        atomic, so two threads never open two connections. Opening sets WAL
-        mode and creates missing tables (also migrating an older database).
+        atomic, so two threads never open two connections. The directory of the
+        file is made here (the default cache lives in the user cache directory,
+        which need not exist yet); a directory that cannot be made is an
+        ``sqlite3.OperationalError`` with the ``OSError`` as its cause, like a
+        file that cannot be opened. Opening sets WAL mode and creates missing
+        tables (also migrating an older database).
         """
         if self._error is not None:
             if self._strict:
@@ -260,6 +268,12 @@ class MetadataCache:
             return None
         if self._conn is not None:
             return self._conn
+        try:
+            self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            raise sqlite3.OperationalError(
+                f"unable to open database file: {error}"
+            ) from error
         conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         try:
             # Enable WAL mode for better concurrent read/write performance

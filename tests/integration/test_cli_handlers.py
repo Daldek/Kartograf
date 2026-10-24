@@ -175,7 +175,7 @@ def test_every_catalog_cli_command_has_a_handler():
     parsed = _command_ids(create_parser())
     declared = {c.id for c in get_catalog().commands if c.cli is not None}
 
-    assert len(parsed) == 37 and None not in parsed
+    assert len(parsed) == 38 and None not in parsed
     assert parsed == declared
     assert parsed <= set(HANDLERS)
 

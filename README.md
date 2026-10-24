@@ -34,8 +34,8 @@ wybiera `--product` w każdej grupie (w `soil` — `--property`, `--depth`,
 | `geodesy` | Osnowy geodezyjne (`control`): pozioma, wysokościowa, grawimetryczna i magnetyczna GUGiK (także archiwa), Bodove pole CUZK. Quasi-geoidy (`geoid`): PL-geoid2021, QGZU-2013 |
 
 Poza grupami danych: `kartograf project` (projekt z przypiętymi wersjami,
-niżej), `kartograf parse` (godło arkusza), `kartograf cache` i `kartograf catalog`
-(katalog komend dla agentów AI, niżej).
+niżej), `kartograf parse` (godło arkusza), `kartograf cache`, `kartograf config`
+(ustawienia, niżej) i `kartograf catalog` (katalog komend dla agentów AI, niżej).
 
 ## Instalacja
 
@@ -186,6 +186,37 @@ Każdy plik ma obok sidecar `<plik>.meta.json` z układem, licencją
 i pochodzeniem danych; pobrana treść trafia jako wersja do `versions/`,
 a ścieżka standardowa jest dowiązaniem do najnowszej lokalnej wersji — opis
 w [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (sekcja 3).
+
+## Settings, directories and backup
+
+Settings come from the first of: the command-line option, the variable `KARTOGRAF_<KEY>`,
+the shared variable `NOGAT_<KEY>` (only `data_dir`, `cache_dir` and `lang`), the table
+`[kartograf]` and then `[nogat]` of `nogat.toml`, and the default (Nogat DEV-18).
+`nogat.toml` is in the user configuration directory (`~/.config/nogat/nogat.toml` on
+Linux) or at the path in `NOGAT_CONFIG`; Kartograf works without it, and refuses to run
+with a file it cannot read (`validation_error`, reason `invalid_config`).
+`kartograf config show [--json]` lists every setting with its value and source.
+[.env.example](.env.example) has every variable; Kartograf does not read a `.env` file.
+
+| Variable | Key in `nogat.toml` | Meaning | Default |
+|---|---|---|---|
+| `KARTOGRAF_ROOT` | `[kartograf] root` | root of the store (reported by `config show`; the commands still take the store from `--output`) | `<data_dir>/kartograf` |
+| `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR` | `data_dir` | parent of the stores | user data directory of `nogat` (`~/.local/share/nogat`) |
+| `KARTOGRAF_CACHE_DIR`, `NOGAT_CACHE_DIR` | `cache_dir` | parent of the caches; the metadata cache is `<cache_dir>/kartograf/metadata.db` | user cache directory of `nogat` (`~/.cache/nogat`) |
+| `KARTOGRAF_LANG`, `NOGAT_LANG` | `lang` | language of human-readable output, `pl` or `en` (output is Polish until the message catalogue lands) | `pl` |
+| `KARTOGRAF_DEBUG` | `[kartograf] debug` | print tracebacks and every library log record | off |
+| `NOGAT_CONFIG` | - | path of `nogat.toml` | user configuration directory |
+| `CLMS_CREDENTIALS` | never in the file | CLMS API credentials for CORINE as GeoTIFF ([docs/USAGE.md](docs/USAGE.md), section 6); `config show` says present or missing | - |
+
+Kartograf never writes a cache or state into the current directory.
+
+**Backup.** A store keeps hard links: the standard path and `full_sheet/` are hard links to
+a file in `versions/`. Back it up with a copy that preserves them (`rsync -aH SOURCE/
+TARGET/`); on Windows use a tool that keeps hard links, not Explorer or `robocopy`, or the
+copy is two to three times larger. A source serves its current state, so a version that
+the source has since replaced or withdrawn (a campaign GUGiK no longer lists, a national
+file replaced in place) cannot be downloaded again: the store holds the only copy, and
+that part is the one to protect first. The metadata cache is not data and needs no backup.
 
 ## Dokumentacja
 

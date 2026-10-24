@@ -21,11 +21,13 @@ import pytest
 
 import kartograf
 from kartograf import (
+    ConfigError,
     calculate_hsg,
     check_command,
     download_data,
     run_command,
 )
+from kartograf.cache.defaults import default_cache_path
 from kartograf.catalog.tools import tool_specs
 from kartograf.core.bbox import BBox
 from kartograf.download.data import DataReport
@@ -209,6 +211,34 @@ def test_allow_dir_takes_an_absolute_directory_and_the_home_shortcut(tmp_path):
     assert args.allow_dir == [tmp_path.resolve(), Path("~/dane").expanduser().resolve()]
 
 
+def test_the_server_does_not_start_with_settings_that_cannot_be_used(
+    tmp_path, monkeypatch, capsys
+):
+    """Like the CLI, the server stops instead of ignoring an unusable nogat.toml; the
+    error document is the last line of stderr. The check comes before the import of
+    the SDK, so the test needs no ``mcp`` package (and binds no ``sys.stderr`` to it:
+    the SDK keeps the stream it finds when it is first imported)."""
+    from kartograf.mcp_server import create_server
+
+    bad = tmp_path / "nogat.toml"
+    bad.write_bytes(b"\xff\xfe[\x00k\x00]\x00")  # UTF-16, not UTF-8
+    monkeypatch.setenv("NOGAT_CONFIG", str(bad))
+
+    with pytest.raises(ConfigError):
+        create_server(cache=False)
+    assert main(["--no-cache"]) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    document = json.loads(captured.err.splitlines()[-1])
+    assert (document["code"], document["exit_code"]) == ("validation_error", 2)
+    assert document["details"] == {
+        "reason": "invalid_config",
+        "option": "NOGAT_CONFIG",
+        "path": bad.as_posix(),
+    }
+
+
 @needs_mcp
 def test_create_server_refuses_a_relative_allow_dir_before_it_opens_the_cache(tmp_path):
     from kartograf.mcp_server import create_server
@@ -221,12 +251,14 @@ def test_create_server_refuses_a_relative_allow_dir_before_it_opens_the_cache(tm
     assert not database.exists()
 
 
-def test_default_cache_file_is_in_the_user_cache_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
-    assert default_cache_file() == tmp_path / "xdg" / "kartograf" / "metadata.db"
-    # an empty or relative value is no directory: the home is used (XDG spec)
-    monkeypatch.setenv("XDG_CACHE_HOME", "relative")
-    assert default_cache_file() == Path.home() / ".cache" / "kartograf" / "metadata.db"
+def test_default_cache_file_is_the_default_cache_of_the_library(
+    tmp_path, monkeypatch, user_environment
+):
+    expected = user_environment / "cache" / "kartograf" / "metadata.db"
+    assert default_cache_file() == default_cache_path() == expected
+    # cache_dir of the settings moves it, for the server as for the CLI
+    monkeypatch.setenv("KARTOGRAF_CACHE_DIR", str(tmp_path / "own"))
+    assert default_cache_file() == tmp_path / "own" / "kartograf" / "metadata.db"
 
 
 # -- the tools --------------------------------------------------------------------
@@ -969,7 +1001,7 @@ def test_function_tools_get_library_types_and_the_server_cache(tmp_path, monkeyp
         "layer": "L",
         "year": 2024,
         "force": True,
-        "cache": cache,  # the cache of the server, not <cwd>/.kartograf_cache.db
+        "cache": cache,  # the cache of the server
     }
     # a flag that is false is not given, and the function reports no progress
     assert seen[1] == {"product": "laz", "cache": cache}
@@ -1145,17 +1177,15 @@ def _cache_probe(seen):
 
 
 @needs_mcp
-def test_default_cache_is_created_at_first_use_in_the_user_cache_dir(
-    tmp_path, monkeypatch
-):
+def test_default_cache_is_created_at_first_use_in_the_cache_dir(tmp_path, monkeypatch):
     cwd = tmp_path / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
-    database = tmp_path / "xdg" / "kartograf" / "metadata.db"
+    monkeypatch.setenv("KARTOGRAF_CACHE_DIR", str(tmp_path / "own"))
+    database = tmp_path / "own" / "kartograf" / "metadata.db"
 
     server = capture_server([], monkeypatch)
-    assert database.parent.is_dir() and not database.exists()
+    assert not database.parent.exists()  # the first write makes the directory
     seen = []
     with patch("kartograf.mcp_server.run_command", _cache_probe(seen)):
         result = call_on(
@@ -1166,7 +1196,7 @@ def test_default_cache_is_created_at_first_use_in_the_user_cache_dir(
 
     assert result.is_error is False
     assert seen[0].db_path == database and database.is_file()
-    assert not (cwd / ".kartograf_cache.db").exists()  # not the cache of the CLI
+    assert list(cwd.iterdir()) == []  # nothing lands in the working directory
 
 
 @needs_mcp
@@ -1206,7 +1236,7 @@ def test_a_cache_directory_that_cannot_be_made_does_not_stop_the_server(
 
     assert result.is_error is False
     assert seen[0].db_path == database and not database.exists()
-    assert "nie mozna utworzyc katalogu" in caplog.text
+    assert "niedostepny do otwarcia lub zapisu" in caplog.text
 
 
 @needs_mcp

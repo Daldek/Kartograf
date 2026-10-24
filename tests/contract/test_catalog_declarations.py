@@ -368,7 +368,7 @@ def test_catalog_command_offers_the_groups_and_the_commands_of_the_catalog():
 
     groups = resolve(params["group"].allowed)
     assert groups == [g.name for g in _DECLARED.groups]
-    assert groups[-1] == "cache" and "project" in groups
+    assert groups[-2:] == ["cache", "config"] and "project" in groups
     assert resolve(params["command"].allowed) == _IDS
     assert (params["group"].positional, params["group"].nargs) == (True, "?")
     assert (params["command"].positional, params["command"].nargs) == (True, "?")

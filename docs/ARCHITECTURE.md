@@ -519,6 +519,8 @@ kartograf/
 ├── source_info.py       # list_sources -> SourceList, list_layers -> LayerList
 │                        # (kartograf-sources/1, -layers/1; rejestr zrodel, bez sieci)
 ├── cache_info.py        # get_cache_info/get_cache_path/clear_cache -> CacheInfo (kartograf-cache/1)
+├── config.py            # ustawienia uzytkownika (DEV-18, ADR-050): nogat.toml, KARTOGRAF_*/NOGAT_*,
+│                        # get_config -> Config (kartograf-config/1), check_config -> ConfigError
 ├── store_documents.py   # describe_store -> StoreOverview, list_store_entries -> StoreEntries,
 │                        # read_store_sidecar -> StoreSidecar (odczyt magazynu jako dokumenty, ADR-045)
 ├── commands.py          # warstwa komend (KB-2..KB-5): parse_command, validate_command,
@@ -554,7 +556,7 @@ kartograf/
 │                        # i sheet_cache (30 d, SHEET_TTL_SECONDS); plik bazy
 │                        # otwierany leniwie, powstaje przy pierwszym zapisie
 ├── cache/defaults.py    # open_cache(cache: MetadataCache | bool, force) — wspolny cache
-│                        # CLI i biblioteki w <cwd>/.kartograf_cache.db (Z6)
+│                        # CLI i biblioteki w <cache_dir>/kartograf/metadata.db (DEV-18.2)
 ├── download/            # Pobieranie: komenda download (data.py) i tory
 │   ├── data.py          # download_data/check_data — komendy `kartograf elevation download` / `imagery download` w bibliotece
 │   │                    # (ADR-037): kraj i `auto`, rozwiniecie obszaru PL, wybor toru,
@@ -1825,6 +1827,7 @@ schematu oraz to, ze kazdy `result_schema` katalogu jest w rejestrze.
 | `kartograf-project-report/1` | `ProjectReport` | `project.model` | `project, tasks, notices, ok` |
 | `kartograf-project-check/1` | `ProjectCheck` | `project.model` | `project, files, not_downloaded, notices, ok` |
 | `kartograf-cache/1` | `CacheInfo` | `cache_info` | `action, path, exists, size_bytes, entries, cleared, removed_unreadable` |
+| `kartograf-config/1` | `Config` | `config` | `tool, version, config_file, keys, credentials, store` |
 | `kartograf-catalog/1` | `Catalog` | `catalog.model` | `view, kartograf_version, language, groups, commands, exit_codes, errors, schemas` |
 | `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `output_dir, segments` |
 | `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `output_dir, segment, units, limit, truncated, entries` |
@@ -1990,7 +1993,7 @@ oraz sesje keep-alive per watek. `MetadataCache` (SQLite WAL, TTL 7 dni)
 zapisuje rekord `{"source": ...}` lub potwierdzony `{"no_coverage": true}`;
 CLI i biblioteka uzywaja tego samego cache (Z6, ADR-037): parametr
 `cache: MetadataCache | bool = True` funkcji publicznych (`True` =
-`<cwd>/.kartograf_cache.db` przez `cache/defaults.py::open_cache`, `False` =
+`<cache_dir>/kartograf/metadata.db` przez `cache/defaults.py::open_cache`, `False` =
 bez cache); `update="force"` (CLI `--force`) i kazde sprawdzenie
 (`check_*`, `check_data`, CLI `--check-updates` - zawsze pyta zrodlo)
 otwieraja go w trybie `MetadataCache(refresh=True)` — odczyt pominiety,
@@ -2004,11 +2007,12 @@ jako instancja (`DownloadManager`, `LandCoverManager`,
 nie omija — pelne odswiezenie:
 provider z `MetadataCache(..., refresh=True)` (USAGE "Cache metadanych
 w bibliotece").
-Baza jest otwierana leniwie: plik `.kartograf_cache.db` powstaje dopiero przy
-pierwszym zapisie (`set_*`); konstrukcja, odczyty (`get_*` = chybienie),
+Baza jest otwierana leniwie: plik `metadata.db` (i jego katalog
+`<cache_dir>/kartograf/`) powstaje dopiero przy pierwszym zapisie (`set_*`); konstrukcja, odczyty (`get_*` = chybienie),
 `stats()` (zera, `db_exists: false`), `clear()` i `close()` na braku pliku
-go nie tworza, wiec `kartograf cache path|stats|clear` w katalogu bez bazy
-niczego nie zapisuja. Cache jest tylko przyspieszeniem: kazdy
+go nie tworza, wiec `kartograf cache path|stats|clear` bez bazy
+niczego nie zapisuja (cache nigdy nie lezy w biezacym katalogu: `cache_dir`
+pochodzi z ustawien uzytkownika, `kartograf/config.py`, ADR-050). Cache jest tylko przyspieszeniem: kazdy
 `sqlite3.Error` (uszkodzony/uciety plik, brak uprawnien, `database is
 locked`) wylacza instancje na reszte jej zycia (odczyt = chybienie, zapis =
 no-op, `MetadataCache.error`, `stats()["error"]`) z jednym ostrzezeniem

@@ -862,6 +862,7 @@ _GROUPS = (
     "project",
     "soil",
     "cache",
+    "config",
 )
 _NO_GROUP = (
     "parse",
@@ -898,7 +899,7 @@ def test_real_parser_matches_the_catalog():
     commands = {c.id: c for c in get_catalog(params=True).commands if c.cli}
     declarations = {c.id: c for c in _DECLARED.commands}
 
-    assert len(commands) == 37 and set(leaves) == set(commands)
+    assert len(commands) == 38 and set(leaves) == set(commands)
     for command_id, command in commands.items():
         leaf, declaration = leaves[command_id], declarations[command_id]
         expected_flags = {
@@ -977,7 +978,7 @@ def test_catalog_has_every_group_and_command():
     full = get_catalog(params=True)
 
     assert [g.name for g in short.groups] == list(_GROUPS)
-    assert len(short.commands) == len(full.commands) == 41
+    assert len(short.commands) == len(full.commands) == 42
     assert [c.id for c in short.commands if c.group is None] == list(_NO_GROUP)
     assert [c.id for c in short.commands if c.cli is None] == list(_NO_GROUP[2:])
     assert all(c.params is None for c in short.commands)

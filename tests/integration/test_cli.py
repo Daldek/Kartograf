@@ -1777,7 +1777,7 @@ class TestCmdDownloadProduct:
     @patch("kartograf.download.data.find_sheets_for_bbox", return_value=["N-1"])
     @patch("kartograf.download.data._create_provider_and_storage")
     @patch("kartograf.download.data.DownloadManager")
-    def test_without_force_reads_cache_in_cwd(
+    def test_without_force_reads_the_default_cache(
         self, mock_manager_cls, mock_create, _mock_find, tmp_path, argv
     ):
         from kartograf.cache.defaults import default_cache_path, open_cache
@@ -5117,7 +5117,10 @@ class TestCmdDownloadCz:
     def test_unreadable_cache_warns_and_downloads(self, tmp_path, capsys):
         """An unreadable cache in the CZ path: one ``Warning:``, code 0."""
 
-        db = Path.cwd() / ".kartograf_cache.db"
+        from kartograf.cache.defaults import default_cache_path
+
+        db = default_cache_path()
+        db.parent.mkdir(parents=True)
         db.write_bytes(b"to nie jest baza SQLite\n" * 200)
 
         def factory(**kwargs):
@@ -8529,7 +8532,7 @@ class _CachingSheetProvider(_SheetProvider):
 
 
 class TestUnreadableMetadataCache:
-    """An unreadable ``.kartograf_cache.db`` in the cwd does not block downloads.
+    """An unreadable default cache file does not block downloads.
 
     Before the fix every sheet of a list failed with ``file is not a
     database`` (code 1, nothing downloaded) and a single sheet code ended with
@@ -8540,7 +8543,10 @@ class TestUnreadableMetadataCache:
 
     @staticmethod
     def _broken_cache() -> Path:
-        db = Path.cwd() / ".kartograf_cache.db"
+        from kartograf.cache.defaults import default_cache_path
+
+        db = default_cache_path()
+        db.parent.mkdir(parents=True)
         db.write_bytes(b"to nie jest baza SQLite\n" * 200)
         return db
 

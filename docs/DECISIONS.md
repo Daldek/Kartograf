@@ -71,6 +71,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-047](#adr-047-szczegoly-arkuszy-i-kampanii-w-raporcie-dostepnosci-kd-1-kd-2) | Szczegoly arkuszy i kampanii w raporcie dostepnosci (KD-1, KD-2) | 2026-10-19 | Przyjeta; uzupelnia [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (`full_m2`, `sheet_records`, `campaign_coverage`); errata 1: `AvailabilityRecord.full_sheet`, ograniczenie LAZ i wyjatek CZ w dokumentacji pola; errata 2: obszar bez ladu: `complete` bez zmian, sygnal `no_land` (test E2E 0.8.0) |
 | [ADR-048](#adr-048-adoption-of-the-nogat-standard-21-layout-tooling-and-versions) | Adoption of the Nogat standard 2.1: layout, tooling and versions | 2026-10-24 | Przyjeta |
 | [ADR-049](decisions/0049-nogat-error-registry-mapping.md) | Error codes and exit codes follow the Nogat registry | 2026-10-24 | Accepted |
+| [ADR-050](decisions/0050-nogat-user-environment.md) | User environment: nogat.toml, variables, user directories and `config show` | 2026-10-24 | Accepted |
 
 ---
 

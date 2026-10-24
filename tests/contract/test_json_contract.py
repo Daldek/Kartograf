@@ -21,6 +21,7 @@ import pytest
 import kartograf
 from kartograf.cache_info import CacheEntries, CacheInfo
 from kartograf.catalog import get_catalog
+from kartograf.config import Config, ConfigFileInfo, IgnoredKey, Setting, StoreInfo
 from kartograf.core.bbox import BBox
 from kartograf.download.availability import (
     AvailabilityArea,
@@ -395,6 +396,28 @@ def _cache() -> Document:
     )
 
 
+def _config() -> Document:
+    root = Path("/srv/nogat/kartograf")
+    return Config(
+        version="0.8.0",
+        config_file=ConfigFileInfo(
+            Path("/home/ola/.config/nogat/nogat.toml"),
+            "default",
+            True,
+            None,
+            (IgnoredKey("clms_credentials", "credential"),),
+        ),
+        keys={
+            "root": Setting(root, "default", None),
+            "cache_dir": Setting(Path("/var/cache/nogat"), "env", "NOGAT_CACHE_DIR"),
+            "lang": Setting("pl", "file", "[nogat]"),
+            "debug": Setting(False, "default", None),
+        },
+        credentials={"CLMS_CREDENTIALS": "present"},
+        store=StoreInfo(root, "default", None, True, 4096),
+    )
+
+
 def _sidecar() -> Sidecar:
     raw = {"schema": "kartograf-meta/1", "dataset": "pl.gugik.nmt_1m", "sha256": SHA256}
     return Sidecar(
@@ -530,6 +553,7 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-sources/1": (_sources,),
     "kartograf-layers/1": (_layers,),
     "kartograf-cache/1": (_cache,),
+    "kartograf-config/1": (_config,),
     "kartograf-store-overview/1": (_store_overview,),
     "kartograf-store-entries/1": (_store_entries,),
     "kartograf-store-sidecar/1": (_store_sidecar,),
@@ -612,6 +636,15 @@ CONTRACT: dict[str, list[str]] = {
         "entries",
         "cleared",
         "removed_unreadable",
+    ],
+    "kartograf-config/1": [
+        "schema",
+        "tool",
+        "version",
+        "config_file",
+        "keys",
+        "credentials",
+        "store",
     ],
     "kartograf-store-overview/1": ["schema", "output_dir", "segments"],
     "kartograf-store-entries/1": [

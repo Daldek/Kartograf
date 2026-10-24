@@ -7,11 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from kartograf.cache import MetadataCache
-from kartograf.cache.defaults import (
-    DEFAULT_CACHE_FILENAME,
-    default_cache_path,
-    open_cache,
-)
+from kartograf.cache.defaults import CACHE_FILENAME, default_cache_path, open_cache
 from kartograf.notices import CACHE_DISABLED, Notice
 
 KEY = ("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4")
@@ -19,12 +15,14 @@ OLD = {"source": {"url": "old"}}
 NEW = {"source": {"url": "new"}}
 
 
-def test_true_opens_cwd_cache_and_closes(tmp_path, monkeypatch):
+def test_true_opens_the_default_cache_and_closes(
+    tmp_path, monkeypatch, user_environment
+):
     monkeypatch.chdir(tmp_path)
+    expected = user_environment / "cache" / "kartograf" / CACHE_FILENAME
     with open_cache(True, force=False) as cache:
         assert cache is not None
-        assert cache.db_path == default_cache_path()
-        assert cache.db_path == tmp_path / DEFAULT_CACHE_FILENAME
+        assert cache.db_path == default_cache_path() == expected
         assert not cache.db_path.exists()
         cache.set_record(*KEY, OLD)
         connection = cache._conn
@@ -34,6 +32,16 @@ def test_true_opens_cwd_cache_and_closes(tmp_path, monkeypatch):
     with open_cache(True, force=False) as cache:
         assert cache is not None
         assert cache.get_record(*KEY) == OLD
+    assert expected.is_file()
+    assert list(tmp_path.iterdir()) == []  # nothing is written to the cwd (DEV-18.2)
+
+
+def test_the_default_cache_follows_cache_dir_of_the_settings(tmp_path, monkeypatch):
+    elsewhere = tmp_path / "elsewhere"
+    monkeypatch.setenv("NOGAT_CACHE_DIR", str(elsewhere))
+    assert default_cache_path() == elsewhere / "kartograf" / CACHE_FILENAME
+    monkeypatch.setenv("KARTOGRAF_CACHE_DIR", str(tmp_path / "own"))
+    assert default_cache_path() == tmp_path / "own" / "kartograf" / CACHE_FILENAME
 
 
 @pytest.mark.parametrize("force", [False, True])
@@ -42,6 +50,7 @@ def test_false_is_none(tmp_path, monkeypatch, force):
     with open_cache(False, force=force) as cache:
         assert cache is None
     assert not default_cache_path().exists()
+    assert not default_cache_path().parent.exists()  # nothing is made for no cache
 
 
 def test_instance_passed_through_not_closed(tmp_path):
@@ -94,10 +103,9 @@ def test_force_with_user_cache_does_not_flip_shared_instance(tmp_path):
 
 @pytest.mark.parametrize("directory", ["readonly", "zażółć"])
 def test_disabled_cache_emits_notice(tmp_path, monkeypatch, directory):
-    readonly = tmp_path / directory
-    readonly.mkdir(mode=0o555)
-    readonly.chmod(0o555)
-    monkeypatch.chdir(readonly)
+    cache_dir = tmp_path / directory
+    (cache_dir / "kartograf").mkdir(parents=True)
+    monkeypatch.setenv("KARTOGRAF_CACHE_DIR", str(cache_dir))
     notices: list[Notice] = []
     # Permission checks are not reliable under root; emulate SQLite's error
     # when opening a database in a directory without write permissions.
@@ -114,4 +122,35 @@ def test_disabled_cache_emits_notice(tmp_path, monkeypatch, directory):
     assert notices[0].level == "warning"
     assert notices[0].code == CACHE_DISABLED
     assert "readonly database" in notices[0].text
+    assert notices[0].text.isascii()
+
+
+def test_the_first_write_makes_the_cache_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("KARTOGRAF_CACHE_DIR", str(tmp_path / "not" / "there"))
+    assert not (tmp_path / "not").exists()
+    with open_cache(True, force=False) as cache:
+        assert cache is not None
+        assert cache.get_record(*KEY) is None  # a read makes nothing
+        assert not (tmp_path / "not").exists()
+        cache.set_record(*KEY, OLD)
+    assert (tmp_path / "not" / "there" / "kartograf" / CACHE_FILENAME).is_file()
+
+
+def test_a_cache_directory_that_cannot_be_made_disables_the_cache(
+    tmp_path, monkeypatch
+):
+    """A file in the way of the directory is the state of an unwritable cache."""
+    (tmp_path / "file").write_text("x", encoding="utf-8")
+    monkeypatch.setenv("KARTOGRAF_CACHE_DIR", str(tmp_path / "file" / "cache"))
+    notices: list[Notice] = []
+
+    with open_cache(True, force=False, on_notice=notices.append) as cache:
+        assert cache is not None
+        cache.set_record(*KEY, OLD)
+        assert cache.get_record(*KEY) is None
+        assert isinstance(cache.error, sqlite3.OperationalError)
+        assert isinstance(cache.error.__cause__, OSError)
+
+    assert [notice.code for notice in notices] == [CACHE_DISABLED]
+    assert "niedostepny do otwarcia lub zapisu" in notices[0].text
     assert notices[0].text.isascii()

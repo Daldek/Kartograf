@@ -45,6 +45,7 @@ lista publicznego API: `src/kartograf/__init__.py` (`__all__`).
    - [9.5 Warstwa komend](#95-warstwa-komend)
    - [9.6 Serwer MCP](#96-serwer-mcp)
    - [9.7 Pliki dla agentow](#97-pliki-dla-agentow)
+10. [Settings and directories](#10-settings-and-directories)
 
 Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 
@@ -63,7 +64,7 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 | `geodesy` | `download`, `list-sources` | osnowy geodezyjne (`control`): PL (GUGiK) i CZ (Bodove pole); quasi-geoidy (`geoid`): PL-geoid2021 i QGZU-2013 |
 | `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
 
-Poza grupami zostają `kartograf parse`, `kartograf cache` i `kartograf catalog`
+Poza grupami zostają `kartograf parse`, `kartograf cache`, `kartograf config` (ustawienia, sekcja 10) i `kartograf catalog`
 (katalog komend dla agentów, sekcja 9.4). `kartograf <grupa>
 --help` wypisuje komendy grupy, `<grupa> <komenda> --help` — opcje i przykłady
 poleceń, `list-sources` — źródła grupy z rejestru (bez sieci): `WYBOR` (komplet
@@ -1175,7 +1176,7 @@ każdą wartość listy w osobnej linii i wszystkie pola.)
   Archiwa z rejestru nie trafiają do `Info:` — są kombinacjami.
 - **Cache:** typy warstw WFS, rekordy obszaru z obrysami arkuszy i maska
   lądu PRG, a dla CZ arkusze indeksu i wyniki `HEAD` plików trafiają do
-  cache metadanych (`.kartograf_cache.db`, TTL
+  cache metadanych (`<cache_dir>/kartograf/metadata.db`, TTL
   7 dni; `kartograf cache stats`: `Wpisy obszarow skorowidza`), więc
   ponowny raport dla tego samego obszaru nie pyta sieci (pomiar
   2026-10-15: 0,6–1,5 s zamiast ok. 5–7 s dla 16 km2). `--force`
@@ -2170,7 +2171,7 @@ clouds = download_cz_laz(**selection_cz, update="upgrade", plan=plan)
 `download_laz_area`, `download_landcover`/`check_landcover`,
 `download_soil`/`check_soil`, `calculate_hsg`/`check_hsg`) przyjmują
 `cache: MetadataCache | bool = True`: domyślnie ten sam plik co CLI
-(`<cwd>/.kartograf_cache.db`, TTL 7 dni), `False` = bez cache, własny
+(`<cache_dir>/kartograf/metadata.db`, TTL 7 dni), `False` = bez cache, własny
 `MetadataCache` = ten. `update="force"` pomija odczyty z cache w tym
 wywołaniu (jak `--force`), a funkcje sprawdzenia (`check_data`, `check_*`)
 pomijają je zawsze (jak `--check-updates`). Katalog tylko do odczytu:
@@ -2186,12 +2187,12 @@ from kartograf.providers.pl import create_nmt_provider
 manager = DownloadManager(
     "./data",
     create_nmt_provider(
-        vertical_crs="EVRF2007", resolution="1m", cache=MetadataCache(".kartograf_cache.db")
+        vertical_crs="EVRF2007", resolution="1m", cache=MetadataCache("metadata.db")
     ),  # albo GugikProvider(..., cache=...)
 )
 # Land cover: cache dla providera tworzonego po nazwie (BDOT10k: odpowiedzi PRG)
 report = download_landcover(product="bdot10k", output_dir="./data",
-                            teryt="1465", cache=MetadataCache(".kartograf_cache.db"))
+                            teryt="1465", cache=MetadataCache("metadata.db"))
 ```
 
 **`update="force"` a cache providera.** `force` pomija odczyty tylko
@@ -2203,7 +2204,7 @@ poziomu (`DownloadManager("./data", provider)`, wewnętrzny
 `download_laz_area(..., provider=...)`) zachowuje SWÓJ cache:
 `update="force"` pobiera pliki ponownie, ale rekordy skorowidza albo
 odpowiedzi PRG może wziąć z tego cache (do końca TTL). Pełne odświeżenie:
-utwórz provider z `MetadataCache(".kartograf_cache.db", refresh=True)`
+utwórz provider z `MetadataCache("metadata.db", refresh=True)`
 albo wywołaj `download_data(..., update="force")`, które tworzy provider samo.
 
 Pozostałe elementy publicznego API (m.in. `GugikNmptProvider` —
@@ -2931,8 +2932,8 @@ proxy).
 - EGiB obszaru pochodzi z usługi zbiorczej powiatowych WFS: powiat bez
   integracji to luka w wyniku (bez błędu), atrybuty zastrzeżone mają
   wartość `brak_uprawnien`. LoD2 modeli 3D nie pokrywa całego kraju.
-- Uszkodzony albo nieczytelny cache metadanych (`.kartograf_cache.db`
-  w bieżącym katalogu) nie przerywa pobierania: CLI drukuje jedno
+- Uszkodzony albo nieczytelny cache metadanych (`<cache_dir>/kartograf/metadata.db`)
+  nie przerywa pobierania: CLI drukuje jedno
   `Warning: cache metadanych nieczytelny (<plik>): ...` i pracuje bez cache.
   Naprawa: `kartograf cache clear` (usuwa nieczytelny plik wraz
   z `-wal`/`-shm`) albo ręczne usunięcie pliku.
@@ -3165,6 +3166,7 @@ Krotki spis dla agentow, czytany poza repozytorium, to `llms.txt` (9.7).
 | `kartograf-project-report/1` | `project download` | `download_project` | `ok: false` |
 | `kartograf-project-check/1` | `project status`, `project verify`, `project download --check-updates` | `get_project_status`, `verify_project`, `check_project` | `ok: false` |
 | `kartograf-cache/1` | `cache stats`, `cache path`, `cache clear` | `get_cache_info`, `get_cache_path`, `clear_cache` | - |
+| `kartograf-config/1` | `config show` | `get_config` | - |
 | `kartograf-catalog/1` | `catalog` (MCP: `get_catalog`) | `get_catalog` | - |
 | `kartograf-store-overview/1` | tylko API i MCP: `store_overview` | `describe_store` | - |
 | `kartograf-store-entries/1` | tylko API i MCP: `store_entries` | `list_store_entries` | - |
@@ -3335,6 +3337,7 @@ code by `scripts/generate_docs.py` and a contract test checks them.
 | `validation_error` | `invalid_input` | `ValidationError` | 2 | wrong value or combination of arguments, a missing required argument, an invalid input file (plan, manifest, geometry) |
 | `validation_error` | `usage` | `UsageError` | 2 | wrong use of a command: unknown command or flag, a missing positional argument, a value outside the allowed choices |
 | `validation_error` | `invalid_sheet_code` | `ParseError` | 2 | the sheet code is not a PL or CZ code or lies outside the nomenclature |
+| `validation_error` | `invalid_config` | `ConfigError` | 2 | the user settings cannot be used: nogat.toml is unreadable, not UTF-8 text, not valid TOML or has a section that is not a table, or a setting has a value that is not valid |
 | `source_unavailable` | - | `DownloadError` | 5 | network, HTTP, timeout or the response of the source |
 | `no_data` | `no_coverage` | `NoCoverageError` | 14 | the source has no data for the sheet (a state of the data, retrying does not help) |
 | `no_data` | `year_out_of_range` | `YearRangeError` | 14 | data exists but not in the requested year range (found before any download) |
@@ -3600,7 +3603,7 @@ i `"args": ["-m", "kartograf.mcp_server", ...]`.
 |---|---|
 | `--tools RODZINY` | rodziny narzedzi po przecinku: `discovery`, `availability`, `data`, `check`, `project`, `store` (domyslnie wszystkie 29; klienty z limitem liczby narzedzi zawezaja np. do `discovery,availability,data,check`); nieznana rodzina to blad uruchomienia |
 | `--allow-dir KATALOG` | powtarzalna; katalog bezwzgledny (albo z `~`; wzgledny konczy start bledem uzycia, kod 2: zalezalby od katalogu roboczego, ktory wybiera klient); gdy podana, kazda sciezka argumentu (`output_dir`, `geometry`, `project_dir`, `path`) po `Path.resolve()` musi lezec w ktoryms z katalogow, inaczej `invalid_input` z `option` i `hint` |
-| `--cache-file PLIK` | plik cache metadanych; domyslnie `<katalog cache uzytkownika>/kartograf/metadata.db` (`$XDG_CACHE_HOME` albo `~/.cache`; Windows `%LOCALAPPDATA%`), a nie `<cwd>/.kartograf_cache.db`: katalog roboczy serwera wybiera klient |
+| `--cache-file PLIK` | plik cache metadanych; domyslnie `<cache_dir>/kartograf/metadata.db`, ten sam plik co CLI i biblioteka (sekcja 10); nie zalezy od katalogu roboczego, ktory wybiera klient |
 | `--no-cache` | bez cache metadanych (wylaczne z `--cache-file`) |
 | `--version` | wersja |
 
@@ -3738,3 +3741,78 @@ Wynik to dokument kartograf-*/1 z polem ok (narzedzia danych: kartograf-download
 - Zasady pracy agentow z innych repozytoriow nad kodem Kartografa (galaz od `develop`, bez
   merge, push i tagow bez zgody, przeglad przed tagiem): `CLAUDE.md`, sekcja "Agenci z innych
   repozytoriow".
+
+---
+
+## 10. Settings and directories
+
+Kartograf keeps its settings where every Nogat tool does (Nogat DEV-18, ADR-050): one file,
+`nogat.toml`, and variables with a fixed prefix. A setting comes from the first of:
+
+1. the command-line option (none of the keys below has one yet);
+2. the variable `KARTOGRAF_<KEY>`;
+3. the shared variable `NOGAT_<KEY>`, for the shared keys `data_dir`, `cache_dir` and `lang`
+   only;
+4. the table `[kartograf]` of `nogat.toml`;
+5. the table `[nogat]` of `nogat.toml`, for the shared keys only;
+6. the built-in default.
+
+An empty variable counts as unset. `nogat.toml` is read with `tomllib` from the user
+configuration directory (`platformdirs.user_config_path("nogat")`, on Linux
+`~/.config/nogat/nogat.toml`) or from the path in `NOGAT_CONFIG`; Kartograf works without it,
+and does not read a `.env` file ([.env.example](../.env.example) lists every variable).
+
+| Key | Variable | Default | Meaning |
+|---|---|---|---|
+| `root` | `KARTOGRAF_ROOT` | `<data_dir>/kartograf` | root of the store (DEV-19.2); `config show` reports it, the commands take the store from `--output` until the data-output change |
+| `data_dir` | `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR` | user data directory of `nogat` | parent of the stores |
+| `cache_dir` | `KARTOGRAF_CACHE_DIR`, `NOGAT_CACHE_DIR` | user cache directory of `nogat` | parent of the caches: the metadata cache is `<cache_dir>/kartograf/metadata.db` |
+| `lang` | `KARTOGRAF_LANG`, `NOGAT_LANG` | `pl` | `pl` or `en`; the human-readable output is Polish until the message catalogue lands (Next item 25) |
+| `debug` | `KARTOGRAF_DEBUG` | off | tracebacks of unexpected errors and every library log record in the `--json` mode |
+
+The credential `CLMS_CREDENTIALS` (section 6) is read from the environment only, never from
+`nogat.toml`, and is never printed. A directory may start with `~`. Kartograf writes no cache
+and no state into the current directory.
+
+```toml
+# ~/.config/nogat/nogat.toml
+[nogat]
+data_dir = "/srv/nogat"          # shared with the other tools: <data_dir>/kartograf is the store
+
+[kartograf]
+cache_dir = "/var/cache/kartograf"
+```
+
+`kartograf config show` (the library function `get_config`) prints every setting with its
+value and source, each credential as present or missing, and the store root with its size
+(a hard-linked file counted once). `--json` prints the document `kartograf-config/1`:
+
+```json
+{
+  "schema": "kartograf-config/1",
+  "tool": "kartograf",
+  "version": "0.8.0.dev0",
+  "config_file": {"path": "/home/ola/.config/nogat/nogat.toml", "source": "default",
+                  "exists": true, "error": null, "ignored": []},
+  "keys": {
+    "root": {"value": "/srv/nogat/kartograf", "source": "default", "name": null, "error": null},
+    "cache_dir": {"value": "/var/cache/kartograf", "source": "file", "name": "[kartograf]", "error": null}
+  },
+  "credentials": {"CLMS_CREDENTIALS": "missing"},
+  "store": {"root": "/srv/nogat/kartograf", "source": "default", "name": null,
+            "exists": true, "size_bytes": 1835008}
+}
+```
+
+(`keys` is shortened here: the real document has all five keys. `source` is `default`, `env`
+or `file`; `name` is the variable or the table.) `config_file.ignored` lists the keys of
+`[kartograf]` that nothing reads: an unknown key, or a credential (`clms_credentials`).
+
+**A file or a value that cannot be used.** An unreadable file, a file that is not UTF-8 text,
+invalid TOML, a section that is not a table, a missing file named by `NOGAT_CONFIG` and a
+`lang` other than `pl` or `en` are a `ConfigError` (`validation_error`, exit code 2,
+`details.reason` `invalid_config`, with `details.option`, `details.path` and, for a value,
+`details.value` and `details.allowed`). Every CLI command except `config show` and the MCP
+server stop with it, instead of ignoring the file; library functions do not read the file
+for validation and use the defaults, and `config show` (and `get_config`) report the problem
+in `config_file.error` and `keys.<key>.error`.

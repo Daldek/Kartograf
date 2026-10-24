@@ -4,15 +4,21 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from kartograf import config
 from kartograf.cache.metadata import MetadataCache
 from kartograf.notices import CACHE_DISABLED, Notice
 
-DEFAULT_CACHE_FILENAME = ".kartograf_cache.db"
+CACHE_FILENAME = "metadata.db"
 
 
 def default_cache_path() -> Path:
-    """Return the default metadata database path in the current directory."""
-    return Path.cwd() / DEFAULT_CACHE_FILENAME
+    """Return the default metadata database: ``<cache_dir>/kartograf/metadata.db``.
+
+    ``cache_dir`` is the user cache directory of ``nogat`` unless the settings
+    say otherwise (``KARTOGRAF_CACHE_DIR``, ``NOGAT_CACHE_DIR``, ``nogat.toml``;
+    DEV-18.2). The path never depends on the current directory.
+    """
+    return config.cache_dir() / config.TOOL / CACHE_FILENAME
 
 
 @contextmanager

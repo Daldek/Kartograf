@@ -432,10 +432,11 @@ reczne wywolania CLI, dane do analiz) zapisuj POZA repozytorium i poza
   `data/` (ADR-026), wspolny dla kolejnych sesji;
   `<katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>/` — przebiegi testow na
   zywo. Raporty `.md` z przebiegu trafiaja do `docs/research/` w repo.
-- Cache metadanych `.kartograf_cache.db` (SQLite WAL) **zostaje lokalnie**
-  (biezacy katalog = repo, gitignorowany): SQLite na udzialach sieciowych
-  jest zawodny. Uruchamiaj CLI z korzenia repo i kieruj poza repo tylko
-  `--output`.
+- Cache metadanych (SQLite WAL) lezy w katalogu cache uzytkownika,
+  `<cache_dir>/kartograf/metadata.db` (domyslnie `~/.cache/nogat/kartograf/`;
+  DEV-18.2), nigdy w biezacym katalogu ani w repo; SQLite na udzialach
+  sieciowych jest zawodny, wiec `KARTOGRAF_CACHE_DIR` wskazuje dysk lokalny.
+  Kieruj poza repo `--output`.
 - Gdy katalog danych jest niedostepny, zatrzymaj sie i zapytaj uzytkownika
   zamiast pisac lokalnie.
 - Testy pytest nie zapisuja w katalogu danych (offline: `tmp_path`;
