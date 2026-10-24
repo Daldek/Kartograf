@@ -169,19 +169,20 @@ def test_usage_quotes_the_instructions_of_the_server():
     assert block.strip() == mcp_server.INSTRUCTIONS.strip()
 
 
-def test_claude_md_has_the_agent_rule_and_no_agents_md():
+def test_claude_md_has_the_agent_rule_and_points_to_the_generated_guides():
     text = _read(CLAUDE)
 
     rule = _section(text, "Agenci z innych repozytoriow")
 
     for needed in (
         "scripts/gate.sh",
+        "AGENTS.md",
         "llms.txt",
+        "kartograf commands guide",
         "kartograf commands list --json",
         "kartograf-mcp",
     ):
         assert needed in rule, needed
     assert "scripts/gate.sh" in _section(text, "Zasady pracy")
     assert (ROOT / "scripts" / "gate.sh").is_file()
-    assert (ROOT / "llms.txt").is_file()
-    assert not (ROOT / "AGENTS.md").exists()
+    assert (ROOT / "llms.txt").is_file() and (ROOT / "AGENTS.md").is_file()

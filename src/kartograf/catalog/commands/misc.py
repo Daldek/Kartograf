@@ -1,7 +1,8 @@
 """Declare the commands outside the data groups.
 
-``sheet parse`` and ``sheet find``, ``commands list``, the ``cache`` group and the
-read access to the store (``store overview``, ``store entries``, ``store sidecar``).
+``sheet parse`` and ``sheet find``, ``commands list``, ``commands schema`` and
+``commands guide``, the ``cache`` group and the read access to the store
+(``store overview``, ``store entries``, ``store sidecar``).
 """
 
 from dataclasses import replace
@@ -21,6 +22,12 @@ from kartograf.core.sheet_parser import PL_BBOX_CRS, SheetParser
 
 def _command_ids() -> list[str]:
     return [command.id for command in declared().commands]
+
+
+def _guide_formats() -> tuple[str, ...]:
+    from kartograf.guide import GUIDE_FORMATS  # it imports the catalog
+
+    return GUIDE_FORMATS
 
 
 def _scales() -> list[str]:
@@ -110,6 +117,41 @@ _SCHEMA_PARAMS = (
             "lista: kartograf commands list"
         ),
         examples=("elevation download",),
+    ),
+    shared.JSON,
+)
+
+_GUIDE_PARAMS = (
+    Param(
+        "format",
+        "str",
+        (
+            "Guide to render: `agents` is AGENTS.md, `llms` is llms.txt and "
+            "`agents-md-block` is the compact block for the AGENTS.md of a "
+            "repository that uses Kartograf."
+        ),
+        default="agents",
+        allowed=_guide_formats,
+        choices=True,
+        metavar="RODZAJ",
+        description_pl=(
+            "Rodzaj przewodnika: agents (AGENTS.md), llms (llms.txt) albo "
+            "agents-md-block (blok dla AGENTS.md projektu, ktory uzywa "
+            "Kartografa); domyslnie agents"
+        ),
+    ),
+    Param(
+        "inject",
+        "path",
+        "File to put the block in (CLI only).",
+        argument=None,
+        path_role="output",
+        metavar="PLIK",
+        description_pl=(
+            "Wstaw blok agents-md-block do pliku AGENTS.md projektu (zastepuje "
+            "blok miedzy <!-- BEGIN kartograf --> a <!-- END kartograf -->, a "
+            "bez bloku dopisuje go na koncu; wymaga --format agents-md-block)"
+        ),
     ),
     shared.JSON,
 )
@@ -385,6 +427,46 @@ COMMANDS = (
         errors=("validation_error",),
         family="discovery",
         core=True,
+        cardinality="single",
+    ),
+    Command(
+        "commands guide",
+        "Render the guide for AI agents (AGENTS.md, llms.txt or its block)",
+        "query",
+        "agent_guide",
+        "kartograf-guide/1",
+        _GUIDE_PARAMS,
+        description=(
+            "Offline, read only: the English guide for AI agents generated from "
+            "the catalog: `agents` is AGENTS.md, `llms` is llms.txt and "
+            "`agents-md-block` is the compact block that `--inject FILE` puts "
+            "into the AGENTS.md of a repository that uses Kartograf (CLI only). "
+            "A large text: fetch it once per session."
+        ),
+        examples=(
+            Example(
+                {"format": "llms"},
+                title="The llms.txt of Kartograf",
+                title_pl="Plik llms.txt Kartografa",
+            ),
+            Example(
+                {"format": "agents-md-block"},
+                title="The compact block, as JSON",
+                run={"json": True},
+                title_pl="Zwarty blok, jako JSON",
+            ),
+        ),
+        summary_pl="Wygeneruj przewodnik dla agentow AI (AGENTS.md, llms.txt, blok)",
+        description_pl=(
+            "Przewodnik dla agentow AI wygenerowany z katalogu (bez sieci i bez "
+            "zapisu, po angielsku): agents to AGENTS.md, llms to llms.txt, "
+            "agents-md-block to zwiezly blok, ktory --inject PLIK wstawia do "
+            "AGENTS.md projektu korzystajacego z Kartografa. --json: dokument "
+            "kartograf-guide/1."
+        ),
+        rules=("Fetch the guide once per session; `agents` is large.",),
+        rules_pl=("Pobierz przewodnik raz na sesje; agents jest duzy.",),
+        errors=("validation_error",),
         cardinality="single",
     ),
     Command(

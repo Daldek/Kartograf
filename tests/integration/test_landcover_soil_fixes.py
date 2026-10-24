@@ -4,6 +4,7 @@ blank preview, the SoilGrids layers and units, the exact HSG triangle, the
 BDOT10k classes and the volume limit of a BDOT10k area."""
 
 import json
+import re
 import shlex
 import struct
 import zlib
@@ -519,18 +520,23 @@ def test_bdot10k_area_within_the_limit_downloads_every_powiat(tmp_path):
     assert report.ok and [f.unit for f in report.files] == ["0208", "0224"]
 
 
-# --- llms.txt (P3-01) -------------------------------------------------------
+# --- the guides for agents (P3-01) ------------------------------------------------
 
 
-def test_offline_query_commands_of_llms_txt_run():
-    """The first file an agent reads: its commands without network exit 0 (the
+def test_offline_query_commands_of_the_guides_run():
+    """The first files an agent reads: their commands without network exit 0 (the
     ``list-layers`` of landcover needs ``--product``)."""
     lines = [
         line
-        for line in (ROOT / "llms.txt").read_text().splitlines()
-        if line.startswith("kartograf ")
-        and (" list-layers" in line or " list-sources" in line)
+        for name in ("AGENTS.md", "llms.txt")
+        for line in re.findall(r"`(kartograf [^`]+)`", (ROOT / name).read_text())
+        if "<" not in line
+        and re.match(
+            r"kartograf (sheet parse|commands list|\w+ list-layers|\w+ list-sources)\b",
+            line,
+        )
     ]
     assert any("landcover list-layers" in line for line in lines)
+    assert any("sheet parse" in line for line in lines)
     for line in lines:
         assert main(shlex.split(line)[1:]) == 0, line

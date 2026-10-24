@@ -81,6 +81,11 @@ MEANINGS: Final[Mapping[str, Mapping[str, str]]] = {
         "XLSX": "Excel workbook.",
         "FGDB": "ESRI file geodatabase.",
         "VFK": "VFK exchange format of the Czech cadastre.",
+        "agents": "AGENTS.md: the full guide for agents.",
+        "llms": "llms.txt: the short guide in the llmstxt.org layout.",
+        "agents-md-block": (
+            "The compact block for the AGENTS.md of a repository that uses Kartograf."
+        ),
     },
     "sheet_system": {
         "1992": "PL-1992 sheets (1:10000 and coarser).",

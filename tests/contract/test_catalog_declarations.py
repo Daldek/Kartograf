@@ -529,6 +529,8 @@ def _collected(group: str, key: str) -> set[str]:
 def _expected_allowed(command_id: str, name: str) -> list[str] | set[str]:
     """The allowed values of a registry parameter, read from the registry in
     another way than the declaration does (a set: the order is the registry's)."""
+    if command_id == "commands guide":  # the formats of the generator of the guide
+        return ["agents", "llms", "agents-md-block"]
     if command_id == "sheet find":  # the sheet search takes the Polish CRSs
         scales_2000 = [s for s in SCALE_HIERARCHY_2000 if s not in _SCALES_1992]
         return {
@@ -710,6 +712,7 @@ def test_the_core_family_has_at_most_ten_tools_and_only_tools_have_a_family():
         "cache clear",
         "cache path",
         "config show",
+        "commands guide",
     }
     assert all(c.family in FAMILIES for c in _DECLARED.commands if c.family)
 
@@ -733,6 +736,7 @@ def test_the_options_that_write_are_roots_or_outputs():
         "geometry",
         "project_dir",
         "path",
+        "inject",
     }
     assert {role for (_, name), role in roles.items() if name == "output_dir"} == {
         "root"

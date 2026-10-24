@@ -1,8 +1,8 @@
 # ADR-052: Command catalog documents and the MCP server on the Nogat agent interface
 
 **Date:** 2026-10-24
-**Status:** Accepted. The catalog documents (decisions 1 to 8) and the MCP rebuild (decision 9)
-are implemented.
+**Status:** Accepted. The catalog documents (decisions 1 to 8), the MCP rebuild (decision 9)
+and the guide for agents (decision 10) are implemented.
 
 **Context:** The Nogat standard 2.1 asks every tool for a command catalog as the document
 `<tool>-commands/1` (AGI-2.4), for `list_commands()` and `command_schema(command)` in the
@@ -125,7 +125,50 @@ migration (ECO-020).
    *Known gap.* `project download`, `project status` and `project verify` read the store path
    from the project manifest, and `--allow-dir` checks the project directory, not that path.
 
+10. **The guide for agents (AGI section 8).** `kartograf commands guide --format
+    agents|llms|agents-md-block` and the library function `agent_guide(format=)` (the document
+    `AgentGuide` = `kartograf-guide/1` with `format` and `text`, both exported) render
+    `AGENTS.md`, `llms.txt` and the compact block of AGI-8.2, in English whatever the setting
+    `lang` (AGI-9.2); the command is offline and read only and has no MCP tool.
+
+    *The templates* are hand-written Markdown in `src/kartograf/_data/agents/` (`agents.md`,
+    `llms.md`, `agents-md-block.md`, packaged by `package-data`). A marker
+    `<!-- kartograf:NAME -->` is replaced by a block that `kartograf.guide` builds from the
+    catalog and the error registry: the group names, one line per command with its
+    `operation_id` (or "no MCP tool"), the table of every registry code with its exit code and
+    what an agent does about it (a code without advice stops the generator), the rules, the
+    typical flows and the call of the library. The text depends only on the installed package
+    (no date, version or local path), so the files `AGENTS.md` and `llms.txt` of the
+    repository are the output of the command written to a file, and a contract test compares
+    them byte for byte; they are regenerated with the catalog, not edited.
+
+    *No stale example.* Every command line of a flow or of the block is read by the parser of
+    the CLI and, for a data command, by `validate_command` while the guide is rendered; the
+    rules name their options and commands as `{opt:NAME}` and `{cmd:NAME}`, which are looked up
+    in the catalog; the call of the library is checked against its signature. A renamed option
+    or command stops the generator with a `ValueError`, so the data-output change (`--output`,
+    `--check-updates`) cannot leave a wrong line in the guide: it regenerates the guide or the
+    test fails.
+
+    *The budgets* of DOC-1.7 are checked by the contract test: `AGENTS.md` 200 lines and
+    16 KiB (165 lines and 15.8 KB now, the sections of DOC-4.2 and the last line "Developing
+    this repository? Read CLAUDE.md."), `llms.txt` 8,000 characters before its first link
+    list (the layout of DOC-5.1; its links are raw links to files of the repository, DOC-5.2),
+    the block 60 lines.
+
+    *The block* (AGI-8.2). `--inject FILE` is an option of the CLI only: the library function
+    returns the text and writes no file, and `kartograf.guide.inject_block(existing, block)`
+    (not in `__all__`) is the text part. The block between `<!-- BEGIN kartograf -->` and
+    `<!-- END kartograf -->` replaces the old one in the file or is appended after a blank
+    line; the file is written through a temporary file and a rename, so repeating the command
+    changes nothing. `--inject` needs `--format agents-md-block` (`validation_error`).
+
+    *Open.* `kartograf mcp` (AGI-3.8) is not added: `kartograf-mcp` stays the entry point of
+    the server. The flows use today's option names (`--output`, `--check-updates`).
+
 **Consequences:** A consumer reads the options of a data command from `command_schema`; the task
 options are its options except the run options `output_dir`, `update`, `plan`, `workers`,
 `summary` and `check_updates` (the `task` flag of the old document is not published). The error
-code table is read from the registry. `kartograf commands list` takes no argument.
+code table is read from the registry. `kartograf commands list` takes no argument. The
+repository files `AGENTS.md` and `llms.txt` change whenever the catalog, the error registry or
+a template does; the contract test says so until they are regenerated (USAGE 9.7).

@@ -518,6 +518,10 @@ def _command_list() -> Document:
     return list_commands()
 
 
+def _agent_guide() -> Document:
+    return kartograf.agent_guide(format="agents-md-block")
+
+
 def _command_schema() -> Document:
     return command_schema("elevation download")
 
@@ -576,6 +580,7 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-sheets/1": (_sheets,),
     "kartograf-command-list/1": (_command_list,),
     "kartograf-commands/1": (_command_schema,),
+    "kartograf-guide/1": (_agent_guide,),
 }
 
 # schema -> the keys of the document in order (``schema`` first)
@@ -704,6 +709,7 @@ CONTRACT: dict[str, list[str]] = {
     "kartograf-sheets/1": ["schema", "request", "sheets", "count"],
     "kartograf-command-list/1": ["schema", "tool", "version", "groups", "commands"],
     "kartograf-commands/1": ["schema", "tool", "version", "commands"],
+    "kartograf-guide/1": ["schema", "format", "text"],
 }
 
 # type name -> (a value, the keys of its object in order); spec 5.3 and 5.4

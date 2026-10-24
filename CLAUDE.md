@@ -48,12 +48,15 @@ repozytoriach, ktorzy edytuja Kartografa:
 - przed tagiem OBOWIAZKOWY przeglad: `git log develop..<galaz>`, przeglad
   diffu przez uzytkownika i `scripts/gate.sh` zielony; tag dopiero po jawnej
   zgodzie uzytkownika;
-- interfejs maszynowy Kartografa: `llms.txt` (spis dla agentow),
+- interfejs maszynowy Kartografa: `AGENTS.md` i `llms.txt` (przewodnik dla agentow),
   `kartograf commands list --json` (komendy, parametry, dozwolone wartosci,
   przyklady), `--json` w kazdej komendzie (dokumenty `kartograf-*/1`, blad
   `kartograf-error/1`, kody wyjscia z rejestru bledow Nogat) i serwer MCP `kartograf-mcp`
   (`kartograf[mcp]`); opis: `docs/USAGE.md`, sekcja 9;
-- nie tworz `AGENTS.md`: reguly dla agentow sa w tym pliku.
+- `AGENTS.md` i `llms.txt` sa generowane z katalogu komend (`kartograf commands guide
+  --format agents`, `--format llms`): nie edytuj ich recznie, po zmianie katalogu,
+  rejestru bledow albo szablonow w `src/kartograf/_data/agents/` wygeneruj je ponownie
+  (przekierowaniem do pliku); reguly pracy nad kodem sa w tym pliku.
 
 ## Mapa dokumentacji
 

@@ -189,6 +189,11 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
             }
         ],
     },
+    "kartograf-guide/1": {
+        "schema": "kartograf-guide/1",
+        "format": "llms",
+        "text": "# Kartograf\n\n> Downloader of official spatial data.\n",
+    },
     "kartograf-commands/1": {
         "schema": "kartograf-commands/1",
         "tool": "kartograf",

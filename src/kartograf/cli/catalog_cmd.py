@@ -1,5 +1,5 @@
 """
-``kartograf commands list`` and ``kartograf commands schema --command ID`` (spec 7.4).
+``kartograf commands list``, ``commands schema --command ID`` and ``commands guide``.
 
 The commands are queries: they read the catalog from the library (``list_commands``,
 ``command_schema``), need no network and write nothing. With ``--json`` they print the
@@ -8,17 +8,26 @@ the library; without it, a text for a person (Polish until the message catalogue
 ADR-050): the groups with their products and commands, or the description of one
 command with its parameters, rules, constraints and examples. The text is rendered from
 the declarations, which have the Polish texts next to the English ones.
+
+``commands guide`` prints the guide for agents of the library (``agent_guide``: English,
+AGI-9.2) and, with ``--inject FILE``, puts its compact block into that file instead.
 """
 
 import argparse
+import contextlib
+import os
 import sys
+import tempfile
 import textwrap
+from pathlib import Path
 
 from kartograf.catalog import command_schema, list_commands
 from kartograf.catalog.commands import declared, declared_commands
 from kartograf.catalog.formatting import example_command_line
 from kartograf.catalog.spec import Command, Group, Param, resolve
 from kartograf.cli._json import command_id, emit_result, wants_json
+from kartograf.exceptions import ValidationError
+from kartograf.guide import agent_guide, inject_block
 
 _WIDTH = 78
 _LIST_FOOTER = (
@@ -184,4 +193,41 @@ def cmd_commands_schema(args: argparse.Namespace) -> int:
     if wants_json(args):
         return emit_result(command_id(args), document)
     sys.stdout.write(format_command(declared_commands()[document.commands[0].name]))
+    return 0
+
+
+def _write_replacing(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` in one step: a temporary file, then a rename."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(text)
+        os.replace(name, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(name)
+        raise
+
+
+def cmd_commands_guide(args: argparse.Namespace) -> int:
+    """Print the guide for agents, or inject its block into a file (``--inject``)."""
+    document = agent_guide(format=args.format)
+    if args.inject is not None:
+        if document.format != "agents-md-block":
+            raise ValidationError(
+                "--inject puts the block into a file: it needs the format "
+                "agents-md-block",
+                option="inject",
+                options=("format", "inject"),
+                hint="Run: kartograf commands guide --format agents-md-block "
+                "--inject AGENTS.md",
+            )
+        path = Path(args.inject)
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        _write_replacing(path, inject_block(existing, document.text))
+    if wants_json(args):
+        return emit_result(command_id(args), document)
+    if args.inject is None:
+        sys.stdout.write(document.text)
     return 0
