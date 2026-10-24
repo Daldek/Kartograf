@@ -40,10 +40,10 @@ lista publicznego API: `src/kartograf/__init__.py` (`__all__`).
 9. [Interfejs dla agentow](#9-interfejs-dla-agentow)
    - [9.1 Dokumenty JSON i komendy](#91-dokumenty-json-i-komendy)
    - [9.2 Kontrakt `--json`](#92-kontrakt---json)
-   - [9.3 Kody wyjscia i kody bledow](#93-kody-wyjscia-i-kody-bledow)
+   - [9.3 Exit codes and error codes](#93-exit-codes-and-error-codes)
    - [9.4 Katalog komend](#94-katalog-komend)
    - [9.5 Warstwa komend](#95-warstwa-komend)
-   - [9.6 Serwer MCP](#96-serwer-mcp)
+   - [9.6 MCP server](#96-mcp-server)
    - [9.7 Pliki dla agentow](#97-pliki-dla-agentow)
 10. [Settings and directories](#10-settings-and-directories)
 
@@ -3208,23 +3208,23 @@ the catalog, a project that was changed) is `ok` with no items. The documents:
 | Dokument (`schema`) | Komenda CLI (narzedzie MCP) | Funkcja biblioteki | Status `partial` albo `failed`, gdy |
 |---|---|---|---|
 | `kartograf-result/1` | kazda komenda z `--json` (MCP: kazde narzedzie), wokol dokumentu swojego wiersza | `run_command`, `check_command` (`CommandResult`) | nigdy: `status` jest werdyktem |
-| `kartograf-download/1` | `elevation download`, `imagery download`, `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download`, `landcover download`, `soil download`, `soil hsg` (MCP: `<grupa>_download`, `soil_hsg`) | `download_data`, `download_collection`, `download_landcover`, `download_soil`, `calculate_hsg` | `ok: false` |
-| `kartograf-plan/1` | kazda z powyzszych z `--check-updates` (MCP: `check_updates`) | `check_data`, `check_collection`, `check_landcover`, `check_soil`, `check_hsg` | pozycja `check_failed` (`ok: false`) |
-| `kartograf-availability/1` | `elevation availability` (MCP: `elevation_availability`) | `check_availability` | `ok: false` |
-| `kartograf-sheet/1` | `sheet parse` (MCP: `parse_sheet`) | `describe_sheet` | - |
-| `kartograf-sheets/1` | `sheet find` (MCP: `find_sheets`) | `find_sheets` | - |
-| `kartograf-sources/1` | `<grupa> list-sources` (11 grup; MCP: `list_sources`) | `list_sources` | - |
-| `kartograf-layers/1` | `landcover list-layers`, `soil list-layers` (MCP: `list_layers`) | `list_layers` | - |
+| `kartograf-download/1` | `elevation download`, `imagery download`, `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download`, `landcover download`, `soil download`, `soil hsg` (MCP: `kartograf_<grupa>_download`, `kartograf_soil_hsg`) | `download_data`, `download_collection`, `download_landcover`, `download_soil`, `calculate_hsg` | `ok: false` |
+| `kartograf-plan/1` | kazda z powyzszych z `--check-updates` (MCP: ten sam tool z `check_updates: true`) | `check_data`, `check_collection`, `check_landcover`, `check_soil`, `check_hsg` | pozycja `check_failed` (`ok: false`) |
+| `kartograf-availability/1` | `elevation availability` (MCP: `kartograf_elevation_availability`) | `check_availability` | `ok: false` |
+| `kartograf-sheet/1` | `sheet parse` (MCP: `kartograf_sheet_parse`) | `describe_sheet` | - |
+| `kartograf-sheets/1` | `sheet find` (MCP: `kartograf_sheet_find`) | `find_sheets` | - |
+| `kartograf-sources/1` | `<grupa> list-sources` (11 grup; MCP: `kartograf_<grupa>_list_sources`) | `list_sources` | - |
+| `kartograf-layers/1` | `landcover list-layers`, `soil list-layers` (MCP: `kartograf_landcover_list_layers`, `kartograf_soil_list_layers`) | `list_layers` | - |
 | `kartograf-project-state/1` | `project init`, `project add`, `project remove` | `init_project`, `add_project_task`, `remove_project_task` | - |
 | `kartograf-project-report/1` | `project download` | `download_project` | `ok: false` |
-| `kartograf-project-check/1` | `project status`, `project verify`, `project download --check-updates` | `get_project_status`, `verify_project`, `check_project` | `ok: false` |
+| `kartograf-project-check/1` | `project status`, `project verify`, `project download --check-updates` (MCP: `kartograf_project_download` z `check_updates: true`) | `get_project_status`, `verify_project`, `check_project` | `ok: false` |
 | `kartograf-cache/1` | `cache stats`, `cache path`, `cache clear` | `get_cache_info`, `get_cache_path`, `clear_cache` | - |
 | `kartograf-config/1` | `config show` | `get_config` | - |
-| `kartograf-command-list/1` | `commands list` (MCP: `commands_list`) | `list_commands` | - |
-| `kartograf-commands/1` | `commands schema --command` (MCP: `commands_schema`) | `command_schema` | - |
-| `kartograf-store-overview/1` | `store overview` (MCP: `store_overview`) | `describe_store` | - |
-| `kartograf-store-entries/1` | `store entries` (MCP: `store_entries`) | `list_store_entries` | - |
-| `kartograf-store-sidecar/1` | `store sidecar` (MCP: `store_sidecar`) | `read_store_sidecar` | - |
+| `kartograf-command-list/1` | `commands list` (MCP: `kartograf_commands_list`) | `list_commands` | - |
+| `kartograf-commands/1` | `commands schema --command` (MCP: `kartograf_commands_schema`) | `command_schema` | - |
+| `kartograf-store-overview/1` | `store overview` (MCP: `kartograf_store_overview`) | `describe_store` | - |
+| `kartograf-store-entries/1` | `store entries` (MCP: `kartograf_store_entries`) | `list_store_entries` | - |
+| `kartograf-store-sidecar/1` | `store sidecar` (MCP: `kartograf_store_sidecar`) | `read_store_sidecar` | - |
 | `kartograf-error/1` | kazda komenda przy bledzie: ostatnia linia stderr (9.3) | `error_report` | - |
 
 Zasady wspolne dokumentow:
@@ -3594,177 +3594,234 @@ except ValidationError as exc:
     print(error_report(exc, command="elevation download").hint)
 ```
 
-### 9.6 Serwer MCP
+### 9.6 MCP server
 
-Serwer Model Context Protocol przez **stdio** (jedyny transport w 0.8.0): skrypt
-`kartograf-mcp` (albo `python -m kartograf.mcp_server`) wystawia 29 narzedzi,
-z ktorych kazde to jedna komenda katalogu i jedna funkcja biblioteki. Wynik narzedzia to ten
-sam dokument co `--json`. Serwer jest cienki: nie ma w nim logiki danych, walidacji ani
-formatowania - schematy wejscia pochodza z katalogu.
+The Model Context Protocol server runs over **stdio** (the only transport in 0.8.0): the
+script `kartograf-mcp` (or `python -m kartograf.mcp_server`) offers one tool per command of
+the catalog, each calling one function of the library (AGI section 5). The name of a tool is
+the `operation_id` of its command (`kartograf_elevation_download`); its description, input
+schema and hints come from the catalog; its answer is the result envelope
+`kartograf-result/1`, the document of `--json` (9.1), and its `outputSchema` says so. The
+server is thin: it has no data logic, validation or formatting of its own, and everything it
+says (instructions, descriptions, its own messages) is English (AGI-9.2).
 
-**Instalacja.** SDK `mcp` jest opcjonalnym extra (`mcp>=2.3.0,<3`; dolacza m.in. `pydantic`,
-`starlette`, `uvicorn`, `jsonschema`), rdzen Kartografa nie zyskuje zaleznosci:
+**Installation.** The SDK `mcp` is an optional extra (`mcp>=2.3.0,<3`; it brings `pydantic`,
+`starlette`, `uvicorn` and `jsonschema`, among others); the core of Kartograf gains no
+dependency:
 
 ```bash
 pip install "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git"
 ```
 
-(po wydaniu: tag `v0.8.0`; wersja deweloperska: `uv sync --locked --all-extras` zawiera `mcp`).
-`import kartograf` i CLI dzialaja bez `mcp`; skrypt `kartograf-mcp` jest instalowany zawsze,
-a bez SDK konczy sie kodem 6 (`missing_dependency`): ostatnia linia stderr to dokument
-`kartograf-error/1` z podpowiedzia `uv add "kartograf[mcp]"`, stdout zostaje pusty.
+(after the release: the tag `v0.8.0`; a development checkout: `uv sync --locked --all-extras`
+includes `mcp`). `import kartograf` and the CLI work without `mcp`; the script `kartograf-mcp`
+is always installed, and without the SDK it ends with the exit code 6 (`missing_dependency`):
+the last line of stderr is the `kartograf-error/1` document with the hint
+`uv add "kartograf[mcp]"`, stdout stays empty.
 
-**Konfiguracja klientow.** Claude Code:
+**Client configuration.** Claude Code:
 
 ```bash
-claude mcp add kartograf -- kartograf-mcp
+claude mcp add kartograf -- kartograf-mcp                  # reads and plans only
+claude mcp add kartograf -- kartograf-mcp --allow-writes --allow-dir /data/kartograf
 ```
 
-Inni klienci (plik z kluczem `mcpServers`; opcje serwera jako `args`):
+Other clients (a file with the key `mcpServers`; the options of the server are `args`):
 
 ```json
 {
   "mcpServers": {
     "kartograf": {
       "command": "kartograf-mcp",
-      "args": ["--allow-dir", "/dane/kartograf", "--tools", "discovery,availability,data,check"]
+      "args": ["--allow-writes", "--allow-dir", "/data/kartograf", "--tools", "core"]
     }
   }
 }
 ```
 
-W srodowisku bez katalogu skryptow na `PATH` (worktree, `uvx`) uzyj `"command": "python"`
-i `"args": ["-m", "kartograf.mcp_server", ...]`.
+Where the scripts directory is not on `PATH` (a worktree, `uvx`) use `"command": "python"` and
+`"args": ["-m", "kartograf.mcp_server", ...]`. The server prints one line on stderr when it
+starts (`kartograf-mcp 0.8.0: stdio, writes off, allow-dir none, tools all, lang pl`); a
+failure to start prints `Error: ...` and the `kartograf-error/1` document as the last line.
 
-**Opcje serwera:**
+**Server options:**
 
-| Opcja | Znaczenie |
+| Option | Meaning |
 |---|---|
-| `--tools RODZINY` | rodziny narzedzi po przecinku: `discovery`, `availability`, `data`, `check`, `project`, `store` (domyslnie wszystkie 29; klienty z limitem liczby narzedzi zawezaja np. do `discovery,availability,data,check`); nieznana rodzina to blad uruchomienia |
-| `--allow-dir KATALOG` | powtarzalna; katalog bezwzgledny (albo z `~`; wzgledny konczy start bledem uzycia, kod 2: zalezalby od katalogu roboczego, ktory wybiera klient); gdy podana, kazda sciezka argumentu (`output_dir`, `geometry`, `project_dir`, `path`) po `Path.resolve()` musi lezec w ktoryms z katalogow, inaczej `forbidden` (kod 12) z `details.option`, `details.path`, `details.allowed` i `hint` |
-| `--cache-file PLIK` | plik cache metadanych; domyslnie `<cache_dir>/kartograf/metadata.db`, ten sam plik co CLI i biblioteka (sekcja 10); nie zalezy od katalogu roboczego, ktory wybiera klient |
-| `--no-cache` | bez cache metadanych (wylaczne z `--cache-file`) |
-| `--version` | wersja |
+| `--tools FAMILIES` | tool families, comma separated: `discovery`, `availability`, `data`, `project`, `store` and `core` (default: every tool). `core` is the ten tools of the main tasks (AGI-5.12) for clients that limit the number of tools or have no tool search; an unknown family stops the start (exit code 2) |
+| `--allow-dir DIR` | repeatable; an absolute directory (or with `~`; a relative one stops the start with a usage error, exit code 2: it would depend on the working directory the client chose). When given, every path argument (`output_dir`, `geometry`, `project_dir`, `path`, and the paths among the options of `project add`) must lie, after `Path.resolve()`, inside one of the directories, else the call is `forbidden` (exit code 12) with `details.option`, `details.path`, `details.allowed` and a `hint`. Without it a call may read any absolute path. The store that a project manifest names is not checked, the project directory is |
+| `--allow-writes` | the tools that write do write, inside `--allow-dir` (required with it: without a directory the start fails with a usage error, exit code 2). Without it the server reads and plans (see below) |
+| `--lang pl\|en` | language of human-readable text (AGI-3.4). The server answers in English whatever the value (AGI-9.2): the value is validated and reported in the start line, and changes nothing else. Default: the setting `lang` (`pl`) |
+| `--cache-file FILE` | file of the metadata cache; default `<cache_dir>/kartograf/metadata.db`, the same file as the CLI and the library (section 10); it does not depend on the working directory the client chose |
+| `--no-cache` | no metadata cache (exclusive with `--cache-file`) |
+| `--version` | the version |
 
-#### Narzedzia serwera MCP
+**Read only by default (AGI-1.3).** Without `--allow-writes` the 23 tools that only read work
+as usual, and each of the 13 tools that write and have a plan (the twelve data commands and
+`project download`) is offered as its **plan-only variant**: its input schema has no `update`,
+`plan`, `workers` or `summary`, `check_updates` is fixed to `true` (the call may leave it
+out), its hints say `readOnlyHint: true`, and every call is the plan (`check: true` in the
+envelope, the document `kartograf-plan/1`; for `project download` `kartograf-project-check/1`).
+An argument of a run, or `check_updates: false`, answers `forbidden` (12) with `details.option`
+and the hint to start the server with `--allow-writes`. The three tools that write and have no
+plan (`project init`, `project add`, `project remove`) are not offered at all; a call of one (a
+client may still have the old list) answers `forbidden` (12). With `--allow-writes` all 39
+tools are offered as declared, and `check_updates: true` still plans.
 
-Adnotacje (tylko wskazowki dla klienta): `RO` - tylko odczyt (`readOnlyHint`); `ND` - zapis
-nieniszczacy (`destructiveHint=false`: magazyn jest niezmienny, nic nie jest nadpisywane);
-`D` - niszczacy; `I` - idempotentne; `OW` - siec (`openWorldHint`).
+#### MCP server tools
 
-| Rodzina | Narzedzie | Komenda katalogu | Funkcja biblioteki | Dokument | Adnotacje |
-|---|---|---|---|---|---|
-| `discovery` | `commands_list` | `commands list` | `list_commands` | `kartograf-command-list/1` | RO |
-| `discovery` | `commands_schema` | `commands schema` | `command_schema` | `kartograf-commands/1` | RO |
-| `discovery` | `parse_sheet` | `sheet parse` | `describe_sheet` | `kartograf-sheet/1` | RO |
-| `discovery` | `find_sheets` | `sheet find` | `find_sheets` | `kartograf-sheets/1` | RO |
-| `discovery` | `list_sources` | `<grupa> list-sources` (parametr `group`) | `list_sources` | `kartograf-sources/1` | RO |
-| `discovery` | `list_layers` | `landcover list-layers`, `soil list-layers` (parametr `group`) | `list_layers` | `kartograf-layers/1` | RO |
-| `availability` | `elevation_availability` | `elevation availability` | `check_availability` | `kartograf-availability/1` | RO, OW |
-| `data` | `elevation_download` | `elevation download` | `download_data` | `kartograf-download/1` | ND, I, OW |
-| `data` | `imagery_download` | `imagery download` | `download_data` | `kartograf-download/1` | ND, I, OW |
-| `data` | `landcover_download` | `landcover download` | `download_landcover` | `kartograf-download/1` | ND, I, OW |
-| `data` | `soil_download` | `soil download` | `download_soil` | `kartograf-download/1` | ND, I, OW |
-| `data` | `soil_hsg` | `soil hsg` | `calculate_hsg` | `kartograf-download/1` | ND, I, OW |
-| `data` | `boundaries_download` | `boundaries download` | `download_collection` | `kartograf-download/1` | ND, I, OW |
-| `data` | `cadastre_download` | `cadastre download` | `download_collection` | `kartograf-download/1` | ND, I, OW |
-| `data` | `models3d_download` | `models3d download` | `download_collection` | `kartograf-download/1` | ND, I, OW |
-| `data` | `hydro_download` | `hydro download` | `download_collection` | `kartograf-download/1` | ND, I, OW |
-| `data` | `names_download` | `names download` | `download_collection` | `kartograf-download/1` | ND, I, OW |
-| `data` | `maps_download` | `maps download` | `download_collection` | `kartograf-download/1` | ND, I, OW |
-| `data` | `geodesy_download` | `geodesy download` | `download_collection` | `kartograf-download/1` | ND, I, OW |
-| `check` | `check_updates` | 12 komend danych (parametry `tool` i `arguments`) | `check_data`, `check_landcover`, `check_soil`, `check_hsg`, `check_collection` | `kartograf-plan/1` | RO, OW |
-| `project` | `project_init` | `project init` | `init_project` | `kartograf-project-state/1` | ND, I |
-| `project` | `project_add` | `project add` | `add_project_task` | `kartograf-project-state/1` | ND |
-| `project` | `project_remove` | `project remove` | `remove_project_task` | `kartograf-project-state/1` | D |
-| `project` | `project_download` | `project download` | `download_project` | `kartograf-project-report/1` | ND, I, OW |
-| `project` | `project_check_updates` | `project download --check-updates` | `check_project` | `kartograf-project-check/1` | RO, OW |
-| `project` | `project_status` | `project status` | `get_project_status` | `kartograf-project-check/1` | RO |
-| `project` | `project_verify` | `project verify` | `verify_project` | `kartograf-project-check/1` | RO |
-| `store` | `store_overview` | `store overview` | `describe_store` | `kartograf-store-overview/1` | RO |
-| `store` | `store_entries` | `store entries` | `list_store_entries` | `kartograf-store-entries/1` | RO |
-| `store` | `store_sidecar` | `store sidecar` | `read_store_sidecar` | `kartograf-store-sidecar/1` | RO |
+The hints are the MCP annotations (AGI-5.4); every tool has all five, the `title` (the summary
+of the command) and the four booleans: `RO` is `readOnlyHint`, `D` `destructiveHint`, `I`
+`idempotentHint`, `OW` `openWorldHint`. A hint that is not listed is `false`: a tool that
+writes a store says it is not destructive, because a store never overwrites a version. The
+table is the declaration of a server that writes; the last column says what a server that does
+not write does with the tool.
 
-Poza serwerem zostaja `cache *` (cache serwera to jego wewnetrzna sprawa; `update="force"`
-odswieza wpisy) i `open_project` (stan projektu zwracaja `project_status` i pozostale narzedzia
-projektu). Nazwy narzedzi sa stabilne jak kody bledow.
+<!-- generated: mcp-tools from kartograf.catalog.tools by scripts/generate_docs.py; do not edit -->
+| Tool | Catalog command | Library function | Families | Document | Hints | Without `--allow-writes` |
+|---|---|---|---|---|---|---|
+| `kartograf_elevation_download` | `elevation download` | `download_data` | `data`, `core` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_elevation_list_sources` | `elevation list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_elevation_availability` | `elevation availability` | `check_availability` | `availability`, `core` | `kartograf-availability/1` | RO, I, OW | same |
+| `kartograf_imagery_download` | `imagery download` | `download_data` | `data`, `core` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_imagery_list_sources` | `imagery list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_landcover_download` | `landcover download` | `download_landcover` | `data`, `core` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_landcover_list_sources` | `landcover list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_landcover_list_layers` | `landcover list-layers` | `list_layers` | `discovery` | `kartograf-layers/1` | RO, I | same |
+| `kartograf_soil_download` | `soil download` | `download_soil` | `data`, `core` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_soil_hsg` | `soil hsg` | `calculate_hsg` | `data`, `core` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_soil_list_sources` | `soil list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_soil_list_layers` | `soil list-layers` | `list_layers` | `discovery` | `kartograf-layers/1` | RO, I | same |
+| `kartograf_boundaries_download` | `boundaries download` | `download_collection` | `data` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_boundaries_list_sources` | `boundaries list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_cadastre_download` | `cadastre download` | `download_collection` | `data` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_cadastre_list_sources` | `cadastre list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_models3d_download` | `models3d download` | `download_collection` | `data` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_models3d_list_sources` | `models3d list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_hydro_download` | `hydro download` | `download_collection` | `data` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_hydro_list_sources` | `hydro list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_names_download` | `names download` | `download_collection` | `data` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_names_list_sources` | `names list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_maps_download` | `maps download` | `download_collection` | `data` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_maps_list_sources` | `maps list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_geodesy_download` | `geodesy download` | `download_collection` | `data` | `kartograf-download/1` | I, OW | plan |
+| `kartograf_geodesy_list_sources` | `geodesy list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_project_init` | `project init` | `init_project` | `project` | `kartograf-project-state/1` | I | not offered |
+| `kartograf_project_add` | `project add` | `add_project_task` | `project` | `kartograf-project-state/1` |  | not offered |
+| `kartograf_project_remove` | `project remove` | `remove_project_task` | `project` | `kartograf-project-state/1` | D | not offered |
+| `kartograf_project_download` | `project download` | `download_project` | `project` | `kartograf-project-report/1` | I, OW | plan |
+| `kartograf_project_status` | `project status` | `get_project_status` | `project` | `kartograf-project-check/1` | RO, I | same |
+| `kartograf_project_verify` | `project verify` | `verify_project` | `project` | `kartograf-project-check/1` | RO, I | same |
+| `kartograf_sheet_parse` | `sheet parse` | `describe_sheet` | `discovery` | `kartograf-sheet/1` | RO, I | same |
+| `kartograf_commands_list` | `commands list` | `list_commands` | `discovery`, `core` | `kartograf-command-list/1` | RO, I | same |
+| `kartograf_commands_schema` | `commands schema` | `command_schema` | `discovery`, `core` | `kartograf-commands/1` | RO, I | same |
+| `kartograf_sheet_find` | `sheet find` | `find_sheets` | `discovery`, `core` | `kartograf-sheets/1` | RO, I | same |
+| `kartograf_store_overview` | `store overview` | `describe_store` | `store`, `core` | `kartograf-store-overview/1` | RO, I | same |
+| `kartograf_store_entries` | `store entries` | `list_store_entries` | `store` | `kartograf-store-entries/1` | RO, I | same |
+| `kartograf_store_sidecar` | `store sidecar` | `read_store_sidecar` | `store` | `kartograf-store-sidecar/1` | RO, I | same |
+<!-- end generated -->
 
-Narzedzie danych bierze argumenty funkcji biblioteki (nazwy z kolumny `argument` katalogu,
-nie flagi CLI); `commands_schema(command="elevation download")` podaje ich liste. Przyklad
-wywolania i sprawdzenia aktualnosci tego samego zadania (`check_updates` przyjmuje `tool` -
-narzedzie danych - i jego `arguments` z `output_dir`, ale bez `update`, `plan` i `workers`):
+`cache *` and `config show` have no tool (the cache of the server is its own business, and
+`update="force"` refreshes entries; the settings are the business of the host), and neither
+has `open_project` (the state of a project is returned by the project tools). Tool names are
+as stable as error codes. `kartograf_commands_list` and `kartograf_commands_schema` carry
+`_meta["anthropic/alwaysLoad"]`, so Claude Code loads their definitions up front. Every tool
+has an `outputSchema`: the envelope `kartograf-result/1` as one self-contained JSON Schema,
+generated from the vendored `schemas/nogat/result-1.schema.json` by
+`scripts/generate_output_schema.py` (a contract test keeps the module equal to the generator).
+
+A tool takes the arguments of the library function, named like the `options` of the
+catalog (not the CLI flags); `kartograf_commands_schema(command="elevation download")` lists
+them with the meaning of every allowed value. The same task, run and then planned (the
+`arguments` of the second call add `check_updates`; the plan is what `update="upgrade"` and
+`plan` run later):
 
 ```json
 {
-  "name": "elevation_download",
+  "name": "kartograf_elevation_download",
   "arguments": {
     "product": "nmt",
     "sheet": "N-34-130-D-d-2-4",
     "resolution": "1m",
     "vertical_crs": "EVRF2007",
-    "output_dir": "/dane/kartograf"
+    "output_dir": "/data/kartograf"
   }
 }
 ```
 
 ```json
 {
-  "name": "check_updates",
+  "name": "kartograf_elevation_download",
   "arguments": {
-    "tool": "elevation_download",
-    "arguments": {
-      "product": "nmt",
-      "sheet": "N-34-130-D-d-2-4",
-      "resolution": "1m",
-      "vertical_crs": "EVRF2007",
-      "output_dir": "/dane/kartograf"
-    }
+    "product": "nmt",
+    "sheet": "N-34-130-D-d-2-4",
+    "resolution": "1m",
+    "vertical_crs": "EVRF2007",
+    "output_dir": "/data/kartograf",
+    "check_updates": true
   }
 }
 ```
 
-**Wynik i bledy.**
+**Result and errors.**
 
 - A result, also with the status `partial` or `failed`: `CallToolResult` with
   `structured_content` = `to_dict()` of the envelope `kartograf-result/1` (9.1) and
   `content` = the same document as compact JSON (`to_json(indent=None)`); `is_error` is
-  false. The outcomes 10 and 11 of the CLI are results here too (also `project_status` with a
-  task that is not downloaded): the agent reads `status` and `items`.
-- An error: `kartograf-error/1` (`structured_content` and `content`, `is_error: true`) z `command` = komenda narzedzia (dla `check_updates` - komenda
-  wskazana przez `tool`), `is_error: true`; `OSError` to `io_error`, inny wyjatek spoza
-  hierarchii `internal_error` (pelny traceback tylko w logu stderr serwera). Jedyny blad
-  protokolu to nieznana nazwa narzedzia (`INVALID_PARAMS`).
-- Kolejnosc walidacji wywolania: argumenty wobec schematu wejscia narzedzia (pierwszy
-  blad to `invalid_input` z `details.option` = nazwa wlasciwosci), regula sciezek
-  (bezwzgledne; `--allow-dir`), `validate_command` (reguly biblioteki z `option`), dopiero
-  potem wykonanie w watku roboczym. Serwer nie dodaje wartosci domyslnych wplywajacych na
-  dane: `output_dir` jest zawsze jawny i bezwzgledny (wzgledny to `invalid_input` z
-  `option: output_dir` i `hint`), a `bbox` zawsze z `bbox_crs`.
-- Postep: narzedzia z `on_progress` w API (`elevation_download`, `imagery_download`,
-  `landcover_download`, 7 narzedzi grup kolekcji i `project_download`) raportuja notyfikacje
-  MCP `progress` (licznik zdarzen rosnacy scisle, bez sumy, tekst `<status> <jednostka>
-  (<biezaca>/<lacznie>): <komunikat>`); `soil_download`, `soil_hsg`, `check_updates`,
-  `project_check_updates` i narzedzia odczytu postepu nie maja.
-- Wspolbieznosc: wywolania moga isc rownolegle, ale co najwyzej 4 narzedzia danych i
-  sprawdzajace naraz (reszta czeka: nie zalewamy GUGiK i CUZK). Anulowanie wywolania przez
-  klienta nie przerywa trwajacego pobrania (wersje sa zatwierdzane atomowo, wynik jest
-  odrzucany); zamkniecie stdio konczy proces serwera.
-- Koszt kontekstu agenta: `tools/list` ma ok. 29 tys. znakow (opisy narzedzi sa krotkie;
-  szczegoly daje `commands_schema(command=...)`), spis `commands_list` ok. 11 tys.
-  znakow; `structuredContent` powtarza `content`.
+  false. The outcomes 10 and 11 of the CLI are results here too (also
+  `kartograf_project_status` with a task that is not downloaded): the agent reads `status` and
+  `items`. The SDK client checks every such result against the `outputSchema`.
+- An error: `kartograf-error/1` (`structured_content` and `content`, `is_error: true`) with
+  `command` = the command of the tool. `OSError` is `io_error`, any other exception outside
+  the hierarchy is `internal_error` (the full traceback only in the stderr log of the
+  server). `forbidden` (12) is a path outside `--allow-dir`, an argument of a run (or
+  `check_updates: false`) on a server that does not write, or a tool that is not offered. The
+  only protocol error is an unknown tool name (`INVALID_PARAMS`, naming the close tool names).
+- The order of the checks of a call: a write that a plan-only tool refuses (`forbidden`); the
+  arguments against the input schema of the tool (the first violation is `validation_error`
+  with `details.option` = the property: a missing argument, then an unknown one, then a
+  missing companion such as `bbox_crs`, then a wrong value); the rule of paths (absolute;
+  `--allow-dir`); the options of a run next to `check_updates` (`validation_error`: a plan
+  fetches nothing); `validate_command` (the rules of the library, with `option`); then the
+  execution in a worker thread. The server adds no default that changes data: `output_dir` is
+  always explicit and absolute (a relative one is `validation_error` with `option: output_dir`
+  and a `hint`), and a `bbox` always comes with `bbox_crs`.
+- Progress: a tool whose library function has `on_progress` (`kartograf_elevation_download`,
+  `kartograf_imagery_download`, `kartograf_landcover_download`, the seven collection download
+  tools and `kartograf_project_download`) sends MCP `progress` notifications when it runs (a
+  counter of events that grows strictly, no total, the text `<status> <unit>
+  (<current>/<total>): <message>`); a plan and the other tools send none.
+- Concurrency: calls may run in parallel, but at most 4 tools that use the network
+  (`openWorldHint`) at once; the rest wait (GUGiK and CUZK are not flooded). A call that the
+  client cancels does not stop a running download (versions are committed atomically, the
+  result is dropped); closing stdio ends the server process.
+- Cost for the context of the agent: `tools/list` is long, because every property has its
+  catalog description and every tool the 3,000-character `outputSchema`: about 207,000
+  characters of compact JSON for the 39 tools of a server that writes (87,000 without the
+  `outputSchema`), 188,000 (77,000) for the 36 tools of a server that does not, and 64,000
+  (34,000) for `--tools core`; the answer of `kartograf_commands_list` is about 11,000
+  characters, and `structuredContent` repeats `content`. Claude Code defers the definitions
+  and loads only the names and the `alwaysLoad` tools; for a client that loads all of them,
+  start with `--tools core` or fewer families. The limit of 30,000 characters of ADR-046 (D22)
+  does not hold any more (ADR-052, decision 9).
 
-#### Instrukcje serwera (`instructions`)
+#### Server instructions (`instructions`)
 
-Serwer przekazuje klientowi tekst `instructions` (cztery akapity, do 2000 znakow; Claude Code
-laduje go na poczatku kazdej sesji): wspolne znaczenia argumentow sa w nim raz, a nie w
-opisie kazdego narzedzia. Test porownuje ten blok z `kartograf.mcp_server.INSTRUCTIONS`:
+The server sends the client the text `instructions` (at most 4,096 characters, where Claude
+Code cuts it; it loads the text at the start of every session): what the tools have in common
+is said there once, and not in the description of each tool, and the last paragraphs say the
+state of this server (writes, directories, families). The block below is the text of a server
+in the default state (`kartograf.mcp_server.INSTRUCTIONS`); a test compares it:
 
+<!-- generated: mcp-instructions from kartograf.mcp_server by scripts/generate_docs.py; do not edit -->
 ```text
-Kartograf pobiera dane przestrzenne Polski i Czech (GUGiK, CUZK, Copernicus, ISRIC) do magazynu wersji w katalogu output_dir. Zacznij od commands_list (przeglad: grupy, produkty, komendy); parametry komendy: commands_schema(command="elevation download"). Jakie lata i uklady ma obszar: elevation_availability.
-Wspolne argumenty. Sciezki (output_dir, geometry, project_dir, path) podawaj bezwzglednie. Obszar: sheet (godlo arkusza, np. N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] w ukladzie bbox_crs, ktory jest wymagany: bez wartosci domyslnej) albo geometry (plik SHP albo GPKG, obwiednia obiektow; layer: warstwa GPKG) - dokladnie jeden; czesc komend ma tez teryt, ku albo whole_country. country: pl, cz albo auto (wymagany z bbox i geometry, z sheet wynika z godla).
-Dane wybierasz jawnie (product, resolution, vertical_crs...): Kartograf nie zgaduje; wartosc per kraj to tekst albo {pl, cz}. update: pominiety - tylko brakujace wersje, upgrade - nowsza tresc wg zrodla, force - od nowa; pobranie nie nadpisuje danych. check_updates (tool, arguments) sprawdza aktualnosc bez pobierania; jego plan (result koperty, kartograf-plan/1) wykonasz z update=upgrade i plan.
-Wynik to koperta kartograf-result/1: status (ok, partial albo failed), result (dokument komendy, narzedzia danych: kartograf-download/1 z polem ok), items (jednostki; nieudana ma code i reason) i notices. partial i failed to wyniki (is_error=false): sprawdz items. Blad (is_error=true) to kartograf-error/1 z code, hint i details.option.
+Kartograf downloads spatial data of Poland and Czechia (GUGiK, CUZK, Copernicus, ISRIC) into a versioned store: the directory output_dir, one directory per product, files never overwritten. Order: discover, check, run, read. Discover with kartograf_commands_list (groups, products and commands) and kartograf_commands_schema(command="elevation download") (the options of one command, its allowed values with their meanings, rules, examples and errors). What years, grids and CRSs an area has: kartograf_elevation_availability. Read the store: kartograf_store_overview, kartograf_store_entries, kartograf_store_sidecar; the sidecar of a file has its CRS, source and licence.
+Shared arguments. Paths (output_dir, project_dir, geometry, path) are absolute. Area: sheet (a sheet code, for example N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no default) or geometry (a SHP or GPKG file; layer is its GPKG layer), exactly one; some commands also take teryt, ku or whole_country. country is pl, cz or auto: required with bbox and geometry, implied by a sheet code. Select data explicitly (product, resolution, vertical_crs, ...): nothing is guessed. A value per country is a string or {"pl": ..., "cz": ...}.
+Updates. update omitted fetches what is missing, update=upgrade fetches newer content when the source signals it, update=force fetches again; a version is never overwritten. check_updates=true plans without fetching: its plan (the result of the envelope, kartograf-plan/1) runs later with update=upgrade and plan.
+This server does not write: a command that writes only plans (check_updates is true; update, plan, workers and summary are forbidden), and kartograf_project_init, kartograf_project_add and kartograf_project_remove are unavailable. Start kartograf-mcp with --allow-writes and --allow-dir DIR to download.
+Results. A result is the envelope kartograf-result/1: status (ok, partial, failed), result (the document of the command), items (one per unit; a failed one has code and reason) and notices. partial and failed are results (isError false): read items. An error (isError true) is kartograf-error/1 with code, message, hint and details; details.option names the argument to fix. forbidden is a path outside --allow-dir or a write on a server that only plans.
 ```
+<!-- end generated -->
 
 ### 9.7 Pliki dla agentow
 

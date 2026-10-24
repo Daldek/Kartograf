@@ -169,7 +169,9 @@ To samo zadanie daje ten sam wynik w CLI, bibliotece i serwerze MCP:
 - `kartograf commands list --json` (`list_commands()`) i `kartograf commands schema --command
   "elevation download" --json` (`command_schema()`): komendy, opcje, dozwolone wartości i przykłady;
 - serwer MCP `kartograf-mcp` (`pip install "kartograf[mcp]"`, stdio; w Claude
-  Code `claude mcp add kartograf -- kartograf-mcp`) z 30 narzędziami;
+  Code `claude mcp add kartograf -- kartograf-mcp`) z 39 narzędziami
+  `kartograf_<grupa>_<komenda>`; domyślnie tylko czyta i planuje (`check_updates`), zapis włącza
+  `--allow-writes --allow-dir KATALOG` (USAGE 9.6);
 - [llms.txt](llms.txt): krótki spis dla agentów (zadania, polecenia, kody
   błędów).
 

@@ -1,14 +1,23 @@
-"""The MCP server of Kartograf (spec 9).
+"""The MCP server of Kartograf (AGI section 5).
 
-The tools of ``kartograf.catalog.tools`` over stdio, for AI agents.
+One tool per command of the catalog (``kartograf.catalog.tools``), over stdio, for AI
+agents. The name of a tool is the ``operation_id`` of its command
+(``kartograf_elevation_download``); ``kartograf_commands_list`` and
+``kartograf_commands_schema`` are the catalog. Every tool calls one function of the
+library and answers with the envelope ``kartograf-result/1`` of its command
+(``to_dict()``, the same document as the CLI ``--json``; the domain document is its
+``result``); a failure that stops the call is the ``kartograf-error/1`` document with
+``isError``. Everything the server says is English (AGI-9.2).
 
-Every tool calls one function of the library and returns the envelope
-``kartograf-result/1`` of its command (``to_dict()``, the same document as the CLI
-``--json``; the domain document is its ``result``); a failure that stops the call is
-the ``kartograf-error/1`` document with ``isError``. The module is the only one that
-touches the MCP SDK, and it imports the SDK lazily:
-``import kartograf.mcp_server`` works without the ``mcp`` package,
-``create_server`` and ``main`` report its absence with the install command.
+The server starts read only. Without ``--allow-writes`` a command that writes and has
+a check only plans (``check_updates`` is true, the options of a run are refused with
+``forbidden``) and ``project init``, ``project add`` and ``project remove`` answer
+``forbidden``; ``--allow-writes`` needs ``--allow-dir``. With ``--allow-dir`` every
+path of a call must lie inside one of the directories (``forbidden`` otherwise), also
+the paths nested in the options of ``project add``; without it any absolute path can
+be read. The module is the only one that touches the MCP SDK, and it imports the SDK
+lazily: ``import kartograf.mcp_server`` works without the ``mcp`` package,
+``create_server`` and ``main`` report its absence as ``missing_dependency``.
 
 Run it with ``kartograf-mcp`` or ``python -m kartograf.mcp_server``.
 
@@ -27,38 +36,45 @@ from __future__ import annotations
 
 import argparse
 import copy
+import difflib
 import functools
 import inspect
 import logging
 import sys
 import threading
-from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
+from collections.abc import AsyncGenerator, Callable, Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import kartograf
 from kartograf.cache.defaults import default_cache_path
 from kartograf.cache.metadata import MetadataCache
+from kartograf.catalog.commands import declared_commands
 from kartograf.catalog.kinds import convert_arguments
+from kartograf.catalog.spec import CHECK_OPTION, PathRole
 from kartograf.catalog.tools import (
-    CHECK_UPDATES,
+    ALWAYS_LOAD_KEY,
     FAMILIES,
+    RUN_OPTIONS,
     ToolSpec,
-    check_arguments_schema,
+    check_families,
+    hidden_tools,
+    parse_families,
+    task_paths,
     tool_specs,
 )
 from kartograf.commands import check_command, run_command, validate_command
-from kartograf.config import check_config
+from kartograf.config import LANGUAGES, check_config, resolve
 from kartograf.download.manager import DownloadProgress
 from kartograf.envelope import CommandResult, wrap
 from kartograf.error_report import ErrorReport, error_line, error_report
 from kartograf.exceptions import (
-    ConfigError,
     ForbiddenError,
     KartografError,
     MissingDependencyError,
+    UsageError,
     ValidationError,
 )
 
@@ -72,47 +88,116 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 SDK_REQUIREMENT = "mcp>=2.3.0,<3"
+"""The requirement on the SDK; the ``mcp`` extra of the package says the same."""
 
-# Text for the client (``instructions`` of the server): Polish, ASCII, four
-# paragraphs, under 2000 characters (spec 9.9). The tools do not repeat what is
-# the same in many of them (the area, the paths, the update mode, the result
-# documents): it is said here once, and ``commands_schema`` has the rest. Claude
-# Code loads this text at the start of every session and cuts it at 4096
-# characters.
-INSTRUCTIONS = "\n".join(
-    (
-        "Kartograf pobiera dane przestrzenne Polski i Czech (GUGiK, CUZK, "
-        "Copernicus, ISRIC) do magazynu wersji w katalogu output_dir. Zacznij od "
-        "commands_list (przeglad: grupy, produkty, komendy); parametry komendy: "
-        'commands_schema(command="elevation download"). Jakie lata i uklady ma '
-        "obszar: elevation_availability.",
-        "Wspolne argumenty. Sciezki (output_dir, geometry, project_dir, path) "
-        "podawaj bezwzglednie. Obszar: sheet (godlo arkusza, np. "
-        "N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] w ukladzie "
-        "bbox_crs, ktory jest wymagany: bez wartosci domyslnej) albo geometry "
-        "(plik SHP albo GPKG, obwiednia obiektow; layer: warstwa GPKG) - "
-        "dokladnie jeden; czesc komend ma tez teryt, ku albo whole_country. "
-        "country: pl, cz albo auto (wymagany z bbox i geometry, z sheet wynika "
-        "z godla).",
-        "Dane wybierasz jawnie (product, resolution, vertical_crs...): Kartograf "
-        "nie zgaduje; wartosc per kraj to tekst albo {pl, cz}. update: pominiety "
-        "- tylko brakujace wersje, upgrade - nowsza tresc wg zrodla, force - od "
-        "nowa; pobranie nie nadpisuje danych. check_updates (tool, arguments) "
-        "sprawdza aktualnosc bez pobierania; jego plan (result koperty, "
-        "kartograf-plan/1) wykonasz z update=upgrade i plan.",
-        "Wynik to koperta kartograf-result/1: status (ok, partial albo failed), "
-        "result (dokument komendy, narzedzia danych: kartograf-download/1 z "
-        "polem ok), items (jednostki; nieudana ma code i reason) i notices. "
-        "partial i failed to wyniki (is_error=false): sprawdz items. Blad "
-        "(is_error=true) to kartograf-error/1 z code, hint i details.option.",
-    )
-)
+INSTRUCTIONS_MAX = 4096
+"""Claude Code cuts the instructions of a server at this many characters (DOC-1.7)."""
 
-# At most this many calls that use the network run at once (spec 9.7): several
+# At most this many calls that use the network run at once (AGI-5.11): several
 # conversations do not flood GUGiK and CUZK with parallel jobs.
 MAX_NETWORK_CALLS = 4
 
-_PATH_HINT = "Podaj sciezke bezwzgledna, np. /home/ola/dane/kartograf"
+_PATH_HINT = "Give an absolute path, for example /home/ola/dane/kartograf."
+_WRITES_HINT = (
+    "Start kartograf-mcp with --allow-writes and --allow-dir DIR to run and write; "
+    "check_updates=true plans without writing."
+)
+
+
+def _tool(command: str) -> str:
+    """Return the name of the tool of a catalog command (``commands list``)."""
+    return declared_commands()[command].operation_id
+
+
+def build_instructions(
+    *,
+    allow_writes: bool = False,
+    allow_dirs: Sequence[Path | str] = (),
+    families: Sequence[str] | None = None,
+) -> str:
+    """Return the ``instructions`` of the server (AGI-5.10).
+
+    What the descriptions of the tools cannot say once for all of them: the order of
+    the work (discover, check, run, read), the arguments they share, the update modes,
+    what the results and the errors are, and the state of this server (writes,
+    directories, families). The names of the tools are read from the catalog.
+    Claude Code loads this text at the start of every session and cuts it at
+    ``INSTRUCTIONS_MAX`` characters.
+
+    Parameters
+    ----------
+    allow_writes : bool
+        The server writes (``--allow-writes``).
+    allow_dirs : sequence of path
+        The directories of ``--allow-dir``.
+    families : sequence of str, optional
+        The families of ``--tools`` (``None``: every tool).
+    """
+    schema = _tool("commands schema")
+    flow = (
+        "Kartograf downloads spatial data of Poland and Czechia (GUGiK, CUZK, "
+        "Copernicus, ISRIC) into a versioned store: the directory output_dir, one "
+        "directory per product, files never overwritten. Order: discover, check, run, "
+        f"read. Discover with {_tool('commands list')} (groups, products and commands) "
+        f'and {schema}(command="elevation download") (the options of one command, '
+        "its allowed values with their meanings, rules, examples and errors). What "
+        f"years, grids and CRSs an area has: {_tool('elevation availability')}. Read "
+        f"the store: {_tool('store overview')}, {_tool('store entries')}, "
+        f"{_tool('store sidecar')}; the sidecar of a file has its CRS, source and "
+        "licence."
+    )
+    shared = (
+        "Shared arguments. Paths (output_dir, project_dir, geometry, path) are "
+        "absolute. Area: sheet (a sheet code, for example N-34-130-D-d-2-4), bbox "
+        "([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no "
+        "default) or geometry (a SHP or GPKG file; layer is its GPKG layer), exactly "
+        "one; some commands also take teryt, ku or whole_country. country is pl, cz or "
+        "auto: required with bbox and geometry, implied by a sheet code. Select data "
+        "explicitly (product, resolution, vertical_crs, ...): nothing is guessed. A "
+        'value per country is a string or {"pl": ..., "cz": ...}.'
+    )
+    updates = (
+        "Updates. update omitted fetches what is missing, update=upgrade fetches newer "
+        "content when the source signals it, update=force fetches again; a version is "
+        "never overwritten. check_updates=true plans without fetching: its plan (the "
+        "result of the envelope, kartograf-plan/1) runs later with update=upgrade and "
+        "plan."
+    )
+    directories = ", ".join(Path(directory).as_posix() for directory in allow_dirs)
+    if allow_writes:
+        state = f"Writes are enabled inside {directories}; a path outside is forbidden."
+    else:
+        state = (
+            "This server does not write: a command that writes only plans "
+            "(check_updates is true; update, plan, workers and summary are "
+            "forbidden), and "
+            f"{_tool('project init')}, {_tool('project add')} and "
+            f"{_tool('project remove')} are unavailable. Start kartograf-mcp with "
+            "--allow-writes and --allow-dir DIR to download."
+        )
+        if directories:
+            state += f" Paths must lie inside {directories}."
+    results = (
+        "Results. A result is the envelope kartograf-result/1: status (ok, partial, "
+        "failed), result (the document of the command), items (one per unit; a failed "
+        "one has code and reason) and notices. partial and failed are results "
+        "(isError false): read items. An error (isError true) is kartograf-error/1 "
+        "with code, message, hint and details; details.option names the argument to "
+        "fix. forbidden is a path outside --allow-dir or a write on a server that "
+        "only plans."
+    )
+    parts = [flow, shared, updates, state, results]
+    if families is not None:
+        parts.append(
+            f"Exposed families (--tools): {', '.join(families)}; other tools are not "
+            "listed."
+        )
+    return "\n".join(parts)
+
+
+# The instructions of a server in the default state (read only, no directory, every
+# tool): the text quoted in USAGE 9.6.
+INSTRUCTIONS = build_instructions()
 
 
 @dataclass
@@ -158,37 +243,22 @@ def _open_cache(path: Path) -> MetadataCache:
     return MetadataCache(path)
 
 
-def _ascii(text: str) -> str:
-    return text.encode("ascii", "backslashreplace").decode("ascii")
-
-
-_TYPE_TEXT = {
-    "string": "tekst",
-    "integer": "liczba calkowita",
-    "number": "liczba",
-    "boolean": "wartosc logiczna",
-    "array": "tablica",
-    "object": "obiekt",
-    "null": "null",
-}
-
-
-def _type_text(value: object) -> str:
-    """Return the Polish name of the JSON type of a Python value."""
+def _json_type(value: object) -> str:
+    """Return the name of the JSON type of a Python value."""
     if value is None:
-        return _TYPE_TEXT["null"]
+        return "null"
     if isinstance(value, bool):
-        return _TYPE_TEXT["boolean"]
+        return "boolean"
     if isinstance(value, int):
-        return _TYPE_TEXT["integer"]
+        return "integer"
     if isinstance(value, float):
-        return _TYPE_TEXT["number"]
+        return "number"
     if isinstance(value, str):
-        return _TYPE_TEXT["string"]
+        return "string"
     if isinstance(value, list | tuple):
-        return _TYPE_TEXT["array"]
+        return "array"
     if isinstance(value, Mapping):
-        return _TYPE_TEXT["object"]
+        return "object"
     return type(value).__name__
 
 
@@ -213,9 +283,11 @@ def _first_violation(validator: Any, arguments: Mapping[str, Any]) -> Any | None
 
 
 def _violation(error: Any) -> ValidationError:
-    """``ValidationError`` of a violation of the input schema.
+    """Return the ``ValidationError`` of a violation of the input schema.
 
-    ``option`` is the argument, the message says what is wrong (Polish, ASCII).
+    ``option`` is the argument; the message says what is wrong and, for a value
+    outside an ``enum``, ``allowed`` lists the values (``error_report`` adds the hint
+    with an example from the catalog).
     """
     path = list(error.absolute_path)
     option = str(path[0]) if path else None
@@ -225,14 +297,14 @@ def _violation(error: Any) -> ValidationError:
     rule, expected = error.validator, error.validator_value
     if rule == "required" and not path:
         option = next(name for name in expected if name not in error.instance)
-        return ValidationError(f"brak wymaganego argumentu {option}", option=option)
+        return ValidationError(f"missing required argument {option}", option=option)
     if rule == "additionalProperties" and not path:
         known = list(error.schema.get("properties", {}))
         option = next(name for name in error.instance if name not in known)
         return ValidationError(
-            f"nieznany argument {option}",
+            f"unknown argument {option}",
             option=option,
-            hint=f"Dozwolone argumenty: {', '.join(known)}",
+            hint=f"Arguments of this tool: {', '.join(known)}.",
         )
     if rule == "dependentRequired" and not path:
         key, option = next(
@@ -243,37 +315,39 @@ def _violation(error: Any) -> ValidationError:
             if dependency not in error.instance
         )
         return ValidationError(
-            f"argument {option} jest wymagany razem z {key}",
+            f"argument {option} is required together with {key}",
             option=option,
             options=(key, option),
         )
     prefix = f"argument {where}:"
     if rule == "enum":
         return ValidationError(
-            _ascii(f"{prefix} wartosc {error.instance!r} spoza dozwolonych"),
+            f"{prefix} {error.instance!r} is not an allowed value",
             option=option,
             allowed=[str(value) for value in expected],
         )
     if rule == "type":
         names = [expected] if isinstance(expected, str) else expected
-        wanted = " albo ".join(_TYPE_TEXT.get(name, name) for name in names)
-        got = _type_text(error.instance)
-        message = f"{prefix} oczekiwano {wanted}, podano {got}"
+        message = (
+            f"{prefix} expected {' or '.join(names)}, got {_json_type(error.instance)}"
+        )
     elif rule == "minimum":
-        message = f"{prefix} wartosc {error.instance} jest mniejsza niz {expected}"
+        message = f"{prefix} {error.instance} is below the minimum {expected}"
     elif rule in ("minItems", "maxItems"):
         message = (
-            f"{prefix} oczekiwano tablicy o dokladnie {expected} elementach, "
-            f"podano {len(error.instance)}"
+            f"{prefix} expected an array of exactly {expected} items, "
+            f"got {len(error.instance)}"
         )
     elif rule == "anyOf":
         message = (
-            f"{prefix} wartosc nie pasuje do dozwolonej postaci "
-            "(tekst albo obiekt z kluczami pl i cz)"
+            f"{prefix} the value is neither a string nor an object with the keys "
+            "pl and cz"
         )
+    elif rule == "const":
+        message = f"{prefix} must be {expected!r}"
     else:
         message = f"{prefix} {error.message}"
-    return ValidationError(_ascii(message), option=option)
+    return ValidationError(message, option=option)
 
 
 def _progress_text(event: DownloadProgress) -> str:
@@ -287,7 +361,7 @@ def _progress_text(event: DownloadProgress) -> str:
         text += f" ({event.current}/{event.total})"
     if event.message:
         text += f": {event.message}"
-    return _ascii(text.strip())
+    return text.strip().encode("ascii", "backslashreplace").decode("ascii")
 
 
 class _Progress:
@@ -321,6 +395,24 @@ class _Progress:
                 self._lost = True
 
 
+def _takes(function: str, parameter: str) -> bool:
+    """Check whether a library function (a name of ``kartograf``) has the parameter."""
+    return parameter in inspect.signature(getattr(kartograf, function)).parameters
+
+
+def _given(value: object) -> bool:
+    """Say whether an argument is given: ``None`` and a false flag are not."""
+    return value is not None and value is not False
+
+
+def _writes_disabled(spec: ToolSpec, option: str) -> ForbiddenError:
+    return ForbiddenError(
+        f"{spec.name} only plans on this server: {option} is not available",
+        option=option,
+        hint=_WRITES_HINT,
+    )
+
+
 class _Toolbox:
     """The tools of a server.
 
@@ -331,61 +423,67 @@ class _Toolbox:
     def __init__(
         self,
         specs: Sequence[ToolSpec],
+        hidden: Mapping[str, str],
         *,
         cache: MetadataCache | bool,
         allow_dirs: Sequence[Path],
         validator_class: Any,
     ) -> None:
-        self._validator_class = validator_class
         self.specs = {spec.name: spec for spec in specs}
-        # nested checks (``check_updates``, ``project_add``) need every data tool
-        self._data = {spec.name: spec for spec in tool_specs(("data",))}
-        self._data_by_command = {spec.commands[0]: spec for spec in self._data.values()}
+        self.hidden = dict(hidden)
         self._validators = {
             spec.name: validator_class(spec.input_schema) for spec in specs
         }
         self._cache = cache
         self._allow_dirs = tuple(allow_dirs)
 
-    def command_of(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> str | None:
-        """Return the id of the catalog command a call is about.
-
-        As far as the arguments tell (for the error document; never raises).
-        """
-        if len(spec.commands) == 1:
-            return spec.commands[0]
-        if spec.name == CHECK_UPDATES:
-            target = self._data.get(str(arguments.get("tool")))
-            return target.commands[0] if target else None
-        group = arguments.get("group")
-        for command in spec.commands:
-            if isinstance(group, str) and command.startswith(f"{group} "):
-                return command
-        return None
+    def refusal(self, name: str) -> ForbiddenError | None:
+        """Return the error of a tool that exists but is not offered (or ``None``)."""
+        command = self.hidden.get(name)
+        if command is None:
+            return None
+        return ForbiddenError(
+            f"{name} writes ({command}) and this server does not write",
+            hint=_WRITES_HINT,
+        )
 
     def plan(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> _Plan:
         """Check the arguments of a call and prepare its library call.
 
-        The checks (spec 9.4) are the input schema, the rule of absolute paths and
-        ``--allow-dir``.
+        The order of the checks: the writes a plan-only tool refuses, the input
+        schema, the paths (absolute; ``--allow-dir``), the options a plan has none of;
+        the checks of the library come in ``_execute``.
 
         Raises
         ------
+        ForbiddenError
+            A plan-only tool was asked to run, or a path lies outside ``--allow-dir``.
         ValidationError
-            An argument breaks the schema or the rule of paths.
+            An argument breaks the schema or the rule of paths, or ``check_updates``
+            is combined with an option of a run.
         """
+        self._refuse_writes(spec, arguments)
         self._check_schema(self._validators[spec.name], arguments)
-        self._check_paths(spec.kinds, arguments)
-        if spec.name == CHECK_UPDATES:
-            return self._check_updates(arguments)
-        if spec.family == "data":
-            return self._data_tool(spec, arguments)
-        if spec.name == "project_add":
+        self._check_paths(spec.paths, arguments)
+        check = spec.plan_only or arguments.get(CHECK_OPTION) is True
+        if check:
+            self._no_run_options(spec, arguments)
+        if spec.task_options:
+            return self._data_tool(spec, arguments, check=check)
+        if spec.command == "project add":
             # the paths among the task options follow the rules of a data tool
-            target = self._data_by_command.get(arguments["command"])
-            if target is not None:
-                self._check_paths(target.kinds, arguments["options"])
-        return self._function_tool(spec, arguments)
+            self._check_paths(task_paths(arguments["command"]), arguments["options"])
+        return self._function_tool(spec, arguments, check=check)
+
+    @staticmethod
+    def _refuse_writes(spec: ToolSpec, arguments: Mapping[str, Any]) -> None:
+        if not spec.plan_only:
+            return
+        for name in arguments:
+            if name in spec.refused and _given(arguments[name]):
+                raise _writes_disabled(spec, name)
+        if arguments.get(CHECK_OPTION) is False:
+            raise _writes_disabled(spec, CHECK_OPTION)
 
     @staticmethod
     def _check_schema(validator: Any, arguments: Mapping[str, Any]) -> None:
@@ -393,38 +491,56 @@ class _Toolbox:
         if error is not None:
             raise _violation(error)
 
-    def _check_paths(self, kinds: Mapping[str, str], values: Mapping[str, Any]) -> None:
+    def _check_paths(
+        self, paths: Mapping[str, PathRole], values: Mapping[str, Any]
+    ) -> None:
         """Check that every path is absolute and inside an allowed directory.
 
         With ``--allow-dir``, inside one of the directories (after
-        ``Path.resolve()``).
+        ``Path.resolve()``); every role is confined: the server reads and writes only
+        there.
         """
         for option, value in values.items():
-            if kinds.get(option) != "path" or not isinstance(value, str):
+            if option not in paths or not isinstance(value, str):
                 continue  # a value of a wrong form is the library's to report
             path = Path(value)
             if not path.is_absolute():
                 raise ValidationError(
-                    f"argument {option}: sciezka musi byc bezwzgledna, "
-                    f"podano {value!r}",
+                    f"argument {option}: the path must be absolute, got {value!r}",
                     option=option,
                     hint=_PATH_HINT,
                 )
-            allowed = self._allow_dirs
             resolved = path.resolve()
-            if allowed and not any(resolved.is_relative_to(d) for d in allowed):
-                directories = [directory.as_posix() for directory in allowed]
+            if self._allow_dirs and not any(
+                resolved.is_relative_to(directory) for directory in self._allow_dirs
+            ):
+                directories = [directory.as_posix() for directory in self._allow_dirs]
                 raise ForbiddenError(
-                    f"argument {option}: sciezka {value!r} lezy poza katalogami "
-                    "dozwolonymi dla serwera (--allow-dir)",
+                    f"argument {option}: the path {value!r} lies outside the "
+                    "directories this server allows (--allow-dir)",
                     option=option,
                     path=resolved,
                     allowed=directories,
-                    hint="Dozwolone katalogi: " + ", ".join(directories),
+                    hint=f"Allowed directories: {', '.join(directories)}.",
                 )
 
-    def _data_tool(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> _Plan:
-        command = spec.commands[0]
+    @staticmethod
+    def _no_run_options(spec: ToolSpec, arguments: Mapping[str, Any]) -> None:
+        """Refuse an option of a run next to ``check_updates``: it fetches nothing."""
+        for name in RUN_OPTIONS:
+            if name in arguments and _given(arguments[name]):
+                raise ValidationError(
+                    f"check_updates plans without fetching: {name} belongs to a run",
+                    option=name,
+                    options=(CHECK_OPTION, name),
+                    hint="Drop check_updates to run, or drop update, plan, workers "
+                    "and summary to plan.",
+                )
+
+    def _data_tool(
+        self, spec: ToolSpec, arguments: Mapping[str, Any], *, check: bool
+    ) -> _Plan:
+        command = spec.command
         options = {k: v for k, v in arguments.items() if k in spec.task_options}
         run_kinds = {k: v for k, v in spec.kinds.items() if k not in spec.task_options}
         run = convert_arguments(
@@ -434,6 +550,17 @@ class _Toolbox:
 
         def validate() -> None:
             validate_command(command, options, output_dir=output_dir)
+
+        if check:
+
+            def plan_call(
+                _on_progress: Callable[[DownloadProgress], None] | None,
+            ) -> CommandResult[Any]:
+                return check_command(
+                    command, options, output_dir=output_dir, cache=self._cache
+                )
+
+            return _Plan(validate, plan_call, False)
 
         def call(
             on_progress: Callable[[DownloadProgress], None] | None,
@@ -450,59 +577,29 @@ class _Toolbox:
                 on_progress=on_progress,
             )
 
-        assert spec.function is not None
-        takes_progress = _takes(spec.function, "on_progress")
-        return _Plan(validate, call, takes_progress)
+        return _Plan(validate, call, _takes(spec.function, "on_progress"))
 
-    def _check_updates(self, arguments: Mapping[str, Any]) -> _Plan:
-        target = self._data[arguments["tool"]]
-        inner = arguments["arguments"]
-        validator = self._validator_class(check_arguments_schema(target.name))
-        self._check_schema(validator, inner)
-        kinds = {
-            name: kind
-            for name, kind in target.kinds.items()
-            if name in target.task_options or name == "output_dir"
-        }
-        self._check_paths(kinds, inner)
-        output_dir = Path(inner["output_dir"])
-        options = {k: v for k, v in inner.items() if k != "output_dir"}
-        data_command = target.commands[0]
-
-        def validate() -> None:
-            validate_command(data_command, options, output_dir=output_dir)
-
-        def call(
-            _on_progress: Callable[[DownloadProgress], None] | None,
-        ) -> CommandResult[Any]:
-            return check_command(
-                data_command, options, output_dir=output_dir, cache=self._cache
-            )
-
-        return _Plan(validate, call, False)
-
-    def _function_tool(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> _Plan:
-        assert spec.function is not None
-        function = getattr(kartograf, spec.function)
-        converted = convert_arguments(spec.kinds, arguments)
-        if _takes(spec.function, "cache"):
+    def _function_tool(
+        self, spec: ToolSpec, arguments: Mapping[str, Any], *, check: bool
+    ) -> _Plan:
+        name = spec.check_function if check else spec.function
+        assert name is not None  # a command with the option has the twin
+        function = getattr(kartograf, name)
+        converted = convert_arguments(
+            spec.kinds, {k: v for k, v in arguments.items() if k != CHECK_OPTION}
+        )
+        converted.update(spec.fixed)
+        if _takes(name, "cache"):
             converted["cache"] = self._cache
-        takes_progress = _takes(spec.function, "on_progress")
-        command = self.command_of(spec, arguments)
-        assert command is not None  # the schema checked the group of a shared tool
+        takes_progress = not check and _takes(name, "on_progress")
 
         def call(
             on_progress: Callable[[DownloadProgress], None] | None,
         ) -> CommandResult[Any]:
             extra = {"on_progress": on_progress} if takes_progress else {}
-            return wrap(command, function(**converted, **extra), check=spec.check)
+            return wrap(spec.command, function(**converted, **extra), check=check)
 
         return _Plan(None, call, takes_progress)
-
-
-def _takes(function: str, parameter: str) -> bool:
-    """Check whether a library function (a name of ``kartograf``) has the parameter."""
-    return parameter in inspect.signature(getattr(kartograf, function)).parameters
 
 
 def _wire_tool(spec: ToolSpec) -> types.Tool:
@@ -512,14 +609,18 @@ def _wire_tool(spec: ToolSpec) -> types.Tool:
     hints = spec.annotations
     return types.Tool(
         name=spec.name,
+        title=spec.title,
         description=spec.description,
         input_schema=copy.deepcopy(spec.input_schema),
+        output_schema=copy.deepcopy(spec.output_schema),
         annotations=types.ToolAnnotations(
+            title=hints.title,
             read_only_hint=hints.read_only_hint,
             destructive_hint=hints.destructive_hint,
             idempotent_hint=hints.idempotent_hint,
             open_world_hint=hints.open_world_hint,
         ),
+        _meta={ALWAYS_LOAD_KEY: True} if spec.always_load else None,
     )
 
 
@@ -542,7 +643,7 @@ def _result(document: CommandResult[Any] | ErrorReport) -> types.CallToolResult:
 async def _execute(
     ctx: ServerRequestContext[_State], spec: ToolSpec, plan: _Plan
 ) -> types.CallToolResult:
-    """Run a planned call in worker threads (spec 9.7) and encode its document.
+    """Run a planned call in worker threads (AGI-5.11) and encode its document.
 
     The document is encoded there, so that a large document does not stop the
     other calls.
@@ -577,38 +678,67 @@ async def _execute(
     return result
 
 
+def _unknown_tool(name: str, names: Iterable[str]) -> str:
+    close = difflib.get_close_matches(name, list(names), n=3, cutoff=0.6)
+    hint = f" Did you mean: {', '.join(close)}?" if close else ""
+    return f"Unknown tool {name!r}.{hint}"
+
+
 def create_server(
     *,
     families: Sequence[str] | None = None,
     cache: MetadataCache | Path | bool | None = None,
     allow_dirs: Sequence[str | Path] = (),
+    allow_writes: bool = False,
 ) -> Server[_State]:
     """Build the MCP server with the tools of the given families (all by default).
 
     Parameters
     ----------
     families : sequence of str, optional
-        ``discovery``, ``availability``, ``data``, ``check``, ``project``,
-        ``store`` (``kartograf.catalog.tools.FAMILIES``).
+        ``discovery``, ``availability``, ``data``, ``project``, ``store`` or
+        ``core`` (``kartograf.catalog.tools.FAMILIES``).
     cache : MetadataCache, Path or False, optional
         The metadata cache of the library calls: an open cache, the file of one
         (the server closes the cache it opened), ``False`` for none; by default
         ``default_cache_file()``.
     allow_dirs : sequence of path, optional
         Absolute directories (``~`` allowed); when given, every path of a tool
-        call must lie in one of them (after ``Path.resolve()``).
+        call must lie in one of them (after ``Path.resolve()``), else the call is
+        ``forbidden``.
+    allow_writes : bool, optional
+        Let the tools that write write (inside ``allow_dirs``, which they need).
+        By default a command that writes and has a check only plans and the
+        others that write answer ``forbidden``.
 
     Raises
     ------
     ConfigError
         ``nogat.toml`` or a setting cannot be used (``kartograf.config.check_config``);
         checked first, before the SDK is imported.
+    ValidationError
+        An unknown or empty family, ``allow_writes`` without ``allow_dirs``,
+        ``cache=True`` or a relative directory in ``allow_dirs``
+        (``option`` names the argument).
     MissingDependencyError
         The ``mcp`` package is not installed (hint: ``uv add "kartograf[mcp]"``).
-    ValueError
-        An unknown family, ``cache=True`` or a relative directory in ``allow_dirs``.
     """
     check_config()  # unusable settings stop the server instead of being ignored
+    chosen = None if families is None else check_families(families)
+    directories = [_allowed_directory(directory) for directory in allow_dirs]
+    if allow_writes and not directories:
+        raise ValidationError(
+            "allow_writes needs allow_dirs: the server writes only inside the "
+            "directories of --allow-dir",
+            option="allow_writes",
+            options=("allow_writes", "allow_dirs"),
+            hint="Start kartograf-mcp with --allow-writes and --allow-dir DIR.",
+        )
+    if cache is True:
+        raise ValidationError(
+            "cache=True: give a MetadataCache, the file of a cache or False",
+            option="cache",
+        )
     try:
         import anyio
         import mcp_types as types
@@ -619,10 +749,8 @@ def create_server(
         raise MissingDependencyError(
             f"the MCP server needs the mcp package ({SDK_REQUIREMENT})", extra="mcp"
         ) from error
-    if cache is True:
-        raise ValueError("cache=True: podaj MetadataCache, plik cache albo False")
-    allowed = [_allowed_directory(directory) for directory in allow_dirs]
-    specs = tool_specs(families)
+    specs = tool_specs(chosen, allow_writes=allow_writes)
+    hidden = hidden_tools(chosen, allow_writes=allow_writes)
     owned: MetadataCache | None = None
     library_cache: MetadataCache | bool
     if cache is None or isinstance(cache, Path):
@@ -632,8 +760,9 @@ def create_server(
         library_cache = cache
     toolbox = _Toolbox(
         specs,
+        hidden,
         cache=library_cache,
-        allow_dirs=allowed,
+        allow_dirs=directories,
         validator_class=Draft202012Validator,
     )
     tools = [_wire_tool(spec) for spec in specs]
@@ -655,38 +784,33 @@ def create_server(
         ctx: ServerRequestContext[_State], params: types.CallToolRequestParams
     ) -> types.CallToolResult:
         spec = toolbox.specs.get(params.name)
-        if spec is None:
-            raise MCPError(types.INVALID_PARAMS, f"Nieznane narzedzie: {params.name}")
         arguments = params.arguments or {}
-        command = toolbox.command_of(spec, arguments)
+        if spec is None:
+            refusal = toolbox.refusal(params.name)
+            if refusal is None:
+                raise MCPError(
+                    types.INVALID_PARAMS, _unknown_tool(params.name, toolbox.specs)
+                )
+            return _result(error_report(refusal, command=toolbox.hidden[params.name]))
         try:
             plan = toolbox.plan(spec, arguments)
             return await _execute(ctx, spec, plan)
         except Exception as exc:
             if not isinstance(exc, KartografError | OSError):
-                logger.exception("Narzedzie %s: blad programu", spec.name)
-            return _result(error_report(exc, command=command, given=arguments))
+                logger.exception("Tool %s: program error", spec.name)
+            return _result(error_report(exc, command=spec.command, given=arguments))
 
     return Server(
         "kartograf",
         version=kartograf.__version__,
-        instructions=INSTRUCTIONS,
+        title="Kartograf",
+        instructions=build_instructions(
+            allow_writes=allow_writes, allow_dirs=directories, families=chosen
+        ),
         lifespan=lifespan,
         on_list_tools=list_tools,
         on_call_tool=call_tool,
     )
-
-
-def _families(text: str) -> list[str]:
-    """Return the value of ``--tools``: families separated by commas."""
-    names = [name.strip() for name in text.split(",")]
-    unknown = [name for name in names if name not in FAMILIES]
-    if unknown:
-        raise argparse.ArgumentTypeError(
-            f"nieznana rodzina narzedzi: {', '.join(unknown) or '(pusta)'} "
-            f"(dozwolone: {', '.join(FAMILIES)})"
-        )
-    return names
 
 
 def _allowed_directory(directory: str | Path) -> Path:
@@ -697,39 +821,81 @@ def _allowed_directory(directory: str | Path) -> Path:
 
     Raises
     ------
-    ValueError
-        The directory is not absolute.
+    ValidationError
+        The directory is not absolute (``option="allow_dirs"``).
     """
     path = Path(directory).expanduser()
     if not path.is_absolute():
-        raise ValueError(
-            f"--allow-dir wymaga sciezki bezwzglednej, jest {str(directory)!r} "
-            "(wzgledna zalezalaby od katalogu roboczego serwera)"
+        raise ValidationError(
+            f"--allow-dir needs an absolute path, got {str(directory)!r} (a relative "
+            "one would depend on the working directory of the server)",
+            option="allow_dirs",
+            hint="Give an absolute directory, for example --allow-dir /home/ola/dane.",
         )
     return path.resolve()
 
 
-def _allow_dir_argument(text: str) -> Path:
-    """Return the type of ``--allow-dir``: a usage error for a relative directory."""
-    try:
-        return _allowed_directory(text)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError(str(error)) from error
+def _argument(convert: Callable[[str], Any]) -> Callable[[str], Any]:
+    """Return ``convert`` as an argparse type that reports a ``ValidationError``."""
+
+    @functools.wraps(convert)
+    def typed(text: str) -> Any:
+        try:
+            return convert(text)
+        except ValidationError as error:
+            raise argparse.ArgumentTypeError(str(error)) from error
+
+    return typed
+
+
+class _ServerParser(argparse.ArgumentParser):
+    """The parser of ``kartograf-mcp``: a usage error is a ``UsageError``.
+
+    ``main`` reports it like every other failure to start, with the error document as
+    the last line of stderr (AGI-3.3).
+    """
+
+    def error(self, message: str) -> NoReturn:
+        """Raise a ``UsageError`` instead of printing the usage and exiting."""
+        raise UsageError(message, hint=f"Run {self.prog} --help for the options.")
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _ServerParser(
         prog="kartograf-mcp",
         description="Serwer MCP (stdio): narzedzia Kartografa dla agentow AI - "
-        "katalog, godla, dostepnosc, pobieranie i sprawdzanie aktualnosci danych "
-        "oraz odczyt magazynu.",
+        "katalog komend, godla, dostepnosc, pobieranie i sprawdzanie aktualnosci "
+        "danych oraz odczyt magazynu. Domyslnie serwer nie zapisuje.",
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--tools",
-        type=_families,
+        type=_argument(parse_families),
         metavar="RODZINY",
         help="rodziny narzedzi po przecinku: " + ", ".join(FAMILIES) + " (domyslnie "
-        "wszystkie; klienty z limitem narzedzi: discovery,availability,data,check)",
+        "wszystkie; core to najwazniejsze zadania, dla klientow z limitem narzedzi)",
+    )
+    parser.add_argument(
+        "--allow-dir",
+        action="append",
+        default=[],
+        type=_argument(_allowed_directory),
+        metavar="KATALOG",
+        help="katalog bezwzgledny (albo z ~), w ktorym musza lezec sciezki narzedzi "
+        "(powtarzalna; sciezka poza nim to forbidden; bez tej flagi: dowolna sciezka "
+        "bezwzgledna do odczytu)",
+    )
+    parser.add_argument(
+        "--allow-writes",
+        action="store_true",
+        help="narzedzia, ktore zapisuja, zapisuja (tylko w katalogach --allow-dir, "
+        "ktore jest wtedy wymagane); bez tej flagi planuja (check_updates)",
+    )
+    parser.add_argument(
+        "--lang",
+        choices=LANGUAGES,
+        help="jezyk tekstu dla czlowieka (pl albo en); serwer odpowiada zawsze po "
+        "angielsku, wartosc jest tylko sprawdzana i podana w linii startowej",
     )
     caching = parser.add_mutually_exclusive_group()
     caching.add_argument(
@@ -740,15 +906,6 @@ def _parser() -> argparse.ArgumentParser:
         "kartograf/metadata.db)",
     )
     caching.add_argument("--no-cache", action="store_true", help="bez cache metadanych")
-    parser.add_argument(
-        "--allow-dir",
-        action="append",
-        default=[],
-        type=_allow_dir_argument,
-        metavar="KATALOG",
-        help="katalog bezwzgledny (albo z ~), w ktorym musza lezec sciezki narzedzi "
-        "(powtarzalne; bez tej flagi: dowolna sciezka bezwzgledna)",
-    )
     parser.add_argument(
         "--version", action="version", version=f"kartograf-mcp {kartograf.__version__}"
     )
@@ -781,24 +938,46 @@ def _fail(error: KartografError) -> int:
     return report.exit_code
 
 
+def _start_line(args: argparse.Namespace) -> str:
+    """Return the line that says on stderr how the server started.
+
+    The state the options chose, ``lang`` included: the language is validated and
+    reported and changes nothing, as everything the server says is English.
+    """
+    lang = args.lang or str(resolve("lang").value)
+    return (
+        f"kartograf-mcp {kartograf.__version__}: stdio, "
+        f"writes {'on' if args.allow_writes else 'off'}, "
+        f"allow-dir {', '.join(d.as_posix() for d in args.allow_dir) or 'none'}, "
+        f"tools {','.join(args.tools) if args.tools else 'all'}, lang {lang}"
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """``kartograf-mcp``: serve the tools over stdio until the client closes it.
 
     Returns
     -------
     int
-        0 after a normal end, 2 when the settings cannot be used, 6 when the ``mcp``
-        package is missing (``kartograf-error/1`` is the last line of stderr, the hint
-        is the install command), 130 after Ctrl-C; a wrong argument exits with 2.
+        0 after a normal end; 2 for a wrong argument or setting (an unknown family,
+        a relative ``--allow-dir``, ``--allow-writes`` without ``--allow-dir``, an
+        unusable ``nogat.toml``); 6 when the ``mcp`` package is missing; 130 after
+        Ctrl-C. A failure to start writes the ``kartograf-error/1`` document as the
+        last line of stderr; ``--help`` and ``--version`` end the process
+        (``SystemExit``) as argparse does.
     """
-    args = _parser().parse_args(argv)
-    cache: Path | bool | None = False if args.no_cache else args.cache_file
     try:
+        args = _parser().parse_args(argv)
+        cache: Path | bool | None = False if args.no_cache else args.cache_file
         server = create_server(
-            families=args.tools, cache=cache, allow_dirs=args.allow_dir
+            families=args.tools,
+            cache=cache,
+            allow_dirs=args.allow_dir,
+            allow_writes=args.allow_writes,
         )
-    except (ConfigError, MissingDependencyError) as error:
+    except KartografError as error:
         return _fail(error)
+    print(_start_line(args), file=sys.stderr, flush=True)
     import anyio
 
     try:

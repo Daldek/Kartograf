@@ -1349,17 +1349,18 @@ poprawić błąd bez parsowania tekstu.
   albo dysku; `ok: false`), 2 (błędne dane wejściowe i użycie), 130 (Ctrl-C), 143 (SIGTERM);
   `ValidationError` niesie `option` i `allowed`, a podpowiedź (`hint`) dozwolone
   wartości i przykład komendy. Jedna tabela kodów: `docs/USAGE.md` 9.3.
-- Katalog komend (`kartograf commands list`, `get_catalog()`, `kartograf-catalog/1`):
+- Katalog komend (`kartograf commands list`, `kartograf commands schema`, `list_commands()`,
+  `command_schema()`, `kartograf-command-list/1`, `kartograf-commands/1`):
   grupy, produkty, komendy, parametry (flaga, argument API, rodzaj, wymagany,
   dozwolone wartości), ograniczenia i przykłady; jedyne źródło prawdy: parser CLI,
   opcje projektu i schematy narzędzi MCP powstają z deklaracji. Warstwa komend:
   `parse_command`, `validate_command`, `format_command`, `run_command`,
   `check_command` (KB-1..KB-5 Archiwisty).
-- Serwer MCP `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 29 narzędzi 1:1
-  z komendami (w tym `check_updates`), wynik = dokument `--json`, `is_error` = kod
-  wyjścia CLI != 0, bez wartości domyślnych wpływających na dane (`output_dir`
+- Serwer MCP `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 39 narzędzi 1:1
+  z komendami (`kartograf_<grupa>_<komenda>`), wynik = koperta `kartograf-result/1` (`outputSchema`),
+  `is_error` tylko dla błędu, bez wartości domyślnych wpływających na dane (`output_dir`
   jawny i bezwzględny, `bbox` z `bbox_crs`), postęp przez notyfikacje MCP,
-  `--tools` i `--allow-dir`.
+  `--tools`, `--allow-dir` i `--allow-writes` (bez niego serwer tylko czyta i planuje).
 - `kartograf/py.typed` (PEP 561), `llms.txt`, `scripts/gate.sh`, `python -m
   kartograf`; reguła dla agentów z innych repozytoriów w `CLAUDE.md`.
 - Poza zakresem 0.8.0: transport HTTP serwera MCP, anulowanie pobrań (KC),
@@ -1620,11 +1621,10 @@ from kartograf import (
     PinnedTransform,
 
     # Command catalog, command layer and JSON documents (agent interface, ADR-046)
-    get_catalog,
-    data_commands,
-    Catalog,
-    CommandInfo,
-    ParamInfo,
+    list_commands,
+    command_schema,
+    CommandList,
+    CommandCatalog,
     parse_command,
     validate_command,
     format_command,

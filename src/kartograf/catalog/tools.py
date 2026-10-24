@@ -1,217 +1,91 @@
 """
-The tools of the MCP server as data (spec 9.3, 9.4).
+The tools of the MCP server as data (AGI-5.2 to AGI-5.5, AGI-5.8, AGI-5.12).
 
-``tool_specs()`` lists the 30 tools with their JSON Schema 2020-12 input schema
-and annotations, built only from the command catalog: a command with a ``tool``
-name is a tool (``list_sources`` and ``list_layers`` are one tool for the
-commands of several groups), ``check_updates`` is the one tool that checks any
-of the twelve data commands (O4) and ``project_check_updates`` the check of a
-project. ``check_arguments_schema`` gives the schema of the ``arguments`` of
-``check_updates``: that of the data tool without the run options.
+Every command of the catalog that has a ``family`` is one tool, in the order of the
+catalog. The name is the ``operation_id`` (``kartograf_<group>_<verb>``), the title
+is the summary and the description is the summary, the description and the rules of
+the declaration (English, at most 600 characters together, DOC-1.7). The input
+schema (JSON Schema 2020-12, ``additionalProperties: false``) has one property per
+option of the command, with the description, the allowed values, the bounds and the
+default of the catalog; a rule among options (``one_of``) is a sentence of their
+descriptions, not a keyword that clients reject. ``check_updates`` is an option of
+every command that has a check, so there is no separate tool for a check.
+
+The server mode decides what a write tool is (``allow_writes``): with writes it is
+the command as declared; without them a command that has a check is its plan-only
+variant (the options of a run are gone, ``check_updates`` is fixed to true, the
+annotations say read only) and a command that writes without a check
+(``project init``, ``project add``, ``project remove``) is not offered at all
+(``hidden_tools``).
 
 The module imports nothing of the MCP SDK: ``kartograf.mcp_server`` turns a
-``ToolSpec`` into a protocol ``Tool`` and runs it; tests read these specs
+``ToolSpec`` into a protocol ``Tool`` and runs it, and tests read these specs
 without the SDK installed.
-
-The list of the tools is what a client puts in the context of the model at the
-start of every conversation, so it is short: the names, kinds and allowed
-values of the arguments come from the declarations, but the wording is not the
-catalog's. A catalog description is the CLI help (long, with flags and every
-allowed value) and is read on demand with ``commands_schema``; the
-descriptions here are a few words written for a tool call (``_BRIEF``), and a
-tool says where the rest is. No ``$ref``: clients do not agree on resolving it
-(Claude Code and Codex hand a model an object behind a ``$ref`` as a string).
 
 Examples
 --------
->>> spec = {s.name: s for s in tool_specs()}["elevation_download"]
->>> spec.family, spec.annotations.read_only_hint, spec.commands
-('data', False, ('elevation download',))
+>>> spec = {s.name: s for s in tool_specs(allow_writes=True)}["kartograf_soil_hsg"]
+>>> spec.families, spec.annotations.read_only_hint
+(('data', 'core'), False)
 >>> "output_dir" in spec.input_schema["required"]
 True
 """
 
-import copy
 import functools
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Final
 
+from kartograf._output_schema import OUTPUT_SCHEMA
+from kartograf.catalog.build import command_entries, declared_options, effects
 from kartograf.catalog.commands import declared
-from kartograf.catalog.spec import Command, Kind, Param, resolve
-
-FAMILIES = ("discovery", "availability", "data", "check", "project", "store")
-
-CHECK_UPDATES = "check_updates"
-PROJECT_CHECK_UPDATES = "project_check_updates"
-
-# Arguments of the run of a data command (not options of its task): a check takes
-# the task options and the store only (``check_command``).
-RUN_ARGUMENTS = ("update", "plan", "workers", "summary")
-
-# The tools that are not data commands, by family, in the order of ``tools/list``
-# (the data tools follow ``COMMANDS``: the order of the catalog).
-_OTHER_TOOLS = {
-    "discovery": (
-        "commands_list",
-        "commands_schema",
-        "parse_sheet",
-        "find_sheets",
-        "list_sources",
-        "list_layers",
-    ),
-    "availability": ("elevation_availability",),
-    "check": (CHECK_UPDATES,),
-    "project": (
-        "project_init",
-        "project_add",
-        "project_remove",
-        "project_download",
-        PROJECT_CHECK_UPDATES,
-        "project_status",
-        "project_verify",
-    ),
-    "store": ("store_overview", "store_entries", "store_sidecar"),
-}
-
-# Tools that stand for the commands of several groups: the summary and the text of
-# ``group`` and ``product`` (the commands have no other arguments: a new one is a
-# program error, not a silently lost parameter).
-_SHARED = {
-    "list_sources": (
-        "Wypisz zrodla danych grupy (rejestr zrodel, bez sieci)",
-        "Grupa, ktorej zrodla wypisac",
-        "Tylko zrodla tego produktu (domyslnie wszystkie produkty grupy)",
-    ),
-    "list_layers": (
-        "Wypisz warstwy produktu (landcover) albo wlasciwosci SoilGrids (soil), "
-        "bez sieci",
-        "Grupa, ktorej warstwy wypisac",
-        "Produkt landcover, ktorego warstwy wypisac",
-    ),
-}
-_SHARED_ARGUMENTS = ("group", "product")
-
-_CHECK_SUMMARY = (
-    "Porownaj magazyn z sygnalami zrodel dla zadania narzedzia danych (tool) i "
-    "jego argumentow (arguments: te same, bez update, plan, workers i summary; "
-    "output_dir wymagany). Nic nie jest pobierane"
+from kartograf.catalog.model import CommandEntry, OptionEntry
+from kartograf.catalog.spec import (
+    CHECK_OPTION,
+    Command,
+    Kind,
+    Param,
+    PathRole,
 )
-_CHECK_TOOL_TEXT = "Narzedzie danych, ktorego zadanie sprawdzasz"
-_CHECK_ARGUMENTS_TEXT = "Argumenty tego narzedzia danych, z output_dir"
+from kartograf.catalog.spec import FAMILIES as COMMAND_FAMILIES
+from kartograf.exceptions import ValidationError
 
-# Where a tool sends for the arguments it does not list in words.
-_PARAMS_POINTER = 'Parametry: commands_schema(command="{}").'
-_ADD_POINTER = "Parametry komendy: commands_schema(command=<command>)."
+FAMILIES: Final[tuple[str, ...]] = (*COMMAND_FAMILIES, "core")
+"""What ``--tools`` selects: the families of the commands and ``core`` (AGI-5.12)."""
 
-# Arguments whose allowed values the catalog has but a tool does not list: the
-# list is as long as the overview and an unknown value is an error that names
-# the allowed ones.
-_NO_ENUM = {("commands_schema", "command")}
+RUN_OPTIONS: Final[tuple[str, ...]] = ("update", "plan", "workers", "summary")
+"""The options of a run: a plan (``check_updates``) has none of them."""
 
-# What a tool call says about an argument, in a few words: the allowed values
-# are in the schema (``enum``), whether it is required in ``required``, the long
-# text (flags, every value, the cases of the CLI) in ``commands_schema``. ``None``:
-# the name, the type and the values say enough, or the argument means the same
-# in many tools and the instructions of the server say it once (the area, the
-# store directory, the update mode: ``mcp_server.INSTRUCTIONS``). ``_BRIEF_FOR``
-# is the wording of one tool where the argument means something else than
-# elsewhere. Every argument of every tool has an entry (a new argument of the
-# catalog fails the build of the specs until it gets one).
-_BRIEF: dict[str, str | None] = {
-    "all_campaigns": "Wszystkie loty z zakresu lat, nie tylko najnowszy",
-    "bbox": "[min_x, min_y, max_x, max_y]",
-    "bbox_crs": None,
-    "children": "Bezposrednie arkusze potomne (tylko godla PL)",
-    "country": None,
-    "coverage": "Wariant WCS wycinka ortofotomapy",
-    "cutout": "Jeden wycinek WCS zamiast arkuszy; wymaga horizontal_crs",
-    "depth": None,
-    "descendants": "Wszystkie arkusze potomne do tej skali, np. 1:10000 (PL)",
-    "direction": "Kierunki widoku; domyslnie wszystkie",
-    "force": "Pomin cache metadanych",
-    "format": "Format pliku; wartosci zaleza od produktu i kraju",
-    "full_sheet": "Dolacz najnowszy pelny lot arkusza (w full_sheet/)",
-    "geometry": None,
-    "hierarchy": "Hierarchia arkuszy do skali 1:1000000 (tylko godla PL)",
-    "horizontal_crs": "Uklad poziomy wycinka albo pliku krajowego",
-    "keep_raw": "Zachowaj oryginalny ZIP GUGiK (tylko biezace BDOT10k GPKG)",
-    "ku": "Kod katastralniho uzemi CZ (6 cyfr)",
-    "layer": None,
-    "layers": "Kody warstw BDOT10k albo klas BDOO; domyslnie wszystkie",
-    "level": "Poziom jednostek obszaru; wartosci zaleza od produktu i kraju",
-    "limit": "Najwyzej tyle wpisow; truncated w wyniku mowi o dalszych",
-    "lod": "Poziom szczegolowosci (LoD) paczek modeli",
-    "max_year": None,
-    "min_density": "Tylko LAZ PL: kafle o gestosci >= N pkt/m2",
-    "min_year": None,
-    "model": "Model chmury LAZ CZ (wymagany z product=laz dla CZ)",
-    "name": "Nazwa zadania",
-    "network": "Siec osnowy; wartosci zaleza od kraju",
-    "options": "Opcje zadania jak argumenty narzedzia danych, bez output_dir",
-    "output_dir": None,
-    "path": "Plik magazynu albo jego sidecar .meta.json (sciezka bezwzgledna)",
-    "plan": None,
-    "product": None,
-    "project_dir": None,
-    "property": None,
-    "resolution": "Rozdzielczosc siatki, np. 1m; wartosci zaleza od produktu i kraju",
-    "scale": "Skala arkuszy PL-2000 (z sheet_system 2000)",
-    "segment": "Segment magazynu, np. nmt/pl_1992_1m_evrf2007 (z store_overview)",
-    "sheet": None,
-    "sheet_system": "Uklad godel PL (z sheet wynika z godla)",
-    "stat": None,
-    "summary": "Dodaj podsumowanie grup A-D (udzial i powierzchnia)",
-    "tasks": "Tylko te zadania (domyslnie wszystkie)",
-    "teryt": "Kod TERYT: wojewodztwo (2 cyfry) albo powiat (4 cyfry)",
-    "units": "Tylko te jednostki segmentu (nazwy jak sidecar.unit)",
-    "update": None,
-    "vertical_crs": "Uklad wysokosci, np. EVRF2007; osobno per kraj: {pl, cz}",
-    "whole_country": "Plik krajowy zamiast obszaru (wymaga country pl albo cz)",
-    "workers": None,
-    "year": None,
-}
-_BRIEF_FOR: dict[tuple[str, str], str | None] = {
-    ("commands_schema", "command"): (
-        "Nazwa komendy z commands_list (np. elevation download) albo jej operation_id"
-    ),
-    ("find_sheets", "scale"): "Skala arkuszy (zalezy od ukladu godel)",
-    ("find_sheets", "sheet_system"): None,
-    ("imagery_download", "cutout"): (
-        "Jeden wycinek WCS (tylko PL); wymaga horizontal_crs"
-    ),
-    ("imagery_download", "resolution"): "Piksel wycinka (z cutout)",
-    ("landcover_download", "year"): "Rocznik archiwum albo wydanie (CORINE, BDOO)",
-    ("maps_download", "scale"): "Skala mapy",
-    ("maps_download", "sheet_system"): "Uklad arkuszy ZTM (CZ)",
-    ("models3d_download", "year"): "Rok wydania paczek albo rok danych kafli mesh",
-    ("parse_sheet", "sheet"): "Godlo: PL-1992, PL-2000, SM5, TM33 albo ZTM",
-    ("project_add", "command"): "Komenda danych zadania",
-    ("project_download", "update"): (
-        "Pominiety: tylko niepobrane zadania; inaczej przepina cale zadanie"
-    ),
-    ("project_remove", "name"): "Nazwa zadania do usuniecia",
-}
+ALWAYS_LOAD_KEY: Final = "anthropic/alwaysLoad"
+"""Key of ``_meta`` that tells Claude Code to load a tool's definition up front."""
+ALWAYS_LOAD_COMMANDS: Final[tuple[str, ...]] = ("commands list", "commands schema")
+"""The catalog commands (AGI-5.9): the only tools marked with ``ALWAYS_LOAD_KEY``."""
 
-_BBOX_SCHEMA = {
-    "type": "array",
-    "items": {"type": "number"},
-    "minItems": 4,
-    "maxItems": 4,
-}
+DESCRIPTION_MAX: Final = 600
+"""Longest description of a tool in characters (DOC-1.7)."""
+
+PLAN_ONLY_NOTE: Final = "This server only plans: nothing is written."
+_PLAN_ONLY_DIRECTORY: Final = " This server only plans: nothing is written there."
+_PLAN_ONLY_CHECK: Final = " Always true here: this server only plans."
+
+# Options whose allowed values are not listed in the schema: they are the names of
+# the commands, which ``kartograf_commands_list`` has, and a second copy in every
+# ``tools/list`` is waste.
+_NO_ENUM: Final = {("commands schema", "command")}
 
 
 @dataclass(frozen=True)
 class ToolAnnotations:
-    """Hints for the client (the MCP ``ToolAnnotations``); ``None`` = not set.
+    """The hints of a tool for the client (the MCP ``ToolAnnotations``, AGI-5.4).
 
-    ``destructive_hint`` and ``idempotent_hint`` are set for the tools that
-    write, ``open_world_hint`` says whether the tool uses the network.
+    All five are always set: a client that sees no ``destructiveHint`` assumes the
+    tool is destructive.
     """
 
+    title: str
     read_only_hint: bool
-    destructive_hint: bool | None
-    idempotent_hint: bool | None
+    destructive_hint: bool
+    idempotent_hint: bool
     open_world_hint: bool
 
 
@@ -222,368 +96,361 @@ class ToolSpec:
     Attributes
     ----------
     name : str
-        The tool name (stable like an error code).
+        The tool name: the ``operation_id`` of the command (stable like an error code).
+    title : str
+        The summary of the command.
     description : str
-        The summary of the command, where the arguments are described
-        (``commands_schema``) and the document the tool returns; there is no title:
-        the first sentence is the summary.
+        Summary, description and rules of the command (the mode of a plan-only tool
+        is added); at most ``DESCRIPTION_MAX`` characters.
     input_schema : dict
-        JSON Schema 2020-12 of the arguments, exactly as sent to the client; do
-        not modify it.
+        JSON Schema 2020-12 of the arguments, as sent to the client; do not modify it.
+    output_schema : dict
+        The result envelope ``kartograf-result/1``, self-contained; do not modify it.
     annotations : ToolAnnotations
         Hints for the client.
-    family : str
-        One of ``FAMILIES`` (what ``kartograf-mcp --tools`` selects).
-    commands : tuple of str
-        Ids of the catalog commands the tool runs: one, several for a tool shared
-        by groups (``list_sources``), none for ``check_updates`` (the command is
-        that of the ``tool`` argument).
-    function : str, optional
-        The library function the tool calls (a name of ``kartograf.__all__``: the
-        ``check_function`` of the command for a check); a data tool calls it
-        through ``run_command``; ``None`` for ``check_updates``.
-    check : bool
-        The tool runs the check twin of the command (``check_function``).
+    families : tuple of str
+        The families of the tool: its own and ``core`` for the main tasks.
+    command : str
+        The id of the catalog command the tool runs (``elevation download``).
+    function : str
+        The library function the command calls (a name of ``kartograf.__all__``).
+    check_function : str, optional
+        The ``check_*`` twin the tool calls for ``check_updates``.
     kinds : dict
-        Catalog kind of every argument (``path``, ``bbox``, ...).
+        The catalog kind of every argument that reaches the library
+        (``check_updates`` does not).
+    fixed : dict
+        Constant arguments of the function (the ``group`` of ``<group> list-sources``).
+    paths : dict
+        The path arguments with what each is for (AGI-2.3 ``path_role``): the sandbox
+        of ``--allow-dir`` applies to every one.
     task_options : tuple of str
-        The arguments that are options of a data task; the other arguments of a
-        data tool are those of its run (``output_dir``, ``update``, ``plan``,
-        ``workers``, ``summary``).
+        The arguments that are options of a data task (``project_task``); the other
+        arguments of a data tool belong to its run (``output_dir``, ``update``,
+        ``plan``, ``workers``, ``summary``).
+    plan_only : bool
+        The command writes and has a check, and the server does not write: every
+        call is a plan.
+    refused : frozenset of str
+        The options of a run that a plan-only tool refuses with ``forbidden``.
+    always_load : bool
+        The definition is loaded up front by the client (``_meta``).
     """
 
     name: str
+    title: str
     description: str
     input_schema: dict[str, Any]
+    output_schema: dict[str, Any]
     annotations: ToolAnnotations
-    family: str
-    commands: tuple[str, ...]
-    function: str | None
-    check: bool
+    families: tuple[str, ...]
+    command: str
+    function: str
+    check_function: str | None
     kinds: dict[str, Kind]
+    fixed: dict[str, str]
+    paths: dict[str, PathRole]
     task_options: tuple[str, ...]
+    plan_only: bool
+    refused: frozenset[str]
+    always_load: bool
 
 
-def _brief(tool: str, name: str) -> str | None:
-    """Return the words a tool call has for an argument (``None``: none)."""
-    if (tool, name) in _BRIEF_FOR:
-        return _BRIEF_FOR[tool, name]
-    if name in _BRIEF:
-        return _BRIEF[name]
-    raise ValueError(
-        f"{tool}: the argument {name} has no wording for a tool call "
-        "(add it to _BRIEF or _BRIEF_FOR; None = name, type and values only)"
-    )
+def parse_families(text: str) -> tuple[str, ...]:
+    """Return the families of the text of ``--tools``: names separated by commas.
+
+    Raises
+    ------
+    ValidationError
+        A name that is not in ``FAMILIES`` (``allowed`` lists them), or no name.
+    """
+    return check_families([name.strip() for name in text.split(",")])
 
 
-def _property(param: Param, tool: str) -> dict[str, Any]:
-    """Return the JSON Schema of one argument (spec 9.4 item 2)."""
-    values = resolve(param.allowed)
-    listed = values is not None and (tool, param.name) not in _NO_ENUM
-    allowed = list(values) if listed and values is not None else None
+def check_families(names: Sequence[str]) -> tuple[str, ...]:
+    """Return ``names`` when every one is a family of the tools.
+
+    Raises
+    ------
+    ValidationError
+        No family, or one that is not in ``FAMILIES`` (``allowed`` lists them).
+    """
+    unknown = [name for name in names if name not in FAMILIES]
+    if not names or unknown:
+        shown = ", ".join(repr(name) for name in unknown) or "none given"
+        raise ValidationError(
+            f"unknown tool family: {shown}",
+            option="families",
+            allowed=FAMILIES,
+            hint=f"Tool families: {', '.join(FAMILIES)}.",
+        )
+    return tuple(names)
+
+
+def _read_only(command: Command) -> bool:
+    return effects(command).read_only
+
+
+def _hidden(command: Command, allow_writes: bool) -> bool:
+    """Say whether a server without writes leaves the command out (no check)."""
+    return not allow_writes and not _read_only(command) and not command.supports_check
+
+
+def _plan_only(command: Command, allow_writes: bool) -> bool:
+    return not allow_writes and not _read_only(command) and command.supports_check
+
+
+def _values(option: OptionEntry, command: Command) -> list[Any] | None:
+    """Return the allowed values of an option as they go in ``enum`` (``None``: any)."""
+    if not option.enum or (command.id, option.name) in _NO_ENUM:
+        return None
+    return [entry.value for entry in option.enum]
+
+
+def _string(values: list[Any] | None) -> dict[str, Any]:
+    schema: dict[str, Any] = {"type": "string"}
+    if values is not None:
+        schema["enum"] = values
+    return schema
+
+
+def _property(command: Command, param: Param, option: OptionEntry) -> dict[str, Any]:
+    """Return the JSON Schema of one option (AGI-5.5)."""
+    values = _values(option, command)
     schema: dict[str, Any]
     match param.kind:
         case "str" | "bbox_crs":
-            schema = {"type": "string"}
-            if allowed is not None:
-                schema["enum"] = allowed
+            schema = _string(values)
         case "int":
             schema = {"type": "integer"}
-            if param.name == "workers":
-                schema["minimum"] = 1
+            if option.minimum is not None:
+                schema["minimum"] = option.minimum
+            if option.maximum is not None:
+                schema["maximum"] = option.maximum
+            if values is not None:
+                schema["enum"] = values
         case "flag":
             schema = {"type": "boolean"}
         case "bbox":
-            schema = copy.deepcopy(_BBOX_SCHEMA)
+            schema = {
+                "type": "array",
+                "items": {"type": "number"},
+                "minItems": 4,
+                "maxItems": 4,
+            }
         case "path":
             schema = {"type": "string"}
         case "per_country":
             schema = {
                 "anyOf": [
-                    {"type": "string"},
+                    _string(values),
                     {
                         "type": "object",
-                        "properties": {
-                            "pl": {"type": "string"},
-                            "cz": {"type": "string"},
-                        },
+                        "properties": {"pl": _string(values), "cz": _string(values)},
                         "additionalProperties": False,
                     },
                 ]
             }
         case "str_list":
-            items: dict[str, Any] = {"type": "string"}
-            if allowed is not None:
-                items["enum"] = allowed
-            schema = {"type": "array", "items": items}
+            schema = {"type": "array", "items": _string(values)}
         case "plan" | "options":
             schema = {"type": "object"}
         case _:
-            raise ValueError(f"{param.name}: kind {param.kind!r} has no JSON Schema")
-    text = _brief(tool, param.name)
-    if text is not None:
-        schema["description"] = text
+            raise ValueError(f"{command.id}: kind {param.kind!r} has no JSON Schema")
+    schema["description"] = option.description
+    if option.default is not None:
+        schema["default"] = option.default
+    if option.examples:
+        schema["examples"] = list(option.examples)
     return schema
 
 
-def _object_schema(
-    properties: dict[str, dict[str, Any]], required: Sequence[str]
-) -> dict[str, Any]:
-    """Return the root schema of a tool: an object with exactly these arguments."""
-    schema: dict[str, Any] = {"type": "object", "properties": properties}
+@dataclass(frozen=True)
+class _Built:
+    schema: dict[str, Any]
+    kinds: dict[str, Kind]
+    paths: dict[str, PathRole]
+    refused: frozenset[str]
+
+
+def _input_schema(command: Command, entry: CommandEntry, *, plan_only: bool) -> _Built:
+    """Build the input schema of a command for a mode (see the module docstring)."""
+    properties: dict[str, dict[str, Any]] = {}
+    required: list[str] = []
+    kinds: dict[str, Kind] = {}
+    paths: dict[str, PathRole] = {}
+    refused: set[str] = set()
+    for param, option in zip(declared_options(command), entry.options, strict=True):
+        name = param.name
+        if param.api_argument not in (None, name):
+            raise ValueError(f"{command.id}: the option {name!r} has another argument")
+        if plan_only and name in RUN_OPTIONS:
+            refused.add(name)
+            continue
+        schema = _property(command, param, option)
+        if name == CHECK_OPTION and plan_only:
+            schema.update(const=True, default=True)
+            schema["description"] += _PLAN_ONLY_CHECK
+        elif plan_only and param.path_role in ("root", "output"):
+            schema["description"] += _PLAN_ONLY_DIRECTORY
+        properties[name] = schema
+        if option.required:
+            required.append(name)
+        if param.api_argument is not None:
+            kinds[name] = param.kind
+            if param.path_role is not None:
+                paths[name] = param.path_role
+    root: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
-        schema["required"] = list(required)
-    schema["additionalProperties"] = False
+        root["required"] = required
+    root["additionalProperties"] = False
     if "bbox" in properties and "bbox_crs" in properties:
-        schema["dependentRequired"] = {"bbox": ["bbox_crs"]}
-    return schema
+        root["dependentRequired"] = {"bbox": ["bbox_crs"]}
+    return _Built(root, kinds, paths, frozenset(refused))
 
 
-def _from_params(
-    params: Sequence[Param], tool: str
-) -> tuple[dict[str, Any], dict[str, Kind]]:
-    """Return the input schema and the kind of every argument.
-
-    The parameters that have an API argument are used.
-    """
-    exposed = [param for param in params if param.api_argument]
-    properties = {str(param.api_argument): _property(param, tool) for param in exposed}
-    required = [str(param.api_argument) for param in exposed if param.required]
-    kinds = {str(param.api_argument): param.kind for param in exposed}
-    return _object_schema(properties, required), kinds
+def _description(entry: CommandEntry, *, plan_only: bool) -> str:
+    parts = [entry.summary, entry.description]
+    if entry.rules:
+        parts.append(" ".join(entry.rules))
+    if plan_only:
+        parts.append(PLAN_ONLY_NOTE)
+    return "\n\n".join(parts)
 
 
-def _annotations(command: Command, *, read_only: bool) -> ToolAnnotations:
-    network = "network" in command.effects
-    if read_only:
-        return ToolAnnotations(True, None, None, network)
-    return ToolAnnotations(False, command.destructive, command.idempotent, network)
+def _annotations(entry: CommandEntry, *, plan_only: bool) -> ToolAnnotations:
+    """Derive the hints from the effects of the command and the mode (AGI-5.4)."""
+    changes = entry.effects
+    read_only = changes.read_only or plan_only
+    return ToolAnnotations(
+        title=entry.summary,
+        read_only_hint=read_only,
+        destructive_hint=changes.destructive and not read_only,
+        idempotent_hint=changes.idempotent,
+        open_world_hint=changes.network,
+    )
 
 
-def _describe_tool(
-    summary: str, schema: str | None = None, pointer: str | None = None
-) -> str:
-    """Return ``<summary>. <where the arguments are>. Wynik: <document>.``.
-
-    A data tool names no document: all twelve return the same, the instructions say
-    which.
-    """
-    parts = [f"{summary.rstrip('.')}."]
-    if pointer is not None:
-        parts.append(pointer)
-    if schema is not None:
-        parts.append(f"Wynik: {schema}.")
-    return " ".join(parts)
-
-
-def _command_tool(command: Command, family: str) -> ToolSpec:
-    """Build the tool that runs one catalog command."""
-    assert command.tool is not None
-    schema, kinds = _from_params(command.params, command.tool)
-    pointer: str | None = None
-    result: str | None = command.result_schema
-    if command.project_task:
-        pointer, result = _PARAMS_POINTER.format(command.id), None
-    elif command.tool == "project_add":
-        pointer = _ADD_POINTER
+def _tool(command: Command, entry: CommandEntry, *, plan_only: bool) -> ToolSpec:
+    built = _input_schema(command, entry, plan_only=plan_only)
     return ToolSpec(
-        name=command.tool,
-        description=_describe_tool(command.summary_pl, result, pointer),
-        input_schema=schema,
-        annotations=_annotations(command, read_only=command.kind == "query"),
-        family=family,
-        commands=(command.id,),
+        name=entry.operation_id,
+        title=entry.summary,
+        description=_description(entry, plan_only=plan_only),
+        input_schema=built.schema,
+        output_schema=OUTPUT_SCHEMA,
+        annotations=_annotations(entry, plan_only=plan_only),
+        families=entry.families,
+        command=command.id,
         function=command.function,
-        check=False,
-        kinds=kinds,
-        task_options=tuple(
-            str(param.api_argument) for param in command.params if param.task
-        ),
-    )
-
-
-def _shared_tool(name: str, commands: Sequence[Command], family: str) -> ToolSpec:
-    """One tool for the commands of several groups: ``group`` picks the command."""
-    title, group_text, product_text = _SHARED[name]
-    has_product = False
-    for command in commands:
-        arguments = [
-            str(param.api_argument) for param in command.params if param.api_argument
-        ]
-        if not set(arguments) <= set(_SHARED_ARGUMENTS):
-            raise ValueError(
-                f"{command.id}: the tool {name} is shared, its arguments are "
-                f"{_SHARED_ARGUMENTS}, not {arguments}"
-            )
-        has_product = has_product or "product" in arguments
-    properties: dict[str, dict[str, Any]] = {
-        "group": {
-            "type": "string",
-            "enum": [str(command.group) for command in commands],
-            "description": group_text,
-        }
-    }
-    kinds: dict[str, Kind] = {"group": "str"}
-    if has_product:
-        properties["product"] = {"type": "string", "description": product_text}
-        kinds["product"] = "str"
-    first = commands[0]
-    return ToolSpec(
-        name=name,
-        description=_describe_tool(title, first.result_schema),
-        input_schema=_object_schema(properties, ["group"]),
-        annotations=_annotations(first, read_only=True),
-        family=family,
-        commands=tuple(command.id for command in commands),
-        function=first.function,
-        check=False,
-        kinds=kinds,
-        task_options=(),
-    )
-
-
-def _check_updates_tool(data: Sequence[ToolSpec], check_schema: str) -> ToolSpec:
-    """``check_updates``: any data tool and its arguments (O4)."""
-    properties: dict[str, dict[str, Any]] = {
-        "tool": {
-            "type": "string",
-            "enum": [spec.name for spec in data],
-            "description": _CHECK_TOOL_TEXT,
+        check_function=command.check_function,
+        kinds=built.kinds,
+        fixed={
+            str(param.api_argument): param.fixed
+            for param in command.params
+            if param.fixed is not None
         },
-        "arguments": {"type": "object", "description": _CHECK_ARGUMENTS_TEXT},
-    }
-    return ToolSpec(
-        name=CHECK_UPDATES,
-        description=_describe_tool(_CHECK_SUMMARY, check_schema),
-        input_schema=_object_schema(properties, ["tool", "arguments"]),
-        annotations=ToolAnnotations(True, None, None, True),
-        family="check",
-        commands=(),
-        function=None,
-        check=True,
-        kinds={"tool": "str", "arguments": "options"},
-        task_options=(),
+        paths=built.paths,
+        task_options=tuple(
+            str(param.api_argument)
+            for param in command.params
+            if command.project_task and param.task
+        ),
+        plan_only=plan_only,
+        refused=built.refused,
+        always_load=command.id in ALWAYS_LOAD_COMMANDS,
     )
 
 
-def _project_check_tool(command: Command) -> ToolSpec:
-    """``project_check_updates``: ``check_project`` of ``project download``."""
-    assert command.check_result_schema is not None
-    params = [param for param in command.params if param.name not in RUN_ARGUMENTS]
-    schema, kinds = _from_params(params, PROJECT_CHECK_UPDATES)
-    summary = next(
-        resolve(param.description_pl)
-        for param in command.params
-        if param.name == "check_updates"
-    )
-    return ToolSpec(
-        name=PROJECT_CHECK_UPDATES,
-        description=_describe_tool(summary, command.check_result_schema),
-        input_schema=schema,
-        annotations=_annotations(command, read_only=True),
-        family="project",
-        commands=(command.id,),
-        function=command.check_function,
-        check=True,
-        kinds=kinds,
-        task_options=(),
-    )
-
-
-def _check_schema(spec: ToolSpec) -> dict[str, Any]:
-    """Return the schema of a data tool for a check.
-
-    The task options and ``output_dir``.
-    """
-    keep = {*spec.task_options, "output_dir"}
-    properties = {
-        name: copy.deepcopy(schema)
-        for name, schema in spec.input_schema["properties"].items()
-        if name in keep
-    }
-    required = [name for name in spec.input_schema.get("required", ()) if name in keep]
-    return _object_schema(properties, required)
+@dataclass(frozen=True)
+class _Hidden:
+    command: str
+    families: tuple[str, ...]
 
 
 @functools.cache
-def _built() -> tuple[tuple[ToolSpec, ...], dict[str, dict[str, Any]]]:
-    """Return every tool in the order of ``FAMILIES`` and the check schemas.
-
-    The check schema of every data tool is included.
-    """
-    commands = declared().commands
-    by_tool: dict[str, list[Command]] = {}
-    for command in commands:
-        if command.tool is not None:
-            by_tool.setdefault(command.tool, []).append(command)
-    data_commands = [command for command in commands if command.project_task]
-    data = [_command_tool(command, "data") for command in data_commands]
-    listed = {name for names in _OTHER_TOOLS.values() for name in names}
-    derived = {CHECK_UPDATES, PROJECT_CHECK_UPDATES}
-    unknown = set(by_tool) - listed - {spec.name for spec in data}
-    if unknown:
-        raise ValueError(f"tools without a family: {sorted(unknown)}")
-    missing = listed - derived - set(by_tool)
-    if missing:
-        raise ValueError(f"tools of no catalog command: {sorted(missing)}")
-    check_schema = data_commands[0].check_result_schema
-    assert check_schema is not None
-
-    def make(name: str, family: str) -> ToolSpec:
-        if name == CHECK_UPDATES:
-            return _check_updates_tool(data, check_schema)
-        if name == PROJECT_CHECK_UPDATES:
-            return _project_check_tool(by_tool["project_download"][0])
-        commands = by_tool[name]
-        if name in _SHARED:
-            return _shared_tool(name, commands, family)
-        return _command_tool(commands[0], family)
-
+def _built(allow_writes: bool) -> tuple[tuple[ToolSpec, ...], dict[str, _Hidden]]:
+    """Return the tools of a mode, in the order of the catalog, and the hidden ones."""
     specs: list[ToolSpec] = []
-    for family in FAMILIES:
-        if family == "data":
-            specs += data
-        else:
-            specs += [make(name, family) for name in _OTHER_TOOLS[family]]
-    return tuple(specs), {spec.name: _check_schema(spec) for spec in data}
+    hidden: dict[str, _Hidden] = {}
+    for command, entry in zip(declared().commands, command_entries(), strict=True):
+        if command.family is None:
+            continue
+        if _hidden(command, allow_writes):
+            hidden[entry.operation_id] = _Hidden(command.id, entry.families)
+            continue
+        specs.append(_tool(command, entry, plan_only=_plan_only(command, allow_writes)))
+    return tuple(specs), hidden
 
 
-def tool_specs(families: Sequence[str] | None = None) -> tuple[ToolSpec, ...]:
-    """Return the tools of the given families.
+def clear_caches() -> None:
+    """Forget the tools built so far (for tests that swap the declarations)."""
+    _built.cache_clear()
 
-    All families are the default; the order is that of ``FAMILIES``.
+
+def tool_specs(
+    families: Sequence[str] | None = None, *, allow_writes: bool
+) -> tuple[ToolSpec, ...]:
+    """Return the tools a server offers, in the order of the catalog.
+
+    Parameters
+    ----------
+    families : sequence of str, optional
+        Only the tools of these families (``FAMILIES``); all by default.
+    allow_writes : bool
+        Whether the server writes: without it the commands that have a check are
+        their plan-only variants and the others that write are left out
+        (``hidden_tools``).
 
     Raises
     ------
-    ValueError
-        A family that is not in ``FAMILIES``.
+    ValidationError
+        An unknown family (``option="families"``, ``allowed`` lists them).
     """
-    specs = _built()[0]
+    specs = _built(allow_writes)[0]
     if families is None:
         return specs
-    unknown = [family for family in families if family not in FAMILIES]
-    if unknown:
-        raise ValueError(
-            f"nieznana rodzina narzedzi: {', '.join(unknown)} "
-            f"(dozwolone: {', '.join(FAMILIES)})"
-        )
-    return tuple(spec for spec in specs if spec.family in families)
+    wanted = set(check_families(families))
+    return tuple(spec for spec in specs if wanted & set(spec.families))
 
 
-def check_arguments_schema(tool: str) -> dict[str, Any]:
-    """Return the schema of the ``arguments`` of ``check_updates`` for a data tool.
+def hidden_tools(
+    families: Sequence[str] | None = None, *, allow_writes: bool
+) -> dict[str, str]:
+    """Return the tools that exist but are not offered: name -> command id.
 
-    Its input schema without the arguments of a run (``update``, ``plan``, ``workers``,
-    ``summary``), ``output_dir`` still required.
+    These are the commands that write and have no check (``project init``,
+    ``project add``, ``project remove``) on a server that does not write; none with
+    writes. A call of one is ``forbidden``, not an unknown tool.
 
     Raises
     ------
-    ValueError
-        ``tool`` is not the name of a data tool.
+    ValidationError
+        An unknown family (``option="families"``, ``allowed`` lists them).
     """
-    schemas = _built()[1]
-    if tool not in schemas:
-        raise ValueError(
-            f"{tool!r} nie jest narzedziem danych (dozwolone: {', '.join(schemas)})"
-        )
-    return copy.deepcopy(schemas[tool])
+    hidden = _built(allow_writes)[1]
+    wanted = None if families is None else set(check_families(families))
+    return {
+        name: item.command
+        for name, item in hidden.items()
+        if wanted is None or wanted & set(item.families)
+    }
+
+
+def task_paths(command: str) -> dict[str, PathRole]:
+    """Return the path options of a data command with what each is for.
+
+    The options of a task nested in ``project add`` follow the sandbox of the server
+    like the arguments of a tool.
+
+    Raises
+    ------
+    KeyError
+        ``command`` is not a command of the catalog.
+    """
+    by_id = {c.id: c for c in declared().commands}
+    return {
+        param.name: param.path_role
+        for param in by_id[command].params
+        if param.task and param.kind == "path" and param.path_role is not None
+    }

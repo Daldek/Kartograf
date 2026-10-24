@@ -1175,7 +1175,7 @@ Komenda to deklaracja w katalogu (Z9, ADR-046), nie flagi w `cli/`:
 
 1. **Deklaracja:** `kartograf/catalog/commands/<grupa>.py` z `COMMANDS` (`Command`:
    `id`, `summary`, `kind`, `function` i `check_function` z `kartograf.__all__`,
-   `result_schema`, `tool` = nazwa narzedzia MCP, `effects`, `project_task`, `params`,
+   `result_schema`, `family` i `core` (rodzina narzedzia MCP), `effects`, `project_task`, `params`,
    `constraints`, `examples`) i `GROUPS`; moduly sa wykrywane po nazwie (`declared()`),
    a grupa kolekcji uzywa `collection_commands`/`collection_group`
    (`catalog/commands/_collection.py`). `Param`: `name`, `kind`, `flag`, `argument`
@@ -1197,9 +1197,9 @@ Komenda to deklaracja w katalogu (Z9, ADR-046), nie flagi w `cli/`:
    do przypiec (`VersionedFile`, wraz z plikami wejsciowymi i surowymi, jesli dotyczy);
    opcje zadania to parametry `task=True` deklaracji (`TaskCommand.options`). Nowy produkt
    w istniejacej komendzie nie wymaga nowej pozycji `COMMANDS`.
-5. **MCP:** narzedzie powstaje z deklaracji (`catalog/tools.py`); kazdy argument potrzebuje
-   wpisu `_BRIEF` (krotki opis na wywolanie) - nowy parametr nie zbuduje narzedzi, dopoki
-   go nie ma.
+5. **MCP:** narzedzie o nazwie `operation_id` powstaje z deklaracji (`catalog/tools.py`): opis
+   z `summary`, `description` i `rules` (do 600 znakow), schemat z opisow, wartosci, granic i
+   przykladow opcji, adnotacje z `effects`; nic wiecej nie trzeba dopisywac.
 6. **Testy:** testy kontraktowe katalogu (`tests/test_catalog*.py`: flagi parsera ==
    katalog, sygnatura funkcji, przyklady przez `validate_command`, ograniczenia), test
    zadania projektu (przypiecie wyniku, sprawdzenie wzgledem przypiec i odtworzenie przy

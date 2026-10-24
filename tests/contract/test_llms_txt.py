@@ -17,7 +17,7 @@ import pytest
 import kartograf
 from kartograf import mcp_server, parse_command, validate_command
 from kartograf.catalog.commands import declared
-from kartograf.catalog.tools import FAMILIES
+from kartograf.catalog.tools import FAMILIES, tool_specs
 from kartograf.cli._parser import create_parser
 from kartograf.error_report import ERROR_CODES, EXIT_CODES
 
@@ -25,10 +25,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 LLMS = ROOT / "llms.txt"
 BLOB = "https://github.com/Daldek/Kartograf/blob/main/"
 
-# Parameter and result fields the MCP section names next to the tools.
-NOT_TOOLS = {"is_error", "output_dir", "bbox_crs"}
-# Tools that are not a command of the catalog (spec 9.3).
-SHARED_TOOLS = {"check_updates", "project_check_updates"}
+# Parameter, option and result fields the MCP section names next to the tools.
+NOT_TOOLS = {"is_error", "output_dir", "bbox_crs", "check_updates"}
 
 
 def _text() -> str:
@@ -126,11 +124,14 @@ def test_python_example_uses_real_api():
 
 def test_mcp_tool_names_are_tools_of_the_catalog():
     section = _section("Serwer MCP")
-    tools = {command.tool for command in declared().commands if command.tool}
-    tools |= SHARED_TOOLS
+    tools = {spec.name for spec in tool_specs(allow_writes=True)}
     named = set(re.findall(r"`([a-z0-9]+(?:_[a-z0-9]+)+)`", section)) - NOT_TOOLS
-    wanted = {"commands_list", "commands_schema", "elevation_download"}
-    assert wanted | {"check_updates"} <= named
+    wanted = {
+        "kartograf_commands_list",
+        "kartograf_commands_schema",
+        "kartograf_elevation_download",
+    }
+    assert wanted <= named
     assert named <= tools, sorted(named - tools)
 
 

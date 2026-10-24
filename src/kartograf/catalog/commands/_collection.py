@@ -295,7 +295,6 @@ def collection_commands(
         project_task=True,
         check_function="check_collection",
         check_result_schema="kartograf-plan/1",
-        tool=f"{group}_download",
         constraints=(*declared, *constraints),
         examples=tuple(examples),
         summary_pl=str(summary[1]),
