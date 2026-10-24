@@ -2372,10 +2372,13 @@ class TestRegistryVariantsCli:
             main(["elevation", "download", "--help"])
         assert exc.value.code == 0
         out = capsys.readouterr().out
-        block = out.split("--resolution, -r ROZDZIELCZOSC", 1)[1].split(
-            "--vertical-crs UKLAD"
-        )[0]
-        text = " ".join(block.split())
+        # The option header is "--resolution X, -r X" in Python 3.12 and
+        # "--resolution, -r X" in 3.13.
+        match = re.search(
+            r"^  --resolution[^\n]*\n(.*?)^  --vertical-crs UKLAD", out, re.S | re.M
+        )
+        assert match is not None
+        text = " ".join(match.group(1).split())
 
         listed = {
             (product.lower(), system, label)
