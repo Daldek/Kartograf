@@ -231,7 +231,9 @@ def test_json_usage_error_of_a_known_command_names_it_and_gives_an_example(
     assert message in document["message"]
     assert document["command"] == "elevation download"
     where, example = document["hint"].split(" Przyklad: kartograf ", 1)
-    assert where == "Parametry komendy: kartograf commands list elevation download."
+    assert where == (
+        'Parametry komendy: kartograf commands schema --command "elevation download".'
+    )
     assert parse_command(example).command == "elevation download"
 
 
@@ -258,7 +260,8 @@ def test_json_usage_error_in_a_task_line_is_about_the_line_not_the_task(
     assert document["details"]["reason"] == "usage"
     assert document["command"] == "project add"
     assert document["hint"].startswith(
-        "Parametry komendy: kartograf commands list elevation download. Przyklad: "
+        'Parametry komendy: kartograf commands schema --command "elevation download".'
+        " Przyklad: "
     )
 
 
@@ -506,7 +509,8 @@ def test_library_warnings_pass_with_debug_in_json_mode(capsys, tmp_path, monkeyp
         (["sheet", "parse", "NIE-GODLO"], "sheet"),
         (["sheet", "parse", "CTES96", "--hierarchy"], "hierarchy"),
         (["sheet", "parse", "N-34-130-D", "--descendants", "1:77"], "descendants"),
-        (["commands", "list", "nie-ma-takiej-grupy"], "group"),
+        (["commands", "schema", "--command", "nie-ma-takiej-komendy"], "command"),
+        (["commands", "schema"], "command"),
     ],
 )
 def test_input_errors_of_the_handlers_name_the_option(capsys, argv, option):

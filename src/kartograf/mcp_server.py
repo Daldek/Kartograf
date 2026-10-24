@@ -70,15 +70,15 @@ INSTALL_HINT = 'Brak pakietu mcp: pip install "kartograf[mcp]"'
 # Text for the client (``instructions`` of the server): Polish, ASCII, four
 # paragraphs, under 2000 characters (spec 9.9). The tools do not repeat what is
 # the same in many of them (the area, the paths, the update mode, the result
-# documents): it is said here once, and ``get_catalog`` has the rest. Claude Code
-# loads this text at the start of every session and cuts it at 4096 characters.
+# documents): it is said here once, and ``commands_schema`` has the rest. Claude
+# Code loads this text at the start of every session and cuts it at 4096
+# characters.
 INSTRUCTIONS = "\n".join(
     (
         "Kartograf pobiera dane przestrzenne Polski i Czech (GUGiK, CUZK, "
         "Copernicus, ISRIC) do magazynu wersji w katalogu output_dir. Zacznij od "
-        "get_catalog (przeglad: grupy, produkty, komendy); parametry komendy: "
-        'get_catalog(command="elevation download"); kody wyjscia, kody bledow i '
-        "schematy dokumentow: get_catalog(tables=true). Jakie lata i uklady ma "
+        "commands_list (przeglad: grupy, produkty, komendy); parametry komendy: "
+        'commands_schema(command="elevation download"). Jakie lata i uklady ma '
         "obszar: elevation_availability.",
         "Wspolne argumenty. Sciezki (output_dir, geometry, project_dir, path) "
         "podawaj bezwzglednie. Obszar: sheet (godlo arkusza, np. "

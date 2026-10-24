@@ -9,7 +9,7 @@ sheets of an area (``find_sheets_for_bbox`` and ``find_sheets_for_geometry`` as 
 document). Neither of them uses the network.
 
 The commands a code can be given to are read from the declarations of the
-catalog (``ParamInfo.accepts`` of the ``sheet`` parameter), so a command that
+catalog (``Param.accepts`` of the ``sheet`` parameter), so a command that
 starts to take a sheet system lists it here without a second edit.
 """
 
@@ -20,7 +20,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import ClassVar
 
-from kartograf.catalog import get_catalog
+from kartograf.catalog.commands import declared
 from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.core.geometry import find_sheets_for_geometry
 from kartograf.core.parser_2000 import SCALE_HIERARCHY_2000
@@ -169,8 +169,8 @@ def _accepting(system: str) -> tuple[str, ...]:
     """
     return tuple(
         command.id
-        for command in get_catalog(params=True).commands
-        for param in command.params or ()
+        for command in declared().commands
+        for param in command.params
         if param.name == "sheet" and system in (param.accepts or ())
     )
 

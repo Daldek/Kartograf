@@ -171,9 +171,34 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
         "path": _PATH,
         "sidecar": _SIDECAR,
     },
-    "kartograf-catalog/1": {
-        "schema": "kartograf-catalog/1",
-        "view": "overview",
-        "commands": [{"id": "elevation download", "summary": "Download NMT"}],
+    "kartograf-command-list/1": {
+        "schema": "kartograf-command-list/1",
+        "tool": "kartograf",
+        "version": "0.8.0",
+        "groups": [
+            {"name": "elevation", "summary": "Elevation data", "products": ["nmt"]}
+        ],
+        "commands": [
+            {
+                "name": "elevation download",
+                "operation_id": "kartograf_elevation_download",
+                "summary": "Download elevation data into a store",
+                "families": ["data", "core"],
+                "read_only": False,
+                "check": "elevation download",
+            }
+        ],
+    },
+    "kartograf-commands/1": {
+        "schema": "kartograf-commands/1",
+        "tool": "kartograf",
+        "version": "0.8.0",
+        "commands": [
+            {
+                "name": "elevation download",
+                "operation_id": "kartograf_elevation_download",
+                "options": [{"name": "product", "type": "string", "required": True}],
+            }
+        ],
     },
 }

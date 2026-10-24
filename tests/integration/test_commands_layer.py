@@ -16,13 +16,14 @@ from kartograf import (
     calculate_hsg,
     check_command,
     check_data,
-    data_commands,
     download_data,
     format_command,
     parse_command,
     run_command,
     validate_command,
 )
+from kartograf.catalog.commands import declared
+from kartograf.catalog.formatting import example_command_line
 from kartograf.exceptions import UsageError
 from kartograf.project.commands import COMMANDS, data_commands_text
 from kartograf.serialization import encode
@@ -375,9 +376,15 @@ def test_format_command_writes_the_flags_of_a_valid_run():
 
 
 _EXAMPLES = [
-    pytest.param(command.id, example, id=f"{command.id}#{index}")
-    for command in data_commands()
-    for index, example in enumerate(command.examples or ())
+    pytest.param(
+        command.id,
+        example,
+        example_command_line(command, example),
+        id=f"{command.id}#{index}",
+    )
+    for command in declared().commands
+    if command.project_task
+    for index, example in enumerate(command.examples)
 ]
 
 
@@ -385,8 +392,10 @@ def test_every_data_command_has_catalog_examples():
     assert {p.values[0] for p in _EXAMPLES} == set(COMMANDS)
 
 
-@pytest.mark.parametrize(("command", "example"), _EXAMPLES)
-def test_format_parse_round_trip_for_every_catalog_example(command, example):
+@pytest.mark.parametrize(("command", "example", "example_line"), _EXAMPLES)
+def test_format_parse_round_trip_for_every_catalog_example(
+    command, example, example_line
+):
     options: dict[str, Any] = encode(example.options)  # type: ignore[assignment]
     run = {"output_dir": "./data"}
 
@@ -394,7 +403,7 @@ def test_format_parse_round_trip_for_every_catalog_example(command, example):
     call = parse_command(line[len("kartograf ") :])
 
     assert (call.command, call.options, call.run) == (command, options, run)
-    assert parse_command(example.command_line[len("kartograf ") :]).options == options
+    assert parse_command(example_line[len("kartograf ") :]).options == options
     validate_command(command, options)
 
 

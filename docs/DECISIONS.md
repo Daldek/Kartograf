@@ -73,6 +73,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-049](decisions/0049-nogat-error-registry-mapping.md) | Error codes and exit codes follow the Nogat registry | 2026-10-24 | Accepted |
 | [ADR-050](decisions/0050-nogat-user-environment.md) | User environment: nogat.toml, variables, user directories and `config show` | 2026-10-24 | Accepted |
 | [ADR-051](decisions/0051-result-envelope-and-outcome-exit-codes.md) | Result envelope kartograf-result/1, outcome exit codes 10 and 11, error document on stderr | 2026-10-24 | Accepted |
+| [ADR-052](decisions/0052-command-catalog-documents-and-mcp-server.md) | Command catalog documents kartograf-command-list/1 and kartograf-commands/1, and the MCP server | 2026-10-24 | Accepted |
 
 ---
 

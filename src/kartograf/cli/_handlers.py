@@ -14,7 +14,7 @@ from functools import partial
 
 from kartograf.cli.availability_cmd import cmd_availability
 from kartograf.cli.cache_cmd import cmd_cache
-from kartograf.cli.catalog_cmd import cmd_catalog
+from kartograf.cli.catalog_cmd import cmd_commands_list, cmd_commands_schema
 from kartograf.cli.collection_cmd import cmd_collection_download
 from kartograf.cli.config_cmd import cmd_config_show
 from kartograf.cli.download_cmd import cmd_download
@@ -55,7 +55,8 @@ COLLECTION_GROUPS = (
 HANDLERS: dict[str, Handler] = {
     "sheet parse": cmd_parse,
     "sheet find": cmd_find_sheets,
-    "commands list": cmd_catalog,
+    "commands list": cmd_commands_list,
+    "commands schema": cmd_commands_schema,
     "elevation download": partial(cmd_download, products=ELEVATION_PRODUCTS),
     "elevation availability": cmd_availability,
     "imagery download": partial(cmd_download, products=IMAGERY_PRODUCTS),

@@ -6,7 +6,7 @@ kontrakty leżą w dokumentach kanonicznych, do których sekcje odsyłają:
 zakres i ograniczenia — [SCOPE.md](SCOPE.md), architektura, układ `data/`
 i schemat sidecara — [ARCHITECTURE.md](ARCHITECTURE.md), uzasadnienia —
 [DECISIONS.md](DECISIONS.md). Pełna lista opcji CLI: `kartograf <grupa> <komenda> --help`
-albo maszynowo `kartograf commands list --json` (sekcja 9.4);
+albo maszynowo `kartograf commands list --json` i `kartograf commands schema --command ... --json` (sekcja 9.4);
 lista publicznego API: `src/kartograf/__init__.py` (`__all__`).
 
 ## Spis treści
@@ -66,7 +66,7 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 | `store` | `overview`, `entries`, `sidecar` | odczyt magazynu (bez sieci i bez zapisu): segmenty, wpisy z sidecarami, sidecar jednego pliku |
 
 Poza grupami danych są `kartograf sheet parse` i `kartograf sheet find` (grupa `sheet`), `kartograf cache`, `kartograf config` (ustawienia, sekcja 10)
-i `kartograf commands list` (grupa `commands`: katalog komend dla agentów, sekcja 9.4). `kartograf <grupa>
+i `kartograf commands list` oraz `kartograf commands schema` (grupa `commands`: katalog komend dla agentów, sekcja 9.4). `kartograf <grupa>
 --help` wypisuje komendy grupy, `<grupa> <komenda> --help` — opcje i przykłady
 poleceń, `list-sources` — źródła grupy z rejestru (bez sieci): `WYBOR` (komplet
 wymaganych flag wyboru źródła; `a|b` = jedna z wartości), `KRAJ`, `DOSTAWCA`,
@@ -3162,7 +3162,7 @@ ten sam dokument `kartograf-<rodzaj>/1`: te same klucze, wartosci i kolejnosc
 kluczy (roznia sie tylko pola zalezne od chwili wykonania - `checked_at`,
 etykieta wersji - i sciezki magazynu). Na kazdej drodze agent moze:
 (1) **odkryc**, co Kartograf potrafi i jakie wartosci sa dozwolone
-(`kartograf commands list`, 9.4), bez czytania kodu i bez parsowania `--help`;
+(`kartograf commands list` i `commands schema`, 9.4), bez czytania kodu i bez parsowania `--help`;
 (2) **wywolac** komende z jawnymi parametrami i dostac wynik maszynowy
 (`--json`, 9.2); (3) po bledzie **wiedziec, co poprawic**, bez parsowania
 tekstu (`kartograf-error/1` z `code`, `hint` i `details.option`, 9.3).
@@ -3220,7 +3220,8 @@ the catalog, a project that was changed) is `ok` with no items. The documents:
 | `kartograf-project-check/1` | `project status`, `project verify`, `project download --check-updates` | `get_project_status`, `verify_project`, `check_project` | `ok: false` |
 | `kartograf-cache/1` | `cache stats`, `cache path`, `cache clear` | `get_cache_info`, `get_cache_path`, `clear_cache` | - |
 | `kartograf-config/1` | `config show` | `get_config` | - |
-| `kartograf-catalog/1` | `commands list` (MCP: `get_catalog`) | `get_catalog` | - |
+| `kartograf-command-list/1` | `commands list` (MCP: `commands_list`) | `list_commands` | - |
+| `kartograf-commands/1` | `commands schema --command` (MCP: `commands_schema`) | `command_schema` | - |
 | `kartograf-store-overview/1` | `store overview` (MCP: `store_overview`) | `describe_store` | - |
 | `kartograf-store-entries/1` | `store entries` (MCP: `store_entries`) | `list_store_entries` | - |
 | `kartograf-store-sidecar/1` | `store sidecar` (MCP: `store_sidecar`) | `read_store_sidecar` | - |
@@ -3259,7 +3260,7 @@ Zasady wspolne dokumentow:
 
 ### 9.2 Kontrakt `--json`
 
-Flaga `--json` (bez skrotu) jest w kazdej komendzie-lisciu CLI (36 komend i `commands list`),
+Flaga `--json` (bez skrotu) jest w kazdej komendzie-lisciu CLI (43 komendy),
 za komenda: `kartograf elevation availability --json ...`; `kartograf --json ...` nie
 istnieje. W `project add` podaj ja przed nazwa zadania (`kartograf project add --json
 teren elevation download ...`): po nazwie zadania jest opcja uruchomienia i konczy sie
@@ -3268,8 +3269,7 @@ bledem `invalid_input` z `details.option` rownym `json`.
 1. **stdout** is exactly one JSON document, the envelope `kartograf-result/1` (UTF-8
    whatever the locale, indent of 2 spaces, `\n` at the end), and nothing else; an error writes
    nothing to it: ani pasek postepu, ani linie statusu, ani
-   naglowek listy arkuszy. Wyjatek: przeglad katalogu (`kartograf commands list --json` bez
-   grupy) drukuje rekord grupy i komendy w jednej linii.
+   naglowek listy arkuszy.
 2. **stderr** is empty, with two exceptions outside the contract (and the error document, 4): linie ponowien transportu HTTP
    (`Warning:`) i traceback przy `KARTOGRAF_DEBUG=1` (wyjatek jest wtedy podnoszony takze
    w trybie JSON; z ta zmienna przechodza tez ostrzezenia diagnostyczne biblioteki). Inne
@@ -3485,105 +3485,58 @@ command).
 
 ### 9.4 Katalog komend
 
-Katalog opisuje kazda komende i kazdy jej parametr: nazwe flagi i argumentu biblioteki,
-rodzaj, wymagalnosc, dozwolone wartosci, zaleznosci miedzy parametrami i przyklady. To
-jedyne zrodlo prawdy: z deklaracji w `src/kartograf/catalog/` powstaja parser CLI, opcje
-komend danych projektu i schematy wejscia narzedzi MCP, a testy kontraktowe sprawdzaja,
-ze kazda flaga kazdej komendy jest w katalogu i odwrotnie. Katalog nie wymaga sieci ani
-zapisu.
+Komendy opisuje katalog (`kartograf.catalog`): z tych samych deklaracji powstaja parser CLI,
+dokumenty `kartograf-command-list/1` i `kartograf-commands/1` oraz narzedzia MCP. Dwa kroki:
+najpierw spis komend, potem schemat jednej komendy.
 
 ```bash
-kartograf commands list                         # grupy z produktami i komendami (tekst)
-kartograf commands list elevation download      # opis komendy: parametry, ograniczenia, przyklady
-kartograf commands list soil --params           # komendy grupy z parametrami
-kartograf commands list --json                  # przeglad (kartograf-catalog/1, view "overview")
-kartograf commands list elevation download --json   # pelny opis jednej komendy
-kartograf commands list --params --json         # caly katalog z tabelami kodow i schematow
+kartograf commands list                                         # grupy z produktami i komendami (tekst)
+kartograf commands list --json                                  # spis: kartograf-command-list/1
+kartograf commands schema --command "elevation download"        # opis komendy: parametry, zasady, przyklady (tekst)
+kartograf commands schema --command kartograf_soil_hsg --json   # kartograf-commands/1 z jedna komenda
 ```
 
 ```python
-from kartograf import data_commands, get_catalog
+from kartograf import command_schema, list_commands
 
-overview = get_catalog()                              # = catalog --json
-command = get_catalog(command="elevation download")   # parametry, ograniczenia, przyklady
-tables = get_catalog(tables=True)                     # + exit_codes, errors, schemas
-print(overview.to_json())                             # to_dict() / to_json(): jak kazdy dokument
-print([c.id for c in data_commands()])                # 12 komend danych (zadania projektu)
+listing = list_commands()                       # = commands list --json (result koperty)
+schema = command_schema("elevation download")   # = commands schema --command ... --json
+print(schema.to_json())                         # to_dict() / to_json(): jak kazdy dokument
 ```
 
-Widoki (kazdy to dokument `kartograf-catalog/1` z tym samym zestawem kluczy: `view`,
-`kartograf_version`, `language`, `groups`, `commands`, `exit_codes`, `errors`, `schemas`):
+`--command` bierze nazwe komendy (`elevation download`) albo jej `operation_id`
+(`kartograf_elevation_download`); nieznana albo brakujaca komenda to `validation_error` z
+`details.option` `command` i `details.allowed` (nazwy komend).
 
-| Wywolanie | Widok (`view`) | Zawartosc | Rozmiar |
-|---|---|---|---|
-| `catalog --json`, `get_catalog()` | `overview` | grupy (`name`, `summary`, nazwy produktow), komendy (`id`, `summary`, `tool` = narzedzie MCP, `supports_check`) | ok. 7,6 tys. znakow |
-| `catalog <grupa> --json`, `get_catalog(group=)` | `full` | opisy komend grupy, produkty ze zrodlami | ok. 5 tys. znakow |
-| `catalog <grupa> <komenda> --json`, `get_catalog(command=)` | `full` | jedna komenda: parametry, ograniczenia, przyklady | do ok. 30 tys. znakow (`elevation download`) |
-| `catalog --params --json`, `get_catalog(params=True)` | `full` | wszystkie komendy z parametrami i tabele kodow wyjscia, bledow i schematow | ok. 300 tys. znakow |
-| `get_catalog(tables=True)` | `overview` | przeglad + tabele `exit_codes`, `errors`, `schemas` | ok. 13 tys. znakow |
+**Spis** (`kartograf-command-list/1`, ok. 11 tys. znakow w zwartym JSON): `tool`, `version`,
+`groups` (`name`, `summary`, `products`: nazwy produktow) i `commands` (`name` =
+`<grupa> <komenda>`, `operation_id` = `kartograf_<grupa>_<komenda>`, `summary`, `families`,
+`read_only`, `check`: komenda, ktora planuje te komende bez skutkow, czyli ona sama z opcja
+`check_updates`, albo `null`).
 
-Przeglad zaczyna sie tak (fragment prawdziwego wydruku `kartograf commands list --json`, rekord
-w jednej linii - jedyny wyjatek od wciecia 2 spacje):
+**Schemat** (`kartograf-commands/1`, schemat Nogat `schemas/nogat/commands-1.schema.json`; do
+ok. 16 tys. znakow w zwartym JSON, CLI drukuje z wcieciem) niesie jedna komende: `name`,
+`operation_id`, `function` (funkcja biblioteki), `summary`, `description` (kiedy uzyc, kiedy
+nie, glowne ograniczenie), `options`, `result` (`schema` i `cardinality`: `single`, `bounded`,
+`unbounded`), `effects` (`read_only`, `writes`: `none`, `add`, `replace`, `delete`;
+`idempotent`, `network`, `destructive`), `check`, `families` (rodziny narzedzi MCP; `core` to
+glowne zadania), `rules`, `examples` (`call` = pelne polecenie CLI, `result` = fragment wyniku,
+`title`), `errors` (kody rejestru bledow, 9.3) i `i18n.pl` (polskie `summary`, `description`,
+`rules`; polskich opisow opcji dokument nie niesie, sa w `--help`).
 
-```json
-{
-  "schema": "kartograf-catalog/1",
-  "view": "overview",
-  "kartograf_version": "0.8.0",
-  "language": "pl",
-  "groups": [
-    {"name":"boundaries","summary":"Granice i adresy: PRG (PL), RUIAN i jednostki geomorfologiczne (CZ)","products":["admin","addresses","special","geomorphology"]},
-    "..."
-  ],
-  "commands": [
-    {"id":"elevation download","summary":"Pobierz NMT, NMPT, LAZ albo warstwice (arkusze, kafle albo wycinek)","tool":"elevation_download","supports_check":true},
-    "..."
-  ],
-  "exit_codes": null,
-  "errors": null,
-  "schemas": null
-}
-```
+Opcja (`options[]`) to parametr z argumentem funkcji biblioteki albo `check_updates` komendy z
+planem; flagi tylko CLI (`--json`, `--quiet`, `--upgrade`, `--force`) nie sa opcjami
+(`--upgrade` i `--force` zapisuja opcje `update`). Ma `name` (argument funkcji, klucz wywolania
+MCP i `--flaga`), `type` (`string`, `integer`, `boolean`, `array`, `object`), `required`,
+`description` (po angielsku) oraz, gdy ma wartosc: `items`, `unit`, `default`, `enum` (`value`
+i jednowierszowe `meaning`), `min`, `max`, `examples`, `one_of` (grupa opcji wykluczajacych sie:
+`area`, wybor obszaru, dokladnie jedna z nich) i `path_role` (`input`, `output`, `root`:
+sciezka, ktora serwer MCP sprawdza). Wartosc per kraj (`resolution`, `vertical_crs`) to tekst
+albo obiekt z kluczami `pl` i `cz`.
 
-Opis komendy (`kartograf commands list soil hsg --json`, skrocony) niesie m.in.: `id`, `group`,
-`name`, `summary`, `description`, `kind` (`data`, `query` albo `manage`), `effects`
-(`network`, `store_write`, `project_write`, `cache_write`, `cache_delete`), `idempotent`,
-`destructive`, `project_task` (czy komenda jest zadaniem projektu), `function` i
-`check_function` (funkcje biblioteki z `kartograf.__all__`), `result_schema` i
-`check_result_schema` (dokumenty), `supports_check`, `check_tool` (narzedzie MCP, ktore
-sprawdza komende bez pobierania: `check_updates` dla komend danych,
-`project_check_updates` dla `project download`; `null` bez sprawdzenia; tylko w widoku
-`full`), `cli` (komenda CLI albo `null` dla komendy tylko-API), `tool` (narzedzie MCP albo
-`null`), `params`, `constraints`, `examples`:
-
-```json
-{
-  "name": "depth",
-  "argument": "depth",
-  "flag": "--depth",
-  "short": "-d",
-  "positional": false,
-  "kind": "str",
-  "required": true,
-  "task": true,
-  "allowed": ["0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm", "100-200cm"],
-  "default": null,
-  "cli_default": null,
-  "accepts": null,
-  "section": "Produkt i obszar",
-  "description": "Wymagane: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm (przedzial glebokosci ponizej powierzchni)"
-}
-```
-
-`argument` to nazwa argumentu funkcji biblioteki (`null` dla flag tylko CLI, jak `--quiet`
-i `--json`), `flag` - flaga CLI (`null` dla argumentow tylko API), `kind` - rodzaj wartosci
-(`str`, `int`, `flag`, `bbox`, `bbox_crs`, `path`, `per_country`, `str_list`, `plan`,
-`options`), `task` - czy opcja trafia do zadania projektu, `allowed` - dozwolone wartosci
-z rejestru zrodel. Ograniczenia (`constraints`: `one_of`, `any_of`, `requires`, `excludes`,
-`applies_to`, `required_when`, z komunikatem) dokumentuja glowne reguly walidatora (zrodlem
-zachowania zostaje biblioteka), a przyklady (`examples`) niosa opcje i gotowa linie
-polecenia: kazdy przyklad przechodzi `validate_command` i okrazenie
-`parse_command(format_command(...))`.
+Wyjscie i kody bledow nie sa juz w katalogu: tabele sa w 9.3, a kody komendy w jej `errors`.
+Opisy komend sa po angielsku (AGI-9.1); tekst CLI i `--help` sa po polsku do czasu katalogu
+komunikatow.
 
 ### 9.5 Warstwa komend
 
@@ -3602,7 +3555,7 @@ znajomosci funkcji per produkt:
 
 ```python
 from kartograf import (
-    check_command, data_commands, error_report, format_command,
+    check_command, error_report, format_command,
     parse_command, run_command, validate_command,
 )
 from kartograf.exceptions import ValidationError
@@ -3689,7 +3642,8 @@ nieniszczacy (`destructiveHint=false`: magazyn jest niezmienny, nic nie jest nad
 
 | Rodzina | Narzedzie | Komenda katalogu | Funkcja biblioteki | Dokument | Adnotacje |
 |---|---|---|---|---|---|
-| `discovery` | `get_catalog` | `commands list` | `get_catalog` | `kartograf-catalog/1` | RO |
+| `discovery` | `commands_list` | `commands list` | `list_commands` | `kartograf-command-list/1` | RO |
+| `discovery` | `commands_schema` | `commands schema` | `command_schema` | `kartograf-commands/1` | RO |
 | `discovery` | `parse_sheet` | `sheet parse` | `describe_sheet` | `kartograf-sheet/1` | RO |
 | `discovery` | `find_sheets` | `sheet find` | `find_sheets` | `kartograf-sheets/1` | RO |
 | `discovery` | `list_sources` | `<grupa> list-sources` (parametr `group`) | `list_sources` | `kartograf-sources/1` | RO |
@@ -3724,7 +3678,7 @@ odswieza wpisy) i `open_project` (stan projektu zwracaja `project_status` i pozo
 projektu). Nazwy narzedzi sa stabilne jak kody bledow.
 
 Narzedzie danych bierze argumenty funkcji biblioteki (nazwy z kolumny `argument` katalogu,
-nie flagi CLI); `get_catalog(command="elevation download")` podaje ich liste. Przyklad
+nie flagi CLI); `commands_schema(command="elevation download")` podaje ich liste. Przyklad
 wywolania i sprawdzenia aktualnosci tego samego zadania (`check_updates` przyjmuje `tool` -
 narzedzie danych - i jego `arguments` z `output_dir`, ale bez `update`, `plan` i `workers`):
 
@@ -3783,8 +3737,8 @@ narzedzie danych - i jego `arguments` z `output_dir`, ale bez `update`, `plan` i
   sprawdzajace naraz (reszta czeka: nie zalewamy GUGiK i CUZK). Anulowanie wywolania przez
   klienta nie przerywa trwajacego pobrania (wersje sa zatwierdzane atomowo, wynik jest
   odrzucany); zamkniecie stdio konczy proces serwera.
-- Koszt kontekstu agenta: `tools/list` ma ok. 28,6 tys. znakow (opisy narzedzi sa krotkie;
-  szczegoly daje `get_catalog(command=...)`), przeglad `get_catalog()` ok. 7,3 tys.
+- Koszt kontekstu agenta: `tools/list` ma ok. 29 tys. znakow (opisy narzedzi sa krotkie;
+  szczegoly daje `commands_schema(command=...)`), spis `commands_list` ok. 11 tys.
   znakow; `structuredContent` powtarza `content`.
 
 #### Instrukcje serwera (`instructions`)
@@ -3794,7 +3748,7 @@ laduje go na poczatku kazdej sesji): wspolne znaczenia argumentow sa w nim raz, 
 opisie kazdego narzedzia. Test porownuje ten blok z `kartograf.mcp_server.INSTRUCTIONS`:
 
 ```text
-Kartograf pobiera dane przestrzenne Polski i Czech (GUGiK, CUZK, Copernicus, ISRIC) do magazynu wersji w katalogu output_dir. Zacznij od get_catalog (przeglad: grupy, produkty, komendy); parametry komendy: get_catalog(command="elevation download"); kody wyjscia, kody bledow i schematy dokumentow: get_catalog(tables=true). Jakie lata i uklady ma obszar: elevation_availability.
+Kartograf pobiera dane przestrzenne Polski i Czech (GUGiK, CUZK, Copernicus, ISRIC) do magazynu wersji w katalogu output_dir. Zacznij od commands_list (przeglad: grupy, produkty, komendy); parametry komendy: commands_schema(command="elevation download"). Jakie lata i uklady ma obszar: elevation_availability.
 Wspolne argumenty. Sciezki (output_dir, geometry, project_dir, path) podawaj bezwzglednie. Obszar: sheet (godlo arkusza, np. N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] w ukladzie bbox_crs, ktory jest wymagany: bez wartosci domyslnej) albo geometry (plik SHP albo GPKG, obwiednia obiektow; layer: warstwa GPKG) - dokladnie jeden; czesc komend ma tez teryt, ku albo whole_country. country: pl, cz albo auto (wymagany z bbox i geometry, z sheet wynika z godla).
 Dane wybierasz jawnie (product, resolution, vertical_crs...): Kartograf nie zgaduje; wartosc per kraj to tekst albo {pl, cz}. update: pominiety - tylko brakujace wersje, upgrade - nowsza tresc wg zrodla, force - od nowa; pobranie nie nadpisuje danych. check_updates (tool, arguments) sprawdza aktualnosc bez pobierania; jego plan (result koperty, kartograf-plan/1) wykonasz z update=upgrade i plan.
 Wynik to koperta kartograf-result/1: status (ok, partial albo failed), result (dokument komendy, narzedzia danych: kartograf-download/1 z polem ok), items (jednostki; nieudana ma code i reason) i notices. partial i failed to wyniki (is_error=false): sprawdz items. Blad (is_error=true) to kartograf-error/1 z code, hint i details.option.

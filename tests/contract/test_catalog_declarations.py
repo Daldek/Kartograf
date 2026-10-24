@@ -13,12 +13,12 @@ import kartograf
 from kartograf import _errors
 from kartograf.catalog import commands as commands_package
 from kartograf.catalog import shared
+from kartograf.catalog.build import is_option
 from kartograf.catalog.commands import declared, elevation
 from kartograf.catalog.excerpts import EXCERPTS
 from kartograf.catalog.kinds import check_options_json, options_from_json
 from kartograf.catalog.meanings import meaning
 from kartograf.catalog.spec import (
-    CHECK_OPTION,
     CORE_MAX,
     FAMILIES,
     SHEET_SYSTEMS,
@@ -303,6 +303,7 @@ def test_project_cache_parse_catalog_sheet_search_and_store_commands_are_declare
         "cache clear",
         "sheet parse",
         "commands list",
+        "commands schema",
         *_STORE_AND_SHEET_SEARCH,
     } <= set(_IDS)
     # every command has a CLI: the four that began as API-only functions have flags
@@ -370,16 +371,29 @@ def test_project_download_has_the_update_modes_but_no_plan():
     assert (params["tasks"].positional, params["tasks"].nargs) == (True, "*")
 
 
-def test_catalog_command_offers_the_groups_and_the_commands_of_the_catalog():
-    params = {p.name: p for p in _COMMAND_BY_ID["commands list"].params}
+def test_the_catalog_commands_take_no_options_but_the_command_to_describe():
+    listing = _COMMAND_BY_ID["commands list"]
+    schema = _COMMAND_BY_ID["commands schema"]
+    params = {p.name: p for p in schema.params}
 
-    groups = resolve(params["group"].allowed)
-    assert groups == [g.name for g in _DECLARED.groups]
-    assert groups[-3:] == ["cache", "commands", "config"] and "project" in groups
-    assert resolve(params["command"].allowed) == _IDS
-    assert (params["group"].positional, params["group"].nargs) == (True, "?")
-    assert (params["command"].positional, params["command"].nargs) == (True, "?")
-    assert (params["params"].kind, params["params"].default) == ("flag", None)
+    assert [p.name for p in listing.params] == ["json"]
+    assert [p.name for p in schema.params] == ["command", "json"]
+    assert resolve(params["command"].allowed) == _IDS  # every command, no copy
+    assert callable(params["command"].allowed)
+    assert (params["command"].required, params["command"].choices) == (True, False)
+    assert (params["command"].cli_flag, params["command"].positional) == (
+        "--command",
+        False,
+    )
+    assert (listing.function, listing.result_schema) == (
+        "list_commands",
+        "kartograf-command-list/1",
+    )
+    assert (schema.function, schema.result_schema) == (
+        "command_schema",
+        "kartograf-commands/1",
+    )
+    assert listing.core and schema.core and listing.family == schema.family
 
 
 def test_the_sheet_search_requires_the_choice_of_sheets_and_one_area():
@@ -627,15 +641,6 @@ _REGISTRY_CODES = {entry.code for entry in _errors.CODES if entry.exit_code is n
 _CHECK_ONLY = ("json", "quiet", "upgrade", "force", "details", "arguments")
 
 
-def _is_option(command: Command, param: Param) -> bool:
-    """A parameter the catalog document and the MCP tool show as an option."""
-    if param.fixed is not None:
-        return False
-    return param.api_argument is not None or (
-        param.name == CHECK_OPTION and command.supports_check
-    )
-
-
 def _english(command: Command) -> list[str]:
     texts = [command.summary, resolve(command.description), *command.rules]
     for param in command.params:
@@ -673,7 +678,7 @@ def test_a_command_has_its_texts_in_english_and_polish(command):
         assert example.title and example.title_pl, command.id
     for param in command.params:
         assert resolve(param.description_pl), f"{command.id}.{param.name}: no Polish"
-        if _is_option(command, param):
+        if is_option(command, param):
             assert resolve(param.description), f"{command.id}.{param.name}: no English"
 
 
@@ -850,29 +855,33 @@ def test_arguments_match_the_signature_of_the_function(command):
 
 @pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
 def test_result_schemas_are_registered(command):
-    """The schema a command names is that of a document class of the library, and
-    the catalog describes it and lists the command among its producers."""
-    from kartograf.catalog import get_catalog
+    """The schema a command names is that of a document class of the library."""
     from kartograf.serialization import SCHEMAS
 
-    described = {info.schema: info for info in get_catalog(tables=True).schemas}
     for schema in (command.result_schema, command.check_result_schema):
         if schema is None:
             continue
         assert schema in SCHEMAS, f"{command.id}: {schema} is not registered"
-        assert schema in described, f"{command.id}: {schema} has no description"
-        assert command.id in described[schema].produced_by
 
 
-def test_every_described_schema_has_a_producer_but_the_error_and_the_envelope():
-    """A document nobody returns is a dead type or a missing command."""
-    from kartograf.catalog import get_catalog
+def test_every_document_of_the_library_is_the_result_of_a_command_but_two():
+    """A document nobody returns is a dead type or a missing command; the error
+    document and the envelope are the answer of every command."""
+    from kartograf.serialization import SCHEMAS
 
-    unproduced = {
-        info.schema for info in get_catalog(tables=True).schemas if not info.produced_by
+    library = {
+        schema
+        for schema, classes in SCHEMAS.items()
+        if all(cls.__module__.startswith("kartograf.") for cls in classes)
+    }
+    produced = {
+        schema
+        for command in _DECLARED.commands
+        for schema in (command.result_schema, command.check_result_schema)
+        if schema is not None
     }
 
-    assert unproduced == {"kartograf-error/1", "kartograf-result/1"}
+    assert library - produced == {"kartograf-error/1", "kartograf-result/1"}
 
 
 def test_declaration_modules_do_not_call_providers_at_import(monkeypatch):

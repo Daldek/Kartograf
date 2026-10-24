@@ -1,144 +1,173 @@
 """
-The catalog document built from the declarations (spec 8.5).
+The catalog documents built from the declarations (spec 8.5).
 
-``build_catalog`` resolves the providers of the declarations, checks them and
-builds the ``Catalog``; ``get_catalog`` and ``data_commands`` do it for the
-declarations of ``kartograf/catalog/commands/``. The full catalog is built once
-per process and is read-only; the filters (a group, a command, with or without
-parameters) are views of it.
+``list_commands`` and ``command_schema`` resolve the providers of the declarations of
+``kartograf/catalog/commands/`` and build ``CommandList`` (``kartograf-command-list/1``)
+and ``CommandCatalog`` (``kartograf-commands/1``). The entry of every command is built
+once per process and is read-only; ``command_schema`` picks one of them.
+
+An *option* of a command is a parameter that has an argument of the library function
+(and so a key of an MCP tool call) and the plan option ``check_updates`` of a command
+that has a check; a flag only the CLI has (``--json``, ``--quiet``, ``--upgrade``,
+``--force``) and the constant argument of ``<group> list-sources`` are not options
+(``is_option``).
 """
 
 import functools
-from collections.abc import Mapping, Sequence
-from dataclasses import replace
-from types import MappingProxyType
+from collections.abc import Sequence
 
 from kartograf.catalog.commands import declared
+from kartograf.catalog.excerpts import EXCERPTS
 from kartograf.catalog.formatting import example_command_line
+from kartograf.catalog.meanings import meaning
 from kartograf.catalog.model import (
-    FULL,
-    OVERVIEW,
-    Catalog,
-    CommandInfo,
-    ConstraintInfo,
-    ErrorCodeInfo,
-    ExampleInfo,
-    ExitCodeInfo,
-    GroupInfo,
-    ParamInfo,
-    ProductInfo,
-    SchemaInfo,
+    CommandCatalog,
+    CommandEntry,
+    CommandList,
+    CommandRow,
+    EffectsEntry,
+    EnumValue,
+    ExampleEntry,
+    GroupRow,
+    I18nEntry,
+    OptionEntry,
+    PolishTexts,
+    ResultEntry,
 )
 from kartograf.catalog.spec import (
+    CHECK_OPTION,
     Command,
     Constraint,
-    Example,
     Group,
     Param,
     check_declarations,
     resolve,
     sorted_groups,
 )
-from kartograf.error_report import ERROR_CODES, EXIT_CODES
 from kartograf.exceptions import ValidationError
-from kartograf.serialization import SCHEMAS
-from kartograf.sources.registry import sources_for
 
-LANGUAGE = "pl"
+TOOL = "kartograf"
+# The name of the mutually exclusive group of the options that choose the area: every
+# ``one_of`` constraint of the catalog is the choice of the area.
+ONE_OF_GROUP = "area"
 
-# The description of every document schema of the library; a registered schema
-# without one is not listed in the catalog (a test requires one for each).
-SCHEMA_DESCRIPTIONS = {
-    "kartograf-download/1": "Wynik komendy danych: pliki, pliki surowe, wejscia, "
-    "bledy, nieaktualne pozycje, podsumowanie i komunikaty; ok: false = czesc "
-    "jednostek sie nie powiodla",
-    "kartograf-plan/1": "Plan aktualizacji (sprawdzenie bez pobierania): pozycje "
-    "z porownaniem lokalnej wersji ze zrodlem i komunikaty; ok: false = czesci "
-    "pozycji nie dalo sie sprawdzic",
-    "kartograf-availability/1": "Raport dostepnosci produktu dla obszaru: lata, "
-    "uklady, rozdzielczosci, formaty i polecenia pobrania kompletnych kombinacji",
-    "kartograf-sheet/1": "Opis godla arkusza: system, skala, czlony, uklad, "
-    "obwiednia i komendy, ktore przyjmuja to godlo",
-    "kartograf-sheets/1": "Godla arkuszy obszaru w wybranej skali i ukladzie godel",
-    "kartograf-sources/1": "Zrodla danych grupy z rejestru: dostawca, katalog "
-    "w magazynie, wybor flag i sygnaly aktualnosci",
-    "kartograf-layers/1": "Warstwy produktu: BDOT10k, ZABAGED, Data50, Data250, "
-    "klasy BDOO, lata CORINE albo wlasciwosci SoilGrids",
-    "kartograf-project-state/1": "Stan projektu po init, add albo remove: "
-    "magazyn i zadania",
-    "kartograf-project-report/1": "Wynik pobrania zadan projektu: wyniki zadan "
-    "i przypiete pliki",
-    "kartograf-project-check/1": "Sprawdzenie projektu (status, verify, "
-    "sprawdzenie aktualnosci): pliki zadan z wynikiem",
-    "kartograf-cache/1": "Cache metadanych: sciezka, rozmiar i liczby wpisow "
-    "wg rodzaju",
-    "kartograf-config/1": "Ustawienia w mocy: plik nogat.toml, klucze z wartoscia "
-    "i zrodlem, dane uwierzytelniajace (ustawione albo brak) i katalog magazynu "
-    "z rozmiarem",
-    "kartograf-store-overview/1": "Przeglad magazynu: segmenty i liczby wpisow",
-    "kartograf-store-entries/1": "Wpisy magazynu: pliki z sidecarami",
-    "kartograf-store-sidecar/1": "Sidecar jednego pliku magazynu (kartograf-meta/1)",
-    "kartograf-result/1": "Koperta wyniku komendy: komenda, status (ok, partial, "
-    "failed), wynik (dokument komendy), jednostki (items) i komunikaty (notices)",
-    "kartograf-error/1": "Blad komendy: kod rejestru, tytul, komunikat, "
-    "podpowiedz, szczegoly (details.reason), kod wyjscia i komenda",
-    "kartograf-catalog/1": "Katalog komend: grupy, komendy, parametry, "
-    "ograniczenia, przyklady, tabele kodow wyjscia i bledow oraz schematy",
+# The JSON type of a parameter kind (a ``per_country`` value is a text, or an object
+# with the keys ``pl`` and ``cz`` that the description of the option names).
+_TYPES = {
+    "str": "string",
+    "int": "integer",
+    "flag": "boolean",
+    "bbox": "array",
+    "bbox_crs": "string",
+    "path": "string",
+    "per_country": "string",
+    "str_list": "array",
+    "plan": "object",
+    "options": "object",
 }
+_ITEMS = {"bbox": "number", "str_list": "string"}
+_UNITS = {"bbox": "m, or degrees for EPSG:4326"}
+# What changes the world outside the process (``Command.effects``).
+_WRITING = frozenset({"store_write", "project_write", "cache_write", "cache_delete"})
 
 
-def _frozen(value: object) -> object:
-    """Freeze mappings read-only and lists as tuples.
+def is_option(command: Command, param: Param) -> bool:
+    """Check whether a parameter is an option of the command in every interface.
 
-    The encoder writes them back as objects and arrays.
+    It has an argument of the library function, or it is ``check_updates`` of a command
+    with a check; the constant argument of a command (``fixed``) is none.
     """
-    if isinstance(value, Mapping):
-        return _frozen_mapping(value)
-    if isinstance(value, list | tuple):
-        return tuple(_frozen(item) for item in value)
-    return value
+    if param.fixed is not None:
+        return False
+    return param.api_argument is not None or (
+        param.name == CHECK_OPTION and command.supports_check
+    )
 
 
-def _frozen_mapping(mapping: Mapping[str, object]) -> Mapping[str, object]:
-    return MappingProxyType({key: _frozen(item) for key, item in mapping.items()})
+def declared_options(command: Command) -> tuple[Param, ...]:
+    """Return the parameters of a command that are its options, in declaration order."""
+    return tuple(param for param in command.params if is_option(command, param))
 
 
-def _param_info(param: Param) -> ParamInfo:
+def one_of_constraint(command: Command) -> Constraint | None:
+    """Return the constraint that chooses the area of the command (``None``: none).
+
+    Raises
+    ------
+    ValueError
+        The command has several ``one_of`` constraints: the document names one group.
+    """
+    found = [c for c in command.constraints if c.type == "one_of"]
+    if len(found) > 1:
+        raise ValueError(f"{command.id}: more than one one_of constraint")
+    return found[0] if found else None
+
+
+def _one_of_sentence(constraint: Constraint) -> str:
+    names = ", ".join(f"`{name}`" for name in constraint.params)
+    return f" Give exactly one of {names}."
+
+
+def _summaries(commands: Sequence[Command]) -> dict[str, str]:
+    """Return the summary of every command by its id."""
+    return {command.id: command.summary for command in commands}
+
+
+def _enum(param: Param, summaries: dict[str, str]) -> tuple[EnumValue, ...] | None:
+    """Return the allowed values of a parameter with their meanings."""
     allowed = resolve(param.allowed)
-    return ParamInfo(
+    if allowed is None:
+        return None
+    values = []
+    for value in allowed:
+        if param.name == "command":  # a command of the catalog says itself
+            text = summaries[str(value)]
+        else:
+            text = meaning(param.name, str(value))
+        values.append(
+            EnumValue(int(value) if param.kind == "int" else str(value), text)
+        )
+    return tuple(values)
+
+
+def _option(command: Command, param: Param, summaries: dict[str, str]) -> OptionEntry:
+    description = resolve(param.description)
+    group = one_of_constraint(command)
+    chosen = group is not None and param.name in group.params
+    if chosen and group is not None:
+        description += _one_of_sentence(group)
+    return OptionEntry(
         name=param.name,
-        argument=param.api_argument,
-        flag=param.cli_flag,
-        short=param.short,
-        positional=param.positional,
-        kind=param.kind,
+        type=_TYPES[param.kind],
         required=param.required,
-        task=param.task,
-        allowed=None if allowed is None else tuple(allowed),
+        description=description,
+        items=_ITEMS.get(param.kind),
+        unit=param.unit or _UNITS.get(param.kind),
         default=param.default,
-        cli_default=param.cli_default,
-        accepts=param.accepts,
-        section=param.section,
-        description=resolve(param.description_pl),
+        enum=_enum(param, summaries),
+        minimum=param.minimum,
+        maximum=param.maximum,
+        examples=param.examples or None,
+        one_of=ONE_OF_GROUP if chosen else None,
+        path_role=param.path_role,
     )
 
 
-def _constraint_info(constraint: Constraint) -> ConstraintInfo:
-    when = constraint.when
-    return ConstraintInfo(
-        type=constraint.type,
-        param=constraint.param,
-        params=constraint.params,
-        when=None if when is None else _frozen_mapping(when),
-        message=constraint.message_pl,
-    )
+def effects(command: Command) -> EffectsEntry:
+    """Return what a declared command changes (AGI-2.2 ``effects``).
 
-
-def _example_info(command: Command, example: Example) -> ExampleInfo:
-    return ExampleInfo(
-        title=example.title_pl,
-        options=_frozen_mapping(example.options),
-        command_line=example_command_line(command, example),
+    The command is read only when it writes neither the store, a project, nor the
+    cache; ``writes`` is ``delete`` for a command that removes data and ``add`` for
+    every other that writes (a store never overwrites a version).
+    """
+    read_only = not _WRITING & set(command.effects)
+    writes = "delete" if command.destructive else "add"
+    return EffectsEntry(
+        read_only=read_only,
+        writes="none" if read_only else writes,
+        idempotent=command.idempotent,
+        network="network" in command.effects,
+        destructive=command.destructive and not read_only,
     )
 
 
@@ -161,248 +190,180 @@ def _check_references(command: Command) -> None:
                 )
 
 
-def _command_info(command: Command) -> CommandInfo:
-    """Return the command with its parameters, constraints and examples."""
-    _check_references(command)
-    return CommandInfo(
-        id=command.id,
-        group=command.group,
-        name=command.name,
-        summary=command.summary_pl,
-        description=resolve(command.description_pl) or command.summary_pl,
-        kind=command.kind,
-        effects=command.effects,
-        idempotent=command.idempotent,
-        destructive=command.destructive,
-        project_task=command.project_task,
-        function=command.function,
-        check_function=command.check_function,
-        result_schema=command.result_schema,
-        check_result_schema=command.check_result_schema,
-        supports_check=command.supports_check,
-        check_tool=command.check_tool,
-        cli=command.id,
-        tool=command.tool,
-        params=tuple(_param_info(param) for param in command.params),
-        constraints=tuple(_constraint_info(c) for c in command.constraints),
-        examples=tuple(_example_info(command, e) for e in command.examples),
-    )
-
-
-def _product_infos(group: Group) -> tuple[ProductInfo, ...]:
-    infos = []
-    for name, summary in resolve(group.products):
-        sources = sources_for(product=name)
-        countries = tuple(dict.fromkeys(source.country.lower() for source in sources))
-        infos.append(
-            ProductInfo(
-                name, summary, countries, tuple(source.key for source in sources)
-            )
-        )
-    return tuple(infos)
-
-
-def _group_info(group: Group, commands: Sequence[Command]) -> GroupInfo:
-    ids = tuple(c.id for c in commands if c.group == group.name)
-    return GroupInfo(
-        name=group.name,
-        summary=group.summary_pl,
-        description=group.description_pl,
-        products=_product_infos(group),
-        commands=ids,
-    )
-
-
-def _schema_infos(commands: Sequence[Command]) -> tuple[SchemaInfo, ...]:
-    infos = []
-    for schema in SCHEMAS:
-        description = SCHEMA_DESCRIPTIONS.get(schema)
-        if description is None:
-            continue
-        producers = tuple(
-            c.id for c in commands if schema in (c.result_schema, c.check_result_schema)
-        )
-        infos.append(SchemaInfo(schema, description, producers))
-    return tuple(infos)
-
-
-def _build_full(commands: Sequence[Command], groups: Sequence[Group]) -> Catalog:
-    """Return the catalog of every command: the source of every view.
-
-    It has the parameters, constraints, examples and the tables.
-    """
-    from kartograf import __version__  # the package imports the catalog
-
-    check_declarations(commands, groups)
-    return Catalog(
-        view=FULL,
-        kartograf_version=__version__,
-        language=LANGUAGE,
-        groups=tuple(_group_info(g, commands) for g in sorted_groups(groups)),
-        commands=tuple(_command_info(command) for command in commands),
-        exit_codes=tuple(
-            ExitCodeInfo(row.code, row.name, row.meaning) for row in EXIT_CODES
-        ),
-        errors=tuple(
-            ErrorCodeInfo(
-                row.code, row.reason, row.exception, row.exit_code, row.meaning
-            )
-            for row in ERROR_CODES
-        ),
-        schemas=_schema_infos(commands),
-    )
-
-
-def _select(
-    full: Catalog,
-    *,
-    group: str | None,
-    command: str | None,
-    params: bool | None,
-    tables: bool | None,
-) -> Catalog:
-    """Return a view of the full catalog (spec 8.5).
-
-    The overview when nothing is selected and no parameters are asked for, else the full
-    view.
-    """
-    groups, commands = full.groups, full.commands
-    if group is not None:
-        names = tuple(g.name for g in groups)
-        if group not in names:
-            raise ValidationError(
-                f"Nieznana grupa {group!r} - dostepne: {', '.join(names)}",
-                option="group",
-                allowed=names,
-            )
-        groups = tuple(g for g in groups if g.name == group)
-        commands = tuple(c for c in commands if c.group == group)
-    if command is not None:
-        ids = tuple(c.id for c in commands)
-        if command not in ids:
-            scope = f"grupy {group}" if group is not None else "katalogu"
-            raise ValidationError(
-                f"Nieznana komenda {command!r} {scope} - dostepne: {', '.join(ids)}",
-                option="command",
-                allowed=ids,
-            )
-        commands = tuple(c for c in commands if c.id == command)
-        owners = {c.group for c in commands}
-        groups = tuple(g for g in groups if g.name in owners)
-    selected = group is not None or command is not None
-    with_params = params if params is not None else command is not None
-    if not with_params:
-        commands = tuple(
-            replace(c, params=None, constraints=None, examples=None) for c in commands
-        )
-    if tables is None:
-        tables = with_params and not selected  # the whole catalog: everything
-    return Catalog(
-        view=FULL if selected or with_params else OVERVIEW,
-        kartograf_version=full.kartograf_version,
-        language=full.language,
-        groups=groups,
-        commands=commands,
-        exit_codes=full.exit_codes if tables else None,
-        errors=full.errors if tables else None,
-        schemas=full.schemas if tables else None,
-    )
-
-
-def build_catalog(
-    commands: Sequence[Command],
-    groups: Sequence[Group],
-    *,
-    params: bool | None = None,
-    group: str | None = None,
-    command: str | None = None,
-    tables: bool | None = None,
-) -> Catalog:
-    """Return the catalog of the given declarations.
-
-    The view arguments are those of ``get_catalog``; nothing is cached.
+def command_entry(command: Command, summaries: dict[str, str]) -> CommandEntry:
+    """Return the entry of one declared command (``kartograf-commands/1``).
 
     Raises
     ------
     ValueError
-        The declarations are inconsistent (a group without commands, a constraint
-        or an example naming a parameter the command does not have).
-    ValidationError
-        An unknown ``group`` or ``command`` (``option`` names the argument,
-        ``allowed`` the known values).
+        A constraint or an example names a parameter the command does not have, or the
+        command has several ``one_of`` constraints.
+    KeyError
+        An allowed value without a meaning (``kartograf.catalog.meanings``).
     """
-    full = _build_full(commands, groups)
-    return _select(full, group=group, command=command, params=params, tables=tables)
-
-
-@functools.cache
-def _full_catalog() -> Catalog:
-    declarations = declared()
-    return _build_full(declarations.commands, declarations.groups)
-
-
-@functools.cache
-def _view(
-    group: str | None, command: str | None, params: bool | None, tables: bool | None
-) -> Catalog:
-    return _select(
-        _full_catalog(), group=group, command=command, params=params, tables=tables
+    _check_references(command)
+    examples = tuple(
+        ExampleEntry(
+            call=example_command_line(command, example),
+            result=example.result or EXCERPTS[command.result_schema],
+            title=example.title or "",
+        )
+        for example in command.examples
+    )
+    return CommandEntry(
+        name=command.id,
+        operation_id=command.operation_id,
+        function=command.function,
+        summary=command.summary,
+        description=resolve(command.description),
+        options=tuple(
+            _option(command, param, summaries) for param in declared_options(command)
+        ),
+        result=ResultEntry(command.result_schema, command.cardinality),
+        effects=effects(command),
+        check=command.id if command.supports_check else None,
+        families=command.families,
+        rules=command.rules,
+        examples=examples,
+        errors=command.errors,
+        i18n=I18nEntry(
+            PolishTexts(
+                summary=command.summary_pl,
+                description=resolve(command.description_pl),
+                rules=command.rules_pl,
+            )
+        ),
     )
 
 
+def build_entries(
+    commands: Sequence[Command], groups: Sequence[Group]
+) -> tuple[CommandEntry, ...]:
+    """Return the entry of every command of the declarations, in their order.
+
+    Raises
+    ------
+    ValueError
+        The declarations are inconsistent (a group without commands, a constraint or
+        an example naming a parameter the command does not have).
+    """
+    check_declarations(commands, groups)
+    summaries = _summaries(commands)
+    return tuple(command_entry(command, summaries) for command in commands)
+
+
+def _command_list(
+    entries: Sequence[CommandEntry], groups: Sequence[Group], version: str
+) -> CommandList:
+    rows = tuple(
+        CommandRow(
+            name=entry.name,
+            operation_id=entry.operation_id,
+            summary=entry.summary,
+            families=entry.families,
+            read_only=entry.effects.read_only,
+            check=entry.check,
+        )
+        for entry in entries
+    )
+    group_rows = tuple(
+        GroupRow(
+            group.name,
+            group.summary,
+            tuple(name for name, _ in resolve(group.products)),
+        )
+        for group in sorted_groups(groups)
+    )
+    return CommandList(TOOL, version, group_rows, rows)
+
+
+def build_list(
+    commands: Sequence[Command], groups: Sequence[Group], version: str
+) -> CommandList:
+    """Return the ``kartograf-command-list/1`` document of the declarations."""
+    return _command_list(build_entries(commands, groups), groups, version)
+
+
+def _version() -> str:
+    from kartograf import __version__  # the package imports the catalog
+
+    return __version__
+
+
+@functools.cache
+def _entries() -> tuple[CommandEntry, ...]:
+    declarations = declared()
+    return build_entries(declarations.commands, declarations.groups)
+
+
+@functools.cache
+def _list() -> CommandList:
+    return _command_list(_entries(), declared().groups, _version())
+
+
 def clear_caches() -> None:
-    """Forget the catalogs built so far (for tests that swap the declarations)."""
-    _full_catalog.cache_clear()
-    _view.cache_clear()
+    """Forget the documents built so far (for tests that swap the declarations)."""
+    _entries.cache_clear()
+    _list.cache_clear()
 
 
-def get_catalog(
-    *,
-    group: str | None = None,
-    command: str | None = None,
-    params: bool | None = None,
-    tables: bool | None = None,
-) -> Catalog:
-    """Return the catalog of the commands: ``kartograf commands list --json``.
+def command_entries() -> tuple[CommandEntry, ...]:
+    """Return the entry of every declared command, in the order of the catalog."""
+    return _entries()
 
-    Without arguments the *overview*: every group (summary, product names) and
-    every command (id, summary, MCP tool, whether it can check for updates) -
-    a short document an agent reads first. Everything else is asked for.
 
-    Parameters
-    ----------
-    group : str, optional
-        Only this group and its commands, with the products and their sources.
-    command : str, optional
-        Only this command (its id: ``elevation download``, ``parse``,
-        ``find_sheets``); the view has its parameters, constraints and examples.
-    params : bool, optional
-        ``True``: parameters, constraints and examples of every selected command
-        (without ``group`` and ``command``: of all of them, the whole catalog,
-        about 200 thousand characters); ``False``: never; ``None``: only when
-        ``command`` is given.
-    tables : bool, optional
-        ``True``: the exit code and error code tables and the document schemas;
-        ``False``: never; ``None``: only for the whole catalog (``params=True``
-        without ``group`` and ``command``).
+def list_commands() -> CommandList:
+    """Return the summary of the catalog: ``kartograf commands list --json``.
+
+    Every group (its summary and the products of its commands) and every command (name,
+    ``operation_id``, summary, MCP families, whether it only reads and its plan command)
+    in a short document: the first thing an agent reads (AGI-1.5). The options of a
+    command are one call away (``command_schema``).
 
     Returns
     -------
-    Catalog
-        ``view`` is ``overview`` when nothing is selected and no parameters are
-        asked for, else ``full``. The same object for the same arguments.
+    CommandList
+        The document ``kartograf-command-list/1``; no network is used. The same object
+        every time.
+    """
+    return _list()
+
+
+def command_schema(command: str) -> CommandCatalog:
+    """Return the description of one command: ``kartograf commands schema --json``.
+
+    Parameters
+    ----------
+    command : str
+        The name of a command (``elevation download``) or its ``operation_id``
+        (``kartograf_elevation_download``).
+
+    Returns
+    -------
+    CommandCatalog
+        The document ``kartograf-commands/1`` with that one command: its options (type,
+        bounds, allowed values with their meanings, path role), result, effects, rules,
+        examples with excerpts of their results, errors and Polish texts.
 
     Raises
     ------
     ValidationError
-        An unknown ``group`` or ``command``.
+        The command is not given or is unknown (``option="command"``, ``allowed`` the
+        names of the commands).
     """
-    return _view(group, command, params, tables)
-
-
-def data_commands() -> tuple[CommandInfo, ...]:
-    """Return the data commands a project task may run, with their parameters.
-
-    The twelve commands of ``COMMANDS`` in its order (``project_task`` is true).
-    """
-    return tuple(c for c in _full_catalog().commands if c.project_task)
+    entries = _entries()
+    found = None
+    if isinstance(command, str):
+        found = next((e for e in entries if command in (e.name, e.operation_id)), None)
+    if found is None:
+        names = tuple(entry.name for entry in entries)
+        given = (
+            "nie podano komendy" if command is None else f"nieznana komenda {command!r}"
+        )
+        raise ValidationError(
+            f"{given}: podaj nazwe komendy z katalogu albo jej operation_id",
+            option="command",
+            allowed=names,
+            hint="Lista komend: kartograf commands list",
+        )
+    return CommandCatalog(TOOL, _version(), (found,))

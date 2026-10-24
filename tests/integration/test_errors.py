@@ -352,7 +352,9 @@ def test_usage_error_of_a_known_command_names_it_and_gives_an_example():
     assert report.exit_code == 2 and report.details == {"reason": "usage"}
     assert report.hint is not None
     where, example = report.hint.split(" Przyklad: kartograf ", 1)
-    assert where == "Parametry komendy: kartograf commands list elevation download."
+    assert where == (
+        'Parametry komendy: kartograf commands schema --command "elevation download".'
+    )
     assert parse_command(example).command == "elevation download"
     assert UsageError("m").command is None
 
@@ -366,11 +368,11 @@ def test_usage_error_command_and_hint_sources():
     assert nested.command == "project add"
     assert nested.hint is not None
     assert nested.hint.startswith(
-        "Parametry komendy: kartograf commands list elevation "
+        'Parametry komendy: kartograf commands schema --command "elevation '
     )
     # without a command of its own the error is about the command that was run
     assert error_report(UsageError("m"), command="sheet parse").hint == (
-        "Parametry komendy: kartograf commands list sheet parse. "
+        'Parametry komendy: kartograf commands schema --command "sheet parse". '
         "Przyklad: kartograf sheet parse N-34-130-D-d-2-4"
     )
     # a hint set where the error is raised wins, an unknown id is no command

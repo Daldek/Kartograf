@@ -117,8 +117,8 @@ _ADD_PARAMS = (
         description_pl=(
             "Opcje zadania (wymagane): obiekt z opcjami komendy danych bez "
             'output_dir, np. {"product": "nmt", "sheet": '
-            '"N-34-130-D-d-2-4"}; parametry z task=true podaje get_catalog '
-            "z command=; w CLI to opcje po komendzie"
+            '"N-34-130-D-d-2-4"}; opcje komendy podaje commands schema; '
+            "w CLI to opcje po komendzie"
         ),
     ),
     shared.JSON,
@@ -275,9 +275,9 @@ COMMANDS = (
             " bez sieci, nic nie jest pobierane."
         ),
         rules=(
-            ("`options` are the options of the data command; see `commands list`."),
+            ("`options` are the options of the data command; see `commands schema`."),
         ),
-        rules_pl=("`options` to opcje komendy danych; zobacz `commands list`.",),
+        rules_pl=("`options` to opcje komendy danych; zobacz `commands schema`.",),
         errors=(
             "validation_error",
             "io_error",

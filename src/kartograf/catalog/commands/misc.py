@@ -14,14 +14,9 @@ from kartograf.catalog.spec import (
     Example,
     Group,
     Param,
-    sorted_groups,
 )
 from kartograf.core.parser_2000 import SCALE_HIERARCHY_2000
 from kartograf.core.sheet_parser import PL_BBOX_CRS, SheetParser
-
-
-def _groups() -> list[str]:
-    return [group.name for group in sorted_groups(declared().groups)]
 
 
 def _command_ids() -> list[str]:
@@ -97,59 +92,24 @@ _PARSE_PARAMS = (
     shared.JSON,
 )
 
-_CATALOG_PARAMS = (
-    Param(
-        "group",
-        "str",
-        "Command group; default the overview of every group.",
-        positional=True,
-        nargs="?",
-        metavar="GRUPA",
-        allowed=_groups,
-        description_pl=(
-            "Grupa komend, np. elevation albo project: opisy jej komend i "
-            "produkty ze zrodlami (domyslnie przeglad wszystkich grup)"
-        ),
-    ),
+_SCHEMA_PARAMS = (
     Param(
         "command",
         "str",
         (
-            "Command to describe: its name, such as `elevation download`, "
-            "or its `operation_id`, such as `kartograf_elevation_download`."
+            "Command to describe (required): its name, such as `elevation "
+            "download`, or its `operation_id`, such as "
+            "`kartograf_elevation_download`."
         ),
-        positional=True,
-        nargs="?",
+        required=True,
         metavar="KOMENDA",
         allowed=_command_ids,
         description_pl=(
-            "Komenda do opisania: identyfikator w katalogu (elevation "
-            "download, sheet parse, sheet find); w CLI po GRUPIE wystarczy "
-            "nazwa komendy grupy (download)"
+            "Komenda do opisania (wymagana): nazwa z katalogu (np. elevation "
+            "download) albo jej operation_id (np. kartograf_elevation_download); "
+            "lista: kartograf commands list"
         ),
-    ),
-    Param(
-        "params",
-        "flag",
-        (
-            "Add the options, constraints and examples to a group or to the"
-            " whole catalog."
-        ),
-        description_pl=(
-            "Dodaj parametry, ograniczenia i przyklady do widoku grupy albo"
-            " calego katalogu (opis jednej komendy zawsze je ma; caly "
-            "katalog z parametrami to ok. 200 tys. znakow)"
-        ),
-    ),
-    Param(
-        "tables",
-        "flag",
-        ("Add the tables of the exit codes, the error codes and the document schemas."),
-        flag=None,
-        description_pl=(
-            "Dodaj tabele: kody wyjscia CLI, kody bledow i schematy "
-            "dokumentow (caly katalog z parametrami ma je zawsze)"
-        ),
+        examples=("elevation download",),
     ),
     shared.JSON,
 )
@@ -347,62 +307,88 @@ COMMANDS = (
     ),
     Command(
         "commands list",
-        ("Describe the commands: groups, products, parameters and examples"),
+        "List the commands with their groups, products and MCP families",
         "query",
-        "get_catalog",
-        "kartograf-catalog/1",
-        _CATALOG_PARAMS,
+        "list_commands",
+        "kartograf-command-list/1",
+        (shared.JSON,),
         description=(
-            "Offline, read only: the groups with their products and "
-            "commands; with a group or a command also the parameters, "
-            "constraints and examples."
+            "Offline, read only: every group with its products and every "
+            "command with its `operation_id`, summary, MCP families, whether "
+            "it only reads and whether `check_updates` plans it. Start here; "
+            "for the options of one command use `commands schema`."
         ),
-        tool="get_catalog",
+        tool="commands_list",
         examples=(
             Example(
                 {},
-                title="Overview: groups, products and commands",
-                title_pl="Przeglad: grupy, produkty i komendy",
-            ),
-            Example(
-                {"group": "elevation"},
-                title="A command with its parameters, constraints and examples",
-                run={"command": "download"},
-                title_pl="Opis komendy: parametry, ograniczenia i przyklady",
-            ),
-            Example(
-                {"group": "soil", "params": True},
-                title="The commands of a group with their parameters",
-                title_pl="Komendy grupy z parametrami",
+                title="The groups, products and commands",
+                title_pl="Grupy, produkty i komendy",
             ),
             Example(
                 {},
-                title="The overview as a JSON document",
+                title="The same as a JSON document",
                 run={"json": True},
-                title_pl="Przeglad jako dokument JSON",
+                title_pl="To samo jako dokument JSON",
             ),
         ),
-        summary_pl="Katalog komend: grupy, komendy i parametry",
+        summary_pl="Wypisz komendy z grupami, produktami i rodzinami narzedzi MCP",
         description_pl=(
-            "Wypisz katalog komend (bez sieci i bez zapisu): grupy z "
-            "produktami i komendami (jedna linia na komende: identyfikator,"
-            " rodzaj, podsumowanie); z GRUPA komendy grupy; z GRUPA KOMENDA"
-            " opis, parametry (flaga, argument API, rodzaj, wymagany, "
-            "dozwolone wartosci, opis) i przyklady; --params dodaje "
-            "parametry do widoku grupy i calosci. --json: dokument "
-            "kartograf-catalog/1 - wejscie dla agentow i skryptow; bez "
-            "GRUPY zwiezly przeglad (grupy, nazwy produktow, komendy: "
-            "identyfikator, podsumowanie, narzedzie MCP, sprawdzenie "
-            "aktualnosci), reszta z GRUPA, KOMENDA i --params; tabele kodow"
-            " wyjscia i bledow oraz schematy dokumentow: tables=True w API "
-            "albo caly katalog z parametrami."
+            "Przeglad katalogu komend (bez sieci i bez zapisu): grupy z "
+            "produktami i komendy (nazwa, operation_id, podsumowanie, rodziny "
+            "narzedzi MCP, czy tylko czyta i czy ma plan). --json: dokument "
+            "kartograf-command-list/1. Opcje jednej komendy: kartograf commands "
+            'schema --command "<grupa> <komenda>".'
+        ),
+        rules=(),
+        rules_pl=(),
+        errors=(),
+        family="discovery",
+        core=True,
+        cardinality="bounded",
+    ),
+    Command(
+        "commands schema",
+        "Describe one command: its options, result, effects, rules and examples",
+        "query",
+        "command_schema",
+        "kartograf-commands/1",
+        _SCHEMA_PARAMS,
+        description=(
+            "Offline, read only: the schema of one command (`kartograf-"
+            "commands/1`): each option with its type, bounds, allowed values "
+            "and meanings and path role, the result document, effects, rules, "
+            "examples with a result excerpt, error codes and the Polish texts. "
+            "One command per call; the names are in `commands list`."
+        ),
+        tool="commands_schema",
+        examples=(
+            Example(
+                {"command": "elevation download"},
+                title="The schema of a data command",
+                title_pl="Schemat komendy danych",
+            ),
+            Example(
+                {"command": "kartograf_soil_hsg"},
+                title="The schema of a command by its operation id, as JSON",
+                run={"json": True},
+                title_pl="Schemat komendy wg operation_id, jako JSON",
+            ),
+        ),
+        summary_pl="Opisz jedna komende: opcje, wynik, skutki, zasady i przyklady",
+        description_pl=(
+            "Schemat jednej komendy z katalogu (bez sieci i bez zapisu): opcje "
+            "(rodzaj, zakresy, dozwolone wartosci ze znaczeniami, rola "
+            "sciezki), dokument wyniku, skutki, zasady, przyklady z fragmentem "
+            "wyniku i kody bledow. --json: dokument kartograf-commands/1 "
+            "(opisy po angielsku, polskie teksty komendy w i18n.pl)."
         ),
         rules=(),
         rules_pl=(),
         errors=("validation_error",),
         family="discovery",
         core=True,
-        cardinality="bounded",
+        cardinality="single",
     ),
     Command(
         "cache stats",
@@ -725,8 +711,8 @@ GROUPS = (
         summary_pl="Katalog komend",
         description_pl=(
             "Opis komend Kartografa dla agentow i skryptow (bez sieci i bez"
-            " zapisu): przeglad komend, a po nazwie komendy jej parametry, "
-            "ograniczenia i przyklady."
+            " zapisu): lista komend i schemat jednej komendy z opcjami, "
+            "wynikiem, zasadami i przykladami."
         ),
     ),
     Group(

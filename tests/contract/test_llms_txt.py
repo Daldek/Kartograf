@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 import kartograf
-from kartograf import get_catalog, mcp_server, parse_command, validate_command
-from kartograf.catalog import data_commands
+from kartograf import mcp_server, parse_command, validate_command
+from kartograf.catalog.commands import declared
 from kartograf.catalog.tools import FAMILIES
 from kartograf.cli._parser import create_parser
 from kartograf.error_report import ERROR_CODES, EXIT_CODES
@@ -73,7 +73,7 @@ def test_every_command_is_parsed_by_the_real_parser():
     lines = _command_lines()
     assert len(lines) >= 10
     parser = create_parser(usage_errors=True)
-    data = {command.id for command in data_commands()}
+    data = {command.id for command in declared().commands if command.project_task}
     for line in lines:
         words = shlex.split(line)[1:]
         namespace = parser.parse_args(words)  # UsageError on any mistake
@@ -96,7 +96,7 @@ def test_quoted_commands_of_the_text_exist():
     """Commands quoted inside sentences (`kartograf ...`) parse as well."""
     quoted = re.findall(r"`(kartograf [^`]+)`", _text())
     assert "kartograf commands list --json" in quoted
-    assert "kartograf commands list elevation download --json" in quoted
+    assert 'kartograf commands schema --command "elevation download" --json' in quoted
     parser = create_parser(usage_errors=True)
     for command in quoted:
         if command == "kartograf --version":
@@ -126,10 +126,11 @@ def test_python_example_uses_real_api():
 
 def test_mcp_tool_names_are_tools_of_the_catalog():
     section = _section("Serwer MCP")
-    tools = {command.tool for command in get_catalog().commands if command.tool}
+    tools = {command.tool for command in declared().commands if command.tool}
     tools |= SHARED_TOOLS
     named = set(re.findall(r"`([a-z0-9]+(?:_[a-z0-9]+)+)`", section)) - NOT_TOOLS
-    assert {"get_catalog", "elevation_download", "check_updates"} <= named
+    wanted = {"commands_list", "commands_schema", "elevation_download"}
+    assert wanted | {"check_updates"} <= named
     assert named <= tools, sorted(named - tools)
 
 

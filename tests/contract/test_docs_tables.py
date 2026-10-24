@@ -12,8 +12,9 @@ import re
 from pathlib import Path
 from types import ModuleType
 
-from kartograf import get_catalog, mcp_server
+from kartograf import mcp_server
 from kartograf.catalog.tools import tool_specs
+from kartograf.error_report import ERROR_CODES, EXIT_CODES
 from kartograf.serialization import SCHEMAS
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -98,13 +99,11 @@ def test_usage_error_and_exit_code_tables_are_generated_from_the_code():
 
 
 def test_error_and_exit_code_tables_exist_only_in_usage():
-    catalog = get_catalog(tables=True)
-    assert catalog.exit_codes is not None and catalog.errors is not None
     pairs = "|".join(
         f"`{re.escape(e.code)}`\\s*\\|\\s*(?:`[a-z_]+`|-)\\s*\\|\\s*`{re.escape(e.exception)}`"
-        for e in catalog.errors
+        for e in ERROR_CODES
     )
-    names = "|".join(re.escape(e.name) for e in catalog.exit_codes)
+    names = "|".join(re.escape(e.name) for e in EXIT_CODES)
     error_row = re.compile(rf"^\|\s*(?:{pairs})\s*\|", re.M)
     exit_row = re.compile(rf"^\|\s*\d+\s*\|\s*`(?:{names})`\s*\|", re.M)
 

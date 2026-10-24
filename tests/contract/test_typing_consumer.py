@@ -153,7 +153,7 @@ _CLEAN_CONSUMER = textwrap.dedent(
         Sidecar,
         StoreEntry,
     )
-    from kartograf.catalog.model import Catalog
+    from kartograf.catalog.model import CommandCatalog, CommandList
     from kartograf.commands import CommandCall
     from kartograf.providers.pl import GugikProvider, create_nmt_provider
     from kartograf.store_geometry import Footprint
@@ -210,13 +210,14 @@ _CLEAN_CONSUMER = textwrap.dedent(
         )
         ok: bool = report.ok
         notices: tuple[Notice, ...] = report.notices
-        catalog: Catalog = kartograf.get_catalog(group=None, params=True)
+        listing: CommandList = kartograf.list_commands()
+        schema: CommandCatalog = kartograf.command_schema("elevation download")
         call: CommandCall = kartograf.parse_command("nmt --sheet N-34-130-D-d-2-4")
         line: str = kartograf.format_command(call.command, call.options, run=call.run)
         result: DataReport = kartograf.download_data(
             product="nmt", output_dir=root, sheet="N-34-130-D-d-2-4"
         )
-        print(ok, notices, catalog, line, result)
+        print(ok, notices, listing, schema, line, result)
     '''
 )
 

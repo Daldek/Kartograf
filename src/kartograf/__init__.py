@@ -30,8 +30,9 @@ Every result is a JSON document (ADR-046): ``to_dict()``/``to_json()`` of a
 report give the same ``kartograf-<kind>/1`` document as the CLI ``--json``
 output and the MCP server ``kartograf-mcp``; an exception becomes a
 ``kartograf-error/1`` document with ``error_report`` (every ``KartografError``
-has a stable ``code``, an ``exit_code`` and a ``hint``). ``get_catalog`` and
-``data_commands`` describe every command, its parameters and allowed values;
+has a stable ``code``, an ``exit_code`` and a ``hint``). ``list_commands`` and
+``command_schema`` describe the commands (the list, and one command with its options
+and allowed values);
 ``parse_command``, ``validate_command``, ``format_command``, ``run_command``
 and ``check_command`` work on a data command as data: the last two return the
 ``kartograf-result/1`` envelope (``CommandResult``: ``status``, ``items``,
@@ -111,8 +112,8 @@ Example usage::
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.cache_info import CacheInfo, clear_cache, get_cache_info, get_cache_path
-from kartograf.catalog import data_commands, get_catalog
-from kartograf.catalog.model import Catalog, CommandInfo, ParamInfo
+from kartograf.catalog import command_schema, list_commands
+from kartograf.catalog.model import CommandCatalog, CommandList
 from kartograf.commands import (
     CommandCall,
     check_command,
@@ -479,11 +480,10 @@ __all__ = [
     "SheetInfo",
     "find_sheets",
     "SheetList",
-    "get_catalog",
-    "data_commands",
-    "Catalog",
-    "CommandInfo",
-    "ParamInfo",
+    "list_commands",
+    "command_schema",
+    "CommandList",
+    "CommandCatalog",
     # The command layer: a data command as data (spec 8.7; KB-2..KB-5)
     "CommandCall",
     "parse_command",

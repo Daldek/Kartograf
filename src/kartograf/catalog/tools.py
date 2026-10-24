@@ -1,7 +1,7 @@
 """
 The tools of the MCP server as data (spec 9.3, 9.4).
 
-``tool_specs()`` lists the 29 tools with their JSON Schema 2020-12 input schema
+``tool_specs()`` lists the 30 tools with their JSON Schema 2020-12 input schema
 and annotations, built only from the command catalog: a command with a ``tool``
 name is a tool (``list_sources`` and ``list_layers`` are one tool for the
 commands of several groups), ``check_updates`` is the one tool that checks any
@@ -15,11 +15,11 @@ without the SDK installed.
 
 The list of the tools is what a client puts in the context of the model at the
 start of every conversation, so it is short: the names, kinds and allowed
-values of the arguments come from ``get_catalog(params=True)``, but the wording
-is not the catalog's. A catalog description is the CLI help (long, with flags and
-every allowed value) and is read on demand with ``get_catalog(command=...)``;
-the descriptions here are a few words written for a tool call (``_BRIEF``), and
-a tool says where the rest is. No ``$ref``: clients do not agree on resolving it
+values of the arguments come from the declarations, but the wording is not the
+catalog's. A catalog description is the CLI help (long, with flags and every
+allowed value) and is read on demand with ``commands_schema``; the
+descriptions here are a few words written for a tool call (``_BRIEF``), and a
+tool says where the rest is. No ``$ref``: clients do not agree on resolving it
 (Claude Code and Codex hand a model an object behind a ``$ref`` as a string).
 
 Examples
@@ -35,11 +35,10 @@ import copy
 import functools
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
-from kartograf.catalog.build import get_catalog
-from kartograf.catalog.model import CommandInfo, ParamInfo
-from kartograf.catalog.spec import Kind
+from kartograf.catalog.commands import declared
+from kartograf.catalog.spec import Command, Kind, Param, resolve
 
 FAMILIES = ("discovery", "availability", "data", "check", "project", "store")
 
@@ -54,7 +53,8 @@ RUN_ARGUMENTS = ("update", "plan", "workers", "summary")
 # (the data tools follow ``COMMANDS``: the order of the catalog).
 _OTHER_TOOLS = {
     "discovery": (
-        "get_catalog",
+        "commands_list",
+        "commands_schema",
         "parse_sheet",
         "find_sheets",
         "list_sources",
@@ -100,27 +100,18 @@ _CHECK_SUMMARY = (
 _CHECK_TOOL_TEXT = "Narzedzie danych, ktorego zadanie sprawdzasz"
 _CHECK_ARGUMENTS_TEXT = "Argumenty tego narzedzia danych, z output_dir"
 
-# The summary of the catalog command says what the CLI prints; a tool says what
-# its three arguments do.
-_CATALOG_SUMMARY = (
-    "Katalog komend (bez sieci): bez argumentow przeglad grup, produktow i komend "
-    "(id, podsumowanie, narzedzie, sprawdzenie aktualnosci); command=<id>: "
-    "parametry, ograniczenia i przyklady komendy; group=<grupa>: komendy i "
-    "produkty grupy; tables=true: kody wyjscia, kody bledow i schematy dokumentow"
-)
-
 # Where a tool sends for the arguments it does not list in words.
-_PARAMS_POINTER = 'Parametry: get_catalog(command="{}").'
-_ADD_POINTER = "Parametry komendy: get_catalog(command=<command>)."
+_PARAMS_POINTER = 'Parametry: commands_schema(command="{}").'
+_ADD_POINTER = "Parametry komendy: commands_schema(command=<command>)."
 
 # Arguments whose allowed values the catalog has but a tool does not list: the
 # list is as long as the overview and an unknown value is an error that names
 # the allowed ones.
-_NO_ENUM = {("get_catalog", "command")}
+_NO_ENUM = {("commands_schema", "command")}
 
 # What a tool call says about an argument, in a few words: the allowed values
 # are in the schema (``enum``), whether it is required in ``required``, the long
-# text (flags, every value, the cases of the CLI) in ``get_catalog``. ``None``:
+# text (flags, every value, the cases of the CLI) in ``commands_schema``. ``None``:
 # the name, the type and the values say enough, or the argument means the same
 # in many tools and the instructions of the server say it once (the area, the
 # store directory, the update mode: ``mcp_server.INSTRUCTIONS``). ``_BRIEF_FOR``
@@ -159,7 +150,6 @@ _BRIEF: dict[str, str | None] = {
     "network": "Siec osnowy; wartosci zaleza od kraju",
     "options": "Opcje zadania jak argumenty narzedzia danych, bez output_dir",
     "output_dir": None,
-    "params": "Dodaj parametry, ograniczenia i przyklady (caly: 200 tys. znakow)",
     "path": "Plik magazynu albo jego sidecar .meta.json (sciezka bezwzgledna)",
     "plan": None,
     "product": None,
@@ -172,7 +162,6 @@ _BRIEF: dict[str, str | None] = {
     "sheet_system": "Uklad godel PL (z sheet wynika z godla)",
     "stat": None,
     "summary": "Dodaj podsumowanie grup A-D (udzial i powierzchnia)",
-    "tables": "Dodaj kody wyjscia, kody bledow i schematy dokumentow",
     "tasks": "Tylko te zadania (domyslnie wszystkie)",
     "teryt": "Kod TERYT: wojewodztwo (2 cyfry) albo powiat (4 cyfry)",
     "units": "Tylko te jednostki segmentu (nazwy jak sidecar.unit)",
@@ -183,8 +172,9 @@ _BRIEF: dict[str, str | None] = {
     "year": None,
 }
 _BRIEF_FOR: dict[tuple[str, str], str | None] = {
-    ("get_catalog", "command"): "Id komendy, np. elevation download",
-    ("get_catalog", "group"): "Tylko ta grupa: jej komendy i produkty ze zrodlami",
+    ("commands_schema", "command"): (
+        "Nazwa komendy z commands_list (np. elevation download) albo jej operation_id"
+    ),
     ("find_sheets", "scale"): "Skala arkuszy (zalezy od ukladu godel)",
     ("find_sheets", "sheet_system"): None,
     ("imagery_download", "cutout"): (
@@ -235,7 +225,7 @@ class ToolSpec:
         The tool name (stable like an error code).
     description : str
         The summary of the command, where the arguments are described
-        (``get_catalog``) and the document the tool returns; there is no title:
+        (``commands_schema``) and the document the tool returns; there is no title:
         the first sentence is the summary.
     input_schema : dict
         JSON Schema 2020-12 of the arguments, exactly as sent to the client; do
@@ -286,10 +276,11 @@ def _brief(tool: str, name: str) -> str | None:
     )
 
 
-def _property(param: ParamInfo, tool: str) -> dict[str, Any]:
+def _property(param: Param, tool: str) -> dict[str, Any]:
     """Return the JSON Schema of one argument (spec 9.4 item 2)."""
-    listed = param.allowed is not None and (tool, param.name) not in _NO_ENUM
-    allowed = list(param.allowed) if listed and param.allowed is not None else None
+    values = resolve(param.allowed)
+    listed = values is not None and (tool, param.name) not in _NO_ENUM
+    allowed = list(values) if listed and values is not None else None
     schema: dict[str, Any]
     match param.kind:
         case "str" | "bbox_crs":
@@ -349,20 +340,20 @@ def _object_schema(
 
 
 def _from_params(
-    params: Sequence[ParamInfo], tool: str
+    params: Sequence[Param], tool: str
 ) -> tuple[dict[str, Any], dict[str, Kind]]:
     """Return the input schema and the kind of every argument.
 
     The parameters that have an API argument are used.
     """
-    exposed = [param for param in params if param.argument]
-    properties = {str(param.argument): _property(param, tool) for param in exposed}
-    required = [str(param.argument) for param in exposed if param.required]
-    kinds = {str(param.argument): cast(Kind, param.kind) for param in exposed}
+    exposed = [param for param in params if param.api_argument]
+    properties = {str(param.api_argument): _property(param, tool) for param in exposed}
+    required = [str(param.api_argument) for param in exposed if param.required]
+    kinds = {str(param.api_argument): param.kind for param in exposed}
     return _object_schema(properties, required), kinds
 
 
-def _annotations(command: CommandInfo, *, read_only: bool) -> ToolAnnotations:
+def _annotations(command: Command, *, read_only: bool) -> ToolAnnotations:
     network = "network" in command.effects
     if read_only:
         return ToolAnnotations(True, None, None, network)
@@ -385,22 +376,19 @@ def _describe_tool(
     return " ".join(parts)
 
 
-def _command_tool(command: CommandInfo, family: str) -> ToolSpec:
+def _command_tool(command: Command, family: str) -> ToolSpec:
     """Build the tool that runs one catalog command."""
-    assert command.params is not None and command.tool is not None
+    assert command.tool is not None
     schema, kinds = _from_params(command.params, command.tool)
-    summary = command.summary
     pointer: str | None = None
     result: str | None = command.result_schema
     if command.project_task:
         pointer, result = _PARAMS_POINTER.format(command.id), None
-    elif command.tool == "get_catalog":
-        summary = _CATALOG_SUMMARY
     elif command.tool == "project_add":
         pointer = _ADD_POINTER
     return ToolSpec(
         name=command.tool,
-        description=_describe_tool(summary, result, pointer),
+        description=_describe_tool(command.summary_pl, result, pointer),
         input_schema=schema,
         annotations=_annotations(command, read_only=command.kind == "query"),
         family=family,
@@ -409,18 +397,19 @@ def _command_tool(command: CommandInfo, family: str) -> ToolSpec:
         check=False,
         kinds=kinds,
         task_options=tuple(
-            str(param.argument) for param in command.params if param.task
+            str(param.api_argument) for param in command.params if param.task
         ),
     )
 
 
-def _shared_tool(name: str, commands: Sequence[CommandInfo], family: str) -> ToolSpec:
+def _shared_tool(name: str, commands: Sequence[Command], family: str) -> ToolSpec:
     """One tool for the commands of several groups: ``group`` picks the command."""
     title, group_text, product_text = _SHARED[name]
     has_product = False
     for command in commands:
-        assert command.params is not None
-        arguments = [str(param.argument) for param in command.params if param.argument]
+        arguments = [
+            str(param.api_argument) for param in command.params if param.api_argument
+        ]
         if not set(arguments) <= set(_SHARED_ARGUMENTS):
             raise ValueError(
                 f"{command.id}: the tool {name} is shared, its arguments are "
@@ -477,13 +466,15 @@ def _check_updates_tool(data: Sequence[ToolSpec], check_schema: str) -> ToolSpec
     )
 
 
-def _project_check_tool(command: CommandInfo) -> ToolSpec:
+def _project_check_tool(command: Command) -> ToolSpec:
     """``project_check_updates``: ``check_project`` of ``project download``."""
-    assert command.params is not None and command.check_result_schema is not None
+    assert command.check_result_schema is not None
     params = [param for param in command.params if param.name not in RUN_ARGUMENTS]
     schema, kinds = _from_params(params, PROJECT_CHECK_UPDATES)
     summary = next(
-        param.description for param in command.params if param.name == "check_updates"
+        resolve(param.description_pl)
+        for param in command.params
+        if param.name == "check_updates"
     )
     return ToolSpec(
         name=PROJECT_CHECK_UPDATES,
@@ -520,12 +511,12 @@ def _built() -> tuple[tuple[ToolSpec, ...], dict[str, dict[str, Any]]]:
 
     The check schema of every data tool is included.
     """
-    catalog = get_catalog(params=True)
-    by_tool: dict[str, list[CommandInfo]] = {}
-    for command in catalog.commands:
+    commands = declared().commands
+    by_tool: dict[str, list[Command]] = {}
+    for command in commands:
         if command.tool is not None:
             by_tool.setdefault(command.tool, []).append(command)
-    data_commands = [command for command in catalog.commands if command.project_task]
+    data_commands = [command for command in commands if command.project_task]
     data = [_command_tool(command, "data") for command in data_commands]
     listed = {name for names in _OTHER_TOOLS.values() for name in names}
     derived = {CHECK_UPDATES, PROJECT_CHECK_UPDATES}
