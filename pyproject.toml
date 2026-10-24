@@ -53,7 +53,7 @@ where = ["src"]
 include = ["kartograf*"]
 
 [tool.setuptools.package-data]
-kartograf = ["py.typed"]
+kartograf = ["py.typed", "_data/agents/*.md"]
 
 [tool.setuptools.dynamic]
 version = {attr = "kartograf.__version__"}

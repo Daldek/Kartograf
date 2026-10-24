@@ -96,6 +96,7 @@ def test_every_command_with_a_family_is_one_tool_in_the_order_of_the_catalog():
         "cache clear",
         "cache path",
         "config show",
+        "commands guide",
     }
     assert [s.name for s in tool_specs(allow_writes=True)] == expected  # deterministic
 

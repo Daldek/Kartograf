@@ -530,6 +530,8 @@ kartograf/
 │                        # format_command, run_command, check_command, CommandCall
 ├── mcp_server.py        # serwer MCP (stdio; extra `mcp`, skrypt kartograf-mcp): create_server,
 │                        # main, build_instructions, INSTRUCTIONS; jedyny modul dotykajacy SDK
+├── guide.py             # przewodnik dla agentow z katalogu (AGI 8): agent_guide -> AgentGuide
+│                        # (kartograf-guide/1), inject_block; szablony w _data/agents/*.md
 ├── catalog/             # Katalog komend - jedyne zrodlo prawdy (sekcja 4.11), bez importu cli/mcp
 │   ├── spec.py          # Command, Param, Constraint, Example, Group (dane; dostawcy wartosci z rejestru)
 │   ├── model.py         # dokumenty kartograf-command-list/1 i kartograf-commands/1: CommandList, GroupRow,
@@ -1835,6 +1837,7 @@ schematu oraz to, ze kazdy `result_schema` katalogu jest w rejestrze.
 | `kartograf-config/1` | `Config` | `config` | `tool, version, config_file, keys, credentials, store` |
 | `kartograf-command-list/1` | `CommandList` | `catalog.model` | `tool, version, groups, commands` |
 | `kartograf-commands/1` | `CommandCatalog` | `catalog.model` | `tool, version, commands` |
+| `kartograf-guide/1` | `AgentGuide` | `guide` | `format, text` |
 | `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `output_dir, segments` |
 | `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `output_dir, segment, units, limit, truncated, entries` |
 | `kartograf-store-sidecar/1` | `StoreSidecar` | `store_documents` | `path, sidecar` |

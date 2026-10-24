@@ -613,6 +613,7 @@ def _offline_lines(project: Path, base: Path) -> dict[str, list[str]]:
         ],
         "commands list": ["commands", "list"],
         "commands schema": ["commands", "schema", "--command", "sheet parse"],
+        "commands guide": ["commands", "guide", "--format", "llms"],
         "cache stats": ["cache", "stats"],
         "cache path": ["cache", "path"],
         "cache clear": ["cache", "clear"],

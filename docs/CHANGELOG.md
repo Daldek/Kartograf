@@ -134,6 +134,16 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 
 **Added**
 
+- `kartograf commands guide --format agents|llms|agents-md-block` (library: `agent_guide`,
+  the document `AgentGuide` = `kartograf-guide/1` with `format` and `text`) renders the guide
+  for AI agents of AGI section 8 from the command catalog, the error registry and the
+  templates `src/kartograf/_data/agents/*.md` (packaged); it is offline, English and the same
+  in every interface (AGI-3.8, AGI-8.1, AGI-9.2). `--inject FILE` (CLI only) puts the compact
+  block of `agents-md-block` (at most 60 lines, between `<!-- BEGIN kartograf -->` and
+  `<!-- END kartograf -->`) into the `AGENTS.md` of a repository that uses Kartograf, the same
+  way every time (AGI-8.2); `kartograf.guide.inject_block` is the text part of it. The
+  command has no MCP tool, and `kartograf mcp` (AGI-3.8) is not added: `kartograf-mcp` stays
+  the entry point of the server (ADR-052, decision 10).
 - `list_commands()`, `command_schema(command)` and the documents `CommandList` and
   `CommandCatalog` (AGI-2.1, AGI-2.4): `command_schema` takes the name of a command or its
   `operation_id` (`kartograf_<group>_<verb>`). `validate_command`, `check_command` and
@@ -204,6 +214,17 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - Docstrings follow the numpy convention (ruff `D`) and `mypy --strict` passes
   over `src` and `tests` (DEV-7.2, DEV-7.3); coverage floor 80 (DEV-7.5).
 - `tests/` is split into `unit`, `integration`, `contract` and `support`.
+- `llms.txt` is generated (`kartograf commands guide --format llms`) and English: the layout
+  of llmstxt.org (a summary, then link lists with raw links, at most 8,000 characters before
+  the first list; DOC-5.1, DOC-5.2). `AGENTS.md` is new (at most 200 lines and 16 KiB;
+  DOC-4.2). Both are derived files: `tests/contract/test_agent_guide.py` (in place of
+  `tests/contract/test_llms_txt.py`) compares them with the generator byte for byte, keeps
+  them within the budgets of DOC-1.7 and checks that the parser of the CLI reads every
+  command line of them. Regenerate them after a change of the catalog, the error registry
+  or the templates (USAGE 9.7).
+- The rule of `CLAUDE.md` for the agents of other repositories no longer says "do not create
+  `AGENTS.md`": the generated `AGENTS.md` and `llms.txt` are the interface of an agent that
+  uses Kartograf.
 
 **Fixed**
 

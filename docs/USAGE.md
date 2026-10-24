@@ -3222,6 +3222,7 @@ the catalog, a project that was changed) is `ok` with no items. The documents:
 | `kartograf-config/1` | `config show` | `get_config` | - |
 | `kartograf-command-list/1` | `commands list` (MCP: `kartograf_commands_list`) | `list_commands` | - |
 | `kartograf-commands/1` | `commands schema --command` (MCP: `kartograf_commands_schema`) | `command_schema` | - |
+| `kartograf-guide/1` | `commands guide` (bez narzedzia MCP) | `agent_guide` | - |
 | `kartograf-store-overview/1` | `store overview` (MCP: `kartograf_store_overview`) | `describe_store` | - |
 | `kartograf-store-entries/1` | `store entries` (MCP: `kartograf_store_entries`) | `list_store_entries` | - |
 | `kartograf-store-sidecar/1` | `store sidecar` (MCP: `kartograf_store_sidecar`) | `read_store_sidecar` | - |
@@ -3260,7 +3261,7 @@ Zasady wspolne dokumentow:
 
 ### 9.2 Kontrakt `--json`
 
-Flaga `--json` (bez skrotu) jest w kazdej komendzie-lisciu CLI (43 komendy),
+Flaga `--json` (bez skrotu) jest w kazdej komendzie-lisciu CLI (44 komendy),
 za komenda: `kartograf elevation availability --json ...`; `kartograf --json ...` nie
 istnieje. W `project add` podaj ja przed nazwa zadania (`kartograf project add --json
 teren elevation download ...`): po nazwie zadania jest opcja uruchomienia i konczy sie
@@ -3825,10 +3826,23 @@ Results. A result is the envelope kartograf-result/1: status (ok, partial, faile
 
 ### 9.7 Pliki dla agentow
 
-- **`llms.txt`** w korzeniu repozytorium (format llmstxt.org, po polsku, < 150 linii): czym
-  jest Kartograf, instalacja, typowe zadania CLI, biblioteki i MCP z poleceniami, ktore parsuje
-  prawdziwy parser (test `tests/contract/test_llms_txt.py`), kody bledow z tabeli 9.3 i linki do
-  dokumentacji. Agent spoza repozytorium zaczyna od niego, a potem od `kartograf commands list --json`.
+- **`AGENTS.md` and `llms.txt`** in the repository root are the guide for agents (AGI section 8,
+  DOC 4 and 5): English and **generated** from the command catalog, the error registry and the
+  templates in `src/kartograf/_data/agents/` (`kartograf commands guide --format agents` or
+  `--format llms`). `tests/contract/test_agent_guide.py` compares the files with the output of
+  the generator byte for byte and keeps the budgets: `AGENTS.md` at most 200 lines and 16 KiB,
+  `llms.txt` at most 8,000 characters before the first link list. The generator reads every
+  command line of the guide with the real CLI parser, so an outdated example stops it. After a
+  change of the catalog, the error registry or a template, regenerate both files:
+  `kartograf commands guide --format agents > AGENTS.md` and
+  `kartograf commands guide --format llms > llms.txt`. An agent outside the repository starts
+  with `llms.txt`, then `kartograf commands list --json`.
+- **A block for the `AGENTS.md` of another repository**:
+  `kartograf commands guide --format agents-md-block --inject AGENTS.md` puts the compact block
+  (at most 60 lines) between `<!-- BEGIN kartograf -->` and `<!-- END kartograf -->` into the
+  file of a repository that uses Kartograf; running it again changes nothing. `--inject` is an
+  option of the CLI only: the library function `kartograf.guide.inject_block(existing, block)`
+  returns the new text and is not part of `__all__`.
 - **`python -m kartograf`** dziala jak `kartograf` (srodowisko bez katalogu skryptow na
   `PATH`: worktree, `uvx`); `python -m kartograf.cli.commands` tez.
 - **`kartograf/py.typed`** (PEP 561): `mypy` konsumenta widzi typy biblioteki zamiast

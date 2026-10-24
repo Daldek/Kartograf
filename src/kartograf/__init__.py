@@ -213,6 +213,7 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.guide import AgentGuide, agent_guide
 from kartograf.hydrology.hsg import (
     HsgReport,
     calculate_hsg,
@@ -488,6 +489,8 @@ __all__ = [
     "command_schema",
     "CommandList",
     "CommandCatalog",
+    "agent_guide",
+    "AgentGuide",
     # The command layer: a data command as data (spec 8.7; KB-2..KB-5)
     "CommandCall",
     "parse_command",
