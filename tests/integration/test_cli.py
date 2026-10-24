@@ -8285,9 +8285,12 @@ class TestPublicApiCz:
         assert provider.descriptor_key == "cz.cuzk.dmpok"
 
     def test_version_bumped(self):
+        from packaging.version import Version
+
         from kartograf import __version__
 
-        assert __version__ == "0.8.0"
+        # 0.8.0 or its development version 0.8.0.dev<N> (REL-1.1)
+        assert Version(__version__).release == (0, 8, 0)
 
 
 class _PartialSheetProvider(_SheetProvider):
