@@ -543,12 +543,12 @@ CONTRACT: dict[str, list[str]] = {
     "kartograf-error/1": [
         "schema",
         "code",
+        "title",
         "message",
         "hint",
-        "exception",
+        "details",
         "exit_code",
         "command",
-        "details",
     ],
     "kartograf-plan/1": [
         "schema",
@@ -921,7 +921,7 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
     ),
     "ErrorCodeInfo": (
         lambda: get_catalog(tables=True).errors[0],  # type: ignore[index]
-        ["code", "exception", "exit_code", "meaning"],
+        ["code", "reason", "exception", "exit_code", "meaning"],
     ),
     "SchemaInfo": (
         lambda: get_catalog(tables=True).schemas[0],  # type: ignore[index]

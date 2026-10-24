@@ -254,7 +254,10 @@ def test_bad_code_is_parse_error_with_option_sheet(code):
         describe_sheet(code)
 
     assert error.value.option == "sheet"
-    assert error.value.code == "invalid_sheet_code"
+    assert (error.value.code, error.value.reason) == (
+        "validation_error",
+        "invalid_sheet_code",
+    )
     # the text of the CLI: the library's message and the CZ code formats
     assert "Godla CZ: SM5 (np. CTES96)" in str(error.value)
 

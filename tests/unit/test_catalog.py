@@ -502,9 +502,9 @@ def test_exit_codes_and_errors_are_the_library_tables():
     assert [(r.code, r.name, r.meaning) for r in catalog.exit_codes] == [
         (r.code, r.name, r.meaning) for r in EXIT_CODES
     ]
-    assert [(r.code, r.exception, r.exit_code, r.meaning) for r in catalog.errors] == [
-        (r.code, r.exception, r.exit_code, r.meaning) for r in ERROR_CODES
-    ]
+    assert [
+        (r.code, r.reason, r.exception, r.exit_code, r.meaning) for r in catalog.errors
+    ] == [(r.code, r.reason, r.exception, r.exit_code, r.meaning) for r in ERROR_CODES]
 
 
 def test_tables_are_on_request_and_in_the_whole_catalog():
@@ -1047,7 +1047,7 @@ def test_catalog_filters_and_errors():
     for view in (soil, get_catalog(command="parse"), get_catalog()):
         assert (view.exit_codes, view.errors, view.schemas) == (None, None, None)
     tables = get_catalog(group="soil", tables=True)
-    assert [r.code for r in tables.exit_codes] == [0, 1, 2, 130, 143]
+    assert [r.code for r in tables.exit_codes] == [e.code for e in EXIT_CODES]
     assert tables.errors and tables.schemas
     short = get_catalog()
 

@@ -6,19 +6,36 @@ This module defines the core custom exceptions of the Kartograf package
 ``TransformError``, ``TransformUnavailableError``). All of them inherit from
 KartografError for easy catching of package-specific errors.
 
-Every class carries machine-readable facts next to its message (spec 6.1):
-a stable ``code`` (defined in the ``__dict__`` of EVERY class, never inherited
-silently), the ``exit_code`` of the CLI, an optional ``hint`` set where the
-error is raised and the ``details`` of the attributes listed in
-``DETAIL_FIELDS``. ``kartograf.error_report.error_report`` turns an exception
-into the ``kartograf-error/1`` document.
+Every class carries machine-readable facts next to its message (ERR §3, AGI-4.3):
+a ``code`` from the shared Nogat error registry (defined in the ``__dict__`` of
+EVERY class, never inherited silently), the project-specific ``reason`` that
+refines it (``details.reason``, snake_case English), the ``exit_code`` the registry
+gives the code, an optional ``hint`` set where the error is raised and the
+``details`` of the attributes listed in ``DETAIL_FIELDS``.
+``kartograf.error_report.error_report`` turns an exception into the
+``kartograf-error/1`` document.
 """
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
+from kartograf._errors import BY_CODE
 from kartograf.serialization import encode
+
+
+def registry_exit_code(code: str) -> int:
+    """Return the exit code the Nogat error registry gives ``code``.
+
+    Raises
+    ------
+    ValueError
+        The code is not in the registry or has no exit code (REST-only codes).
+    """
+    entry = BY_CODE.get(code)
+    if entry is None or entry.exit_code is None:
+        raise ValueError(f"{code!r} is not a registry code with an exit code")
+    return entry.exit_code
 
 
 class KartografError(Exception):
@@ -31,10 +48,14 @@ class KartografError(Exception):
     Attributes
     ----------
     code : str
-        Stable error code (``snake_case``); class attribute, defined by every
-        class itself.
+        Registry code (``validation_error``, ``no_data``, ...); class attribute,
+        defined by every class itself.
+    reason : str, optional
+        Project-specific refinement of ``code`` (``invalid_sheet_code``,
+        ``no_coverage``); class attribute, reported as ``details.reason``.
     exit_code : int
-        Exit code of the CLI for this error (1 failure, 2 invalid input).
+        Exit code of the CLI for this error: the registry's exit code of ``code``
+        (set when the class is created).
     DETAIL_FIELDS : tuple[str, ...]
         Names of the instance attributes reported by ``details()``.
     DEFAULT_HINT : str, optional
@@ -51,23 +72,31 @@ class KartografError(Exception):
     ...     print(f"Kartograf error: {e}")
     """
 
-    code: ClassVar[str] = "kartograf_error"
-    exit_code: ClassVar[int] = 1
+    code: ClassVar[str] = "internal_error"
+    reason: ClassVar[str | None] = None
+    exit_code: ClassVar[int] = registry_exit_code("internal_error")
     DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ()
     DEFAULT_HINT: ClassVar[str | None] = None
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Give the class the exit code of its registry ``code``."""
+        super().__init_subclass__(**kwargs)
+        cls.exit_code = registry_exit_code(cls.code)
 
     def __init__(self, *args: object, hint: str | None = None) -> None:
         super().__init__(*args)
         self.hint = hint
 
     def details(self) -> dict[str, object]:
-        """Return the attributes of ``DETAIL_FIELDS`` as JSON-ready values.
+        """Return ``reason`` and the attributes of ``DETAIL_FIELDS`` as JSON values.
 
         Empty values (``None``, empty text or collection) are left out;
         the others go through the encoder of ``kartograf.serialization``
-        (tuples to lists, paths to absolute strings).
+        (tuples to lists, paths to absolute strings). ``reason`` comes first.
         """
         details: dict[str, object] = {}
+        if self.reason is not None:
+            details["reason"] = self.reason
         for name in self.DETAIL_FIELDS:
             value = getattr(self, name, None)
             empty = value is None or (
@@ -114,8 +143,8 @@ class ValidationError(KartografError):
     ... )
     """
 
-    code = "invalid_input"
-    exit_code = 2
+    code = "validation_error"
+    reason = "invalid_input"
     DETAIL_FIELDS = ("option", "options", "allowed")
 
     def __init__(
@@ -151,7 +180,8 @@ class UsageError(ValidationError):
         the example of the hint from it.
     """
 
-    code = "usage_error"
+    code = "validation_error"
+    reason = "usage"
     DEFAULT_HINT = "Parametry komendy: kartograf catalog <grupa> <komenda> --params"
 
     def __init__(
@@ -184,7 +214,8 @@ class ParseError(ValidationError):
     >>> raise ParseError("Invalid godło format: 'ABC-123'")
     """
 
-    code = "invalid_sheet_code"
+    code = "validation_error"
+    reason = "invalid_sheet_code"
     DEFAULT_HINT = (
         "Formaty godel: PL-1992 N-34-130-D-d-2-4, PL-2000 6.179.12.20, "
         "SM5 CTES96, TM33 302_5550; wiecej: kartograf parse --help"
@@ -210,7 +241,7 @@ class DownloadError(KartografError):
     >>> raise DownloadError("Failed to download N-34-130-D: Connection timeout")
     """
 
-    code = "download_failed"
+    code = "source_unavailable"
     DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("sheet", "status_code")
 
     def __init__(
@@ -242,7 +273,8 @@ class NoCoverageError(DownloadError):
         message contains after the period; empty when there are none.
     """
 
-    code = "no_coverage"
+    code = "no_data"
+    reason = "no_coverage"
     DETAIL_FIELDS = ("sheet", "status_code", "hints")
 
     def __init__(
@@ -274,7 +306,8 @@ class YearRangeError(DownloadError):
         empty when none applies.
     """
 
-    code = "year_out_of_range"
+    code = "no_data"
+    reason = "year_out_of_range"
     DETAIL_FIELDS = ("sheets", "min_year", "max_year", "hints")
 
     def __init__(
@@ -303,7 +336,8 @@ class CacheError(KartografError):
     this exception on the failing call and on every later one.
     """
 
-    code = "cache_error"
+    code = "store_unavailable"
+    reason = "cache"
     DEFAULT_HINT = "Wyczysc cache: kartograf cache clear"
 
 
@@ -321,7 +355,8 @@ class InvalidSidecarError(KartografError):
         The sidecar path (``<file>.meta.json``).
     """
 
-    code = "invalid_sidecar"
+    code = "data_error"
+    reason = "invalid_sidecar"
     DETAIL_FIELDS = ("path",)
     DEFAULT_HINT = (
         "Podaj sciezke pliku danych magazynu albo jego sidecara "

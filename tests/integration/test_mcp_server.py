@@ -82,12 +82,14 @@ def normal(data, *stores: Path) -> str:
     return text
 
 
-def error_of(result, *, code="invalid_input"):
+def error_of(result, *, code="validation_error", reason=None):
     """The ``kartograf-error/1`` document of a failed call."""
     report = result.structured_content
     assert result.is_error is True
     assert report["schema"] == "kartograf-error/1", report
     assert report["code"] == code, report
+    if reason is not None:
+        assert report["details"]["reason"] == reason, report
     assert json.loads(result.content[0].text) == report
     return report
 
@@ -552,7 +554,7 @@ def test_check_updates_input_errors(tmp_path):
         report = error_of(call("check_updates", arguments))
 
         assert report["details"]["option"] == option, arguments
-        assert report["command"] == command, arguments
+        assert report.get("command") == command, arguments
         assert report["exit_code"] == 2
     # a rule of the library, checked without network and without writing
     area_missing = {
@@ -651,7 +653,7 @@ def test_input_errors_are_error_documents(tmp_path, tool, arguments, option, com
 
     report = error_of(call(tool, arguments))
 
-    assert report["exit_code"] == 2 and report["command"] == command
+    assert report["exit_code"] == 2 and report.get("command") == command
     assert report["details"].get("option") == option
     assert report["message"].isascii() and (report["hint"] or "").isascii()
     assert list(tmp_path.iterdir()) == []  # nothing was written
@@ -680,7 +682,7 @@ def test_every_data_tool_runs_its_own_command(tmp_path, spec):
 @needs_mcp
 def test_a_bad_sheet_code_is_invalid_sheet_code():
     report = error_of(
-        call("parse_sheet", {"sheet": "not-a-sheet"}), code="invalid_sheet_code"
+        call("parse_sheet", {"sheet": "not-a-sheet"}), reason="invalid_sheet_code"
     )
 
     assert report["exit_code"] == 2 and report["command"] == "parse"
@@ -735,7 +737,7 @@ def test_oserror_is_io_error(tmp_path):
         call("store_overview", {"output_dir": str(missing)}), code="io_error"
     )
 
-    assert report["exit_code"] == 1 and report["command"] == "store_overview"
+    assert report["exit_code"] == 9 and report["command"] == "store_overview"
     assert report["details"] == {"errno": "ENOENT", "path": str(missing)}
 
 
@@ -1287,7 +1289,8 @@ def test_stdio_server_lists_tools_and_parses_a_sheet(tmp_path):
     assert parsed.is_error is False
     assert parsed.structured_content == kartograf.describe_sheet(SHEET).to_dict()
     assert (
-        failed.is_error is True and failed.structured_content["code"] == "invalid_input"
+        failed.is_error is True
+        and failed.structured_content["code"] == "validation_error"
     )
 
 

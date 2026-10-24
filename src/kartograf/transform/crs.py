@@ -42,7 +42,8 @@ _FloatArray = npt.NDArray[np.floating[Any]]
 class TransformError(KartografError):
     """Coordinate transformation error (e.g. an infinite result)."""
 
-    code = "transform_failed"
+    code = "calculation_error"
+    reason = "transform_failed"
 
 
 class TransformUnavailableError(TransformError):
@@ -56,7 +57,8 @@ class TransformUnavailableError(TransformError):
         What the user can do (the hint of the error).
     """
 
-    code = "transform_unavailable"
+    code = "unsupported"
+    reason = "transform_unavailable"
     DETAIL_FIELDS = ("rejected", "remedy")
 
     def __init__(

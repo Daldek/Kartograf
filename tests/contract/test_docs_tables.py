@@ -1,14 +1,16 @@
-"""Documentation tables that must stay equal to the code (spec 10.4, 10.5).
+"""Documentation tables that must stay equal to the code (DOC-9.4, DEV-10.4).
 
-``docs/USAGE.md`` holds the only error code and exit code tables of the
-documentation and they equal the command catalog; the lists of documents and
-MCP tools in ``docs/USAGE.md`` and ``docs/ARCHITECTURE.md`` name exactly what
+The error code and exit code tables of ``docs/USAGE.md`` are generated from the
+code (``scripts/generate_docs.py``) and exist only there; the lists of documents
+and MCP tools in ``docs/USAGE.md`` and ``docs/ARCHITECTURE.md`` name exactly what
 the code registers; the instructions of the MCP server are quoted verbatim;
 ``CLAUDE.md`` carries the rule for agents of other repositories.
 """
 
+import importlib.util
 import re
 from pathlib import Path
+from types import ModuleType
 
 from kartograf import get_catalog, mcp_server
 from kartograf.catalog.tools import tool_specs
@@ -78,29 +80,28 @@ def _plain(cell: str) -> str:
     return cell.strip("`")
 
 
-def test_usage_error_and_exit_code_tables_equal_the_catalog():
-    catalog = get_catalog(tables=True)
-    assert catalog.exit_codes is not None and catalog.errors is not None
-    rows = _table_rows(_section(_read(USAGE), "Kody wyjscia i kody bledow"))
-
-    exit_rows = [(int(row[0]), _plain(row[1])) for row in rows if row[0].isdigit()]
-    error_rows = [
-        (_plain(row[0]), _plain(row[1]), int(row[2]))
-        for row in rows
-        if re.fullmatch(r"`[a-z_]+`", row[0])
-    ]
-
-    assert sorted(exit_rows) == sorted((e.code, e.name) for e in catalog.exit_codes)
-    assert sorted(error_rows) == sorted(
-        (e.code, e.exception, e.exit_code) for e in catalog.errors
+def _docs_generator() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "generate_docs", ROOT / "scripts" / "generate_docs.py"
     )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_usage_error_and_exit_code_tables_are_generated_from_the_code():
+    generator = _docs_generator()
+
+    assert generator.render(_read(USAGE)) == _read(USAGE)
+    assert generator.main(["--check"]) == 0
 
 
 def test_error_and_exit_code_tables_exist_only_in_usage():
     catalog = get_catalog(tables=True)
     assert catalog.exit_codes is not None and catalog.errors is not None
     pairs = "|".join(
-        f"`{re.escape(e.code)}`\\s*\\|\\s*`{re.escape(e.exception)}`"
+        f"`{re.escape(e.code)}`\\s*\\|\\s*(?:`[a-z_]+`|-)\\s*\\|\\s*`{re.escape(e.exception)}`"
         for e in catalog.errors
     )
     names = "|".join(re.escape(e.name) for e in catalog.exit_codes)

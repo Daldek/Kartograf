@@ -4542,7 +4542,7 @@ class TestCmdDownloadLaz:
                     "-q",
                 ]
             )
-        assert result == 1
+        assert result == 14
         err = capsys.readouterr().err
         assert "Brak kafli LAZ" in err
         # N7: discovery is all-or-nothing, so an empty list = extent/filters
@@ -4581,7 +4581,7 @@ class TestCmdDownloadLaz:
                 ]
             )
 
-        assert result == 1
+        assert result == 5
         err = capsys.readouterr().err
         assert "Error: WFS" in err
         assert "(zerwane albo odrzucone polaczenie)" in err
@@ -5513,7 +5513,7 @@ class TestCmdDownloadCz:
                 ]
             )
 
-        assert result == 1
+        assert result == 15
         captured = capsys.readouterr()
         assert "EPSG:5514 -> EPSG:3045" in captured.err
         assert "Remedium: zainstaluj siatki recznie" in captured.err
@@ -5558,7 +5558,7 @@ class TestCmdDownloadCz:
                 ]
             )
 
-        assert result == 1
+        assert result == 15
         err = capsys.readouterr().err
         assert (
             "Error: Brak bezpiecznej operacji transformacji EPSG:5514 -> EPSG:3045 "
@@ -7809,13 +7809,13 @@ class TestAutoSplitBBox:
                 ]
             )
 
-        assert result == 1
+        assert result == 14
         err = capsys.readouterr().err
         assert "--country pl" not in err
         assert "Brak kafli LAZ" in err
 
     @patch("kartograf.providers.cuzk.raster.bbox_to_crs")
-    def test_cz_bbox_transform_error_returns_1_with_remedy(
+    def test_cz_bbox_transform_error_exits_15_with_remedy(
         self, mock_to_crs, tmp_path, capsys
     ):
         """TransformError in CZ bbox normalisation = a CLI message, not a traceback."""
@@ -7848,17 +7848,17 @@ class TestAutoSplitBBox:
                 *self._CUTOUT,
             ]
         )
-        assert result == 1
+        assert result == 15
         err = capsys.readouterr().err
         assert "brak bezpiecznej operacji" in err
         assert "Remedium" in err
 
     @patch("kartograf.download.data._download_cz")
     @patch("kartograf.download.data.country_bbox")
-    def test_country_bbox_transform_error_returns_1_before_download(
+    def test_country_bbox_transform_error_exits_15_before_download(
         self, mock_country_bbox, mock_cz, tmp_path, capsys
     ):
-        """TransformError splitting the area into countries = code 1, no download."""
+        """TransformError splitting the area into countries = code 15, no download."""
         from kartograf.transform.crs import TransformUnavailableError
 
         mock_country_bbox.side_effect = TransformUnavailableError(
@@ -7890,7 +7890,7 @@ class TestAutoSplitBBox:
                 *self._CUTOUT,
             ]
         )
-        assert result == 1
+        assert result == 15
         err = capsys.readouterr().err
         assert "Error: brak operacji dla obwiedni kraju" in err
         assert "Remedium: podaj --bbox-crs EPSG:2180" in err
@@ -8196,7 +8196,7 @@ class TestAutoSplitGeometry:
     def test_geometry_cz_transform_unavailable_reports_remedy(
         self, mock_read_crs, mock_run_cz, tmp_path, capsys
     ):
-        """No safe operation: exit code 1 and Remedium on stderr, zero downloads."""
+        """No safe operation: exit code 15 and Remedium on stderr, zero downloads."""
         from kartograf.transform.crs import TransformUnavailableError
 
         shp = tmp_path / "area.shp"
@@ -8232,7 +8232,7 @@ class TestAutoSplitGeometry:
             ]
         )
 
-        assert result == 1
+        assert result == 15
         assert "Remedium: zainstaluj siatki" in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
@@ -9474,7 +9474,7 @@ class TestCampaignOptions:
                 "-q",
             ]
         )
-        assert rc == 1
+        assert rc == 14
         assert "inny rocznik: --year/--min-year/--max-year" in capsys.readouterr().err
 
     @patch("kartograf.download.laz._run_laz_download")

@@ -158,11 +158,19 @@ def test_mcp_script_and_extra_are_those_of_the_package():
     assert 'kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git"' in text
 
 
-def test_error_table_is_the_error_codes_of_the_library():
+def test_error_table_is_the_registry_codes_of_the_library():
     rows = re.findall(
         r"^- `(\w+)` \(wyjscie (\d+)\)", _section("Kody wyjscia i bledow"), re.M
     )
-    assert rows == [(row.code, str(row.exit_code)) for row in ERROR_CODES]
+    # the file names each registry code once, with the reasons of its classes
+    expected = list(
+        dict.fromkeys((row.code, str(row.exit_code)) for row in ERROR_CODES)
+    )
+    assert rows == expected
+    text = _section("Kody wyjscia i bledow")
+    for row in ERROR_CODES:
+        if row.reason is not None:
+            assert f"`{row.reason}`" in text, row
 
 
 def test_exit_codes_are_the_exit_codes_of_the_library():

@@ -2034,5 +2034,5 @@ class TestLandCoverCliManyCounties:
             )
         assert seen["cache"] is not None  # U5
         # the sea answer (no powiat) reaches the user as an error, not a crash
-        assert rc == 1
+        assert rc == 14
         assert "nie przecina zadnego powiatu" in capsys.readouterr().err

@@ -177,7 +177,7 @@ def test_exit_codes(capsys):
     with patch("time.sleep"):
         # --force: the empty answer of the run above is in the cache
         code, out, err = _run(capsys, ["--country", "pl", *KRAKOW, "--force"], failing)
-    assert code == 1 and out == ""
+    assert code == 5 and out == ""
     # retries are Warning lines; the result is one Error line, the last
     *retries, error = err.splitlines()
     assert all(line.startswith("Warning: ") for line in retries)

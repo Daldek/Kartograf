@@ -1,13 +1,14 @@
 """
-The ``kartograf-error/1`` document: an exception as data (spec 6).
+The ``kartograf-error/1`` document: an exception as data (AGI-4.3, ERR-4).
 
-``error_report(exc)`` turns any exception into an :class:`ErrorReport` with a
-stable ``code``, the exit code of the CLI, a one-line ``hint`` and the
-``details`` of the exception. Four codes belong to no class of the package
-hierarchy and are built here: ``io_error`` (``OSError``: a missing or
-unavailable directory or file), ``interrupted`` (``KeyboardInterrupt``: Ctrl-C),
-``terminated`` (``kartograf.interrupt.Terminated``: SIGTERM) and
-``internal_error`` (any other exception: a program error).
+``error_report(exc)`` turns any exception into an :class:`ErrorReport`: the
+registry ``code`` with its English ``title``, the ``message``, a one-line
+``hint``, the ``details`` (``reason`` first), the exit code of the registry and
+the command. Four cases belong to no class of the package hierarchy and are
+built here: ``OSError`` (``io_error``: a missing or unavailable directory or
+file), ``KeyboardInterrupt`` (``cancelled``: Ctrl-C),
+``kartograf.interrupt.Terminated`` (``terminated``: SIGTERM) and any other
+exception (``internal_error``: a program error).
 
 ``ERROR_CODES`` and ``EXIT_CODES`` are the single source of the two tables of
 ``docs/USAGE.md`` and of the command catalog (``errors``, ``exit_codes``).
@@ -18,12 +19,14 @@ import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
+from kartograf._errors import BY_CODE
 from kartograf.exceptions import (
     KartografError,
     NoCoverageError,
     UsageError,
     ValidationError,
     YearRangeError,
+    registry_exit_code,
 )
 from kartograf.interrupt import Terminated
 from kartograf.serialization import Document
@@ -35,10 +38,16 @@ ALLOWED_HINT_MAX_VALUES = 40
 
 @dataclass(frozen=True)
 class ErrorCodeSpec:
-    """A row of the error code table: the exception class and its meaning."""
+    """A row of the error table: an exception class and what it reports.
 
-    code: str
+    ``code`` is the registry code, ``reason`` its refinement in
+    ``details.reason`` (``None``: none) and ``exit_code`` the exit code the
+    registry gives ``code``.
+    """
+
     exception: str
+    code: str
+    reason: str | None
     exit_code: int
     meaning: str
 
@@ -54,133 +63,135 @@ class ExitCodeSpec:
 
 ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
     ErrorCodeSpec(
-        "kartograf_error",
         "KartografError",
-        1,
-        "blad pakietu bez dokladniejszej klasy",
-    ),
-    ErrorCodeSpec(
-        "invalid_input",
-        "ValidationError",
-        2,
-        "bledna wartosc albo kombinacja argumentow, brak wymaganego argumentu, "
-        "bledny plik wejsciowy (plan, manifest, geometria)",
-    ),
-    ErrorCodeSpec(
-        "usage_error",
-        "UsageError",
-        2,
-        "bledne uzycie komendy: nieznana komenda albo flaga, brak argumentu "
-        "pozycyjnego, wartosc spoza dozwolonych",
-    ),
-    ErrorCodeSpec(
-        "invalid_sheet_code",
-        "ParseError",
-        2,
-        "godlo nie jest godlem PL ani CZ albo lezy poza nomenklatura",
-    ),
-    ErrorCodeSpec(
-        "download_failed",
-        "DownloadError",
-        1,
-        "siec, HTTP, timeout albo odpowiedz zrodla",
-    ),
-    ErrorCodeSpec(
-        "no_coverage",
-        "NoCoverageError",
-        1,
-        "zrodlo nie ma danych dla arkusza (stan danych, ponowienie nie pomoze)",
-    ),
-    ErrorCodeSpec(
-        "year_out_of_range",
-        "YearRangeError",
-        1,
-        "dane sa, ale poza przedzialem lat (wykryte przed pobraniem)",
-    ),
-    ErrorCodeSpec(
-        "cache_error",
-        "CacheError",
-        1,
-        "cache metadanych niedostepny, zablokowany albo nieczytelny",
-    ),
-    ErrorCodeSpec(
-        "invalid_sidecar",
-        "InvalidSidecarError",
-        1,
-        "sidecar kartograf-meta/1 nie istnieje, jest nieczytelny albo ma inny schemat",
-    ),
-    ErrorCodeSpec(
-        "transform_failed",
-        "TransformError",
-        1,
-        "blad przeliczenia wspolrzednych (np. wynik nieskonczony)",
-    ),
-    ErrorCodeSpec(
-        "transform_unavailable",
-        "TransformUnavailableError",
-        1,
-        "brak bezpiecznej operacji dla pary ukladow",
-    ),
-    ErrorCodeSpec(
-        "io_error",
-        "OSError",
-        1,
-        "katalog albo plik niedostepny: brak, uprawnienia, brak miejsca, "
-        "odlaczony udzial",
-    ),
-    ErrorCodeSpec(
-        "interrupted",
-        "KeyboardInterrupt",
-        130,
-        "przerwane przez uzytkownika (Ctrl-C)",
-    ),
-    ErrorCodeSpec(
-        "terminated",
-        "Terminated",
-        143,
-        "zakonczone sygnalem SIGTERM (timeout, docker stop, kill): sprzatanie "
-        "jak po Ctrl-C",
-    ),
-    ErrorCodeSpec(
         "internal_error",
-        "Exception",
+        None,
         1,
-        "blad programu: kazdy inny wyjatek poza OSError",
+        "package error without a more precise class",
+    ),
+    ErrorCodeSpec(
+        "ValidationError",
+        "validation_error",
+        "invalid_input",
+        2,
+        "wrong value or combination of arguments, a missing required argument, "
+        "an invalid input file (plan, manifest, geometry)",
+    ),
+    ErrorCodeSpec(
+        "UsageError",
+        "validation_error",
+        "usage",
+        2,
+        "wrong use of a command: unknown command or flag, a missing positional "
+        "argument, a value outside the allowed choices",
+    ),
+    ErrorCodeSpec(
+        "ParseError",
+        "validation_error",
+        "invalid_sheet_code",
+        2,
+        "the sheet code is not a PL or CZ code or lies outside the nomenclature",
+    ),
+    ErrorCodeSpec(
+        "DownloadError",
+        "source_unavailable",
+        None,
+        5,
+        "network, HTTP, timeout or the response of the source",
+    ),
+    ErrorCodeSpec(
+        "NoCoverageError",
+        "no_data",
+        "no_coverage",
+        14,
+        "the source has no data for the sheet (a state of the data, retrying "
+        "does not help)",
+    ),
+    ErrorCodeSpec(
+        "YearRangeError",
+        "no_data",
+        "year_out_of_range",
+        14,
+        "data exists but not in the requested year range (found before any download)",
+    ),
+    ErrorCodeSpec(
+        "CacheError",
+        "store_unavailable",
+        "cache",
+        8,
+        "the metadata cache is unavailable, locked or unreadable",
+    ),
+    ErrorCodeSpec(
+        "InvalidSidecarError",
+        "data_error",
+        "invalid_sidecar",
+        7,
+        "the kartograf-meta/1 sidecar is missing, unreadable or of another schema",
+    ),
+    ErrorCodeSpec(
+        "TransformError",
+        "calculation_error",
+        "transform_failed",
+        13,
+        "coordinate transformation failed (for example an infinite result)",
+    ),
+    ErrorCodeSpec(
+        "TransformUnavailableError",
+        "unsupported",
+        "transform_unavailable",
+        15,
+        "no safe operation for the pair of coordinate systems",
+    ),
+    ErrorCodeSpec(
+        "OSError",
+        "io_error",
+        None,
+        9,
+        "directory or file unavailable: missing, permissions, no space, "
+        "disconnected share",
+    ),
+    ErrorCodeSpec(
+        "KeyboardInterrupt",
+        "cancelled",
+        None,
+        130,
+        "cancelled by the user (Ctrl-C); versions are committed atomically, so "
+        "units unfinished at the interrupt (also those queued with --workers > 1) "
+        "do not exist and no half-written file is left",
+    ),
+    ErrorCodeSpec(
+        "Terminated",
+        "terminated",
+        None,
+        143,
+        "terminated by SIGTERM (timeout, docker stop, kill): cleanup as after Ctrl-C",
+    ),
+    ErrorCodeSpec(
+        "Exception",
+        "internal_error",
+        None,
+        1,
+        "program error: any other exception except OSError",
     ),
 )
 
-EXIT_CODES: tuple[ExitCodeSpec, ...] = (
-    ExitCodeSpec(
-        0,
-        "ok",
-        "komenda wykonana; dokument wyniku z ok: true albo dokument bez pola ok",
-    ),
-    ExitCodeSpec(
-        1,
-        "failed",
-        "brak kompletnego wyniku: blad zrodla, sieci, cache, magazynu, blad "
-        "programu, albo ok: false",
-    ),
-    ExitCodeSpec(
-        2,
-        "usage",
-        "bledne uzycie albo bledne dane wejsciowe: argparse, ValidationError, "
-        "ParseError, UsageError",
-    ),
-    ExitCodeSpec(
-        130,
-        "interrupted",
-        "przerwane przez uzytkownika (128 + SIGINT); wersje sa zatwierdzane "
-        "atomowo - jednostki niedokonczone przed przerwaniem (takze zakolejkowane "
-        "przy --workers > 1) nie powstaja, brak polowicznych plikow",
-    ),
-    ExitCodeSpec(
-        143,
-        "terminated",
-        "zakonczone sygnalem SIGTERM (128 + SIGTERM); sprzatanie i dokument "
-        "bledu jak po Ctrl-C",
-    ),
-)
+
+def _exit_codes() -> tuple[ExitCodeSpec, ...]:
+    """Return the exit codes of ``ERROR_CODES`` and 0, by number.
+
+    Each is named by the registry code that owns it; the meaning is the one of
+    the registry.
+    """
+    rows = {0: ExitCodeSpec(0, "ok", "Operation completed for every unit.")}
+    for row in ERROR_CODES:
+        rows.setdefault(
+            row.exit_code,
+            ExitCodeSpec(row.exit_code, row.code, BY_CODE[row.code].meaning),
+        )
+    return tuple(rows[number] for number in sorted(rows))
+
+
+EXIT_CODES: tuple[ExitCodeSpec, ...] = _exit_codes()
 
 INTERRUPTED_MESSAGE = "przerwano (Ctrl-C)"
 TERMINATED_MESSAGE = "przerwano (SIGTERM)"
@@ -193,35 +204,45 @@ IO_ERROR_HINT_NO_PATH = "Sprawdz sciezki i uprawnienia katalogow z argumentow"
 
 @dataclass(frozen=True)
 class ErrorReport(Document):
-    """The failure of a command as a document (``kartograf-error/1``).
+    """The failure of a command as a document (``kartograf-error/1``, AGI-4.3).
 
-    ``message`` is what the CLI prints after ``Error: ``; ``hint`` is one ASCII
-    line of at most 400 characters or ``None``; ``exception`` is the class
-    name; ``command`` is the catalog id of the failed command (known to the
-    CLI and the MCP server, ``None`` for a plain library call, or the command a
-    ``UsageError`` names); ``details`` is ``exc.details()`` (for ``OSError``:
-    ``errno`` as a symbolic name and ``path``), ``{}`` when there is nothing to
-    tell.
+    ``code`` is a registry code and ``title`` its English title; ``message`` is
+    what the CLI prints after ``Error: ``; ``hint`` is one ASCII line of at most
+    400 characters or ``None`` (then the key is left out of the document);
+    ``exit_code`` is the exit code of the registry; ``command`` is the catalog id
+    of the failed command (known to the CLI and the MCP server, ``None`` for a
+    plain library call, or the command a ``UsageError`` names; left out of the
+    document when ``None``); ``details`` is ``exc.details()`` (``reason`` first;
+    for ``OSError``: ``errno`` as a symbolic name and ``path``), ``{}`` when
+    there is nothing to tell.
     """
 
     SCHEMA = "kartograf-error/1"
     JSON_KEYS = (
         "code",
+        "title",
         "message",
         "hint",
-        "exception",
+        "details",
         "exit_code",
         "command",
-        "details",
     )
 
     code: str
+    title: str
     message: str
     hint: str | None
-    exception: str
     exit_code: int
     command: str | None = None
     details: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the document; ``hint`` and ``command`` are left out when ``None``."""
+        document = super().to_dict()
+        for key in ("hint", "command"):
+            if document[key] is None:
+                del document[key]
+        return document
 
 
 def allowed_values_hint(flag: str, allowed: Sequence[str]) -> str:
@@ -354,6 +375,26 @@ def _io_details(exc: OSError) -> dict[str, object]:
     return details
 
 
+def _report(
+    code: str,
+    message: str,
+    *,
+    hint: str | None = None,
+    command: str | None = None,
+    details: dict[str, object] | None = None,
+) -> ErrorReport:
+    """Return the report of a registry ``code`` (its title and exit code)."""
+    return ErrorReport(
+        code=code,
+        title=BY_CODE[code].title,
+        message=message,
+        hint=hint,
+        exit_code=registry_exit_code(code),
+        command=command,
+        details={} if details is None else details,
+    )
+
+
 def error_report(
     exc: BaseException,
     *,
@@ -366,10 +407,10 @@ def error_report(
     ----------
     exc : BaseException
         Any exception: a ``KartografError`` keeps its ``code``, ``exit_code``,
-        ``hint`` and ``details``; ``KeyboardInterrupt`` is ``interrupted``
-        (130), ``Terminated`` (SIGTERM) is ``terminated`` (143), ``OSError``
-        is ``io_error`` and every other exception is ``internal_error`` (a
-        program error; both exit with 1).
+        ``hint`` and ``details`` (``reason`` first); ``KeyboardInterrupt`` is
+        ``cancelled`` (130), ``Terminated`` (SIGTERM) is ``terminated`` (143),
+        ``OSError`` is ``io_error`` (9) and every other exception is
+        ``internal_error`` (a program error, 1).
     command : str, optional
         Catalog id of the command that failed (``elevation download``); without
         it the command a ``UsageError`` names. The hint of a ``UsageError`` is
@@ -384,54 +425,29 @@ def error_report(
     """
     if isinstance(exc, KartografError):
         named = exc.command if isinstance(exc, UsageError) else None
-        return ErrorReport(
-            code=exc.code,
-            message=str(exc),
+        return _report(
+            exc.code,
+            str(exc) or type(exc).__name__,
             hint=_hint_or_none(_library_hint(exc, command, given)),
-            exception=type(exc).__name__,
-            exit_code=exc.exit_code,
             command=command if command is not None else named,
             details=exc.details(),
         )
     if isinstance(exc, Terminated):
-        return ErrorReport(
-            code="terminated",
-            message=TERMINATED_MESSAGE,
-            hint=None,
-            exception=type(exc).__name__,
-            exit_code=143,
-            command=command,
-        )
+        return _report("terminated", TERMINATED_MESSAGE, command=command)
     if isinstance(exc, KeyboardInterrupt):
-        return ErrorReport(
-            code="interrupted",
-            message=INTERRUPTED_MESSAGE,
-            hint=None,
-            exception=type(exc).__name__,
-            exit_code=130,
-            command=command,
-        )
+        return _report("cancelled", INTERRUPTED_MESSAGE, command=command)
     message = _ascii(f"{type(exc).__name__}: {exc}")
     if isinstance(exc, OSError):
         path = _io_path(exc)
         hint = IO_ERROR_HINT.format(path=path) if path else IO_ERROR_HINT_NO_PATH
-        return ErrorReport(
-            code="io_error",
-            message=message,
+        return _report(
+            "io_error",
+            message,
             hint=_one_line(hint),
-            exception=type(exc).__name__,
-            exit_code=1,
             command=command,
             details=_io_details(exc),
         )
-    return ErrorReport(
-        code="internal_error",
-        message=message,
-        hint=INTERNAL_ERROR_HINT,
-        exception=type(exc).__name__,
-        exit_code=1,
-        command=command,
-    )
+    return _report("internal_error", message, hint=INTERNAL_ERROR_HINT, command=command)
 
 
 def _hint_or_none(text: str | None) -> str | None:

@@ -1677,7 +1677,7 @@ class TestCLICacheCommandsUnreadable:
         finally:
             work.chmod(0o700)
 
-        assert rc == 1
+        assert rc == 8
         err = capsys.readouterr().err
         assert f"Error: nie mozna usunac nieczytelnego pliku cache {db}" in err
         assert db.exists()
@@ -1692,7 +1692,7 @@ class TestCLICacheCommandsUnreadable:
         c.close()
         monkeypatch.setattr(MetadataCache, "_create_tables", staticmethod(_locked))
 
-        assert main(["cache", "clear"]) == 1
+        assert main(["cache", "clear"]) == 8
 
         err = capsys.readouterr().err
         assert "Error: cache zablokowany przez inny proces" in err
@@ -1706,7 +1706,7 @@ class TestCLICacheCommandsUnreadable:
         db = self._db(tmp_path)
         make_broken(db)
 
-        assert main(["cache", "stats"]) == 1
+        assert main(["cache", "stats"]) == 8
 
         captured = capsys.readouterr()
         assert captured.out == ""

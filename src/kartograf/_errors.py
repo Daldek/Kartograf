@@ -26,6 +26,7 @@ class RegistryCode:
     exit_code: int | None
     http_status: int | None
     title: str
+    title_pl: str
     meaning: str
 
 
@@ -35,6 +36,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=1,
         http_status=500,
         title="Internal error",
+        title_pl="B\u0142\u0105d wewn\u0119trzny",
         meaning=("Defect in the tool or an unexpected exception."),
     ),
     RegistryCode(
@@ -42,6 +44,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=2,
         http_status=400,
         title="Invalid input",
+        title_pl="Nieprawid\u0142owe dane wej\u015bciowe",
         meaning=(
             "Unknown command or option, wrong type, value out of range or not "
             "allowed, missing required option, violated exclusion rule."
@@ -52,6 +55,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=3,
         http_status=404,
         title="Not found",
+        title_pl="Nie znaleziono",
         meaning=(
             "Referenced file, resource, station, project or identifier does not exist."
         ),
@@ -61,6 +65,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=4,
         http_status=409,
         title="State conflict",
+        title_pl="Konflikt stanu",
         meaning=(
             "Operation conflicts with current state: version collision, lock held, "
             "identifier taken."
@@ -71,6 +76,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=5,
         http_status=502,
         title="Data source unavailable",
+        title_pl="\u0179r\u00f3d\u0142o danych niedost\u0119pne",
         meaning=(
             "Remote service failed: timeout, connection error, HTTP error, download"
             " failure."
@@ -81,6 +87,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=6,
         http_status=503,
         title="Missing optional dependency",
+        title_pl="Brak opcjonalnej zale\u017cno\u015bci",
         meaning=(
             "Feature needs an extra or an external program that is not installed; "
             "hint names the install command."
@@ -91,6 +98,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=7,
         http_status=500,
         title="Invalid data",
+        title_pl="Niepoprawne dane",
         meaning=(
             "Data read by the tool (input file, archive, sidecar, stored series) is"
             " malformed or violates its format."
@@ -101,6 +109,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=8,
         http_status=503,
         title="Store unavailable",
+        title_pl="Magazyn niedost\u0119pny",
         meaning=(
             "Data store or cache cannot be used: missing marker, locked, "
             "unreadable, network share disconnected."
@@ -111,6 +120,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=9,
         http_status=500,
         title="File system error",
+        title_pl="B\u0142\u0105d systemu plik\u00f3w",
         meaning=(
             "Reading or writing files failed: permissions, no space, path missing."
         ),
@@ -120,6 +130,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=12,
         http_status=403,
         title="Not allowed",
+        title_pl="Operacja niedozwolona",
         meaning=(
             "Path outside allowed directories, write attempted in read-only mode, "
             "insufficient role."
@@ -130,6 +141,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=13,
         http_status=422,
         title="Calculation error",
+        title_pl="B\u0142\u0105d oblicze\u0144",
         meaning=(
             "Input is valid but no result can be computed: no convergence, series "
             "too short, numerical failure, transformation failed."
@@ -140,6 +152,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=14,
         http_status=404,
         title="No data",
+        title_pl="Brak danych",
         meaning=(
             "Request is valid but the source has no data for the area, period or "
             "product requested."
@@ -150,6 +163,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=15,
         http_status=422,
         title="Not supported",
+        title_pl="Nieobs\u0142ugiwane",
         meaning=(
             "Request is valid but this combination is not supported: no safe CRS "
             "transformation, product not offered for the country, operation outside"
@@ -161,6 +175,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=130,
         http_status=None,
         title="Cancelled",
+        title_pl="Anulowano",
         meaning=("Cancelled by the user or by SIGINT."),
     ),
     RegistryCode(
@@ -168,6 +183,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=143,
         http_status=None,
         title="Terminated",
+        title_pl="Przerwano",
         meaning=("Terminated by SIGTERM (container stop, timeout)."),
     ),
     RegistryCode(
@@ -175,6 +191,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=None,
         http_status=401,
         title="Authentication required",
+        title_pl="Wymagane uwierzytelnienie",
         meaning=("REST only: missing or invalid credentials."),
     ),
     RegistryCode(
@@ -182,6 +199,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=None,
         http_status=405,
         title="Method not allowed",
+        title_pl="Niedozwolona metoda",
         meaning=("REST only: HTTP method not supported by the route."),
     ),
     RegistryCode(
@@ -189,6 +207,7 @@ CODES: Final[tuple[RegistryCode, ...]] = (
         exit_code=None,
         http_status=429,
         title="Too many requests",
+        title_pl="Zbyt wiele \u017c\u0105da\u0144",
         meaning=("REST only: client exceeded a rate limit; Retry-After is set."),
     ),
 )

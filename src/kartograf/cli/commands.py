@@ -9,10 +9,12 @@ the ``*_cmd`` modules. This module re-exports public names only
 (``create_parser``, ``cmd_*``, formatters); private helpers are imported from
 the target module (e.g. ``kartograf.cli.download_cmd``).
 
-Exit codes (one table, spec 6.5): 0 ok, 1 failed (a source, the network, the
-cache, a program error, or a result with ``ok: false``), 2 wrong use or wrong
-input (argparse, ``ValidationError`` and its subclasses), 130 interrupted
-(Ctrl-C), 143 terminated (SIGTERM, handled like Ctrl-C). With
+Exit codes come from the shared Nogat registry (``kartograf._errors``): 0 ok, 1
+``internal_error`` (a program error, or a result with ``ok: false``), 2
+``validation_error`` (argparse, ``ValidationError`` and its subclasses), 5
+``source_unavailable``, 7 ``data_error``, 8 ``store_unavailable``, 9
+``io_error``, 13 ``calculation_error``, 14 ``no_data``, 15 ``unsupported``, 130
+``cancelled`` (Ctrl-C), 143 ``terminated`` (SIGTERM, handled like Ctrl-C). With
 ``--json`` every error is the document ``kartograf-error/1`` on stdout and
 stderr stays empty.
 """
@@ -118,8 +120,9 @@ def _fail(
 ) -> int:
     """Report ``error`` in the mode of the command line.
 
-    The exit code of the error table (spec 6.2): ``exit_code`` of a ``KartografError``,
-    130 for Ctrl-C, 143 for SIGTERM, 1 for every other exception.
+    The exit code of the error document (ERR §2): ``exit_code`` of a
+    ``KartografError``, 9 for ``OSError``, 130 for Ctrl-C, 143 for SIGTERM, 1
+    for every other exception.
 
     ``--json``: the document ``kartograf-error/1`` on stdout (``given``: the
     arguments the line gave, for the example of its hint). Text: one
@@ -143,7 +146,7 @@ def _fail(
         return error.exit_code
     print(f"Error: {type(error).__name__}: {error}", file=sys.stderr)
     print("Ustaw KARTOGRAF_DEBUG=1, aby zobaczyc pelny traceback.", file=sys.stderr)
-    return 1
+    return error_report(error).exit_code
 
 
 def main(args: list[str] | None = None) -> int:
@@ -157,10 +160,11 @@ def main(args: list[str] | None = None) -> int:
     Returns
     -------
     int
-        Exit code: 0 ok, 1 failed (or a result with ``ok: false``), 2 wrong
-        use or wrong input, 130 interrupted (Ctrl-C), 143 terminated (SIGTERM).
-        ``--help`` and ``--version`` end the process (``SystemExit``) as argparse
-        does.
+        Exit code: 0 ok, 1 ``internal_error`` (or a result with ``ok: false``), 2
+        wrong use or wrong input, another registry code for a failure of that kind
+        (5, 7, 8, 9, 13, 14, 15), 130 cancelled (Ctrl-C), 143 terminated
+        (SIGTERM). ``--help`` and ``--version`` end the process (``SystemExit``)
+        as argparse does.
     """
     argv = sys.argv[1:] if args is None else args
     as_json = json_mode(argv)

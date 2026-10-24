@@ -61,12 +61,12 @@ def test_input_error_exits_2_in_text_mode(capsys):
     assert err == f"Error: {OUTPUT_REQUIRED}\n"
 
 
-def test_source_failure_exits_1(capsys, tmp_path):
+def test_source_failure_exits_5(capsys, tmp_path):
     failure = DownloadError("HTTP 503 dla https://example.org/zrodlo")
     with patch("kartograf.cli.download_cmd.download_data", side_effect=failure):
         code, out, err = _run(capsys, [*ELEVATION, "-o", str(tmp_path)])
 
-    assert code == 1
+    assert code == 5
     assert err == "Error: HTTP 503 dla https://example.org/zrodlo\n"
 
 
@@ -98,22 +98,25 @@ def test_text_usage_error_is_unchanged(capsys):
 
 
 @pytest.mark.parametrize(
-    ("error", "text"),
+    ("error", "text", "exit_code"),
     [
         (
             TransformUnavailableError("brak operacji", remedy="zainstaluj siatki"),
             "Error: brak operacji Remedium: zainstaluj siatki\n",
+            15,
         ),
-        (TransformError("wynik nieskonczony"), "Error: wynik nieskonczony\n"),
+        (TransformError("wynik nieskonczony"), "Error: wynik nieskonczony\n", 13),
     ],
 )
-def test_transform_failure_exits_1_and_text_has_the_remedy(capsys, error, text):
+def test_transform_failure_exits_13_or_15_and_text_has_the_remedy(
+    capsys, error, text, exit_code
+):
     """The remedy of an unavailable operation follows the message in every
     command, not only in the downloads of elevation and imagery."""
     with _handler_fails(error):
         code, out, err = _run(capsys, ["parse", "N-34"])
 
-    assert code == 1
+    assert code == exit_code
     assert out == ""
     assert err == text
 
@@ -127,12 +130,12 @@ def test_json_input_error_is_an_error_document(capsys):
     document = json.loads(out)
     assert code == 2 and err == ""
     assert document["schema"] == "kartograf-error/1"
-    assert document["code"] == "invalid_input"
+    assert document["code"] == "validation_error"
+    assert document["details"]["reason"] == "invalid_input"
     assert document["message"] == OUTPUT_REQUIRED
-    assert document["exception"] == "ValidationError"
     assert document["exit_code"] == 2
     assert document["command"] == "elevation download"
-    assert document["details"] == {"option": "output_dir"}
+    assert document["details"] == {"reason": "invalid_input", "option": "output_dir"}
     # the hint is a command line of the catalog that works as it stands
     example = document["hint"].removeprefix("Przyklad: kartograf ")
     assert example != document["hint"]
@@ -146,6 +149,7 @@ def test_json_input_error_lists_allowed_values_and_an_example(capsys, tmp_path):
     document = json.loads(out)
     assert code == 2 and err == ""
     assert document["details"] == {
+        "reason": "invalid_input",
         "option": "vertical_crs",
         "allowed": ["EVRF2007", "KRON86"],
     }
@@ -179,8 +183,8 @@ def test_json_argparse_error_is_usage_error(capsys):
 
     document = json.loads(out)
     assert code == 2 and err == ""
-    assert document["code"] == "usage_error"
-    assert document["exception"] == "UsageError"
+    assert document["code"] == "validation_error"
+    assert document["details"]["reason"] == "usage"
     assert document["exit_code"] == 2
     assert "nieznana opcja --bogus" in document["message"]
 
@@ -201,7 +205,8 @@ def test_json_usage_error_of_a_known_command_names_it_and_gives_an_example(
 
     document = json.loads(out)
     assert code == 2 and err == ""
-    assert document["code"] == "usage_error"
+    assert document["code"] == "validation_error"
+    assert document["details"]["reason"] == "usage"
     assert message in document["message"]
     assert document["command"] == "elevation download"
     where, example = document["hint"].split(" Przyklad: kartograf ", 1)
@@ -214,8 +219,9 @@ def test_json_usage_error_without_a_command_has_the_generic_hint(capsys):
 
     document = json.loads(out)
     assert code == 2 and err == ""
-    assert document["code"] == "usage_error"
-    assert document["command"] is None
+    assert document["code"] == "validation_error"
+    assert document["details"]["reason"] == "usage"
+    assert "command" not in document
     assert document["hint"] == UsageError.DEFAULT_HINT
 
 
@@ -227,7 +233,8 @@ def test_json_usage_error_in_a_task_line_is_about_the_line_not_the_task(
 
     document = json.loads(out)
     assert code == 2 and err == ""
-    assert document["code"] == "usage_error"
+    assert document["code"] == "validation_error"
+    assert document["details"]["reason"] == "usage"
     assert document["command"] == "project add"
     assert document["hint"].startswith(
         "Parametry komendy: kartograf catalog elevation download. Przyklad: "
@@ -239,7 +246,8 @@ def test_json_removed_command_is_usage_error(capsys):
 
     document = json.loads(out)
     assert code == 2 and err == ""
-    assert document["code"] == "usage_error"
+    assert document["code"] == "validation_error"
+    assert document["details"]["reason"] == "usage"
     assert "kartograf elevation download" in document["message"]
 
 
@@ -248,7 +256,8 @@ def test_json_flag_before_the_command_is_a_usage_error(capsys):
 
     document = json.loads(out)
     assert code == 2 and err == ""
-    assert document["code"] == "usage_error"
+    assert document["code"] == "validation_error"
+    assert document["details"]["reason"] == "usage"
     # one short hint: where the flag goes, not the list of all 37 commands
     assert "nieznana opcja --json" in document["message"]
     assert "kartograf elevation list-sources --json" in document["message"]
@@ -260,10 +269,10 @@ def test_json_parse_error_uses_invalid_sheet_code(capsys):
 
     document = json.loads(out)
     assert code == 2 and err == ""
-    assert document["code"] == "invalid_sheet_code"
-    assert document["exception"] == "ParseError"
+    assert document["code"] == "validation_error"
+    assert document["details"]["reason"] == "invalid_sheet_code"
     assert document["command"] == "parse"
-    assert document["details"] == {"option": "sheet"}
+    assert document["details"] == {"reason": "invalid_sheet_code", "option": "sheet"}
     assert document["hint"].startswith("Formaty godel: ")
 
 
@@ -273,7 +282,7 @@ def test_json_interrupt_is_130(capsys):
 
     document = json.loads(out)
     assert code == 130 and err == ""
-    assert document["code"] == "interrupted"
+    assert document["code"] == "cancelled"
     assert document["exit_code"] == 130
     assert document["message"] == "przerwano (Ctrl-C)"
     assert document["command"] == "parse"
@@ -320,7 +329,7 @@ def test_sigterm_is_143_with_one_error_line_in_text_mode(capsys, sigterm_during_
 
 def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):
     """The plan cannot be written (the write fails with an ``OSError``): the
-    failure of the store, not a mistake of the command line - code 1,
+    failure of the store, not a mistake of the command line - code 9,
     ``io_error``. (A directory in place of the plan file is rejected before
     any work: ``test_plan_file_that_is_a_directory_is_one_error_line``.)"""
     plan_file = tmp_path / "plan.json"
@@ -334,10 +343,9 @@ def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):
         code, out, err = _run(capsys, [*argv, "--plan", str(plan_file)])
 
     document = json.loads(out)
-    assert code == 1 and err == ""
+    assert code == 9 and err == ""
     assert document["code"] == "io_error"
-    assert document["exit_code"] == 1
-    assert document["exception"] == "IsADirectoryError"
+    assert document["exit_code"] == 9
     assert document["details"] == {"errno": "EISDIR", "path": str(plan_file)}
 
 
@@ -348,7 +356,6 @@ def test_internal_error_in_json_mode_and_debug_reraises(capsys, monkeypatch):
     document = json.loads(out)
     assert code == 1 and err == ""
     assert document["code"] == "internal_error"
-    assert document["exception"] == "RuntimeError"
     assert document["message"] == "RuntimeError: boom"
     assert "KARTOGRAF_DEBUG" in document["hint"]
 
@@ -495,5 +502,5 @@ def test_plan_file_errors_are_input_errors_of_the_plan(capsys, tmp_path, plan_er
 
     document = json.loads(out)
     assert code == 2 and err == ""
-    assert document["code"] == "invalid_input"
-    assert document["details"] == {"option": "plan"}
+    assert document["code"] == "validation_error"
+    assert document["details"] == {"reason": "invalid_input", "option": "plan"}
