@@ -327,8 +327,12 @@ def build_pinned_transform(
 ) -> PinnedTransform:
     """Build a pinned transformation per the policy or raise TransformUnavailableError.
 
+    Whitespace around a CRS label is ignored (PROJ 9.8.1 reads a padded label
+    as a name search, not as an authority code).
+
     Raises ``TransformUnavailableError`` when there is no safe operation.
     """
+    src_crs, dst_crs = src_crs.strip(), dst_crs.strip()
     required: frozenset[str] = frozenset()
     for crs in (src_crs, dst_crs):
         epsg = _epsg_code(crs)
