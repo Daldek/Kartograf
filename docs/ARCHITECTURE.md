@@ -249,7 +249,8 @@ Uwagi, ktore latwo przeoczyc:
   (`check_availability`, ADR-041), `download.collections`
   (`download_collection`/`check_collection`), `landcover.manager`
   i `hydrology`; `parse`, `list-sources`, `list-layers`, `cache` i `catalog`
-  ida przez `sheet_info`, `source_info`, `cache_info` i `catalog.get_catalog`,
+  ida przez `sheet_info`, `source_info`, `cache_info` i `catalog.build` (`list_commands`,
+  `command_schema`),
   a `project add` przez `commands.parse_command`. Wynik drukuje: tryb `--json`
   (`cli/_json.py`) to `Document.to_json()`, tryb tekstowy renderuje te same
   dokumenty (tabele, linie statusu, pasek postepu z
@@ -298,7 +299,7 @@ Uwagi, ktore latwo przeoczyc:
   `task_command`) i `download` (`UpdateMode`, `UpdatePlan`, `DownloadProgress`).
 - `sheet_info`, `source_info`, `cache_info` i `store_documents` sa raportami z logika
   przeniesiona z CLI (Z1): `describe_sheet`/`find_sheets` (`core`, `catalog`:
-  `SheetInfo.commands` z `ParamInfo.accepts`), `list_sources`/`list_layers`
+  `SheetInfo.commands` z `Param.accepts`), `list_sources`/`list_layers`
   (`sources`, `providers`, `landcover`, `download`), `get_cache_info`/
   `get_cache_path`/`clear_cache` (`cache`, `notices`), `describe_store`/
   `list_store_entries`/`read_store_sidecar` (`store`, `download`); zaden nie importuje `cli`.
@@ -529,9 +530,10 @@ kartograf/
 │                        # main, INSTRUCTIONS; jedyny modul dotykajacy SDK
 ├── catalog/             # Katalog komend - jedyne zrodlo prawdy (sekcja 4.11), bez importu cli/mcp
 │   ├── spec.py          # Command, Param, Constraint, Example, Group (dane; dostawcy wartosci z rejestru)
-│   ├── model.py         # dokument kartograf-catalog/1: Catalog, GroupInfo, ProductInfo, CommandInfo,
-│   │                    # ParamInfo, ConstraintInfo, ExampleInfo, ExitCodeInfo, ErrorCodeInfo, SchemaInfo
-│   ├── build.py         # get_catalog(group, command, params, tables), data_commands; widoki overview/full
+│   ├── model.py         # dokumenty kartograf-command-list/1 i kartograf-commands/1: CommandList, GroupRow,
+│   │                    # CommandRow, CommandCatalog, CommandEntry, OptionEntry, EnumValue, ResultEntry,
+│   │                    # EffectsEntry, ExampleEntry, I18nEntry, PolishTexts
+│   ├── build.py         # list_commands(), command_schema(command), is_option, effects; wpisy budowane raz
 │   ├── shared.py        # parametry wspolne komend (obszar, wyjscie, tryby aktualizacji, --json...)
 │   ├── kinds.py         # rodzaje wartosci: parsery tekstow flag, convert_arguments (JSON opcji ->
 │   │                    # argumenty biblioteki), options_from_json/options_to_json
@@ -646,7 +648,7 @@ kartograf/
                          # collection_cmd.py (download_collection/check_collection),
                          # landcover_cmd.py, soil_cmd.py (SoilGrids + HSG), layers_cmd.py (list-layers),
                          # sources_cmd.py (list-sources), parse_cmd.py (describe_sheet),
-                         # cache_cmd.py (cache_info), catalog_cmd.py (get_catalog),
+                         # cache_cmd.py (cache_info), catalog_cmd.py (list_commands, command_schema),
                          # project_cmd.py (API projektu; project add przez parse_command),
                          # commands.py (entry point main: wyjatki -> error_report, kody 0/1/2/130/143)
 ```
@@ -1829,7 +1831,8 @@ schematu oraz to, ze kazdy `result_schema` katalogu jest w rejestrze.
 | `kartograf-project-check/1` | `ProjectCheck` | `project.model` | `project, files, not_downloaded, notices, ok` |
 | `kartograf-cache/1` | `CacheInfo` | `cache_info` | `action, path, exists, size_bytes, entries, cleared, removed_unreadable` |
 | `kartograf-config/1` | `Config` | `config` | `tool, version, config_file, keys, credentials, store` |
-| `kartograf-catalog/1` | `Catalog` | `catalog.model` | `view, kartograf_version, language, groups, commands, exit_codes, errors, schemas` |
+| `kartograf-command-list/1` | `CommandList` | `catalog.model` | `tool, version, groups, commands` |
+| `kartograf-commands/1` | `CommandCatalog` | `catalog.model` | `tool, version, commands` |
 | `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `output_dir, segments` |
 | `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `output_dir, segment, units, limit, truncated, entries` |
 | `kartograf-store-sidecar/1` | `StoreSidecar` | `store_documents` | `path, sidecar` |
@@ -3818,11 +3821,14 @@ nazwe argumentu API (`argument`), wymagalnosc, `task` (opcja zadania projektu), 
 (dostawca czytajacy rejestr zrodel przy budowie katalogu, nie przy imporcie), opis i pola
 tylko dla parsera (`dest`, `metavar`...). Z deklaracji powstaja:
 
-- `get_catalog(group, command, params, tables)` -> `Catalog` (`kartograf-catalog/1`,
-  `catalog/build.py`, `model.py`): przeglad (`view: overview`, ok. 7,6 tys. znakow), opis
-  grupy albo komendy, caly katalog z parametrami; `tables=True` dodaje `exit_codes` i
-  `errors` (`error_report.EXIT_CODES`, `ERROR_CODES`) oraz `schemas` (`SCHEMAS`);
-  `data_commands()` zwraca 12 komend danych (KB-1);
+- `list_commands()` -> `CommandList` (`kartograf-command-list/1`) i `command_schema(command)` ->
+  `CommandCatalog` (`kartograf-commands/1`, jedna komenda: nazwa albo `operation_id`;
+  `catalog/build.py`, `model.py`): wpisy buduje raz `build.command_entries()` z deklaracji
+  (opcja = `is_option`, enum z `meanings.py`, przyklady z `excerpts.py`); budzet strony
+  20 000 znakow (DOC-1.7) i zgodnosc z `schemas/nogat/commands-1.schema.json` pilnuje
+  `tests/contract/test_commands_schema.py`. Tabele kodow wyjscia i bledow:
+  `error_report.EXIT_CODES`, `ERROR_CODES` (USAGE 9.3); 12 komend danych: `project_task`
+  w deklaracjach (`project.commands.COMMANDS`, KB-1);
 - parser CLI (`catalog/cliparser.py::build_parser`; `cli/_parser.py::create_parser` to
   fasada): `--help`, `choices`, wykluczanie flag i przyklady (`epilog` z przykladow
   katalogu); moduly `cli/groups/*` nie istnieja;
@@ -3897,7 +3903,7 @@ walidacja wejscia schematem (`jsonschema`), regula sciezek bezwzglednych (`--all
 postep przez `report_progress`, najwyzej 4 jednoczesne wywolania sieciowe i cache serwera w
 katalogu cache uzytkownika. SDK `mcp` jest zaleznoscia opcjonalna (extra `mcp`), a dotyka go
 tylko `mcp_server.py` i to leniwie. Budzet kontekstu agenta (D22): `tools/list` <= 30 000 znakow
-(opisy narzedzi pisane na wywolanie, wspolne znaczenia w `instructions`), `get_catalog()` <= 8 000
+(opisy narzedzi pisane na wywolanie, wspolne znaczenia w `instructions`), `list_commands()` <= 20 000
 znakow; pilnuja go testy. Uzycie i konfiguracja klientow: USAGE 9.6.
 
 **Nowa komenda przez katalog.** Deklaracja w `catalog/commands/<modul>.py` (`Command` z

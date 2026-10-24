@@ -8,8 +8,7 @@ from pathlib import Path
 import pytest
 
 from kartograf import sheet_info
-from kartograf.catalog.build import build_catalog
-from kartograf.catalog.commands import declared
+from kartograf.catalog.commands import Declared, declared
 from kartograf.catalog.spec import Command, Group, Param
 from kartograf.core.bbox import BBox
 from kartograf.core.geometry import find_sheets_for_geometry
@@ -410,16 +409,15 @@ def test_commands_come_from_the_catalog_not_from_a_copy(monkeypatch):
             params,
         )
 
-    catalog = build_catalog(
+    declarations = Declared(
         (
             command("download", sheet("pl1992")),
             command("list-sources"),
             command("availability", sheet("pl1992", "cz_sm5")),
         ),
         (Group("elevation", "Wysokosci", "Dane wysokosciowe"),),
-        params=True,
     )
-    monkeypatch.setattr(sheet_info, "get_catalog", lambda **_: catalog)
+    monkeypatch.setattr(sheet_info, "declared", lambda: declarations)
 
     assert describe_sheet(PL1992).commands == (
         "elevation download",

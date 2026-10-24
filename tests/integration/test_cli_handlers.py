@@ -2,167 +2,120 @@
 what a command prints and returns, without the parser and ``main``."""
 
 import argparse
-import json
-import re
 
 import pytest
 
-from kartograf import get_catalog
+from kartograf import command_schema, list_commands
 from kartograf.catalog.cliparser import _subparsers
+from kartograf.catalog.commands import declared
+from kartograf.catalog.formatting import example_command_line
+from kartograf.catalog.spec import resolve
 from kartograf.cli._handlers import HANDLERS
 from kartograf.cli._parser import create_parser
-from kartograf.cli.catalog_cmd import cmd_catalog
-from kartograf.cli.commands import main
+from kartograf.cli.catalog_cmd import cmd_commands_list, cmd_commands_schema
 from kartograf.envelope import wrap
 from kartograf.exceptions import ValidationError
 
 
-def _catalog_text(capsys, **given) -> str:
-    words = {
-        "group": None,
-        "command": None,
-        "params": False,
-        "json": False,
-        "_command_id": "commands list",  # what the parser puts on a parsed line
-    }
-    code = cmd_catalog(argparse.Namespace(**{**words, **given}))
-    assert code == 0
+def _list_text(capsys, **given) -> str:
+    words = {"json": False, "_command_id": "commands list"}
+    assert cmd_commands_list(argparse.Namespace(**{**words, **given})) == 0
     captured = capsys.readouterr()
     assert captured.err == ""
     return captured.out
 
 
-def test_catalog_text_lists_groups_commands_summaries(capsys):
-    text = _catalog_text(capsys)
+def _schema_text(capsys, command, **given) -> str:
+    words = {"command": command, "json": False, "_command_id": "commands schema"}
+    assert cmd_commands_schema(argparse.Namespace(**{**words, **given})) == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    return captured.out
+
+
+def test_list_text_lists_groups_commands_summaries(capsys):
+    text = _list_text(capsys)
     lines = text.splitlines()
     flat = " ".join(text.split())  # long summaries wrap
-    catalog = get_catalog()
 
-    for command in catalog.commands:
+    for command in declared().commands:
         line = next(line for line in lines if line.lstrip().startswith(command.id))
-        assert command.kind in line and command.summary in line
-        assert "[tylko API]" not in line
-    for group in catalog.groups:
+        assert command.kind in line and command.summary_pl in line
+    for group in declared().groups:
         header = next(line for line in lines if line.startswith(f"{group.name}: "))
-        assert group.summary in header
-        for product in group.products:
-            assert f"{product.name} - {product.summary}" in flat
-    assert "Komendy tylko API:" not in text  # every command has a CLI
-    assert "Parametry:" not in text  # the short view has no parameters
+        assert group.summary_pl in header
+        for name, summary in resolve(group.products):
+            assert f"{name} - {summary}" in flat
+    assert "Parametry:" not in text  # the list has no parameters
+    assert 'kartograf commands schema --command "<grupa> <komenda>"' in flat
 
 
-def test_catalog_group_and_command_views(capsys):
-    group = _catalog_text(capsys, group="elevation")
-    command = _catalog_text(capsys, group="elevation", command="download")
-    download = get_catalog(command="elevation download").commands[0]
+def test_list_text_has_the_products_of_a_group(capsys):
+    flat = " ".join(_list_text(capsys).split())
 
-    assert "elevation download" in group and "elevation availability" in group
-    assert "soil download" not in group and "Komendy tylko API:" not in group
-    assert "Parametry:" not in group
-    assert download.description.split()[0] in command
-    assert "FLAGA" in command and "ARGUMENT" in command and "WYMAGANY" in command
+    assert "nmt - Numeryczny Model Terenu; PL i CZ" in flat
+    assert "Produkty:" in flat
+
+
+def test_schema_text_describes_one_command(capsys):
+    text = _schema_text(capsys, "elevation download")
+    command = next(c for c in declared().commands if c.id == "elevation download")
+
+    assert text.startswith(f"elevation download: {command.summary_pl}\n")
+    assert "FLAGA" in text and "ARGUMENT" in text and "WYMAGANY" in text
     # the table of parameters: flag, API argument, kind, required, values, text
-    product = next(p for p in download.params or () if p.name == "product")
     row = next(
-        line for line in command.splitlines() if line.lstrip().startswith("--product")
+        line for line in text.splitlines() if line.lstrip().startswith("--product")
     )
-    assert "product" in row and product.kind in row and "tak" in row
-    assert "Dozwolone wartosci: " + ", ".join(product.allowed or ()) in command
-    assert product.description.split(" - ")[0].split()[0] in command
-    output = next(line for line in command.splitlines() if "--output, -o" in line)
+    assert "product" in row and "str" in row and "tak" in row
+    product = next(p for p in command.params if p.name == "product")
+    assert "Dozwolone wartosci: " + ", ".join(resolve(product.allowed) or ()) in text
+    output = next(line for line in text.splitlines() if "--output, -o" in line)
     assert "output_dir" in output
-    for constraint in download.constraints or ():
-        assert constraint.message in command
-    for example in download.examples or ():
-        assert example.command_line in command
-    assert "download_data -> kartograf-download/1" in command
-    assert "check_data -> kartograf-plan/1" in command
+    for constraint in command.constraints:
+        assert constraint.message_pl in text
+    for rule in command.rules_pl:
+        assert rule in text
+    for example in command.examples:
+        assert example_command_line(command, example) in text
+        assert example.title_pl in text
+    assert "download_data -> kartograf-download/1" in text
+    assert "check_data -> kartograf-plan/1" in text
+    assert "operation_id: kartograf_elevation_download" in text
 
 
-def test_catalog_params_flag_adds_params_to_group_view(capsys):
-    short = _catalog_text(capsys, group="soil")
-    detailed = _catalog_text(capsys, group="soil", params=True)
-    everything = _catalog_text(capsys, params=True)
+def test_schema_text_takes_the_operation_id_too(capsys):
+    by_name = _schema_text(capsys, "sheet find")
+    by_operation = _schema_text(capsys, "kartograf_sheet_find")
 
-    assert "Parametry:" not in short and "--depth" not in short
-    assert detailed.count("Parametry:") == 4  # download, hsg, list-sources, list-layers
-    assert "--depth" in detailed and "elevation download" not in detailed
-    assert "elevation download" in everything and "sheet find" in everything
-    # every command carries its parameters
-    assert "<sheet>" in everything and "--scale" in everything
+    assert by_name == by_operation
+    assert by_name.startswith("sheet find: ")
+    assert "kartograf sheet find --bbox" in by_name
+    assert "<sheet>" in _schema_text(capsys, "sheet parse")
 
 
-def test_catalog_command_of_the_sheet_group(capsys):
-    parse = _catalog_text(capsys, group="sheet", command="parse")
-    find = _catalog_text(capsys, group="sheet", command="find")
+def test_list_json_is_the_envelope_of_the_library_document(capsys):
+    printed = _list_text(capsys, json=True)
 
-    assert parse.startswith("sheet parse: ") and "<sheet>" in parse
-    assert "kartograf sheet parse N-34-130-D-d-2-4" in parse
-    assert find.startswith("sheet find: ") and "tylko API" not in find
-    assert "kartograf sheet find --bbox" in find
+    assert printed == wrap("commands list", list_commands()).to_json()
 
 
-@pytest.mark.parametrize(
-    "given",
-    [
-        {},
-        {"group": "elevation"},
-        {"group": "elevation", "command": "download"},
-        {"group": "soil", "params": True},
-        {"params": True},
-        {"group": "sheet", "command": "find"},
-    ],
-    ids=["all", "group", "command", "group-params", "all-params", "api-only-command"],
-)
-def test_catalog_json_is_the_library_document(capsys, given):
-    view = {
-        "group": given.get("group"),
-        "command": given.get("command"),
-        "params": given.get("params") or None,
-    }
-    if view["command"] is not None:  # the CLI asks for the command by its id alone
-        view["command"] = f"{view['group']} {view['command']}"
-        view["group"] = None
+@pytest.mark.parametrize("command", ["elevation download", "kartograf_soil_hsg"])
+def test_schema_json_is_the_envelope_of_the_library_document(capsys, command):
+    printed = _schema_text(capsys, command, json=True)
 
-    printed = _catalog_text(capsys, json=True, **given)
-
-    assert printed == wrap("commands list", get_catalog(**view)).to_json()
+    assert printed == wrap("commands schema", command_schema(command)).to_json()
 
 
-def test_text_footer_commands_run_and_one_of_them_gives_the_tables(capsys):
-    """The text ends with the commands of the documents it advertises: each one
-    runs, and the whole catalog with the code tables and schemas is among them
-    (the overview ``catalog --json`` has no tables)."""
-    footer = _catalog_text(capsys).replace("\n", " ")
-    lines = re.findall(r"kartograf commands list((?: --[a-z]+)+)", footer)
-
-    assert lines
-    documents = []
-    for flags in lines:
-        assert main(["commands", "list", *flags.split()]) == 0
-        documents.append(json.loads(capsys.readouterr().out)["result"])
-    assert any(document["errors"] for document in documents)
-    assert any(document["exit_codes"] and document["schemas"] for document in documents)
-
-
-@pytest.mark.parametrize(
-    ("given", "option"),
-    [
-        ({"group": "nope"}, "group"),
-        ({"group": "nope", "command": "download"}, "group"),
-        ({"group": "elevation", "command": "nope"}, "command"),
-        ({"command": "download"}, "group"),
-    ],
-    ids=["group", "group-and-command", "command-of-a-group", "command-without-group"],
-)
-def test_catalog_unknown_group_is_a_validation_error(given, option, capsys):
+@pytest.mark.parametrize("given", [None, "nope", "elevation", "soil"])
+def test_schema_of_an_unknown_or_missing_command_is_a_validation_error(given, capsys):
     with pytest.raises(ValidationError) as caught:
-        _catalog_text(capsys, **given)
+        _schema_text(capsys, given)
 
-    assert caught.value.option == option
-    if option == "group" and "command" not in given:
-        assert "elevation" in caught.value.allowed
-        assert "sheet" in caught.value.allowed
+    assert caught.value.option == "command"
+    assert caught.value.allowed is not None
+    assert "elevation download" in caught.value.allowed
+    assert "commands schema" in caught.value.allowed
     assert capsys.readouterr().out == ""
 
 
@@ -178,16 +131,10 @@ def _command_ids(parser) -> set[str]:
     return ids
 
 
-def test_every_catalog_cli_command_has_a_handler():
+def test_every_catalog_command_has_a_handler_and_the_other_way_round():
     parsed = _command_ids(create_parser())
-    declared = {c.id for c in get_catalog().commands if c.cli is not None}
+    declared_ids = {c.id for c in declared().commands}
 
-    assert len(parsed) == 42 and None not in parsed
-    assert parsed == declared
-    assert parsed <= set(HANDLERS)
-
-
-def test_no_handler_without_a_catalog_command():
-    declared = {c.id for c in get_catalog().commands if c.cli is not None}
-
-    assert set(HANDLERS) == declared
+    assert len(parsed) == 43 and None not in parsed
+    assert parsed == declared_ids
+    assert set(HANDLERS) == declared_ids

@@ -51,7 +51,8 @@ _DOCUMENT_FUNCTIONS = {
     "read_store_sidecar": ["path"],
     "describe_sheet": ["sheet"],
     "find_sheets": [],
-    "get_catalog": [],
+    "list_commands": [],
+    "command_schema": ["command"],
 }
 
 

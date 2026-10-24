@@ -20,7 +20,8 @@ import pytest
 
 import kartograf
 from kartograf.cache_info import CacheEntries, CacheInfo
-from kartograf.catalog import get_catalog
+from kartograf.catalog import command_schema, list_commands
+from kartograf.catalog.model import EnumValue, OptionEntry
 from kartograf.config import Config, ConfigFileInfo, IgnoredKey, Setting, StoreInfo
 from kartograf.core.bbox import BBox
 from kartograf.download.availability import (
@@ -513,28 +514,35 @@ def _sheets() -> Document:
     return SheetList(_sheet_request(), (SHEET,))
 
 
-def _catalog() -> Document:
-    return get_catalog(command="elevation download")
+def _command_list() -> Document:
+    return list_commands()
 
 
-def _catalog_overview() -> Document:
-    return get_catalog()
+def _command_schema() -> Document:
+    return command_schema("elevation download")
 
 
-def _catalog_command() -> object:
-    return get_catalog(command="elevation download").commands[0]
+def _command_entry() -> object:
+    return command_schema("elevation download").commands[0]
 
 
-def _catalog_param() -> object:
-    return get_catalog(command="elevation download").commands[0].params[0]  # type: ignore[index]
-
-
-def _catalog_constraint() -> object:
-    return get_catalog(command="elevation download").commands[0].constraints[0]  # type: ignore[index]
-
-
-def _catalog_example() -> object:
-    return get_catalog(command="elevation download").commands[0].examples[0]  # type: ignore[index]
+def _full_option() -> OptionEntry:
+    """An option with every key a document may carry (a real one has few of them)."""
+    return OptionEntry(
+        name="depth",
+        type="array",
+        required=True,
+        description="Depth intervals.",
+        items="string",
+        unit="cm",
+        default=["0-5cm"],
+        enum=(EnumValue("0-5cm", "Depth interval 0-5cm below the surface."),),
+        minimum=1,
+        maximum=6,
+        examples=(["0-5cm"],),
+        one_of="area",
+        path_role="input",
+    )
 
 
 def _result_envelope() -> Document:
@@ -566,7 +574,8 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-store-sidecar/1": (_store_sidecar,),
     "kartograf-sheet/1": (_sheet_info,),
     "kartograf-sheets/1": (_sheets,),
-    "kartograf-catalog/1": (_catalog, _catalog_overview),
+    "kartograf-command-list/1": (_command_list,),
+    "kartograf-commands/1": (_command_schema,),
 }
 
 # schema -> the keys of the document in order (``schema`` first)
@@ -693,17 +702,8 @@ CONTRACT: dict[str, list[str]] = {
         "descendants",
     ],
     "kartograf-sheets/1": ["schema", "request", "sheets", "count"],
-    "kartograf-catalog/1": [
-        "schema",
-        "view",
-        "kartograf_version",
-        "language",
-        "groups",
-        "commands",
-        "exit_codes",
-        "errors",
-        "schemas",
-    ],
+    "kartograf-command-list/1": ["schema", "tool", "version", "groups", "commands"],
+    "kartograf-commands/1": ["schema", "tool", "version", "commands"],
 }
 
 # type name -> (a value, the keys of its object in order); spec 5.3 and 5.4
@@ -913,75 +913,65 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
         _sheet_request,
         ["scale", "sheet_system", "bbox", "bbox_crs", "geometry", "layer"],
     ),
-    "GroupInfo": (
-        lambda: get_catalog().groups[0],
-        ["name", "summary", "description", "products", "commands"],
+    "GroupRow": (
+        lambda: list_commands().groups[0],
+        ["name", "summary", "products"],
     ),
-    "ProductInfo": (
-        lambda: get_catalog().groups[0].products[0],
-        ["name", "summary", "countries", "sources"],
+    "CommandRow": (
+        lambda: list_commands().commands[0],
+        ["name", "operation_id", "summary", "families", "read_only", "check"],
     ),
-    "CommandInfo": (
-        _catalog_command,
+    "CommandEntry": (
+        _command_entry,
         [
-            "id",
-            "group",
             "name",
+            "operation_id",
+            "function",
             "summary",
             "description",
-            "kind",
+            "options",
+            "result",
             "effects",
-            "idempotent",
-            "destructive",
-            "project_task",
-            "function",
-            "check_function",
-            "result_schema",
-            "check_result_schema",
-            "supports_check",
-            "check_tool",
-            "cli",
-            "tool",
-            "params",
-            "constraints",
+            "check",
+            "families",
+            "rules",
             "examples",
+            "errors",
+            "i18n",
         ],
     ),
-    "ParamInfo": (
-        _catalog_param,
+    "OptionEntry": (
+        _full_option,
         [
             "name",
-            "argument",
-            "flag",
-            "short",
-            "positional",
-            "kind",
+            "type",
+            "items",
+            "unit",
             "required",
-            "task",
-            "allowed",
             "default",
-            "cli_default",
-            "accepts",
-            "section",
+            "enum",
+            "min",
+            "max",
+            "examples",
             "description",
+            "one_of",
+            "path_role",
         ],
     ),
-    "ConstraintInfo": (
-        _catalog_constraint,
-        ["type", "param", "params", "when", "message"],
+    "EnumValue": (lambda: _full_option().enum[0], ["value", "meaning"]),  # type: ignore[index]
+    "ResultEntry": (lambda: _command_entry().result, ["schema", "cardinality"]),  # type: ignore[attr-defined]
+    "EffectsEntry": (
+        lambda: _command_entry().effects,  # type: ignore[attr-defined]
+        ["read_only", "writes", "idempotent", "network", "destructive"],
     ),
-    "ExampleInfo": (_catalog_example, ["title", "options", "command_line"]),
-    "ExitCodeInfo": (
-        lambda: get_catalog(tables=True).exit_codes[0],  # type: ignore[index]
-        ["code", "name", "meaning"],
+    "ExampleEntry": (
+        lambda: _command_entry().examples[0],  # type: ignore[attr-defined]
+        ["call", "result", "title"],
     ),
-    "ErrorCodeInfo": (
-        lambda: get_catalog(tables=True).errors[0],  # type: ignore[index]
-        ["code", "reason", "exception", "exit_code", "meaning"],
-    ),
-    "SchemaInfo": (
-        lambda: get_catalog(tables=True).schemas[0],  # type: ignore[index]
-        ["schema", "description", "produced_by"],
+    "I18nEntry": (lambda: _command_entry().i18n, ["pl"]),  # type: ignore[attr-defined]
+    "PolishTexts": (
+        lambda: _command_entry().i18n.pl,  # type: ignore[attr-defined]
+        ["summary", "description", "rules"],
     ),
 }
 

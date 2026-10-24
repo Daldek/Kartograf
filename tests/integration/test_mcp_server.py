@@ -121,8 +121,8 @@ def test_instructions_are_ascii_short_and_say_what_the_tools_do_not_repeat():
     assert len(INSTRUCTIONS.splitlines()) <= 8
     # what is the same in many tools is said here, once
     for word in (
-        "get_catalog",
-        "tables=true",
+        "commands_list",
+        "commands_schema",
         "bezwzglednie",
         "bbox_crs",
         "sheet",
@@ -311,12 +311,12 @@ def test_list_tools_equals_tool_specs():
 @needs_mcp
 def test_tools_list_on_the_wire_is_under_30000_characters():
     """The acceptance of the context budget on the real protocol objects: what
-    ``tools/list`` sends (it was 65 883) and the answer of ``get_catalog()``
-    (it was 47 807; the CLI form is the same document, indented)."""
+    ``tools/list`` sends (it was 65 883) and the answer of ``commands_list``
+    (it was 47 807 as the old catalog; the CLI form is the same document, indented)."""
 
     async def scenario(client):
         listed = (await client.list_tools()).tools
-        overview = await client.call_tool("get_catalog", {})
+        overview = await client.call_tool("commands_list", {})
         return listed, overview
 
     listed, overview = run_session(scenario)
@@ -327,17 +327,17 @@ def test_tools_list_on_the_wire_is_under_30000_characters():
     assert text == json.dumps(
         json.loads(text), ensure_ascii=False, separators=(",", ":")
     )
-    assert len(text) <= 8_000
+    assert len(text) <= 20_000
 
 
 DISCOVERY = [
     (
-        "get_catalog",
+        "commands_schema",
         {"command": "elevation download"},
-        lambda: kartograf.get_catalog(command="elevation download"),
-        "commands list",
+        lambda: kartograf.command_schema("elevation download"),
+        "commands schema",
     ),
-    ("get_catalog", {}, lambda: kartograf.get_catalog(), "commands list"),
+    ("commands_list", {}, lambda: kartograf.list_commands(), "commands list"),
     (
         "parse_sheet",
         {"sheet": SHEET, "hierarchy": True, "descendants": "1:5000"},
@@ -980,7 +980,7 @@ def test_library_does_not_write_to_stdout_during_calls(tmp_path, capfd):
     with pl_sheets():
         call("elevation_download", {**PL_SHEET, "output_dir": str(tmp_path / "a")})
     call("parse_sheet", {"sheet": SHEET})
-    call("get_catalog", {})
+    call("commands_list", {})
     call("store_overview", {"output_dir": str(tmp_path / "missing")})
     call("elevation_download", {"product": "xx", "output_dir": str(tmp_path)})
 
@@ -997,7 +997,7 @@ def test_function_tools_get_library_types_and_the_server_cache(tmp_path, monkeyp
 
     def availability(*, cache, **kwargs):
         seen.append({**kwargs, "cache": cache})
-        return kartograf.get_catalog(command="commands list")
+        return kartograf.command_schema("commands list")
 
     monkeypatch.setattr(kartograf, "check_availability", availability)
     cache = MetadataCache(tmp_path / "cache.db")
@@ -1042,7 +1042,7 @@ def test_project_download_passes_its_arguments_and_reports_progress(
         assert on_progress is not None
         on_progress(DownloadProgress(1, 2, "N-1", "downloading"))
         on_progress(DownloadProgress(2, 2, "N-1", "completed"))
-        return kartograf.get_catalog(command="commands list")
+        return kartograf.command_schema("commands list")
 
     monkeypatch.setattr(kartograf, "download_project", download)
     received = []
@@ -1193,7 +1193,7 @@ def test_tools_flag_selects_families(monkeypatch):
 
     names = run_session(scenario, server=server)
 
-    assert len(names) == 19
+    assert len(names) == 20
     assert names == [s.name for s in tool_specs(families)]
 
 
@@ -1370,12 +1370,12 @@ def test_stdio_stdout_has_only_protocol_frames():
     runs goes to stderr: every line of stdout is a JSON-RPC message."""
     program = (
         "import os, sys, kartograf\n"
-        "real = kartograf.get_catalog\n"
+        "real = kartograf.list_commands\n"
         "def noisy(**kwargs):\n"
         "    print('STRAY PRINT')\n"
         "    os.write(1, b'STRAY WRITE\\n')\n"
         "    return real(**kwargs)\n"
-        "kartograf.get_catalog = noisy\n"
+        "kartograf.list_commands = noisy\n"
         "from kartograf.mcp_server import main\n"
         "sys.exit(main(['--no-cache']))\n"
     )
@@ -1396,7 +1396,7 @@ def test_stdio_stdout_has_only_protocol_frames():
             "jsonrpc": "2.0",
             "id": 3,
             "method": "tools/call",
-            "params": {"name": "get_catalog", "arguments": {}},
+            "params": {"name": "commands_list", "arguments": {}},
         },
     ]
 
@@ -1439,19 +1439,21 @@ def test_stdio_stdout_has_only_protocol_frames():
     assert by_id[1]["instructions"] == INSTRUCTIONS
     # the keys of the protocol are camelCase, the hints that are not set are absent
     tools = {t["name"]: t for t in by_id[2]["tools"]}
-    assert len(tools) == 29
+    assert len(tools) == 30
     assert tools["elevation_download"]["annotations"] == {
         "readOnlyHint": False,
         "destructiveHint": False,
         "idempotentHint": True,
         "openWorldHint": True,
     }
-    assert tools["get_catalog"]["annotations"] == {
+    assert tools["commands_list"]["annotations"] == {
         "readOnlyHint": True,
         "openWorldHint": False,
     }
     schema = tools["elevation_download"]["inputSchema"]
     assert schema["dependentRequired"] == {"bbox": ["bbox_crs"]}
     assert not any("outputSchema" in tool for tool in tools.values())
-    assert by_id[3]["structuredContent"]["result"]["schema"] == "kartograf-catalog/1"
+    assert by_id[3]["structuredContent"]["result"]["schema"] == (
+        "kartograf-command-list/1"
+    )
     assert by_id[3]["isError"] is False

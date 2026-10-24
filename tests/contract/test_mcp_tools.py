@@ -13,8 +13,9 @@ from typing import Any, cast
 import pytest
 
 import kartograf
-from kartograf.catalog import data_commands, get_catalog
 from kartograf.catalog import tools as tools_module
+from kartograf.catalog.commands import declared
+from kartograf.catalog.spec import resolve
 from kartograf.catalog.tools import FAMILIES, check_arguments_schema, tool_specs
 from kartograf.serialization import SCHEMAS
 
@@ -26,7 +27,8 @@ WORDS = tools_module._BRIEF
 WORDS_FOR = tools_module._BRIEF_FOR
 
 SPECS = {spec.name: spec for spec in tool_specs()}
-CATALOG = {command.id: command for command in get_catalog(params=True).commands}
+CATALOG = {command.id: command for command in declared().commands}
+DATA_COMMANDS = [command for command in CATALOG.values() if command.project_task]
 DATA_TOOLS = [spec for spec in SPECS.values() if spec.family == "data"]
 # a tool that runs one command of its own (not a shared or a check tool)
 SINGLE = [s for s in SPECS.values() if len(s.commands) == 1 and not s.check]
@@ -70,13 +72,13 @@ def test_tool_names_are_unique_snake_case():
     assert all(re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in names)
 
 
-def test_there_are_29_tools_in_six_families():
+def test_there_are_30_tools_in_six_families():
     specs = tool_specs()
     counts = {f: sum(1 for s in specs if s.family == f) for f in FAMILIES}
 
-    assert len(specs) == 29
+    assert len(specs) == 30
     assert counts == {
-        "discovery": 5,
+        "discovery": 6,
         "availability": 1,
         "data": 12,
         "check": 1,
@@ -113,7 +115,7 @@ def test_the_catalog_names_the_tool_that_checks_each_command():
     checked = {c.id: c for c in CATALOG.values() if c.supports_check}
 
     assert {c.id for c in checked.values() if c.check_tool == "check_updates"} == {
-        c.id for c in data_commands() if c.supports_check
+        c.id for c in DATA_COMMANDS if c.supports_check
     }
     assert [c.tool for c in checked.values() if c.check_tool == "check_updates"] == enum
     assert checked["project download"].check_tool == "project_check_updates"
@@ -127,7 +129,7 @@ def test_the_catalog_names_the_tool_that_checks_each_command():
 
 def test_check_updates_enum_is_the_twelve_data_tools():
     enum = SPECS["check_updates"].input_schema["properties"]["tool"]["enum"]
-    checkable = [c.tool for c in data_commands() if c.supports_check]
+    checkable = [c.tool for c in DATA_COMMANDS if c.supports_check]
 
     assert len(enum) == 12
     assert enum == checkable  # the order of COMMANDS
@@ -171,24 +173,25 @@ def test_input_schemas_are_valid_draft_2020_12():
 @pytest.mark.parametrize("spec", SINGLE, ids=lambda s: s.name)
 def test_schemas_follow_catalog_params(spec):
     command = CATALOG[spec.commands[0]]
-    exposed = [p for p in command.params if p.argument]
+    exposed = [p for p in command.params if p.api_argument]
     schema = spec.input_schema
     properties = schema["properties"]
 
-    assert list(properties) == [p.argument for p in exposed]
-    assert schema.get("required", []) == [p.argument for p in exposed if p.required]
+    assert list(properties) == [p.api_argument for p in exposed]
+    assert schema.get("required", []) == [p.api_argument for p in exposed if p.required]
     assert schema["type"] == "object" and schema["additionalProperties"] is False
     if spec.family == "data":
         assert "output_dir" in schema["required"]
         assert CLI_ONLY_FLAGS.isdisjoint(properties)
-        assert list(spec.task_options) == [p.argument for p in exposed if p.task]
+        assert list(spec.task_options) == [p.api_argument for p in exposed if p.task]
     for param in exposed:
-        prop = properties[param.argument]
-        if param.kind in ("str", "bbox_crs") and param.allowed is not None:
+        prop = properties[param.api_argument]
+        allowed = resolve(param.allowed)
+        if param.kind in ("str", "bbox_crs") and allowed is not None:
             if (spec.name, param.name) in NO_ENUM:
                 assert "enum" not in prop, param.name
             else:
-                assert prop["enum"] == list(param.allowed), param.name
+                assert prop["enum"] == list(allowed), param.name
         if param.kind == "bbox":
             assert prop["type"] == "array" and prop["items"] == {"type": "number"}
             assert prop["minItems"] == prop["maxItems"] == 4
@@ -246,7 +249,7 @@ def test_project_add_has_command_and_options():
     schema = SPECS["project_add"].input_schema
     properties = schema["properties"]
 
-    assert properties["command"]["enum"] == [c.id for c in data_commands()]
+    assert properties["command"]["enum"] == [c.id for c in DATA_COMMANDS]
     assert properties["options"]["type"] == "object"
     assert {"project_dir", "name", "command", "options"} <= set(schema["required"])
     assert "arguments" not in properties  # the words of a CLI line
@@ -302,9 +305,7 @@ def test_descriptions_are_ascii_and_start_with_the_summary():
         assert "ok=false" not in spec.description, spec.name
         assert "--" not in spec.description, spec.name  # a call has no flags
     for spec in SINGLE:
-        if spec.name == "get_catalog":
-            continue
-        summary = CATALOG[spec.commands[0]].summary
+        summary = CATALOG[spec.commands[0]].summary_pl
         assert spec.description.startswith(summary.rstrip(".")), spec.name
         if spec.family != "data":
             # the document a tool returns; the twelve data tools all return one
@@ -315,24 +316,22 @@ def test_data_tools_send_to_the_catalog_for_their_parameters():
     for spec in DATA_TOOLS:
         command = spec.commands[0]
 
-        assert f'get_catalog(command="{command}")' in spec.description, spec.name
+        assert f'commands_schema(command="{command}")' in spec.description, spec.name
         assert "Wynik:" not in spec.description
-    assert "get_catalog(command=<command>)" in SPECS["project_add"].description
-    catalog = SPECS["get_catalog"].description
-    for word in ("command=", "group=", "tables=", "przeglad"):
-        assert word in catalog
+    assert "commands_schema(command=<command>)" in SPECS["project_add"].description
+    assert "Wynik: kartograf-command-list/1" in SPECS["commands_list"].description
+    assert "Wynik: kartograf-commands/1" in SPECS["commands_schema"].description
 
 
-def test_get_catalog_has_four_arguments_and_lists_no_commands():
-    schema = SPECS["get_catalog"].input_schema
-    properties = schema["properties"]
+def test_the_catalog_tools_take_no_argument_and_the_command_to_describe():
+    listing = SPECS["commands_list"].input_schema
+    schema = SPECS["commands_schema"].input_schema
 
-    assert list(properties) == ["group", "command", "params", "tables"]
-    assert properties["group"]["enum"] == [g.name for g in get_catalog().groups]
-    assert properties["tables"]["type"] == "boolean"
-    assert "required" not in schema
-    # the 41 ids are the overview's: a second copy in every tools/list is waste
-    assert "enum" not in properties["command"]
+    assert listing["properties"] == {}
+    assert list(schema["properties"]) == ["command"]
+    assert schema["required"] == ["command"]
+    # the 43 names are the list's: a second copy in every tools/list is waste
+    assert "enum" not in schema["properties"]["command"]
 
 
 def _says(text: str, value: str) -> bool:
@@ -419,14 +418,14 @@ def test_family_filter():
     selected = tool_specs(("discovery", "data"))
     everything = tool_specs()
 
-    assert len(selected) == 17
+    assert len(selected) == 18
     assert {s.family for s in selected} == {"discovery", "data"}
     # the order of the families, not of the request
     assert [s.name for s in tool_specs(("data", "discovery"))] == [
         s.name for s in selected
     ]
     assert tool_specs(None) == everything
-    assert len(tool_specs(("discovery", "availability", "data", "check"))) == 19
+    assert len(tool_specs(("discovery", "availability", "data", "check"))) == 20
     with pytest.raises(ValueError, match="nieznana rodzina narzedzi: nope, x"):
         tool_specs(("discovery", "nope", "x"))
 
@@ -436,7 +435,7 @@ def test_tools_module_needs_neither_mcp_nor_jsonschema():
         "import sys\n"
         "sys.modules['mcp'] = None\n"
         "import kartograf.catalog.tools as tools\n"
-        "assert len(tools.tool_specs()) == 29\n"
+        "assert len(tools.tool_specs()) == 30\n"
         "assert 'jsonschema' not in sys.modules\n"
     )
 

@@ -35,7 +35,7 @@ wybiera `--product` w każdej grupie (w `soil` — `--property`, `--depth`,
 
 Poza grupami danych: `kartograf project` (projekt z przypiętymi wersjami,
 niżej), `kartograf sheet parse` (godło arkusza), `kartograf cache`, `kartograf config`
-(ustawienia, niżej) i `kartograf commands list` (katalog komend dla agentów AI, niżej).
+(ustawienia, niżej) oraz `kartograf commands list` i `kartograf commands schema` (katalog komend dla agentów AI, niżej).
 
 ## Instalacja
 
@@ -166,10 +166,10 @@ To samo zadanie daje ten sam wynik w CLI, bibliotece i serwerze MCP:
 - `--json` w każdej komendzie CLI: na stdout jeden dokument
   `kartograf-<rodzaj>/1`, błąd jako `kartograf-error/1` z `code`, `hint`
   i kodem wyjścia (0, 1, 2, 130, 143);
-- `kartograf commands list --json` (`get_catalog()`): komendy, parametry, dozwolone
-  wartości i przykłady;
+- `kartograf commands list --json` (`list_commands()`) i `kartograf commands schema --command
+  "elevation download" --json` (`command_schema()`): komendy, opcje, dozwolone wartości i przykłady;
 - serwer MCP `kartograf-mcp` (`pip install "kartograf[mcp]"`, stdio; w Claude
-  Code `claude mcp add kartograf -- kartograf-mcp`) z 29 narzędziami;
+  Code `claude mcp add kartograf -- kartograf-mcp`) z 30 narzędziami;
 - [llms.txt](llms.txt): krótki spis dla agentów (zadania, polecenia, kody
   błędów).
 

@@ -167,7 +167,7 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     if any(token in _EXITING_FLAGS for token in tokens):
         raise UsageError(
             "--help i --version nie sa czescia komendy danych; opis komendy: "
-            "kartograf commands list <grupa> <komenda> --params",
+            'kartograf commands schema --command "<grupa> <komenda>"',
             command=named,
         )
     if named is not None:

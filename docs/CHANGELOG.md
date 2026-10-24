@@ -83,9 +83,26 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   error of argparse in text mode ends with it too.
 - `run_command` and `check_command` return `CommandResult` (the envelope); the report is
   `.result`, and `run_command(plan=)` takes `check_command(...).result`.
+- The command catalog is the documents `kartograf-command-list/1` and `kartograf-commands/1`
+  (AGI-2.4, ADR-052). `kartograf commands list` takes no argument and prints the list: the groups
+  with their products and every command with its `operation_id`, summary, MCP families,
+  `read_only` and `check`. `kartograf commands schema --command "<group> <verb>"` prints one
+  command (Nogat `commands-1`): its options with allowed values and their meanings, result,
+  effects, rules, examples with a result excerpt, errors and the Polish texts in `i18n.pl`.
+  `get_catalog`, `data_commands`, `Catalog`, `CommandInfo`, `ParamInfo`, the document
+  `kartograf-catalog/1` (its views, `--params`, `group`, `params` and `tables`, the tables of exit
+  codes, error codes and schemas) are removed: migrate to `list_commands()` and
+  `command_schema(command)`; the twelve data commands are the values of `project add --command`
+  (`project_task` in the declarations). The MCP tool `get_catalog` is `commands_list` and
+  `commands_schema` until the tools are renamed with the MCP server rebuild. The hint of a usage
+  error says `kartograf commands schema --command "<id>"`.
 
 **Added**
 
+- `list_commands()`, `command_schema(command)` and the documents `CommandList` and
+  `CommandCatalog` (AGI-2.1, AGI-2.4): `command_schema` takes the name of a command or its
+  `operation_id` (`kartograf_<group>_<verb>`). `validate_command`, `check_command` and
+  `run_command` keep `(command, options, *, output_dir)` and the twelve data commands (ADR-052).
 - `kartograf sheet find`, `kartograf store overview`, `kartograf store entries` and
   `kartograf store sidecar`: the CLI of the four commands that only the API had
   (`find_sheets`, `describe_store`, `list_store_entries`, `read_store_sidecar`), so that every

@@ -307,8 +307,8 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
                 description_pl="Grupa",
             ),
             kind="query",
-            function="get_catalog",
-            result_schema="kartograf-catalog/1",
+            function="list_commands",
+            result_schema="kartograf-command-list/1",
             description="Katalog",
         ),
     )

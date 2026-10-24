@@ -183,7 +183,7 @@ class UsageError(ValidationError):
     code = "validation_error"
     reason = "usage"
     DEFAULT_HINT = (
-        "Parametry komendy: kartograf commands list <grupa> <komenda> --params"
+        'Parametry komendy: kartograf commands schema --command "<grupa> <komenda>"'
     )
 
     def __init__(

@@ -141,13 +141,14 @@ def usage_hint(command: str | None, *, max_chars: int) -> str | None:
     Returns
     -------
     str or None
-        ``Parametry komendy: kartograf commands list <id>.`` followed by ``Przyklad:``
+        ``Parametry komendy: kartograf commands schema --command "<id>".`` followed by
+        ``Przyklad:``
         and the first example of the command when it has one and the text fits.
     """
     found = declared_commands().get(command) if command is not None else None
     if found is None:
         return None
-    where = f"Parametry komendy: kartograf commands list {found.id}."
+    where = f'Parametry komendy: kartograf commands schema --command "{found.id}".'
     _, line = example_for(found.id, None)
     if line and len(candidate := f"{where} Przyklad: {line}") <= max_chars:
         return candidate

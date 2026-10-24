@@ -1,10 +1,8 @@
-"""The catalog document ``kartograf-catalog/1`` and ``get_catalog`` (spec 8.1, 8.5),
-built from synthetic declarations; the parts on the real declarations (the hint
-example, the completeness of the declarations) come last."""
+"""The hint example of the catalog (spec 6.3), the parser built from the real
+declarations and the constraints the library enforces (spec 8.4, 12.5); the documents
+of the catalog are in ``test_catalog_documents.py``."""
 
 import argparse
-import dataclasses
-import json
 import shlex
 import subprocess
 import sys
@@ -12,708 +10,21 @@ from pathlib import Path
 
 import pytest
 
-from kartograf.catalog import build
-from kartograf.catalog.build import build_catalog, data_commands, get_catalog
+from kartograf.catalog import command_schema, list_commands
 from kartograf.catalog.cliparser import _subparsers, build_parser, parse_command_line
-from kartograf.catalog.commands import Declared, declared
+from kartograf.catalog.commands import declared
 from kartograf.catalog.hints import example_for
 from kartograf.catalog.kinds import check_options_json, options_from_json
-from kartograf.catalog.model import Catalog, CommandInfo, ParamInfo
 from kartograf.catalog.spec import (
     Command,
     Constraint,
     Example,
-    Group,
     Param,
     resolve,
 )
 from kartograf.cli._parser import create_parser
-from kartograf.error_report import ERROR_CODES, EXIT_CODES
 from kartograf.exceptions import ValidationError
 from kartograf.project.commands import COMMANDS
-from kartograf.serialization import SCHEMAS
-from kartograf.sources.registry import sources_for
-
-_PRODUCTS = ("nmt", "nmpt")
-
-
-def _params() -> tuple[Param, ...]:
-    return (
-        Param(
-            "product",
-            "str",
-            lambda: "Produkt (wymagany): nmt, nmpt",
-            allowed=lambda: _PRODUCTS,
-            choices=True,
-            required=True,
-            task=True,
-            section="Produkt i obszar",
-            description_pl=lambda: "Produkt (wymagany): nmt, nmpt",
-        ),
-        Param(
-            "sheet",
-            "str",
-            "Godlo arkusza",
-            metavar="GODLO",
-            normalize="strip",
-            task=True,
-            accepts=("pl1992", "pl2000"),
-            section="Produkt i obszar",
-            description_pl="Godlo arkusza",
-        ),
-        Param(
-            "bbox",
-            "bbox",
-            "Prostokat obszaru",
-            task=True,
-            metavar="BBOX",
-            description_pl="Prostokat obszaru",
-        ),
-        Param(
-            "bbox_crs",
-            "bbox_crs",
-            "Uklad --bbox",
-            task=True,
-            allowed=("EPSG:2180", "EPSG:4326"),
-            cli_default="EPSG:2180",
-            description_pl="Uklad --bbox",
-        ),
-        Param(
-            "output_dir",
-            "path",
-            "Katalog magazynu",
-            flag="--output",
-            short="-o",
-            dest="output",
-            required=True,
-            description_pl="Katalog magazynu",
-        ),
-        Param(
-            "quiet",
-            "flag",
-            "Bez paska postepu",
-            argument=None,
-            short="-q",
-            description_pl="Bez paska postepu",
-        ),
-    )
-
-
-def _commands() -> tuple[Command, ...]:
-    return (
-        Command(
-            "elevation download",
-            "Pobierz NMT i NMPT",
-            "data",
-            "download_data",
-            "kartograf-download/1",
-            _params(),
-            description="Pobierz dane do magazynu wersji",
-            effects=("network", "store_write"),
-            project_task=True,
-            check_function="check_data",
-            check_result_schema="kartograf-plan/1",
-            tool="elevation_download",
-            constraints=(
-                Constraint(
-                    "one_of",
-                    ("sheet", "bbox"),
-                    "Podaj dokladnie jeden obszar: --sheet albo --bbox",
-                ),
-            ),
-            examples=(
-                Example({"product": "nmt", "sheet": "N-34-130-D-d-2-4"}),
-                Example(
-                    {"product": "nmpt", "bbox": [1, 2, 3, 4], "bbox_crs": "EPSG:2180"},
-                    title="Obszar",
-                    title_pl="Obszar",
-                ),
-            ),
-            summary_pl="Pobierz NMT i NMPT",
-            description_pl="Pobierz dane do magazynu wersji",
-        ),
-        Command(
-            "elevation list-sources",
-            "Wypisz zrodla",
-            "query",
-            "list_sources",
-            "kartograf-sources/1",
-            (Param("group", "str", flag=None, required=True, allowed=("elevation",)),),
-            tool="list_sources",
-            summary_pl="Wypisz zrodla",
-        ),
-        Command(
-            "cache stats",
-            "Statystyki cache",
-            "query",
-            "get_cache_info",
-            "kartograf-cache/1",
-            (),
-            summary_pl="Statystyki cache",
-        ),
-        Command(
-            "sheet parse",
-            "Rozpoznaj godlo",
-            "query",
-            "describe_sheet",
-            "kartograf-sheet/1",
-            (
-                Param(
-                    "sheet",
-                    "str",
-                    "Godlo",
-                    positional=True,
-                    required=True,
-                    description_pl="Godlo",
-                ),
-            ),
-            tool="parse_sheet",
-            summary_pl="Rozpoznaj godlo",
-        ),
-        Command(
-            "sheet find",
-            "Godla obszaru",
-            "query",
-            "find_sheets",
-            "kartograf-sheets/1",
-            (
-                Param(
-                    "scale",
-                    "str",
-                    "Skala",
-                    flag=None,
-                    required=True,
-                    description_pl="Skala",
-                ),
-            ),
-            tool="find_sheets",
-            summary_pl="Godla obszaru",
-        ),
-    )
-
-
-def _groups() -> tuple[Group, ...]:
-    return (
-        Group(
-            "elevation",
-            "Wysokosci",
-            "Dane wysokosciowe NMT i NMPT",
-            products=lambda: [
-                ("nmt", "Numeryczny Model Terenu; PL i CZ"),
-                ("nmpt", "Numeryczny Model Pokrycia Terenu; PL i CZ"),
-            ],
-            summary_pl="Wysokosci",
-            description_pl="Dane wysokosciowe NMT i NMPT",
-        ),
-        Group(
-            "sheet",
-            "Godla arkuszy",
-            "Godla arkuszy PL i CZ",
-            summary_pl="Godla arkuszy",
-            description_pl="Godla arkuszy PL i CZ",
-        ),
-        Group(
-            "cache",
-            "Cache metadanych",
-            "Lokalny cache metadanych",
-            position=2,
-            summary_pl="Cache metadanych",
-            description_pl="Lokalny cache metadanych",
-        ),
-    )
-
-
-def _build(**view) -> Catalog:
-    return build_catalog(_commands(), _groups(), **view)
-
-
-def _command(catalog: Catalog, command_id: str) -> CommandInfo:
-    return next(c for c in catalog.commands if c.id == command_id)
-
-
-@pytest.fixture
-def declared_catalog(monkeypatch):
-    """``get_catalog`` over the synthetic declarations, with its caches cleared
-    before and after (the process caches the full catalog)."""
-    monkeypatch.setattr(build, "declared", lambda: Declared(_commands(), _groups()))
-    build.clear_caches()
-    yield
-    build.clear_caches()
-
-
-def test_catalog_document_keys():
-    keys = [
-        "schema",
-        "view",
-        "kartograf_version",
-        "language",
-        "groups",
-        "commands",
-        "exit_codes",
-        "errors",
-        "schemas",
-    ]
-
-    # every view has the same keys: the overview shortens the records, not the document
-    for catalog in (_build(), _build(group="elevation"), _build(command="sheet parse")):
-        assert list(catalog.to_dict()) == keys
-    assert catalog.schema == "kartograf-catalog/1"
-    assert catalog.language == "pl"
-    assert SCHEMAS["kartograf-catalog/1"] == (Catalog,)
-
-
-def test_view_is_the_overview_until_something_is_selected_or_asked_for():
-    assert _build().view == "overview"
-    assert _build(params=False).view == "overview"
-    assert _build(tables=True).view == "overview"
-    for view in (
-        {"group": "elevation"},
-        {"command": "sheet parse"},
-        {"params": True},
-        {"group": "elevation", "params": False},
-    ):
-        assert _build(**view).view == "full", view
-
-
-def test_a_catalog_of_an_unknown_view_is_rejected():
-    full = _build()
-
-    with pytest.raises(ValueError, match="unknown catalog view 'short'"):
-        dataclasses.replace(full, view="short")
-
-
-def test_version_is_the_package_version():
-    import kartograf
-
-    assert _build().kartograf_version == kartograf.__version__
-
-
-def test_overview_objects_are_complete_and_without_params():
-    """The objects of the overview have every field but the parameters: a caller
-    of the library reads a description without asking again."""
-    catalog = _build()
-
-    assert [c.id for c in catalog.commands] == [
-        "elevation download",
-        "elevation list-sources",
-        "cache stats",
-        "sheet parse",
-        "sheet find",
-    ]
-    assert all(
-        c.params is None and c.constraints is None and c.examples is None
-        for c in catalog.commands
-    )
-    assert all(c.description and c.kind for c in catalog.commands)
-    assert catalog.groups[0].description
-    assert catalog.groups[0].products[0].sources is not None
-
-
-def test_overview_document_is_a_short_projection():
-    catalog = _build()
-
-    document = catalog.to_dict()
-
-    assert document["view"] == "overview"
-    assert [list(g) for g in document["groups"]] == [
-        ["name", "summary", "products"]
-    ] * 3
-    assert document["groups"][0]["products"] == ["nmt", "nmpt"]
-    assert document["groups"][1]["products"] == []
-    assert [list(c) for c in document["commands"]] == [
-        ["id", "summary", "tool", "supports_check"]
-    ] * 5
-    by_id = {c["id"]: c for c in document["commands"]}
-    assert by_id["elevation download"]["supports_check"] is True
-    assert by_id["cache stats"]["supports_check"] is False
-    assert by_id["cache stats"]["tool"] is None
-    assert by_id["sheet parse"]["tool"] == "parse_sheet"
-    # the tables are asked for
-    assert (document["exit_codes"], document["errors"], document["schemas"]) == (
-        None,
-        None,
-        None,
-    )
-
-
-def test_overview_text_is_one_record_per_line_and_the_same_document():
-    catalog = _build()
-
-    text = catalog.to_json()
-    compact = catalog.to_json(indent=None)
-
-    assert json.loads(text) == json.loads(compact) == catalog.to_dict()
-    assert text.endswith("}\n") and "\n" not in compact
-    lines = text.splitlines()
-    for command in catalog.to_dict()["commands"]:
-        record = json.dumps(command, ensure_ascii=False, separators=(",", ":"))
-        assert f"    {record}," in lines or f"    {record}" in lines
-    assert max(len(line) for line in lines) < 250
-    assert lines[:3] == [
-        "{",
-        '  "schema": "kartograf-catalog/1",',
-        '  "view": "overview",',
-    ]
-
-
-def test_overview_text_with_tables_has_a_record_per_line_for_them_too():
-    catalog = _build(tables=True)
-
-    text = catalog.to_json()
-
-    assert json.loads(text) == catalog.to_dict()
-    assert len(text.splitlines()) > len(_build().to_json().splitlines()) + len(
-        catalog.exit_codes or ()
-    )
-
-
-def test_other_views_are_printed_like_any_document():
-    catalog = _build(command="elevation download")
-
-    assert (
-        catalog.to_json()
-        == json.dumps(catalog.to_dict(), ensure_ascii=False, indent=2) + "\n"
-    )
-    assert catalog.to_json(indent=None) == json.dumps(
-        catalog.to_dict(), ensure_ascii=False, separators=(",", ":")
-    )
-
-
-def test_a_full_view_document_has_every_field_of_its_objects():
-    document = _build(group="elevation").to_dict()
-
-    assert document["view"] == "full"
-    assert list(document["groups"][0]) == [
-        "name",
-        "summary",
-        "description",
-        "products",
-        "commands",
-    ]
-    assert list(document["groups"][0]["products"][0]) == [
-        "name",
-        "summary",
-        "countries",
-        "sources",
-    ]
-    assert "description" in document["commands"][0]
-    assert document["commands"][0]["params"] is None
-
-
-def test_command_view_has_params_constraints_examples():
-    catalog = _build(command="elevation download")
-
-    (command,) = catalog.commands
-    assert command.id == "elevation download"
-    assert command.params is not None
-    assert [p.name for p in command.params] == [
-        "product",
-        "sheet",
-        "bbox",
-        "bbox_crs",
-        "output_dir",
-        "quiet",
-    ]
-    assert command.constraints is not None
-    assert (command.constraints[0].type, command.constraints[0].params) == (
-        "one_of",
-        ("sheet", "bbox"),
-    )
-    assert command.examples is not None
-    assert [e.command_line for e in command.examples] == [
-        "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 -o ./data",
-        "kartograf elevation download --product nmpt --bbox 1,2,3,4 -o ./data",
-    ]
-    assert command.examples[1].title == "Obszar"
-    assert command.examples[1].options["bbox"] == (1, 2, 3, 4)
-    document = catalog.to_dict()
-    example = document["commands"][0]["examples"][1]
-    assert list(example) == ["title", "options", "command_line"]
-    assert example["options"]["bbox"] == [1, 2, 3, 4]
-
-
-def test_param_document_keys_and_values():
-    command = _command(_build(command="elevation download"), "elevation download")
-    assert command.params is not None
-    by_name = {p.name: p for p in command.params}
-
-    document = dataclasses.asdict(by_name["product"])
-    assert list(document) == [
-        "name",
-        "argument",
-        "flag",
-        "short",
-        "positional",
-        "kind",
-        "required",
-        "task",
-        "allowed",
-        "default",
-        "cli_default",
-        "accepts",
-        "section",
-        "description",
-    ]
-    assert by_name["output_dir"] == ParamInfo(
-        name="output_dir",
-        argument="output_dir",
-        flag="--output",
-        short="-o",
-        positional=False,
-        kind="path",
-        required=True,
-        task=False,
-        allowed=None,
-        default=None,
-        cli_default=None,
-        accepts=None,
-        section=None,
-        description="Katalog magazynu",
-    )
-    assert by_name["bbox_crs"].cli_default == "EPSG:2180"
-    assert by_name["sheet"].accepts == ("pl1992", "pl2000")
-    quiet = by_name["quiet"]
-    assert (quiet.argument, quiet.flag, quiet.short) == (None, "--quiet", "-q")
-    parse = _command(_build(command="sheet parse"), "sheet parse")
-    assert parse.params is not None
-    assert (parse.params[0].flag, parse.params[0].positional) == (None, True)
-
-
-def test_group_filter_and_unknown_group():
-    catalog = _build(group="elevation")
-
-    assert [g.name for g in catalog.groups] == ["elevation"]
-    assert [c.id for c in catalog.commands] == [
-        "elevation download",
-        "elevation list-sources",
-    ]
-    assert all(c.params is None for c in catalog.commands)
-    with pytest.raises(ValidationError) as error:
-        _build(group="nope")
-    assert error.value.option == "group"
-    assert error.value.allowed == ("elevation", "sheet", "cache")
-    assert "nope" in str(error.value)
-
-
-def test_unknown_command_and_command_of_another_group():
-    with pytest.raises(ValidationError) as unknown:
-        _build(command="elevation nope")
-    with pytest.raises(ValidationError) as other:
-        _build(group="cache", command="elevation download")
-
-    assert unknown.value.option == "command"
-    assert unknown.value.allowed is not None
-    assert "elevation download" in unknown.value.allowed
-    assert "sheet find" in unknown.value.allowed
-    assert other.value.option == "command"
-
-
-def test_params_flag_overrides_the_default():
-    everything = _build(params=True)
-    nothing = _build(command="elevation download", params=False)
-    group = _build(group="cache", params=True)
-
-    assert all(c.params is not None for c in everything.commands)
-    assert all(
-        c.params is None and c.constraints is None and c.examples is None
-        for c in nothing.commands
-    )
-    assert [c.id for c in group.commands] == ["cache stats"]
-    assert group.commands[0].params == ()
-
-
-def test_command_of_a_group_and_api_only_command():
-    parse = _command(_build(), "sheet parse")
-    api_only = _command(_build(), "sheet find")
-
-    assert (parse.group, parse.name, parse.cli) == ("sheet", "parse", "sheet parse")
-    assert (api_only.group, api_only.cli, api_only.tool) == (
-        "sheet",
-        "sheet find",
-        "find_sheets",
-    )
-    assert [g.commands for g in _build().groups] == [
-        ("elevation download", "elevation list-sources"),
-        ("sheet parse", "sheet find"),
-        ("cache stats",),
-    ]
-
-
-def test_supports_check_is_derived():
-    catalog = _build()
-    download = _command(catalog, "elevation download")
-    sources = _command(catalog, "elevation list-sources")
-
-    assert download.supports_check is True
-    assert (download.check_function, download.check_result_schema) == (
-        "check_data",
-        "kartograf-plan/1",
-    )
-    assert sources.supports_check is False
-    assert (sources.check_function, sources.check_result_schema) == (None, None)
-    for command in catalog.commands:
-        assert command.supports_check == (command.check_function is not None)
-
-
-def test_exit_codes_and_errors_are_the_library_tables():
-    catalog = _build(tables=True)
-
-    assert [(r.code, r.name, r.meaning) for r in catalog.exit_codes] == [
-        (r.code, r.name, r.meaning) for r in EXIT_CODES
-    ]
-    assert [
-        (r.code, r.reason, r.exception, r.exit_code, r.meaning) for r in catalog.errors
-    ] == [(r.code, r.reason, r.exception, r.exit_code, r.meaning) for r in ERROR_CODES]
-
-
-def test_tables_are_on_request_and_in_the_whole_catalog():
-    nothing = (None, None, None)
-
-    def tables(catalog: Catalog) -> tuple[object, object, object]:
-        return catalog.exit_codes, catalog.errors, catalog.schemas
-
-    assert tables(_build()) == tables(_build(group="elevation")) == nothing
-    assert (
-        tables(_build(command="sheet parse")) == tables(_build(params=False)) == nothing
-    )
-    asked = _build(tables=True)
-    # the overview with the tables: the tables do not make it a full view
-    assert asked.view == "overview" and all(tables(asked))
-    assert all(tables(_build(command="sheet parse", tables=True)))
-    # the whole catalog (every parameter of every command) has everything ...
-    whole = _build(params=True)
-    assert whole.view == "full" and all(tables(whole))
-    # ... unless it is told not to; a group with parameters is not the whole catalog
-    assert tables(_build(params=True, tables=False)) == nothing
-    assert tables(_build(group="elevation", params=True)) == nothing
-
-
-def test_schemas_list_follows_the_registry_and_names_the_producers(monkeypatch):
-    registry = {
-        "kartograf-sheet/1": (),
-        "kartograf-download/1": (),
-        "kartograf-test-undocumented/1": (),
-        "kartograf-plan/1": (),
-        "kartograf-error/1": (),
-    }
-    descriptions = {
-        "kartograf-download/1": "Wynik komendy danych",
-        "kartograf-plan/1": "Plan aktualizacji",
-        "kartograf-sheet/1": "Opis godla",
-        "kartograf-error/1": "Blad komendy",
-    }
-    monkeypatch.setattr(build, "SCHEMAS", registry)
-    monkeypatch.setattr(build, "SCHEMA_DESCRIPTIONS", descriptions)
-
-    catalog = _build(tables=True)
-
-    # registry order; a schema without a description is not part of the catalog
-    assert [(s.schema, s.description, s.produced_by) for s in catalog.schemas] == [
-        ("kartograf-sheet/1", "Opis godla", ("sheet parse",)),
-        ("kartograf-download/1", "Wynik komendy danych", ("elevation download",)),
-        # the check twin of a command produces its plan schema too
-        ("kartograf-plan/1", "Plan aktualizacji", ("elevation download",)),
-        ("kartograf-error/1", "Blad komendy", ()),
-    ]
-
-
-def test_every_library_schema_has_a_description():
-    described = {s.schema for s in _build(tables=True).schemas}
-
-    library = {s for s in SCHEMAS if not s.startswith("kartograf-test-")}
-    assert library <= described
-    assert "kartograf-catalog/1" in described
-
-
-def test_full_catalog_is_built_once(declared_catalog, monkeypatch):
-    built = []
-    original = build._build_full
-
-    def counting(commands, groups):
-        built.append(1)
-        return original(commands, groups)
-
-    monkeypatch.setattr(build, "_build_full", counting)
-
-    short = get_catalog()
-    one = get_catalog(command="sheet parse")
-    group = get_catalog(group="elevation")
-    everything = get_catalog(params=True)
-    data = data_commands()
-
-    assert built == [1]
-    assert get_catalog() is short
-    assert get_catalog(command="sheet parse") is one
-    assert one.commands[0].params is not None
-    assert short.commands[0].params is None
-    assert [c.id for c in group.commands] == [
-        "elevation download",
-        "elevation list-sources",
-    ]
-    assert all(c.params is not None for c in everything.commands)
-    assert [c.id for c in data] == ["elevation download"]
-
-
-def test_data_commands_have_params_and_are_project_tasks(declared_catalog):
-    commands = data_commands()
-
-    assert [c.id for c in commands] == ["elevation download"]
-    assert all(c.project_task and c.params for c in commands)
-    assert commands[0].examples is not None
-
-
-def test_provider_values_reach_the_document():
-    command = _command(_build(command="elevation download"), "elevation download")
-    assert command.params is not None
-    product = command.params[0]
-    group = _build().groups[0]
-
-    assert product.allowed == _PRODUCTS
-    assert product.description == "Produkt (wymagany): nmt, nmpt"
-    assert [p.name for p in group.products] == ["nmt", "nmpt"]
-    assert group.products[0].summary == "Numeryczny Model Terenu; PL i CZ"
-
-
-def test_products_get_countries_and_sources_from_the_registry():
-    nmt = _build().groups[0].products[0]
-
-    registered = sources_for(product="nmt")
-    assert nmt.sources == tuple(source.key for source in registered)
-    assert nmt.countries == ("pl", "cz")
-    assert {"pl.gugik.nmt_1m", "cz.cuzk.dmr5g"} <= set(nmt.sources)
-
-
-def test_catalog_is_immutable_data():
-    catalog = _build(command="elevation download")
-    example = catalog.commands[0].examples[0]  # type: ignore[index]
-
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        catalog.language = "en"  # type: ignore[misc]
-    with pytest.raises(TypeError):
-        example.options["product"] = "nmpt"  # type: ignore[index]
-    assert isinstance(catalog.commands, tuple)
-
-
-def test_constraints_must_reference_declared_params():
-    bad_param = dataclasses.replace(
-        _commands()[0],
-        constraints=(Constraint("requires", ("nope",), "x", "sheet"),),
-    )
-    bad_when = dataclasses.replace(
-        _commands()[0],
-        constraints=(Constraint("applies_to", (), "x", "sheet", {"nope": True}),),
-    )
-    bad_example = dataclasses.replace(_commands()[0], examples=(Example({"nope": 1}),))
-
-    for command in (bad_param, bad_when, bad_example):
-        with pytest.raises(ValueError, match="nope"):
-            build_catalog((command,), _groups()[:1], command=command.id)
-
-
-def test_declarations_of_a_group_without_commands_are_refused():
-    with pytest.raises(ValueError, match="cache"):
-        build_catalog(_commands()[:1], (_groups()[0], _groups()[2]))
-
 
 # =============================================================================
 # example_for: the example of an error hint (spec 6.3, part (b))
@@ -730,9 +41,8 @@ _CLI_WITH_EXAMPLES = [
 
 def _lines(command_id: str) -> list[str]:
     """The command lines of the examples of a command, as the catalog gives them."""
-    (command,) = get_catalog(command=command_id).commands
-    assert command.examples is not None
-    return [example.command_line for example in command.examples]
+    (command,) = command_schema(command_id).commands
+    return [example.call for example in command.examples]
 
 
 def test_example_for_prefers_an_example_using_the_option():
@@ -959,16 +269,15 @@ def _exclusive_groups(parser) -> set[frozenset[str]]:
 def test_real_parser_matches_the_catalog():
     """Spec 12.5 a: the parser of the CLI has, for every command of the catalog,
     the flags with the ``dest``, type, default, choices, argument count and
-    exclusive groups of the catalog and the declarations - and no other flag."""
+    exclusive groups of the declarations - and no other flag."""
     leaves = dict(_leaf_parsers(create_parser()))
-    commands = {c.id: c for c in get_catalog(params=True).commands if c.cli}
-    declarations = {c.id: c for c in _DECLARED.commands}
+    commands = {c.id: c for c in _DECLARED.commands}
 
-    assert len(commands) == 42 and set(leaves) == set(commands)
+    assert len(commands) == 43 and set(leaves) == set(commands)
     for command_id, command in commands.items():
-        leaf, declaration = leaves[command_id], declarations[command_id]
+        leaf = leaves[command_id]
         expected_flags = {
-            flag for p in command.params or () for flag in (p.flag, p.short) if flag
+            flag for p in command.params for flag in (p.cli_flag, p.short) if flag
         }
         flags = {
             flag
@@ -978,30 +287,27 @@ def test_real_parser_matches_the_catalog():
         }
         assert flags == expected_flags, command_id
         exclusive = {
-            frozenset(p.cli_dest for p in declaration.params if p.exclusive == name)
-            for name in {p.exclusive for p in declaration.params if p.exclusive}
+            frozenset(p.cli_dest for p in command.params if p.exclusive == name)
+            for name in {p.exclusive for p in command.params if p.exclusive}
         }
         assert _exclusive_groups(leaf) == exclusive, command_id
         positional = list(leaf._get_positional_actions())
         assert [a.dest for a in positional] == [
-            p.name for p in command.params or () if p.positional
+            p.name for p in command.params if p.positional
         ], command_id
-        for param, declared_param in zip(
-            command.params or (), declaration.params, strict=True
-        ):
-            assert param.name == declared_param.name
+        for param in command.params:
             if param.positional:
                 action = next(a for a in positional if a.dest == param.name)
                 nargs = {"REMAINDER": argparse.REMAINDER}.get(
-                    declared_param.nargs or "", declared_param.nargs
+                    param.nargs or "", param.nargs
                 )
                 assert action.nargs == nargs, (command_id, param.name)
                 continue
-            if param.flag is None:
+            if param.cli_flag is None:
                 continue
-            action = leaf._option_string_actions[param.flag]
+            action = leaf._option_string_actions[param.cli_flag]
             where = (command_id, param.name)
-            assert action.dest == declared_param.cli_dest, where
+            assert action.dest == param.cli_dest, where
             assert not action.required, where  # the library reports what is missing
             if param.short:
                 assert param.short in action.option_strings, where
@@ -1014,21 +320,19 @@ def test_real_parser_matches_the_catalog():
                 param.cli_default if param.cli_default is not None else param.default
             )
             assert action.default == default, where
-            if declared_param.choices:
+            if param.choices:
                 assert action.choices is not None
-                assert list(action.choices) == list(param.allowed or ()), where
+                assert list(action.choices) == list(resolve(param.allowed) or ()), where
             else:
                 assert action.choices is None, where
 
 
 def test_data_commands_are_the_twelve_in_COMMANDS_order():
-    commands = data_commands()
+    commands = [c for c in _DECLARED.commands if c.project_task]
 
     assert [c.id for c in commands] == list(COMMANDS)
     assert len(commands) == 12
-    assert [c.id for c in get_catalog().commands if c.project_task] == list(COMMANDS)
     for command in commands:
-        assert command.project_task and command.params is not None
         names = {p.name for p in command.params}
         # the options of a task and the flags of a run
         assert {"output_dir", "update"} <= names
@@ -1038,99 +342,70 @@ def test_data_commands_are_the_twelve_in_COMMANDS_order():
         assert command.examples
 
 
-def test_catalog_has_every_group_and_command():
-    short = get_catalog()
-    full = get_catalog(params=True)
+def test_the_list_has_every_group_and_command():
+    document = list_commands()
 
-    assert [g.name for g in short.groups] == list(_GROUPS)
-    assert len(short.commands) == len(full.commands) == 42
-    assert all(c.cli for c in short.commands)
-    assert all(c.params is None for c in short.commands)
-    assert all(
-        c.params is not None and c.constraints is not None and c.examples is not None
-        for c in full.commands
-    )
-    # the commands of a group are the ones with a CLI whose id starts with it
-    for group in short.groups:
-        assert group.commands == tuple(
-            c.id for c in short.commands if c.group == group.name and c.cli
-        )
-
-
-def test_overview_is_a_short_and_complete_list_of_groups_products_and_commands():
-    """What an agent reads first is under 8500 characters (it was 47 807; the CLI
-    prints the same document, indented: it was 62 389), and nothing is lost: every
-    group, product and command is in it, the rest is one query away."""
-    catalog = get_catalog()
-    document = catalog.to_dict()
-    everything = get_catalog(params=True)
-
-    assert len(catalog.to_json(indent=None)) <= 8500
-    assert len(catalog.to_json()) <= 8500
-    assert [g["name"] for g in document["groups"]] == list(_GROUPS)
-    for group, row in zip(catalog.groups, document["groups"], strict=True):
-        assert row["products"] == [p.name for p in group.products]
-        assert row["summary"] == group.summary
-    assert [c["id"] for c in document["commands"]] == [
-        c.id for c in everything.commands
-    ]
-    for row in document["commands"]:
-        full = get_catalog(command=row["id"]).commands[0]
-        assert (row["summary"], row["tool"], row["supports_check"]) == (
-            full.summary,
-            full.tool,
-            full.supports_check,
-        )
-        # what left the overview: the description and the parameters
-        assert full.description and full.params is not None
-    for group in catalog.groups:
-        detail = get_catalog(group=group.name).groups[0]
-        assert detail.description and detail.products == group.products
-
-
-def test_catalog_filters_and_errors():
-    soil = get_catalog(group="soil")
-    one = {i: get_catalog(command=i).commands[0] for i in ("sheet parse", "sheet find")}
-
-    assert [g.name for g in soil.groups] == ["soil"]
-    assert [c.id for c in soil.commands] == [
+    assert [g.name for g in document.groups] == list(_GROUPS)
+    assert [c.name for c in document.commands] == [c.id for c in _DECLARED.commands]
+    assert len(document.commands) == 43
+    for group in document.groups:
+        assert [c.name for c in document.commands if c.name.startswith(group.name)]
+    assert {c.name for c in document.commands if "core" in c.families} == {
+        "elevation download",
+        "elevation availability",
+        "imagery download",
+        "landcover download",
         "soil download",
         "soil hsg",
-        "soil list-sources",
-        "soil list-layers",
-    ]
-    assert all(c.params is None for c in soil.commands)
-    assert [c.id for c in get_catalog(group="soil", params=True).commands] == [
-        c.id for c in soil.commands
-    ]
-    assert all(c.params for c in get_catalog(group="soil", params=True).commands)
-    # one command: with its parameters, whether it has a group or a CLI or not
-    assert one["sheet parse"].group == "sheet" and one["sheet parse"].params
-    assert one["sheet find"].cli == "sheet find" and one["sheet find"].params
-    assert get_catalog(command="sheet parse", params=False).commands[0].params is None
-    # the tables only on request: not in a group, a command or the overview
-    for view in (soil, get_catalog(command="sheet parse"), get_catalog()):
-        assert (view.exit_codes, view.errors, view.schemas) == (None, None, None)
-    tables = get_catalog(group="soil", tables=True)
-    assert [r.code for r in tables.exit_codes] == [e.code for e in EXIT_CODES]
-    assert tables.errors and tables.schemas
-    short = get_catalog()
+        "commands list",
+        "commands schema",
+        "sheet find",
+        "store overview",
+    }
 
-    with pytest.raises(ValidationError) as group:
-        get_catalog(group="nope")
-    with pytest.raises(ValidationError) as command:
-        get_catalog(command="nope")
-    with pytest.raises(ValidationError) as other_group:
-        get_catalog(group="soil", command="elevation download")
-    with pytest.raises(ValidationError) as api_only:
-        get_catalog(group="soil", command="sheet find")
 
-    assert (group.value.option, group.value.allowed) == ("group", _GROUPS)
-    assert command.value.option == "command"
-    assert command.value.allowed == tuple(c.id for c in short.commands)
-    assert other_group.value.option == "command"
-    assert api_only.value.option == "command"
-    assert api_only.value.allowed == tuple(c.id for c in soil.commands)
+def test_the_list_is_a_short_and_complete_list_of_groups_products_and_commands():
+    """What an agent reads first is within the page budget (DOC-1.7: 20,000
+    characters, also indented as the CLI prints it) and nothing is lost: every group
+    with its products and every command with its summary is in it, the options are
+    one query away."""
+    document = list_commands()
+    data = document.to_dict()
+
+    assert len(document.to_json(indent=None)) <= 20_000
+    assert len(document.to_json()) <= 20_000
+    assert [g["name"] for g in data["groups"]] == list(_GROUPS)  # type: ignore[attr-defined]
+    for group, declared_group in zip(
+        document.groups,
+        sorted(_DECLARED.groups, key=lambda g: (g.position, g.name)),
+        strict=True,
+    ):
+        assert group.products == tuple(n for n, _ in resolve(declared_group.products))
+        assert group.summary == declared_group.summary
+    for row in document.commands:
+        full = command_schema(row.name).commands[0]
+        assert (row.operation_id, row.summary, row.check) == (
+            full.operation_id,
+            full.summary,
+            full.check,
+        )
+        assert row.read_only == full.effects.read_only
+        # what left the list: the options, the rules, the examples
+        assert full.options is not None and full.examples
+
+
+def test_a_command_is_found_by_its_name_and_by_its_operation_id():
+    for command in _DECLARED.commands:
+        by_name = command_schema(command.id)
+        by_operation = command_schema(command.operation_id)
+
+        assert by_name == by_operation
+        assert by_name.commands[0].name == command.id
+    with pytest.raises(ValidationError) as unknown:
+        command_schema("sheet nope")
+
+    assert unknown.value.option == "command"
+    assert unknown.value.allowed == tuple(c.id for c in _DECLARED.commands)
 
 
 def test_catalog_does_not_import_cli_or_mcp():
@@ -1145,7 +420,8 @@ def test_catalog_does_not_import_cli_or_mcp():
         "kartograf.catalog.spec, kartograf.sheet_info\n"
         "from kartograf.catalog.commands import declared\n"
         "declared()\n"
-        "kartograf.catalog.get_catalog(params=True)\n"
+        "kartograf.catalog.list_commands()\n"
+        "kartograf.catalog.command_schema('elevation download')\n"
         "kartograf.catalog.hints.example_for('elevation download', 'cutout')\n"
         "kartograf.sheet_info.describe_sheet('N-34-130-D-d-2-4')\n"
         "loaded = sorted(\n"
