@@ -7,7 +7,7 @@ zakres i ograniczenia — [SCOPE.md](SCOPE.md), architektura, układ `data/`
 i schemat sidecara — [ARCHITECTURE.md](ARCHITECTURE.md), uzasadnienia —
 [DECISIONS.md](DECISIONS.md). Pełna lista opcji CLI: `kartograf <grupa> <komenda> --help`
 albo maszynowo `kartograf catalog --json` (sekcja 9.4);
-lista publicznego API: `kartograf/__init__.py` (`__all__`).
+lista publicznego API: `src/kartograf/__init__.py` (`__all__`).
 
 ## Spis treści
 
@@ -2211,7 +2211,7 @@ od 0.8.0 z wymaganym `resolution=`, np. `GugikNmptProvider(vertical_crs="EVRF200
 resolution="0.5m")`, `GugikOrtoProvider`, `GugikLazProvider`/`download_laz_area`
 dla LAZ PL, `CuzkRasterProvider`/`create_cz_raster_provider` dla rastrów CZ,
 `CuzkLazProvider`/`download_cz_laz` dla LAZ CZ, `Parser2000`,
-`ParserTM33`, `FileStorage`) — eksporty w `kartograf/__init__.py`, opis
+`ParserTM33`, `FileStorage`) — eksporty w `src/kartograf/__init__.py`, opis
 w SCOPE 2.10 i PRD 5.
 
 **Odczyt magazynu (od 0.8.0, ADR-045).** Funkcje biblioteki indeksują
@@ -2293,7 +2293,7 @@ przypiętą operacją `pinned_transform`, a nie domyślnym pyproj. Koszt,
 wątki i warianty struktury: ARCHITECTURE 3.3.1.
 
 **Kody komunikatów (`Notice.code`).** Kod nie zależy od treści komunikatu
-(stałe w `kartograf/notices.py`); CLI wypisuje `info` jako `Info:`,
+(stałe w `src/kartograf/notices.py`); CLI wypisuje `info` jako `Info:`,
 `warning` jako `Warning:` na stderr, także z `-q` (wyjątek: `sheet_list`).
 
 | Kod | Poziom | Kiedy | Komendy |
@@ -3386,7 +3386,7 @@ bledem przeliczenia ukladow wypisuje CLI dla kazdej komendy).
 
 Katalog opisuje kazda komende i kazdy jej parametr: nazwe flagi i argumentu biblioteki,
 rodzaj, wymagalnosc, dozwolone wartosci, zaleznosci miedzy parametrami i przyklady. To
-jedyne zrodlo prawdy: z deklaracji w `kartograf/catalog/` powstaja parser CLI, opcje
+jedyne zrodlo prawdy: z deklaracji w `src/kartograf/catalog/` powstaja parser CLI, opcje
 komend danych projektu i schematy wejscia narzedzi MCP, a testy kontraktowe sprawdzaja,
 ze kazda flaga kazdej komendy jest w katalogu i odwrotnie. Katalog nie wymaga sieci ani
 zapisu.

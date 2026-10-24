@@ -73,7 +73,7 @@ Docelowo (v1.0.0, sekcja 8) dochodzą:
 |-----|--------|
 | Integracja z Hydrograf | Gotowy |
 | Integracja z Hydrolog | Gotowy |
-| Public API exports | Kompletny (`kartograf/__init__.py` `__all__`, sekcja 5) |
+| Public API exports | Kompletny (`src/kartograf/__init__.py` `__all__`, sekcja 5) |
 | Wspólny klucz grupowania plików PL/CZ (`extra.parent_request`) | Gotowy (scalanie PL+CZ po stronie konsumenta) |
 
 ---
@@ -819,7 +819,7 @@ kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt
 - Kanoniczny układ `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
   (np. `nmt/pl_1992_1m_evrf2007/`, `orto/pl_1992_cir/`,
   `laz/pl_2000_evrf2007/`, `nmt/cz_dmr5g_bpv/`); szablony segmentów
-  w deskryptorach źródeł (`kartograf/sources/registry.py`). Układ
+  w deskryptorach źródeł (`src/kartograf/sources/registry.py`). Układ
   `pl_1992`/`pl_2000` z formatu godła każdego pliku (kafle LAZ — z układu
   kafla). Wycinki w `<segment>/bbox/`. Tabela segmentów i migracja:
   `docs/ARCHITECTURE.md` sekcja 3; dodatkowe segmenty `landcover/`, `soil/`, `hsg/`
@@ -1449,7 +1449,7 @@ czytają parametry kanałów z deskryptorów (ADR-042, ADR-043).
 
 ## 5. Public API
 
-Źródłem prawdy jest `kartograf/__init__.py` (`__all__`); lista poniżej jest
+Źródłem prawdy jest `src/kartograf/__init__.py` (`__all__`); lista poniżej jest
 z nim zgodna i musi być aktualizowana razem z nim.
 
 ```python

@@ -12,7 +12,7 @@ set -euo pipefail
 
 # --- project settings --------------------------------------------------------
 PACKAGE="kartograf"                 # import name, measured by coverage
-TYPED_PATHS=(kartograf tests)         # mypy targets (DEV-7.3)
+TYPED_PATHS=(src tests)             # mypy targets (DEV-7.3)
 # Marker expression of the gate (DEV-10.1); an `app` project without a local
 # database uses "not live and not db".
 OFFLINE="not live"

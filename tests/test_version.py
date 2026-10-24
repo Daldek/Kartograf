@@ -10,7 +10,7 @@ from kartograf import _version
 from kartograf._version import build_version
 
 PKG_DIR = Path(kartograf.__file__).resolve().parent
-TOPLEVEL = str(PKG_DIR.parent)
+TOPLEVEL = str(PKG_DIR.parent.parent)  # the repository root; the package is in src/
 
 
 @pytest.fixture(autouse=True)
@@ -111,8 +111,8 @@ class TestBuildVersion:
         self, monkeypatch, dev_version, tmp_path
     ):
         # Package imported from a venv living in another repository.
-        (tmp_path / "kartograf").mkdir()
-        (tmp_path / "kartograf" / "__init__.py").write_text("")
+        (tmp_path / "src" / "kartograf").mkdir(parents=True)
+        (tmp_path / "src" / "kartograf" / "__init__.py").write_text("")
         monkeypatch.setattr(
             _version.subprocess, "run", _fake_git(toplevel=str(tmp_path))
         )

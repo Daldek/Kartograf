@@ -443,7 +443,7 @@ kartograf-mcp                              # serwer MCP (stdio; extra `kartograf
 ### 2.10 Python API - IN SCOPE
 
 ```python
-# Public API — źródło prawdy: kartograf/__init__.py (__all__); lista poniżej
+# Public API — źródło prawdy: src/kartograf/__init__.py (__all__); lista poniżej
 # jest z nim zgodna i aktualizowana razem z nim.
 from kartograf import (
     # Cache
@@ -868,7 +868,7 @@ from kartograf import (
 # `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`
 # (KB-1..KB-5 Archiwisty). Pliki dla agentów: `llms.txt`, `kartograf/py.typed`,
 # `scripts/gate.sh`, `python -m kartograf`; reguły dla agentów z innych repozytoriów:
-# CLAUDE.md. Nowa komenda = deklaracja w `kartograf/catalog/commands/` (STANDARDS 17.2).
+# CLAUDE.md. Nowa komenda = deklaracja w `src/kartograf/catalog/commands/` (STANDARDS 17.2).
 ```
 
 ---
@@ -1140,7 +1140,7 @@ publikacja (repozytorium wtyczek QGIS, publiczna instancja GUI webowego).
 **Zasady:**
 
 - Nakładki (QGIS, web) wołają wyłącznie publiczne API biblioteki
-  (`kartograf/__init__.py`); nie mają własnej logiki pobierania ani obróbki.
+  (`src/kartograf/__init__.py`); nie mają własnej logiki pobierania ani obróbki.
 - Magazyn nigdy nie nadpisuje danych po cichu: każdy produkt ma niezmienne
   wersje (ADR-036, od 0.8.0); ścieżka standardowa wskazuje najnowszą
   lokalną wersję.
