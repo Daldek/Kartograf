@@ -1206,7 +1206,7 @@ Komenda to deklaracja w katalogu (Z9, ADR-046), nie flagi w `cli/`:
    zgodnym SHA-256), scenariusz zgodnosci CLI = API (Z7), wiersz dokumentu w
    `tests/test_json_contract.py` i `--json` w `tests/test_cli_json.py`.
 
-Kontrakt: [ARCHITECTURE.md, sekcje 4.11 i 5](ARCHITECTURE.md#411-interfejs-dla-agentow-katalog-komend-dokumenty-i-serwer-mcp-adr-046)
+Kontrakt: [ARCHITECTURE.md, sekcje 4.11 i 5](ARCHITECTURE.md#411-interface-for-agents-command-catalog-documents-and-mcp-server-adr-046)
 i spec manifestu, sekcja 5.
 
 ### 17.3 Rozszerzenie parsera godel
@@ -1300,7 +1300,7 @@ wpis danych, ktory obsluguja wspolne silniki (`transport/unit_package.py`,
 #    (sekcja 17.2).
 ```
 
-Kontrakt i checklista zrodla: [ARCHITECTURE.md, sekcja 5](ARCHITECTURE.md#5-jak-dodac-nowe-zrodlo-albo-nowy-kraj);
+Kontrakt i checklista zrodla: [ARCHITECTURE.md, sekcja 5](ARCHITECTURE.md#5-how-to-add-a-new-source-or-a-new-country);
 decyzje: ADR-042 i ADR-043 w `docs/DECISIONS.md`.
 
 ---
