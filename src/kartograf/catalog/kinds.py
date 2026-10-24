@@ -1,6 +1,7 @@
-"""
-Value kinds of the catalog parameters: the parsers of the CLI texts and the
-conversion between the JSON form of the options and the library arguments.
+"""Value kinds of the catalog parameters.
+
+The parsers of the CLI texts and the conversion between the JSON form of the options and
+the library arguments.
 
 ``--bbox`` is four numbers with the CRS of ``--bbox-crs``, a per-country value
 is a text for every country or ``pl=..,cz=..`` pairs, ``--layers`` and
@@ -37,8 +38,10 @@ from kartograf.exceptions import ValidationError
 
 
 def layer_codes(text: str) -> tuple[str, ...]:
-    """``SWRS,PTWP`` -> ``("SWRS", "PTWP")`` (also ``--direction n,e``); the codes
-    are checked by the library."""
+    """Parse ``SWRS,PTWP`` into ``("SWRS", "PTWP")`` (also ``--direction n,e``).
+
+    The codes are checked by the library.
+    """
     return tuple(code.strip() for code in text.split(","))
 
 
@@ -131,7 +134,7 @@ def _is_number(value: object) -> bool:
 
 
 def _json_value(kind: Kind, value: object) -> object | None:
-    """The JSON form of one library argument; ``None`` = wrong type."""
+    """Return the JSON form of one library argument; ``None`` = wrong type."""
     if kind == "str":
         return value if isinstance(value, str) else None
     if kind == "int":
@@ -163,7 +166,7 @@ def options_to_json(
     options: Mapping[str, object],
     *,
     command: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Library arguments -> ``tasks[].options`` (spec 3.3).
 
     ``None`` and ``False`` are omitted (only chosen values are recorded);
@@ -199,7 +202,7 @@ def options_to_json(
                 f"(opcje: {', '.join(names)})",
                 option=name,
             )
-    data: dict = {}
+    data: dict[str, Any] = {}
     for name in names:
         if name not in given:
             continue
@@ -224,8 +227,10 @@ def options_to_json(
 
 
 def _valid_json(kind: Kind, value: object, data: Mapping[str, object]) -> bool:
-    """``value`` is the JSON form of ``kind`` (``data``: every given option, for
-    the pair ``bbox`` and ``bbox_crs``)."""
+    """Convert ``value``, the JSON form of ``kind``, to the library argument.
+
+    ``data`` holds every given option, for the pair ``bbox`` and ``bbox_crs``.
+    """
     if kind == "bbox":
         return (
             isinstance(value, list | tuple)
@@ -274,7 +279,7 @@ def convert_arguments(
     *,
     base_dir: Path | None = None,
 ) -> dict[str, Any]:
-    """The JSON form of options or tool arguments -> library arguments.
+    """Return the JSON form of options or tool arguments -> library arguments.
 
     The one conversion of the JSON form (``tasks[].options``, ``CommandCall``,
     MCP tool arguments): ``bbox`` with ``bbox_crs`` becomes one ``BBox``, a
@@ -358,7 +363,10 @@ def convert_arguments(
 
 
 def _plan(name: str, value: object) -> UpdatePlan:
-    """An ``UpdatePlan`` of a plan document (an ``UpdatePlan`` stays as it is)."""
+    """Return an ``UpdatePlan`` of a plan document.
+
+    An ``UpdatePlan`` stays as it is.
+    """
     if isinstance(value, UpdatePlan):
         return value
     try:
@@ -370,7 +378,9 @@ def _plan(name: str, value: object) -> UpdatePlan:
 def options_from_json(
     kinds: Mapping[str, Kind], data: Mapping[str, Any], *, base_dir: Path
 ) -> dict[str, Any]:
-    """``tasks[].options`` -> library arguments; a relative path is resolved
-    against ``base_dir`` (the project directory). ``convert_arguments`` with a
-    base directory."""
+    """Convert ``tasks[].options`` to library arguments.
+
+    A relative path is resolved against ``base_dir`` (the project directory).
+    ``convert_arguments`` with a base directory.
+    """
     return convert_arguments(kinds, data, base_dir=base_dir)

@@ -1,7 +1,8 @@
 """
-Engine ``feature_bbox`` (ADR-042 D3/D4): features of an area from WFS 2.0,
-an ArcGIS REST layer or OGC API Features, saved page by page for
-``transform.gpkg``.
+Engine ``feature_bbox`` (ADR-042 D3/D4): features of an area from a service.
+
+Engine ``feature_bbox`` (ADR-042 D3/D4): features of an area from WFS 2.0, an ArcGIS
+REST layer or OGC API Features, saved page by page for ``transform.gpkg``.
 
 Completeness comes from a number, never from links alone. Before the first
 page the service metadata is fetched fresh (no metadata cache, D3): WFS
@@ -74,7 +75,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeGuard
+from typing import Any, TypeGuard
 from urllib.parse import urljoin, urlsplit
 
 import requests
@@ -163,7 +164,7 @@ def count_features(
     *,
     timeout: float,
 ) -> int:
-    """Number of features of ``layer`` intersecting ``bbox`` (``native_crs``).
+    """Count the features of ``layer`` intersecting ``bbox`` (``native_crs``).
 
     WFS ``RESULTTYPE=hits`` (``numberMatched``), ArcGIS ``returnCountOnly``,
     OGC API Features the ``numberMatched`` of one ``items`` page with
@@ -351,8 +352,11 @@ def _page_loop(
 
 
 def _check_request(params: FeatureBBoxParams, bbox: BBox) -> str:
-    """Native CRS of the call - the EPSG code (``"2180"``) for WFS and ArcGIS,
-    ``"CRS84"`` for OGC API Features; programmer errors are ``ValueError``."""
+    """Return the native CRS of the call; programmer errors are ``ValueError``.
+
+    Native CRS of the call - the EPSG code (``"2180"``) for WFS and ArcGIS, ``"CRS84"``
+    for OGC API Features; programmer errors are ``ValueError``.
+    """
     if params.page_size <= 0:
         raise ValueError(f"page_size musi byc dodatnie: {params.page_size}")
     if params.protocol == "ogcapi":
@@ -386,9 +390,12 @@ def _check_request(params: FeatureBBoxParams, bbox: BBox) -> str:
 
 
 def _epsg_code(crs: str) -> str | None:
-    """EPSG code of a CRS label (``EPSG:2180``, ``urn:ogc:def:crs:EPSG::2180``,
-    ``http://www.opengis.net/def/crs/EPSG/0/2180`` -> ``"2180"``); ``None``
-    for any other label."""
+    """Return the EPSG code of a CRS label, or ``None`` for any other label.
+
+    EPSG code of a CRS label (``EPSG:2180``, ``urn:ogc:def:crs:EPSG::2180``,
+    ``http://www.opengis.net/def/crs/EPSG/0/2180`` -> ``"2180"``); ``None`` for any
+    other label.
+    """
     text = crs.strip()
     for form in _EPSG_FORMS:
         match = form.fullmatch(text)
@@ -418,16 +425,22 @@ def _no_coverage(
 
 
 def _outward(value: float, digits: int, rounding: Callable[[float], int]) -> str:
-    """Coordinate rounded to ``digits`` decimals by ``math.floor``/``math.ceil``
-    (outward rounding never shrinks the area; trailing zeros dropped)."""
+    """Round a coordinate outward to ``digits`` decimals.
+
+    Coordinate rounded to ``digits`` decimals by ``math.floor``/``math.ceil`` (outward
+    rounding never shrinks the area; trailing zeros dropped).
+    """
     scale = 10**digits
     text = f"{rounding(round(value * scale, 6)) / scale:.{digits}f}"
     return text.rstrip("0").rstrip(".")
 
 
 def _bbox_numbers(bbox: BBox, axis_order: str, digits: int = _METRE_DIGITS) -> str:
-    """The four BBOX numbers in the service axis order, widened outward to
-    ``digits`` decimals (default: whole millimetres)."""
+    """Return the four BBOX numbers in the service axis order, widened outward.
+
+    The four BBOX numbers in the service axis order, widened outward to ``digits``
+    decimals (default: whole millimetres).
+    """
     min_x = _outward(bbox.min_x, digits, math.floor)
     min_y = _outward(bbox.min_y, digits, math.floor)
     max_x = _outward(bbox.max_x, digits, math.ceil)
@@ -472,8 +485,11 @@ def _check_capabilities(
     code: str,
     timeout: float,
 ) -> None:
-    """Every layer is a FeatureType of the service with DefaultCRS ``code``
-    and the service page limit (``CountDefault``) admits ``page_size``."""
+    """Check whether every layer is a FeatureType admitted by the service limits.
+
+    Every layer is a FeatureType of the service with DefaultCRS ``code`` and the service
+    page limit (``CountDefault``) admits ``page_size``.
+    """
     context = f"WFS {endpoint} (GetCapabilities)"
     response = get_with_retry(
         session,
@@ -679,10 +695,15 @@ def _layer_url(endpoint: str, layer: FeatureLayer) -> str:
     return f"{endpoint.rstrip('/')}/{layer.source}"
 
 
-def _service_json(response: requests.Response, context: str, service: str) -> dict:
-    """JSON object of an ArcGIS or OGC API answer; ``error`` (also at HTTP 200;
-    both services put a ``message`` in it) or anything that is not a JSON
-    object is a ``DownloadError``."""
+def _service_json(
+    response: requests.Response, context: str, service: str
+) -> dict[str, Any]:
+    """Return the JSON object of an ArcGIS or OGC API answer.
+
+    JSON object of an ArcGIS or OGC API answer; ``error`` (also at HTTP 200; both
+    services put a ``message`` in it) or anything that is not a JSON object is a
+    ``DownloadError``.
+    """
     try:
         payload = json.loads(response.content)
     except (ValueError, UnicodeDecodeError) as e:
@@ -701,7 +722,7 @@ def _service_json(response: requests.Response, context: str, service: str) -> di
     return payload
 
 
-def _layer_wkid(info: dict) -> str | None:
+def _layer_wkid(info: dict[str, Any]) -> str | None:
     """EPSG code of the layer: ``extent`` first, else ``sourceSpatialReference``."""
     extent = info.get("extent")
     holders = (
@@ -861,7 +882,7 @@ def _ogcapi_features(
     pages_dir: Path,
     timeout: float,
 ) -> FeaturePages:
-    """``/collections`` once, then the pages of every layer (module doc)."""
+    """Read ``/collections`` once, then the pages of every layer (module doc)."""
     _check_collections(session, endpoint, layers, timeout)
     result = []
     for layer in layers:
@@ -915,8 +936,11 @@ def _ogcapi_layer(
     layer_dir: Path,
     timeout: float,
 ) -> LayerPages:
-    """Pages of one collection: the first by ``bbox`` and ``limit``, the next
-    ones only by ``rel="next"``, until N unique ids (module doc)."""
+    """Yield the pages of one collection (module doc).
+
+    Pages of one collection: the first by ``bbox`` and ``limit``, the next ones only by
+    ``rel="next"``, until N unique ids (module doc).
+    """
     url = _items_url(endpoint, layer)
     context = f"OGC API {url}"
     pages: list[Path] = []
@@ -981,8 +1005,11 @@ def _ogcapi_count(
 def _ogcapi_page(
     response: requests.Response, layer: FeatureLayer, context: str
 ) -> _OgcapiPage:
-    """``numberMatched``, the feature ids and the ``next`` href of a page: a
-    GeoJSON FeatureCollection whose ``numberReturned`` equals its features."""
+    """Return ``numberMatched``, the feature ids and the ``next`` href of a page.
+
+    ``numberMatched``, the feature ids and the ``next`` href of a page: a GeoJSON
+    FeatureCollection whose ``numberReturned`` equals its features.
+    """
     payload = _service_json(response, context, "OGC API")
     features = payload.get("features")
     if payload.get("type") != "FeatureCollection" or not isinstance(features, list):
@@ -1007,7 +1034,7 @@ def _is_count(value: object) -> TypeGuard[int]:
 
 
 def _ogcapi_id(feature: object, id_field: str, context: str) -> Hashable:
-    """The GeoJSON ``id`` (``id_field="id"``) or the property ``id_field``."""
+    """Return the GeoJSON ``id`` (``id_field="id"``) or the property ``id_field``."""
     value: object = None
     if isinstance(feature, dict):
         if id_field == _GEOJSON_ID:
@@ -1026,9 +1053,12 @@ def _ogcapi_id(feature: object, id_field: str, context: str) -> Hashable:
     return value
 
 
-def _next_link(payload: dict, context: str) -> str | None:
-    """``href`` of the ``rel="next"`` link of a page (GeoJSON or untyped;
-    ``None`` without one); two different hrefs are a ``DownloadError``."""
+def _next_link(payload: dict[str, Any], context: str) -> str | None:
+    """Return the ``href`` of the ``rel="next"`` link of a page.
+
+    ``href`` of the ``rel="next"`` link of a page (GeoJSON or untyped; ``None`` without
+    one); two different hrefs are a ``DownloadError``.
+    """
     links = payload.get("links")
     if links is None:
         return None
@@ -1055,8 +1085,11 @@ def _json_media(media: object) -> bool:
 
 
 def _next_url(current: str, href: str, endpoint: str, context: str) -> str:
-    """Absolute ``next`` URL; off the scheme and host of ``endpoint`` it is a
-    ``DownloadError`` (the request would leave the service)."""
+    """Return the absolute ``next`` URL of a page.
+
+    Absolute ``next`` URL; off the scheme and host of ``endpoint`` it is a
+    ``DownloadError`` (the request would leave the service).
+    """
     url = urljoin(current, href)
     if _origin(url) != _origin(endpoint):
         raise DownloadError(f"{context}: link next spoza uslugi {endpoint}: {url}")

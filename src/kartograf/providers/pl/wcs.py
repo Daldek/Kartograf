@@ -13,7 +13,7 @@ from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlencode
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.transport.aaigrid import ASC_MEDIA_TYPE, save_multipart_asc
 from kartograf.transport.chunks import (
     Chunk,

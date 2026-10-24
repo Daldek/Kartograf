@@ -32,8 +32,8 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import detect_system
-from kartograf.core.sheet_parser import BBox
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -110,10 +110,13 @@ def _session() -> requests.Session:
 
 @dataclass(frozen=True)
 class CzOrtoResult:
-    """One CZ orthophoto sheet: its files in commit order (``.jgw``,
+    """Describe the result of downloading one CZ orthophoto sheet.
+
+    One CZ orthophoto sheet: its files in commit order (``.jgw``,
     ``.TM33N.jgw``, ``.TM34N.jgw``, ``.jpg``). A plan may skip a file
     without a local version (fewer files); ``stale`` = positions of the plan
-    whose source changed since the check; ``notices`` = data notices."""
+    whose source changed since the check; ``notices`` = data notices.
+    """
 
     files: tuple[VersionedFile, ...]
     stale: tuple[PlanItem, ...] = ()
@@ -121,7 +124,7 @@ class CzOrtoResult:
 
 
 def cz_orto_sheet(sheet: str) -> str:
-    """The SM5 code of a CZ orthophoto sheet (whitespace stripped).
+    """Return the SM5 code of a CZ orthophoto sheet (whitespace stripped).
 
     Raises
     ------
@@ -175,8 +178,11 @@ def _params() -> AtomFilesParams:
 
 
 def _slots(sheet: str, output_dir: str | Path) -> dict[str, FileSlot]:
-    """The four store slots of a sheet (commit order): one SM5 hierarchy,
-    ``versions/<hierarchy>/<label>_<sha8>/`` per file."""
+    """Build the four store slots of a sheet in commit order.
+
+    The four store slots of a sheet (commit order): one SM5 hierarchy,
+    ``versions/<hierarchy>/<label>_<sha8>/`` per file.
+    """
     storage = FileStorage(
         output_dir,
         resolution=None,
@@ -199,8 +205,11 @@ def _release_lookup(
     *,
     refresh: bool,
 ) -> Callable[[], AtomFile]:
-    """The current release of the sheet from ONE ``resolve_atom_file`` call;
-    a failure is remembered too (raised again, not asked again)."""
+    """Return a callable resolving the current release of the sheet.
+
+    The current release of the sheet from ONE ``resolve_atom_file`` call;
+    a failure is remembered too (raised again, not asked again).
+    """
     outcome: list[AtomFile | DownloadError] = []
 
     def release() -> AtomFile:
@@ -246,7 +255,7 @@ def _inspect(
 
 
 def _local_file(slot: FileSlot) -> VersionedFile | None:
-    """The local version of a file outside the plan, linked; no request."""
+    """Return the local version of a file outside the plan, linked; no request."""
     local = local_version(slot)
     if local is None:
         return None
@@ -258,13 +267,16 @@ def _sheet_extra(
     session: requests.Session,
     metadata: MetadataCache | None,
     sheet: str,
-    parent_request: dict | None,
-) -> dict:
-    """``extra`` shared by the files of a sheet: map name and the share of the
-    sheet in CZ from the sheet index (best effort), ``parent_request``."""
+    parent_request: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build the ``extra`` shared by the files of a sheet.
+
+    ``extra`` shared by the files of a sheet: map name and the share of the
+    sheet in CZ from the sheet index (best effort), ``parent_request``.
+    """
     from kartograf.providers.cuzk.sheets import SheetIndex
 
-    extra: dict = {}
+    extra: dict[str, Any] = {}
     try:
         info = SheetIndex(session=session, cache=metadata).sm5_sheet(sheet)
         if info.name is not None:
@@ -281,10 +293,13 @@ def _sheet_extra(
 
 
 def _writer(
-    sheet: str, suffix: str, member: str, file: AtomFile, extra: dict
+    sheet: str, suffix: str, member: str, file: AtomFile, extra: dict[str, Any]
 ) -> WriteSidecar:
-    """Version sidecar of one member: its CRS, the release and the member name;
-    the JPEG names the CRS of every world file."""
+    """Build the version sidecar writer of one member.
+
+    Version sidecar of one member: its CRS, the release and the member name;
+    the JPEG names the CRS of every world file.
+    """
     source = {
         "url": file.url,
         "dataset_feed": file.dataset_feed,
@@ -298,7 +313,10 @@ def _writer(
         own["world_files"] = dict(_WORLD_FILES)
 
     def write(
-        data: Path, version: VersionRef, digest: ContentDigest, http: dict | None
+        data: Path,
+        version: VersionRef,
+        digest: ContentDigest,
+        http: dict[str, Any] | None,
     ) -> None:
         emit_sidecar(
             _KEY,
@@ -316,7 +334,7 @@ def _writer(
 
 
 def _stage(slot: FileSlot, unpacked: Path) -> Path:
-    """An unpacked member moved into the slot's own staging directory."""
+    """Move an unpacked member into the slot's own staging directory."""
     staged = new_staging(slot)
     try:
         os.replace(unpacked, staged)
@@ -333,11 +351,14 @@ def _download(
     slots: dict[str, FileSlot],
     scope: set[str],
     release: Callable[[], AtomFile],
-    parent_request: dict | None,
+    parent_request: dict[str, Any] | None,
     on_download: Callable[[], None] | None,
 ) -> dict[str, VersionedFile]:
-    """One ZIP of the current release; the members of ``scope`` committed in
-    the order of ``_SUFFIXES`` (staging removed in every case)."""
+    """Commit the members of one ZIP of the current release.
+
+    One ZIP of the current release; the members of ``scope`` committed in
+    the order of ``_SUFFIXES`` (staging removed in every case).
+    """
     file = release()  # the label before the transfer (D30)
     version = VersionRef(file.edition, "edition")
     image = slots[_IMAGE]
@@ -379,7 +400,7 @@ def _run(
     output_dir: str | Path,
     update: UpdateMode | None,
     plan: UpdatePlan | None,
-    parent_request: dict | None,
+    parent_request: dict[str, Any] | None,
     on_download: Callable[[], None] | None,
 ) -> CzOrtoResult:
     """Local files or one download of the sheet (module docstring).
@@ -438,7 +459,9 @@ def check_cz_orto_sheet(
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
-    """Update plan of ``download_cz_orto_sheet``: four positions (track
+    """Plan the update of one CZ orthophoto sheet.
+
+    Update plan of ``download_cz_orto_sheet``: four positions (track
     ``cz_orto``), the current edition from the ATOM feeds, no image download.
 
     ``current``/``newer`` compare the local edition label, ``missing`` = no

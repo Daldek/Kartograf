@@ -1,6 +1,8 @@
-"""The commands outside the data groups: ``parse``, ``catalog``, the ``cache``
-group and the commands only the API (and so the MCP server) has - the sheet
-search and the read access to the store."""
+"""Declare the commands outside the data groups.
+
+``parse``, ``catalog``, the ``cache`` group and the commands only the API (and so the
+MCP server) has - the sheet search and the read access to the store.
+"""
 
 from kartograf.catalog import shared
 from kartograf.catalog.commands import declared
@@ -25,7 +27,7 @@ def _command_ids() -> list[str]:
 
 
 def _scales() -> list[str]:
-    """The scales of the sheets of either PL sheet system, coarsest first."""
+    """Return the scales of the sheets of either PL sheet system, coarsest first."""
     return list(dict.fromkeys([*SheetParser.SCALE_HIERARCHY, *SCALE_HIERARCHY_2000]))
 
 

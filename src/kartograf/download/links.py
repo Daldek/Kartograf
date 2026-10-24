@@ -33,6 +33,7 @@ import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path, PurePath
+from typing import Any
 
 from kartograf.download.versions import ensure_dir, read_version, version_key
 from kartograf.exceptions import DownloadError
@@ -61,7 +62,7 @@ def _tmp_name(path: Path, suffix: str) -> Path:
     return path.with_name(f"{path.name}.{os.getpid()}_{threading.get_ident()}.{suffix}")
 
 
-def _read_json(path: Path) -> dict | None:
+def _read_json(path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -106,8 +107,11 @@ def link_atomic(target: Path, link: Path) -> None:
 
 
 def version_key_of(path: Path) -> tuple[str, str, str] | None:
-    """``version_key`` of a version file from its version sidecar; ``None``
-    when the file is not a valid version."""
+    """Return the ``version_key`` of a version file.
+
+    ``version_key`` of a version file from its version sidecar; ``None``
+    when the file is not a valid version.
+    """
     version = read_version(path.parent, path.name)
     return version_key(version) if version is not None else None
 
@@ -121,7 +125,7 @@ class _Held:
 
 
 def _hold(link: Path) -> _Held | None:
-    """The version ``link`` holds, from its sidecar and the file itself.
+    """Return the version that ``link`` holds, from its sidecar and the file itself.
 
     The target comes ONLY from the link sidecar (``extra.link == "hardlink"``
     + ``extra.link_target``), verified with ``samefile``. Where the file
@@ -153,7 +157,9 @@ def _hold(link: Path) -> _Held | None:
 
 
 def _same_content(link: Path, target: Path) -> _Held | None:
-    """Confirmation without inode identity: the same size and the link's
+    """Confirm a link without inode identity by size and sha256.
+
+    Confirmation without inode identity: the same size and the link's
     sha256 equal to the version sidecar's (one full read of ``link``).
 
     The link counts are read BEFORE that read (the read itself makes an SMB
@@ -238,7 +244,7 @@ def write_link_sidecar(link: Path, target: Path) -> None:
         )
 
 
-def update_sidecar_extra(data_path: Path, updates: dict) -> None:
+def update_sidecar_extra(data_path: Path, updates: dict[str, Any]) -> None:
     """Atomically update existing LINK sidecar extra fields, never create one.
 
     Only for link sidecars (``extra.flights``, ``extra.better_coverage``); a

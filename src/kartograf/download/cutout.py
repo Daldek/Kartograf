@@ -87,8 +87,11 @@ WCS_REQUEST_SECONDS = (25, 40)
 
 
 def wcs_time_text(requests: int) -> str:
-    """Estimated time of ``requests`` WCS requests one after another:
-    ``ok. 50-80 s`` below 2 minutes, else ``ok. 7-11 min``."""
+    """Return the estimated time of ``requests`` WCS requests one after another.
+
+    Estimated time of ``requests`` WCS requests one after another:
+    ``ok. 50-80 s`` below 2 minutes, else ``ok. 7-11 min``.
+    """
     low, high = (requests * seconds for seconds in WCS_REQUEST_SECONDS)
     if high < 120:
         return f"ok. {low}-{high} s"
@@ -260,7 +263,7 @@ def _prepare_pl_cutout(
 
 
 def wcs_variant(product: str, vertical_crs: str) -> ProductVariant | None:
-    """The product's variant with a WCS channel (the 1 m grid, registry)."""
+    """Return the product's variant with a WCS channel (the 1 m grid, registry)."""
     for variant in variants(product=product, country="PL", vertical_crs=vertical_crs):
         channels = get_source(variant.source).channels
         if any(channel.transport == TransportKind.WCS for channel in channels):
@@ -276,7 +279,7 @@ def _cutout_descriptor_key(product: str, vertical_crs: str) -> str:
     return variant.source
 
 
-def _require_matching_provider(cutout: PlCutout, provider) -> None:
+def _require_matching_provider(cutout: PlCutout, provider: Any) -> None:
     """Reject a provider with a different product, vertical CRS or resolution.
 
     The cutout path and sidecar describe ``cutout``; a mismatched provider
@@ -297,7 +300,7 @@ def _require_matching_provider(cutout: PlCutout, provider) -> None:
             )
 
 
-def _wcs_cutout_provider(cutout: PlCutout, cache: MetadataCache | None = None):
+def _wcs_cutout_provider(cutout: PlCutout, cache: MetadataCache | None = None) -> Any:
     """Default provider of the cutout's product and vertical CRS (1 m)."""
     if cutout.product == "nmpt":
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -331,12 +334,12 @@ def _check_wcs_disk_space(cutout: PlCutout, staged: Path) -> None:
 def write_pl_wcs_cutout_sidecar(
     cutout: PlCutout,
     path: Path,
-    provider,
+    provider: Any,
     *,
     version: VersionRef,
     digest: ContentDigest,
-    http: dict | None,
-    parent_request: dict | None = None,
+    http: dict[str, Any] | None,
+    parent_request: dict[str, Any] | None = None,
     masked_pixels: int = 0,
     zero_pixels: int = 0,
     all_nodata: bool = False,
@@ -355,7 +358,7 @@ def write_pl_wcs_cutout_sidecar(
 
     endpoint, coverage = provider._wcs_target()
     asc = provider._wcs_height_format() == HEIGHT_AAIGRID
-    extra: dict = {}
+    extra: dict[str, Any] = {}
     if parent_request:
         extra["parent_request"] = parent_request
     extra["source"] = {
@@ -473,10 +476,10 @@ def _cutout_result(
 def _run_pl_wcs_cutout(
     cutout: PlCutout,
     *,
-    provider=None,
+    provider: Any = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
     now: datetime | None = None,
     sink: NoticeSink | None = None,
 ) -> PlCutoutResult:
@@ -589,7 +592,10 @@ def _run_pl_wcs_cutout(
         return None
 
     def write_sidecar(
-        path: Path, version: VersionRef, digest: ContentDigest, http: dict | None
+        path: Path,
+        version: VersionRef,
+        digest: ContentDigest,
+        http: dict[str, Any] | None,
     ) -> None:
         assert selected_provider is not None
         write_pl_wcs_cutout_sidecar(

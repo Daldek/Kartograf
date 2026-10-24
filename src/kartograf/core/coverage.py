@@ -1,4 +1,4 @@
-"""
+r"""
 Area coverage by convex polygons - pure geometry, no IO and no dependencies.
 
 Used by LAZ tile selection (``providers/pl/gugik_laz.py``): an older tile is
@@ -131,7 +131,7 @@ def _significant(poly: Sequence[Point]) -> bool:
 
 
 def subtract_convex(subject: Sequence[Point], hole: Sequence[Point]) -> list[Polygon]:
-    """``subject \\ hole`` as a list of disjoint convex pieces (noise-free)."""
+    r"""``subject \\ hole`` as a list of disjoint convex pieces (noise-free)."""
     pieces: list[Polygon] = []
     rest: Polygon = tuple(subject)
     n = len(hole)

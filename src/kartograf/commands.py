@@ -85,8 +85,11 @@ class CommandCall:
 
 @functools.cache
 def _parser() -> argparse.ArgumentParser:
-    """The parser of ``kartograf`` that raises ``UsageError`` and keeps no
-    defaults: a parsed line has the flags that were written and no others."""
+    """Build the parser of ``kartograf`` that raises ``UsageError``.
+
+    It keeps no defaults: a parsed line has the flags that were written and no
+    others.
+    """
     declarations = declared()
     return build_parser(
         declarations.commands,
@@ -97,7 +100,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _words(tokens: Sequence[str]) -> str | None:
-    """The id of the command the first words of a line name, if they do."""
+    """Return the id of the command the first words of a line name, if they do."""
     ids = declared_commands()
     if tokens and tokens[0] in ids:
         return tokens[0]
@@ -107,7 +110,7 @@ def _words(tokens: Sequence[str]) -> str | None:
 
 
 def _call(parsed: argparse.Namespace) -> CommandCall:
-    """A ``CommandCall`` of the namespace of a parsed line."""
+    """Return the ``CommandCall`` of the namespace of a parsed line."""
     command = declared_commands()[parsed._command_id]
     options, run = parsed_options(command, parsed, given_only=True)
     return CommandCall(command.id, options, run)
@@ -188,8 +191,10 @@ def validate_command(
     *,
     output_dir: str | Path | None = None,
 ) -> None:
-    """The checks of the library function of a data command, without network and
-    without writing: what the function does before its first request.
+    """Run the checks of the library function of a data command.
+
+    Runs without network and without writing: what the function does before its
+    first request.
 
     Parameters
     ----------
@@ -213,10 +218,12 @@ def validate_command(
 
 
 def _run_kinds(command: Command) -> dict[str, Kind]:
-    """The flags of a run that a command line can write, by name, with the kinds
-    a line gives them: a plan is a file (a path), not the document of the API, and
-    the argument ``update`` has no flag (``--upgrade`` and ``--force`` stand for
-    it)."""
+    """Return the flags of a run that a command line can write, by name.
+
+    The kinds are those a line gives the flags: a plan is a file (a path), not the
+    document of the API, and the argument ``update`` has no flag (``--upgrade``
+    and ``--force`` stand for it).
+    """
     return {
         param.name: "path" if param.kind == "plan" else param.kind
         for param in command.params
@@ -230,8 +237,9 @@ def format_command(
     *,
     run: Mapping[str, object] | None = None,
 ) -> str:
-    """The canonical command line of a data command (``kartograf <group>
-    <command> <flags>``).
+    """Return the canonical command line of a data command.
+
+    The line has the form ``kartograf <group> <command> <flags>``.
 
     The flags follow the order of the parameters of the command; ``--bbox-crs`` is
     left out when it is the default of the flag; ``run`` adds the other flags
@@ -353,9 +361,10 @@ def check_command(
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
-    """Check whether the local versions of a data command are up to date,
-    without downloading: ``check_data``, ``check_collection``,
-    ``check_landcover``, ``check_soil`` or ``check_hsg`` with the options.
+    """Check whether the local versions of a data command are up to date.
+
+    Nothing is downloaded: ``check_data``, ``check_collection``,
+    ``check_landcover``, ``check_soil`` or ``check_hsg`` runs with the options.
 
     Returns
     -------

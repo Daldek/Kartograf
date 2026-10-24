@@ -29,10 +29,12 @@ import re
 import threading
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator, Sequence
+from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 
 import requests
 
+from kartograf.core.bbox import BBox
 from kartograf.core.coverage import (
     AREA_EPS,
     Polygon,
@@ -41,7 +43,7 @@ from kartograf.core.coverage import (
     normalize_convex,
     polygon_area,
 )
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.providers.pl.skorowidz import (
     SkorowidzLayersMixin,
@@ -51,6 +53,9 @@ from kartograf.providers.pl.skorowidz import (
 )
 from kartograf.sources.variants import IndexRef
 from kartograf.transport.http import MAX_RETRIES, get_with_retry
+
+if TYPE_CHECKING:
+    from pyproj import Transformer
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +84,7 @@ def localname(tag: str) -> str:
 
 
 def corner_xy(text: str, srs_name: str | None) -> tuple[float, float]:
-    """An EPSG:2180 position as (Easting, Northing).
+    """Return an EPSG:2180 position as (Easting, Northing).
 
     URN/URI identifiers use the EPSG axis order (N, E); a missing ``srsName``
     inherits the requested URN. Only the legacy ``EPSG:2180`` uses (E, N).
@@ -134,7 +139,10 @@ def time_position(feature: ET.Element, name: str) -> str | None:
 
 
 def feature_text(feature: ET.Element, name: str) -> str | None:
-    """Stripped text of a ``gugik:`` attribute; ``None`` when missing or empty."""
+    """Return the stripped text of a ``gugik:`` attribute.
+
+    ``None`` when missing or empty.
+    """
     child = feature.find(f"{{{GUGIK_NS}}}{name}")
     if child is not None and child.text and child.text.strip():
         return child.text.strip()
@@ -223,7 +231,10 @@ class WfsIndex:
         return self._prefix
 
     def _xml(self, url: str, description: str) -> ET.Element:
-        """Parsed answer; any failure is a ``DownloadError``, never empty."""
+        """Return the parsed answer.
+
+        Any failure is a ``DownloadError``, never empty.
+        """
         try:
             response = get_with_retry(
                 self._session_factory(),
@@ -313,7 +324,10 @@ class WfsIndex:
     def _pages(
         self, bbox: BBox, types: Sequence[str]
     ) -> Iterator[tuple[list[ET.Element], str | None]]:
-        """Checked pages of one ``GetFeature`` as (features, ``next`` URL)."""
+        """Return the checked pages of one ``GetFeature``.
+
+        Each page is (features, ``next`` URL).
+        """
         params = {
             "SERVICE": "WFS",
             "VERSION": "2.0.0",
@@ -500,8 +514,11 @@ class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
         retries: int | None = None,
         timeout: float | None = None,
     ) -> WfsIndex:
-        """``WfsIndex`` of a known service, one per endpoint, retry policy and
-        timeout (``None``: the provider's ``MAX_RETRIES``/``DEFAULT_TIMEOUT``)."""
+        """Return the ``WfsIndex`` of a known service.
+
+        One per endpoint, retry policy and
+        timeout (``None``: the provider's ``MAX_RETRIES``/``DEFAULT_TIMEOUT``).
+        """
         attempts = self.MAX_RETRIES if retries is None else retries
         seconds = self.DEFAULT_TIMEOUT if timeout is None else timeout
         key = f"{endpoint}|{attempts}|{seconds}"
@@ -520,8 +537,10 @@ class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
             return index
 
     def _layers(self, endpoint: str, timeout: float | None = None) -> list[str]:
-        """One query group: every yearly type of the service (newest first);
-        ``timeout`` (default ``DEFAULT_TIMEOUT``) goes to GetCapabilities."""
+        """Return one query group: every yearly type of the service (newest first).
+
+        ``timeout`` (default ``DEFAULT_TIMEOUT``) goes to GetCapabilities.
+        """
         with self._layers_lock:
             if endpoint not in self._validated_layers:
                 types = self._wfs_index(endpoint, timeout=timeout).feature_types()
@@ -536,8 +555,10 @@ class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
         timeout: int,
         query_bbox: str,
     ) -> list[SkorowidzRecord]:
-        """Records of every type of ``layer`` around the sheet centre; a failed
-        query is a ``DownloadError`` naming the sheet (transport class kept)."""
+        """Return the records of every type of ``layer`` around the sheet centre.
+
+        A failed query is a ``DownloadError`` naming the sheet (transport class kept).
+        """
         index = self._wfs_index(endpoint, timeout=timeout)
         try:
             return index_records(index, sheet_query_bbox(parser), layer.split(","))
@@ -550,7 +571,10 @@ class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
 def index_records(
     index: WfsIndex, bbox: BBox, types: Sequence[str]
 ) -> list[SkorowidzRecord]:
-    """Parsed records of ``types`` in ``bbox`` (unusable features skipped)."""
+    """Return the parsed records of ``types`` in ``bbox``.
+
+    Unusable features are skipped.
+    """
     return [
         record
         for feature in index.features(bbox, types)
@@ -559,7 +583,7 @@ def index_records(
 
 
 @functools.lru_cache(maxsize=8)
-def _to_2180(source_crs: str):
+def _to_2180(source_crs: str) -> "Transformer":
     from pyproj import Transformer
 
     return Transformer.from_crs(source_crs, "EPSG:2180", always_xy=True)
@@ -569,7 +593,9 @@ def convex_hull(points: Sequence[tuple[float, float]]) -> Polygon:
     """Convex hull (CCW, Andrew's monotone chain) of at least three points."""
     pts = sorted(set(points))
 
-    def cross(o, a, b) -> float:
+    def cross(
+        o: tuple[float, float], a: tuple[float, float], b: tuple[float, float]
+    ) -> float:
         return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
 
     lower: list[tuple[float, float]] = []
@@ -626,7 +652,7 @@ def area_envelope(areas: Sequence[Polygon]) -> BBox:
 
 
 def overlaps_area(frame: Polygon, area: Polygon) -> bool:
-    """A sheet frame overlaps an area by more than an edge sliver.
+    """Check whether a sheet frame overlaps an area by more than an edge sliver.
 
     The frame with its edges moved ``EDGE_TOLERANCE_M`` inwards must still
     intersect the convex area (both (E, N) in EPSG:2180, compared in local

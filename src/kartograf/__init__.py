@@ -1,12 +1,11 @@
-"""
-Kartograf - download spatial data of Poland and Czechia into a versioned store:
-elevation (NMT/NMPT grids and archives, LAZ point clouds, CZ contours),
-imagery (orthophotomaps, intensity, true and oblique orthophotomaps), land
-cover (BDOT10k, BDOO, CORINE, ZABAGED, Data50, Data250), soil (SoilGrids,
-HSG), boundaries and addresses (PRG, RUIAN, geomorphology), cadastre (EGiB,
-RCN, CZ cadastral map), 3D models, hydrography (HY-NET), geographic names,
-topographic maps and geodesy (control networks, quasi-geoids) from GUGiK,
-CUZK, Copernicus and ISRIC.
+"""Kartograf - download spatial data of Poland and Czechia into a versioned store.
+
+Elevation (NMT/NMPT grids and archives, LAZ point clouds, CZ contours), imagery
+(orthophotomaps, intensity, true and oblique orthophotomaps), land cover (BDOT10k, BDOO,
+CORINE, ZABAGED, Data50, Data250), soil (SoilGrids, HSG), boundaries and addresses (PRG,
+RUIAN, geomorphology), cadastre (EGiB, RCN, CZ cadastral map), 3D models, hydrography
+(HY-NET), geographic names, topographic maps and geodesy (control networks,
+quasi-geoids) from GUGiK, CUZK, Copernicus and ISRIC.
 
 Every CLI command has one library function with the same choices and the same
 result (ADR-037, ADR-044): ``elevation download`` and ``imagery download`` =
@@ -120,11 +119,11 @@ from kartograf.commands import (
     run_command,
     validate_command,
 )
-from kartograf.core.bbox import transform_bbox
+from kartograf.core.bbox import BBox, transform_bbox
 from kartograf.core.geometry import find_sheets_for_geometry, get_overall_bbox
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
 from kartograf.core.parser_tm33 import ParserTM33
-from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
+from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox
 from kartograf.download.area import parent_request_for
 from kartograf.download.availability import (
     AvailabilityArea,

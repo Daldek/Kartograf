@@ -22,11 +22,12 @@ import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import rasterio
 from rasterio.transform import Affine
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.transport.mosaic import _snap_outward, mosaic_and_crop
 
@@ -225,7 +226,7 @@ def fetch_chunks(
     return output_path
 
 
-def _result_kwds(first_part: Path) -> dict | None:
+def _result_kwds(first_part: Path) -> dict[str, Any] | None:
     """Tiles for a result stitched from STRIPED chunks (GUGiK WCS GeoTIFF).
 
     ``merge`` copies the profile of the first source; a striped GeoTIFF carries

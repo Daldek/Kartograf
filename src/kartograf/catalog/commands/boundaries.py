@@ -1,5 +1,8 @@
-"""``kartograf boundaries``: boundaries and addresses - PRG (GUGiK), RUIAN and
-geomorphological units (CUZK) (ADR-042 D9, D17; plan E, E3)."""
+"""Declare ``kartograf boundaries``.
+
+Boundaries and addresses - PRG (GUGiK), RUIAN and geomorphological units (CUZK) (ADR-042
+D9, D17; plan E, E3).
+"""
 
 from kartograf.catalog.commands._collection import (
     Products,

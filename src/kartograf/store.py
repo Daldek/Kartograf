@@ -374,7 +374,7 @@ def _unit(
 
 @lru_cache(maxsize=256)
 def _dataset_key(dataset: str) -> str | None:
-    """Registered key of a sidecar ``dataset`` (0.8.0-dev keys mapped)."""
+    """Return the registered key of a sidecar ``dataset`` (0.8.0-dev keys mapped)."""
     try:
         return get_source(_DEV_DATASETS.get(dataset, dataset)).key
     except KeyError:
@@ -382,9 +382,10 @@ def _dataset_key(dataset: str) -> str | None:
 
 
 def _typed(raw: dict[str, Any], stem: str | None) -> Sidecar:
-    """The typed view of a ``kartograf-meta/1`` object; raw stays untouched.
+    """Return the typed view of a ``kartograf-meta/1`` object; raw stays untouched.
 
-    ``stem`` is the stem of the data file the sidecar belongs to."""
+    ``stem`` is the stem of the data file the sidecar belongs to.
+    """
     extra = _normalized_extra(_dict(raw.get("extra")))
     request = _renamed(_dict(raw.get("request")), _REQUEST_KEYS)
     extra_data = extra or {}
@@ -476,7 +477,7 @@ def _typed(raw: dict[str, Any], stem: str | None) -> Sidecar:
 
 
 def _read_bytes(path: str) -> bytes:
-    """A small file with open/read/close only (no ``fstat``, no ``isatty``)."""
+    """Read a small file with open/read/close only (no ``fstat``, no ``isatty``)."""
     fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
     try:
         chunks = []
@@ -488,13 +489,16 @@ def _read_bytes(path: str) -> bytes:
 
 
 def _is_meta(raw: dict[str, Any]) -> bool:
-    """``kartograf-meta/1``; a missing ``schema`` only for the bare version
-    sidecar of a provider without a descriptor (``emit_sidecar``): the same
-    object with ``sha256`` and ``extra``, accepted by ``read_version``."""
+    """Check whether ``raw`` is a ``kartograf-meta/1`` object.
+
+    A missing ``schema`` is accepted only for the bare version sidecar of a provider
+    without a descriptor (``emit_sidecar``): the same object with ``sha256`` and
+    ``extra``, accepted by ``read_version``.
+    """
     schema = raw.get("schema")
     if schema is None:
         return isinstance(raw.get("sha256"), str) and isinstance(raw.get("extra"), dict)
-    return schema == _SCHEMA
+    return bool(schema == _SCHEMA)
 
 
 def _load(side: str | Path) -> Sidecar:
@@ -584,8 +588,11 @@ def _system_label(system: str) -> str:
 
 
 def _content_variant(descriptor: SourceDescriptor, suffix: str) -> str | None:
-    """Label of the content tokens ``suffix`` when the descriptor's writer
-    produces them (``content_segment``, rules 8-9); ``None`` otherwise."""
+    """Return the label of the content tokens ``suffix``, or ``None``.
+
+    The label is given when the descriptor's writer produces them
+    (``content_segment``, rules 8-9).
+    """
     parts = suffix.split("_") if suffix else []
     key = descriptor.key
     if key == "pl.gugik.bdot10k":
@@ -683,7 +690,7 @@ _COLLECTION_PARAMS = (UnitPackageParams, AtomFilesParams, FeatureBBoxParams)
 
 
 def _bare_template(descriptor: SourceDescriptor) -> bool:
-    """A fixed template is itself a segment unless content tokens complete it."""
+    """Check whether a fixed template is itself a segment (no content tokens)."""
     if descriptor.key in _PREFIX_ONLY:
         return False
     collection = any(
@@ -914,7 +921,7 @@ def _read_problem(exc: InvalidSidecarError) -> ProblemCode:
 
 
 def _version_of_link(link: Path, rel: str) -> Path | None:
-    """The version a link sidecar names, if it lies in the link's own slot.
+    """Return the version a link sidecar names, if it lies in the link's own slot.
 
     Lexical, without I/O: ``<base>/[full_sheet/]<hierarchy>/<name>`` may only
     point at ``<base>/versions/<hierarchy>/<label>_<sha8>/<name>``. The
@@ -950,9 +957,11 @@ def _version_of_link(link: Path, rel: str) -> Path | None:
 def _slot_version(
     directory: str, name: str, rel: str, slot: str
 ) -> re.Match[str] | None:
-    """``_version_of_link`` of the link ``<directory>/<name>`` when the scan
-    knows its versions ``slot``: the ``<label>_<sha8>`` match of the version
-    directory of ``slot`` that ``rel`` names, else ``None``.
+    """Return the version match of the link ``<directory>/<name>``, or ``None``.
+
+    Used for ``_version_of_link`` when the scan knows its versions ``slot``: the
+    ``<label>_<sha8>`` match of the version directory of ``slot`` that ``rel``
+    names.
 
     The same lexical rule on normalized strings, without ``pathlib``: an
     absolute ``rel`` of a relative store is compared absolutely.
@@ -1006,8 +1015,11 @@ def _link_files(
     listing: list[tuple[str, bool]],
     wanted: Set[str] | None = None,
 ) -> Iterator[StoreEntry]:
-    """Links of one directory of hierarchy ``level`` (``slot``: its
-    ``versions/`` directory, the only place its links may point at)."""
+    """Yield the links of one directory of hierarchy ``level``.
+
+    The ``slot`` is its ``versions/`` directory, the only place its links may
+    point at.
+    """
     names = {name for name, _ in listing}
     for name in _data_names(listing):
         if wanted is not None and not _matches(name, wanted):
@@ -1019,9 +1031,11 @@ def _link_files(
 
 
 def _valid_version(raw: dict[str, Any], sha8: str) -> bool:
-    """The validity rule of ``download.versions.read_version``: ``sha256``
-    starting with the directory's ``sha8`` and ``extra.version`` with
-    ``label`` and ``label_source``."""
+    """Return the validity rule of ``download.versions.read_version``.
+
+    ``sha256`` starting with the directory's ``sha8`` and ``extra.version`` with
+    ``label`` and ``label_source``.
+    """
     extra = raw.get("extra")
     version = extra.get("version") if isinstance(extra, dict) else None
     sha256 = raw.get("sha256")
@@ -1104,8 +1118,10 @@ def _version_files(
 
 
 def _version_match(name: str) -> re.Match[str] | None:
-    """``<label>_<sha8>`` of a version directory name; most hierarchy names
-    (``130``, ``D``, ``teryt``) are rejected without the regex."""
+    """``<label>_<sha8>`` of a version directory name.
+
+    Most hierarchy names (``130``, ``D``, ``teryt``) are rejected without the regex.
+    """
     if len(name) < 10 or name[-9] != "_":
         return None
     return _VERSION_DIR.fullmatch(name)
@@ -1129,8 +1145,11 @@ def _child(level: str, name: str) -> str:
 def _walk_links(
     directory: str, segment: str, level: str, slot: str, kind: EntryKind
 ) -> Iterator[StoreEntry]:
-    """Depth first; files of a directory before its subdirectories (``slot``:
-    the ``versions/`` directory of ``level``)."""
+    """Yield the entries of a directory depth first.
+
+    Files of a directory come before its subdirectories (``slot``: the
+    ``versions/`` directory of ``level``).
+    """
     listing = _listing(directory)
     if listing is None:
         return
@@ -1149,8 +1168,11 @@ def _walk_links(
 def _walk_versions(
     directory: str, segment: str, level: str, skip: _Skip
 ) -> Generator[StoreEntry, None, bool]:
-    """Version directories below ``versions/``; returns whether the staging
-    directory ``.incoming`` exists (seen in the listing of the root)."""
+    """Version directories below ``versions/``.
+
+    Returns whether the staging directory ``.incoming`` exists (seen in the listing of
+    the root).
+    """
     listing = _listing(directory)
     if listing is None:
         return False
@@ -1228,8 +1250,11 @@ def _segment_entries(base: str, segment: str, skip: _Skip) -> Iterator[StoreEntr
 
 
 def _segment_level(base: str, segment: str) -> Iterator[StoreEntry]:
-    """Partition ``"."``: the segment's own problems and the files directly
-    in the segment directory and in ``full_sheet/`` (hierarchy ``""``)."""
+    """Yield the entries of the partition ``"."`` of a segment.
+
+    The segment's own problems and the files directly in the segment directory and in
+    ``full_sheet/`` (hierarchy ``""``).
+    """
     listing = _listing(base)
     if listing is None:
         return
@@ -1254,8 +1279,11 @@ def _segment_level(base: str, segment: str) -> Iterator[StoreEntry]:
 def _partition_entries(
     base: str, segment: str, parts: tuple[str, ...], exact: bool, skip: _Skip
 ) -> Iterator[StoreEntry]:
-    """Entries of one partition of ``list_partitions``: the slot ``parts``
-    (``exact``) or the slot and every slot below it, in the three trees."""
+    """Entries of one partition of ``list_partitions``.
+
+    The slot ``parts`` (``exact``) or the slot and every slot below it, in the three
+    trees.
+    """
     if not parts:
         yield from _segment_level(base, segment)
         return
@@ -1295,8 +1323,11 @@ _Node = tuple[tuple[str, ...], list[str | None]]
 
 
 def _split(dirs: list[str | None]) -> tuple[dict[str, list[str | None]], bool]:
-    """Subdirectories of one hierarchy directory in the three trees (link,
-    ``full_sheet/``, ``versions/``) and whether its own slot has entries."""
+    """Split the subdirectories of one hierarchy directory by name.
+
+    The three trees are link, ``full_sheet/`` and ``versions/``; the flag tells
+    whether its own slot has entries.
+    """
     children: dict[str, list[str | None]] = {}
     own = False
     for tree, directory in enumerate(dirs):
@@ -1317,10 +1348,12 @@ def _split(dirs: list[str | None]) -> tuple[dict[str, list[str | None]], bool]:
 
 
 def _sheet_parts(code: str) -> tuple[str, ...]:
-    """Hierarchy of a sheet code as the writers build it (``unit_slot``,
-    ``FileStorage``): ZTM map sheets by ``cuzk_map_path_parts``, PL codes in
-    their canonical form (``SheetParser``), CZ sheets and tiles and raw tile
-    identifiers by ``path_parts``."""
+    """Return the hierarchy of a sheet code as the writers build it.
+
+    The writers are ``unit_slot`` and ``FileStorage``: ZTM map sheets by
+    ``cuzk_map_path_parts``, PL codes in their canonical form (``SheetParser``),
+    CZ sheets and tiles and raw tile identifiers by ``path_parts``.
+    """
     if parser_registry.ztm_sheet_system(code):
         return tuple(parser_registry.cuzk_map_path_parts(code))
     with contextlib.suppress(ValidationError):  # incl. ParseError: not PL
@@ -1329,7 +1362,7 @@ def _sheet_parts(code: str) -> tuple[str, ...]:
 
 
 def _unit_kinds(segment: str) -> frozenset[str]:
-    """Unit kinds of the segment's package channels (``powiat``, ``ku``...)."""
+    """Return the unit kinds of the segment's package channels (``powiat``...)."""
     key = describe_segment(segment).dataset_key
     if key is None:
         return frozenset()
@@ -1343,8 +1376,10 @@ def _unit_kinds(segment: str) -> frozenset[str]:
 def _unit_slot(
     segment: str, unit: str, kinds: frozenset[str]
 ) -> tuple[tuple[str, ...], str | None]:
-    """``(slot directory below the segment, file stem)`` of one unit; a stem
-    ``None`` = every file of the directory (the slot of one sheet)."""
+    """``(slot directory below the segment, file stem)`` of one unit.
+
+    A stem ``None`` = every file of the directory (the slot of one sheet).
+    """
     if not isinstance(unit, str) or any(c in unit for c in ("\\", "\x00", ":")):
         raise ValidationError(
             f"Nieprawidlowa jednostka magazynu: {unit!r}", option="units"
@@ -1390,8 +1425,10 @@ def _unit_slot(
 def _unit_groups(
     segment: str, units: Iterable[str]
 ) -> dict[tuple[str, ...], frozenset[str] | None]:
-    """Slot directories of the units, each with the wanted file stems
-    (``None``: the whole directory), in the order of the units."""
+    """Return the slot directories of the units with the wanted file stems.
+
+    ``None`` stands for the whole directory; the order is that of the units.
+    """
     if isinstance(units, str):
         raise ValidationError(
             f"units: podaj kolekcje nazw jednostek, nie napis ({units!r})",
@@ -1418,8 +1455,11 @@ def _unit_groups(
 def _real_directory(
     base: str, parts: tuple[str, ...], known: dict[str, bool]
 ) -> str | None:
-    """``base/parts`` when every component is a real directory (no symlink
-    leads out of the store); ``lstat`` results are shared between units."""
+    """Return ``base/parts`` when every component is a real directory.
+
+    No symlink leads out of the store; ``lstat`` results are shared between
+    units.
+    """
     path = base
     for part in parts:
         path = os.path.join(path, part)
@@ -1486,8 +1526,10 @@ def _validated_segment(segment: str) -> tuple[str, str]:
 
 
 def _single_name(name: object) -> bool:
-    """One non-hidden directory entry name: never a path, a drive or longer
-    than file systems accept (``NAME_MAX``)."""
+    """One non-hidden directory entry name.
+
+    Never a path, a drive or longer than file systems accept (``NAME_MAX``).
+    """
     return (
         isinstance(name, str)
         and name != ""
@@ -1499,8 +1541,10 @@ def _single_name(name: object) -> bool:
 
 
 def _partition_scope(partition: str) -> tuple[tuple[str, ...], bool]:
-    """``(hierarchy directories, exact)`` of a ``list_partitions`` key;
-    ``((), True)`` for the segment level ``"."``."""
+    """``(hierarchy directories, exact)`` of a ``list_partitions`` key.
+
+    ``((), True)`` for the segment level ``"."``.
+    """
     if partition == ".":
         return (), True
     exact = isinstance(partition, str) and partition.endswith("/.")
@@ -1535,8 +1579,11 @@ def _known_versions(
 
 
 def _known_names(key: str, names: Collection[str]) -> list[str]:
-    """File names a ``skip_versions`` mapping gives for one version
-    directory, in listing order; only plain names of data files."""
+    """Return the file names a ``skip_versions`` mapping gives for a version.
+
+    The names are of one version directory, in listing order; only plain names of
+    data files.
+    """
     if (
         isinstance(names, str)
         or not isinstance(names, Collection)
@@ -1553,8 +1600,11 @@ def _known_names(key: str, names: Collection[str]) -> list[str]:
 
 
 def _segment_dir(root: str, segment: str) -> str | None:
-    """The segment directory, ``None`` when absent; a missing ``root`` is
-    ``OSError``, a symlinked product or segment ``ValidationError``."""
+    """Return the segment directory, ``None`` when absent.
+
+    A missing ``root`` is ``OSError``, a symlinked product or segment
+    ``ValidationError``.
+    """
     os.stat(root)  # a missing store is an error, a missing segment is not
     path = root
     for part in segment.split("/"):
@@ -1762,7 +1812,7 @@ def iter_store(
 
 
 def link_target(path: str | Path) -> Path | None:
-    """The version a link path holds, confirmed on disk.
+    """Return the version a link path holds, confirmed on disk.
 
     Reads the link sidecar (``extra.link == "hardlink"``,
     ``extra.link_target``), requires the target to be a version of the

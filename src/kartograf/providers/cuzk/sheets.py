@@ -35,9 +35,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import CZ_SM5_PATTERN
 from kartograf.core.parser_tm33 import TM33_CRS
-from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ParseError, ValidationError
 from kartograf.providers.cuzk.client import CuzkClient
 
@@ -182,7 +182,7 @@ class SheetIndex:
         bbox: BBox,
         out_fields: str,
         out_sr: str,
-        to_info: Callable[[dict], SheetInfo],
+        to_info: Callable[[dict[str, Any]], SheetInfo],
     ) -> list[SheetInfo]:
         """Envelope query of ``layer`` with the client-side interior filter."""
         features = self._client.query(
@@ -229,7 +229,10 @@ class SheetIndex:
 
 
 def _validate_request_bbox(bbox: BBox, expected_crs: str, method: str) -> None:
-    """The envelope must be in the layer CRS (the filter works in a single CRS)."""
+    """Check that the envelope is in the layer CRS.
+
+    The filter works in a single CRS.
+    """
     if bbox.crs.strip().upper() != expected_crs:
         raise ValidationError(
             f"{method} wymaga bbox w {expected_crs} (usluga zwraca geometrie "
@@ -266,7 +269,7 @@ def _intersecting(bbox: BBox, infos: list[SheetInfo]) -> list[SheetInfo]:
     return sorted(kept, key=lambda i: i.sheet)
 
 
-def _rings_envelope(feature: dict, crs: str) -> BBox:
+def _rings_envelope(feature: dict[str, Any], crs: str) -> BBox:
     """Envelope of ALL rings of the geometry.
 
     For a polygon with holes the inner rings lie within the outer one, so the
@@ -288,7 +291,7 @@ def _rings_envelope(feature: dict, crs: str) -> BBox:
     return BBox(min(xs), min(ys), max(xs), max(ys), crs)
 
 
-def _mapnom(feature: dict) -> str:
+def _mapnom(feature: dict[str, Any]) -> str:
     mapnom = (feature.get("attributes") or {}).get("MAPNOM")
     if not mapnom:
         raise ParseError(
@@ -297,7 +300,7 @@ def _mapnom(feature: dict) -> str:
     return str(mapnom)
 
 
-def _sm5_info(feature: dict) -> SheetInfo:
+def _sm5_info(feature: dict[str, Any]) -> SheetInfo:
     attrs = feature.get("attributes") or {}
     podil = attrs.get("PODIL")
     return SheetInfo(
@@ -309,7 +312,7 @@ def _sm5_info(feature: dict) -> SheetInfo:
     )
 
 
-def _tm33_info(feature: dict) -> SheetInfo:
+def _tm33_info(feature: dict[str, Any]) -> SheetInfo:
     attrs = feature.get("attributes") or {}
     return SheetInfo(
         sheet=_mapnom(feature),
@@ -320,8 +323,11 @@ def _tm33_info(feature: dict) -> SheetInfo:
     )
 
 
-def _layer_info(feature: dict, crs: str) -> SheetInfo:
-    """Generic sheet of any index layer (MAPNOM, MAPNAME, bbox in ``crs``)."""
+def _layer_info(feature: dict[str, Any], crs: str) -> SheetInfo:
+    """Return a generic sheet of any index layer.
+
+    MAPNOM, MAPNAME, bbox in ``crs``.
+    """
     name = (feature.get("attributes") or {}).get("MAPNAME")
     return SheetInfo(
         sheet=_mapnom(feature),
@@ -341,7 +347,7 @@ def _parse_in_cz(value: Any) -> bool | None:
     return bool(value)
 
 
-def _payload_from_info(info: SheetInfo) -> dict:
+def _payload_from_info(info: SheetInfo) -> dict[str, Any]:
     return {
         "godlo": info.sheet,
         "name": info.name,
@@ -352,7 +358,7 @@ def _payload_from_info(info: SheetInfo) -> dict:
     }
 
 
-def _info_from_payload(payload: dict) -> SheetInfo | None:
+def _info_from_payload(payload: dict[str, Any]) -> SheetInfo | None:
     """Restore SheetInfo from the cache; None if the entry is incomplete or old."""
     try:
         min_x, min_y, max_x, max_y = payload["bbox"]

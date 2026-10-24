@@ -1,5 +1,8 @@
-"""``kartograf cadastre``: cadastral map - EGiB (GUGiK) and the CZ cadastral map
-(CUZK) - and transaction prices RCN (GUGiK) (ADR-042 D9; plan E, E3)."""
+"""Declare ``kartograf cadastre``.
+
+Cadastral map - EGiB (GUGiK) and the CZ cadastral map (CUZK) - and transaction prices
+RCN (GUGiK) (ADR-042 D9; plan E, E3).
+"""
 
 from kartograf.catalog.commands._collection import (
     Products,

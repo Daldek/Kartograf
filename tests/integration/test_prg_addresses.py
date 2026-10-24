@@ -132,7 +132,12 @@ def test_addresses_powiat_package_is_stored_as_published(tmp_path, monkeypatch):
     streets, squares, localities); a second run uses the local version."""
     url, session = _package("powiat_1261")
     monkeypatch.setattr(col, "_session", lambda: session)
-    request = dict(product="addresses", teryt="1261", output_dir=tmp_path, cache=False)
+    request = {
+        "product": "addresses",
+        "teryt": "1261",
+        "output_dir": tmp_path,
+        "cache": False,
+    }
 
     report = download_collection(**request)
 

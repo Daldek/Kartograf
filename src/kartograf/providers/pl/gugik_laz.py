@@ -44,6 +44,7 @@ from pathlib import Path
 import requests
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import BBox
 from kartograf.core.coverage import (
     AREA_EPS,
     Polygon,
@@ -53,7 +54,6 @@ from kartograf.core.coverage import (
     rectangle,
     uncovered_pieces,
 )
-from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import TILES, count_text
 from kartograf.providers.base import DataSourceProvider
@@ -198,16 +198,21 @@ class SupersededLazTile:
 
 @dataclass(frozen=True)
 class LazTileSelection:
-    """Tile selection result: ``tiles`` to download (by sheet) and ``superseded``;
+    """Tile selection result.
+
+    ``tiles`` to download (by sheet) and ``superseded``;
     ``below_density``: the tiles of the area dropped by ``min_density`` before
-    the selection (``select_tiles`` only)."""
+    the selection (``select_tiles`` only).
+    """
 
     tiles: tuple[LazTile, ...]
     superseded: tuple[SupersededLazTile, ...] = field(default=())
     below_density: tuple[LazTile, ...] = field(default=())
 
 
-def _tile_order_key(tile: LazTile) -> tuple:
+def _tile_order_key(
+    tile: LazTile,
+) -> tuple[int, tuple[int, ...], float, str, str]:
     """Greedy order: newest year, newest date, then stable."""
     return (
         -(tile.year or 0),
@@ -286,13 +291,15 @@ def _width(poly: Polygon) -> float:
 
 
 def _edge_rim(area: Polygon, tolerance_m: float) -> float:
-    """Rim of the reach rule: ``tolerance_m``, or 0 for an area at most twice
-    as wide (it has no inner part - any overlap counts)."""
+    """Return the rim of the reach rule: ``tolerance_m``, or 0 for a narrow area.
+
+    An area at most twice as wide has no inner part - any overlap counts.
+    """
     return tolerance_m if _width(area) > 2 * tolerance_m else 0.0
 
 
 def _reaches(region: Polygon, area: Polygon, rim_m: float) -> bool:
-    """The tile region overlaps the area by more than an edge sliver.
+    """Check whether the tile region overlaps the area by more than an edge sliver.
 
     The region with its edges moved ``rim_m`` inwards must still overlap the
     area (the ``overlaps_area`` rule of the sheet indexes): a neighbouring
@@ -536,9 +543,11 @@ def _laz_indexes() -> dict[str, IndexRef]:
 
 
 def laz_tile(elem: ET.Element) -> LazTile | None:
-    """``LazTile`` of one WFS feature of the LAZ index (``None``: no URL or
-    sheet, or an unrecognized ``uklad_xy``). Shared by the tile discovery
-    and the availability report."""
+    """Build a ``LazTile`` of one WFS feature of the LAZ index.
+
+    ``None``: no URL or sheet, or an unrecognized ``uklad_xy``. Shared by the tile
+    discovery and the availability report.
+    """
     url = feature_text(elem, "url_do_pobrania")
     sheet = feature_text(elem, "godlo")
     if not url or not sheet:

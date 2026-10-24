@@ -24,8 +24,10 @@ def json_mode(argv: Sequence[str]) -> bool:
 
 
 def wants_json(args: argparse.Namespace) -> bool:
-    """Whether the parsed command was given ``--json`` (a bare ``Namespace`` of a
-    unit test has no such flag: text)."""
+    """Check whether the parsed command was given ``--json``.
+
+    A bare ``Namespace`` of a unit test has no such flag: text.
+    """
     return bool(getattr(args, "json", False))
 
 

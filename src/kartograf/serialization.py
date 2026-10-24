@@ -98,6 +98,7 @@ class Document:
     JSON_FILL: ClassVar[Mapping[str, object]] = {}
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Validate the ``SCHEMA`` declaration of a document subclass."""
         super().__init_subclass__(**kwargs)
         schema = getattr(cls, "SCHEMA", None)
         if not isinstance(schema, str) or not re.fullmatch(SCHEMA_PATTERN, schema):
@@ -120,16 +121,16 @@ class Document:
         return self.SCHEMA
 
     def prepare_context(self, ctx: EncodeContext) -> None:
-        """Hook: set what the nested values need (default: nothing)."""
+        """Set what the nested values need (hook; default: nothing)."""
 
     def to_dict(self) -> dict[str, object]:
-        """The document as a JSON object; ``schema`` is the first key."""
+        """Return the document as a JSON object; ``schema`` is the first key."""
         ctx = EncodeContext()
         self.prepare_context(ctx)
         return {"schema": self.SCHEMA, **_document_body(self, ctx)}
 
     def to_json(self, *, indent: int | None = 2) -> str:
-        """The document as JSON text.
+        """Return the document as JSON text.
 
         ``indent=2`` (default): indented, ``ensure_ascii=False``, a newline at
         the end (what the CLI prints). ``indent=None``: compact separators and
@@ -228,7 +229,7 @@ def _dataclass_body(obj: object, ctx: EncodeContext) -> dict[str, object]:
 
 
 def _document_body(doc: Document, ctx: EncodeContext) -> dict[str, object]:
-    """The keys of a document after ``schema``, in ``JSON_KEYS`` order."""
+    """Return the keys of a document after ``schema``, in ``JSON_KEYS`` order."""
     by_name = {f.name: f for f in _fields(doc)}
     keys = doc.JSON_KEYS
     if keys is None:

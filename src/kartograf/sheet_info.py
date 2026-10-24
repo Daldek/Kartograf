@@ -123,9 +123,11 @@ class SheetInfo(Document):
 
 @dataclass(frozen=True)
 class SheetRequest:
-    """The request of a sheet search as the document echoes it: the area is a
-    ``bbox`` with its ``bbox_crs`` or a ``geometry`` file with its ``layer``
-    (the other fields are ``None``)."""
+    """The request of a sheet search as the document echoes it.
+
+    The area is a ``bbox`` with its ``bbox_crs`` or a ``geometry`` file with its
+    ``layer`` (the other fields are ``None``).
+    """
 
     scale: str
     sheet_system: str
@@ -161,8 +163,10 @@ class SheetList(Document):
 
 
 def _accepting(system: str) -> tuple[str, ...]:
-    """The ids of the commands whose ``sheet`` parameter accepts ``system``, in
-    the order of the catalog."""
+    """Return the ids of the commands whose ``sheet`` accepts ``system``.
+
+    The order is that of the catalog.
+    """
     return tuple(
         command.id
         for command in get_catalog(params=True).commands
@@ -180,7 +184,8 @@ def _require_flag(value: object, flag: str, option: str) -> None:
 
 
 def _cz_sheet(code: str) -> SheetInfo | None:
-    """The description of a CZ code (SM5 sheet, TM33 tile, ZTM map sheet);
+    """Return the description of a CZ code (SM5 sheet, TM33 tile, ZTM map sheet).
+
     ``None`` for any other code (a PL code or an invalid one).
 
     Raises
@@ -229,7 +234,7 @@ def describe_sheet(
     children: bool = False,
     descendants: str | None = None,
 ) -> SheetInfo:
-    """What a sheet code is: ``kartograf parse`` as a document.
+    """Describe what a sheet code is: ``kartograf parse`` as a document.
 
     Parameters
     ----------
@@ -335,8 +340,10 @@ def describe_sheet(
 
 
 def _blame(error: ValidationError, *, scale: str, sheet_system: str, area: str) -> None:
-    """Set ``option`` of an error of a library sheet search that has none: the
-    sheet system, the scale (with the values the system has) or else the area."""
+    """Set ``option`` of an error of a library sheet search that has none.
+
+    The sheet system, the scale (with the values the system has) or else the area.
+    """
     if error.option is None:
         if sheet_system not in _SCALES:
             error.option, error.allowed = "sheet_system", tuple(_SCALES)
@@ -354,8 +361,9 @@ def find_sheets(
     scale: str,
     sheet_system: str,
 ) -> SheetList:
-    """The sheets covering an area: ``find_sheets_for_bbox`` or
-    ``find_sheets_for_geometry`` as a document.
+    """Return the sheets covering an area.
+
+    ``find_sheets_for_bbox`` or ``find_sheets_for_geometry`` as a document.
 
     Parameters
     ----------

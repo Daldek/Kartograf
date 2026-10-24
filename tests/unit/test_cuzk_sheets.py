@@ -12,13 +12,13 @@ from unittest.mock import Mock
 import pytest
 
 from kartograf.cache import MetadataCache
+from kartograf.core.parser_tm33 import TM33_CRS
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ParseError, ValidationError
 from kartograf.providers.cuzk.sheets import (
     KLADY_ENDPOINT,
     SM5_CRS,
     SM5_LAYER,
-    TM33_CRS,
     TM33_LAYER,
     SheetIndex,
     SheetInfo,

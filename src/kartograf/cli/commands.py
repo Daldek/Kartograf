@@ -70,8 +70,9 @@ _HTTP_LOGGER = "kartograf.transport.http"
 
 
 class _StderrLines(logging.Handler):
-    """Warning and error records of the library as prefixed lines on the
-    current stderr (``Warning:``/``Error:``); without this handler Python's
+    """Print warning and error records of the library as prefixed lines on stderr.
+
+    The prefixes are ``Warning:`` and ``Error:``; without this handler Python's
     fallback prints them as bare messages.
 
     ``--json`` keeps stderr empty (USAGE 9.2): of all the records only the
@@ -97,8 +98,10 @@ class _StderrLines(logging.Handler):
 
 
 def _stderr_lines(as_json: bool) -> None:
-    """Install (once per process) the handler of the library records and set its
-    mode for this command line."""
+    """Install the handler of the library records and set its mode.
+
+    The handler is installed once per process; the mode is that of this command line.
+    """
     log = logging.getLogger("kartograf")
     handler = next((h for h in log.handlers if isinstance(h, _StderrLines)), None)
     if handler is None:
@@ -113,9 +116,10 @@ def _fail(
     as_json: bool,
     given: dict[str, object] | None = None,
 ) -> int:
-    """Report ``error`` in the mode of the command line; the exit code of the
-    error table (spec 6.2): ``exit_code`` of a ``KartografError``, 130 for Ctrl-C,
-    143 for SIGTERM, 1 for every other exception.
+    """Report ``error`` in the mode of the command line.
+
+    The exit code of the error table (spec 6.2): ``exit_code`` of a ``KartografError``,
+    130 for Ctrl-C, 143 for SIGTERM, 1 for every other exception.
 
     ``--json``: the document ``kartograf-error/1`` on stdout (``given``: the
     arguments the line gave, for the example of its hint). Text: one
@@ -143,8 +147,7 @@ def _fail(
 
 
 def main(args: list[str] | None = None) -> int:
-    """
-    Main entry point for the CLI.
+    """Run the CLI and return the exit code.
 
     Parameters
     ----------

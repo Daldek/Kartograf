@@ -29,6 +29,7 @@ import subprocess
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any
 from urllib.parse import urlparse
 
 # Configure logging to stderr (stdout reserved for port number)
@@ -71,7 +72,7 @@ class CLMSCredentials:
     """
 
     def __init__(self) -> None:
-        self._credentials: dict | None = None
+        self._credentials: dict[str, Any] | None = None
         self._access_token: str | None = None
         self._token_expires: float = 0
         # Why CLMS_CREDENTIALS is set but not usable (a text without the
@@ -227,11 +228,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     credentials: CLMSCredentials  # Set by run_server() before serving
 
-    def log_message(self, format, *args):
+    def log_message(self, format: str, *args: Any) -> None:
         """Log to stderr instead of stdout."""
         logger.info("%s - %s", self.address_string(), format % args)
 
-    def send_json(self, data: dict, status: int = 200):
+    def send_json(self, data: dict[str, Any], status: int = 200) -> None:
         """Send JSON response."""
         body = json.dumps(data).encode("utf-8")
         self.send_response(status)
@@ -240,7 +241,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         """Handle GET requests."""
         parsed = urlparse(self.path)
 
@@ -258,7 +259,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         else:
             self.send_json({"error": "Not found"}, 404)
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         """Handle POST requests - proxy to CLMS API.
 
         ``/proxy`` forwards an API call with the Bearer token and answers
@@ -461,7 +462,8 @@ def run_server(port: int = 0) -> None:
         server.shutdown()
 
 
-def main():
+def main() -> None:
+    """Run the CLMS authentication proxy from the command line."""
     parser = argparse.ArgumentParser(description="CLMS Authentication Proxy")
     parser.add_argument(
         "--port",

@@ -19,7 +19,7 @@ from rasterio.io import MemoryFile
 from rasterio.merge import merge
 from rasterio.transform import Affine
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import ValidationError
 from kartograf.transform.raster import VRT_TYPES, vrt_xml
 
@@ -60,7 +60,7 @@ class SourceGrid:
     off_grid: tuple[OffGridSource, ...]
 
     def describe_off_grid(self, total: int, noun: str = "zrodel") -> str:
-        """Description of ``off_grid``: count, largest offset, up to 10 names."""
+        """Describe ``off_grid``: count, largest offset, up to 10 names."""
         worst = max(max(abs(s.dx_px), abs(s.dy_px)) for s in self.off_grid)
         names = ", ".join(s.path.name for s in self.off_grid[:10])
         more = " ..." if len(self.off_grid) > 10 else ""
@@ -71,8 +71,11 @@ class SourceGrid:
 
 
 def _phase_key(value: float, step: float) -> int:
-    """Bucket of a grid line's phase (in tolerance units) - for choosing the
-    majority grid; a phase just below 1 is the same grid as phase 0."""
+    """Return the bucket of a grid line's phase (in tolerance units).
+
+    Bucket of a grid line's phase (in tolerance units) - for choosing the majority grid;
+    a phase just below 1 is the same grid as phase 0.
+    """
     p = (value / step) % 1.0
     if p > 1.0 - _GRID_TOL_PX:
         p = 0.0
@@ -80,8 +83,11 @@ def _phase_key(value: float, step: float) -> int:
 
 
 def _shift_px(value: float, origin: float, step: float) -> float:
-    """Offset of the grid line ``value`` relative to the grid ``origin + k * step``
-    in pixels, in the range [-0.5, 0.5) - wrapping by 1 is done by the modulo."""
+    """Return the offset of the grid line ``value`` from the grid, in pixels.
+
+    Offset of the grid line ``value`` relative to the grid ``origin + k * step`` in
+    pixels, in the range [-0.5, 0.5) - wrapping by 1 is done by the modulo.
+    """
     return ((value - origin) / step + 0.5) % 1.0 - 0.5
 
 
@@ -191,7 +197,7 @@ def mosaic_and_crop(
     wrap = dtype is not None
 
     res_set: set[tuple[float, float]] = set()
-    metas: list[dict] = []
+    metas: list[dict[str, Any]] = []
     for path in paths:
         with rasterio.open(path) as src:
             res_set.add(src.res)
@@ -246,7 +252,7 @@ def mosaic_and_crop(
     # the data size, i.e. about 2.4 GB for a 30x30 km catchment at DMR 5G.
     # merge takes the output profile from the FIRST source.
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    kwds: dict = {}
+    kwds: dict[str, Any] = {}
     if nodata is not None:
         kwds["nodata"] = nodata
     if dst_kwds:
@@ -267,7 +273,7 @@ def mosaic_and_crop(
     memfiles: list[MemoryFile] = []
     try:
         if wrap:
-            sources: list = []
+            sources: list[Any] = []
             for path, meta in zip(paths, metas, strict=True):
                 wkt = meta["crs"].to_wkt() if meta["crs"] else None
                 xml = vrt_xml(

@@ -83,9 +83,12 @@ class ParamInfo:
 
 @dataclass(frozen=True)
 class ConstraintInfo:
-    """A rule among the parameters (``one_of``, ``any_of``, ``requires``,
-    ``excludes``, ``applies_to``, ``required_when``); ``when`` maps a parameter
-    to ``True`` (given) or to the list of values it has."""
+    """A rule among the parameters.
+
+    The rules are ``one_of``, ``any_of``, ``requires``, ``excludes``, ``applies_to`` and
+    ``required_when``; ``when`` maps a parameter to ``True`` (given) or to the list of
+    values it has.
+    """
 
     type: str
     param: str | None
@@ -96,8 +99,11 @@ class ConstraintInfo:
 
 @dataclass(frozen=True)
 class ExampleInfo:
-    """An example call: the task options in the JSON form of the manifest and the
-    command line computed from them."""
+    """Return an example call.
+
+    The task options in the JSON form of the manifest and the command line computed from
+    them.
+    """
 
     title: str | None
     options: Mapping[str, object]
@@ -106,8 +112,9 @@ class ExampleInfo:
 
 @dataclass(frozen=True)
 class CommandInfo:
-    """One command: a CLI command, an API function and, when ``tool`` is set, an
-    MCP tool.
+    """One command.
+
+    A CLI command, an API function and, when ``tool`` is set, an MCP tool.
 
     ``params``, ``constraints`` and ``examples`` are ``None`` unless a command or
     ``params=True`` was asked for (``get_catalog()``, ``group=`` alone).
@@ -141,9 +148,12 @@ class CommandInfo:
 
 @dataclass(frozen=True)
 class ProductInfo:
-    """A product of a group: the value of ``--product``, its description, the
-    countries (``pl``, ``cz``, ``eu``, ``global``) and the descriptor keys of its
-    sources (``list_sources`` gives the details)."""
+    """A product of a group.
+
+    The value of ``--product``, its description, the countries (``pl``, ``cz``, ``eu``,
+    ``global``) and the descriptor keys of its sources (``list_sources`` gives the
+    details).
+    """
 
     name: str
     summary: str
@@ -191,7 +201,7 @@ class SchemaInfo:
 
 
 def _records_json(document: Mapping[str, object], indent: int) -> str:
-    """The document as JSON text with one record of every list per line.
+    """Return the document as JSON text with one record of every list per line.
 
     The same document as ``json.dumps(document, indent=indent)``, but a record
     (a group, a command) is one compact line instead of a line per key: the
@@ -217,9 +227,11 @@ def _records_json(document: Mapping[str, object], indent: int) -> str:
 
 @dataclass(frozen=True)
 class Catalog(Document):
-    """The catalog of the commands (``kartograf-catalog/1``): the groups with their
-    products, the commands with their parameters, constraints and examples, and -
-    when asked for - the exit code and error code tables and the document schemas.
+    """Return the catalog of the commands (``kartograf-catalog/1``).
+
+    The groups with their products, the commands with their parameters, constraints and
+    examples, and - when asked for - the exit code and error code tables and the
+    document schemas.
 
     Attributes
     ----------
@@ -245,12 +257,16 @@ class Catalog(Document):
     schemas: tuple[SchemaInfo, ...] | None
 
     def __post_init__(self) -> None:
+        """Check the view name."""
         if self.view not in VIEWS:
             raise ValueError(f"unknown catalog view {self.view!r} (allowed: {VIEWS})")
 
     def to_dict(self) -> dict[str, object]:
-        """The document; in the overview ``groups`` and ``commands`` are the short
-        records of the module docstring."""
+        """Return the document.
+
+        In the overview ``groups`` and ``commands`` are the short records of the module
+        docstring.
+        """
         document = super().to_dict()
         if self.view == OVERVIEW:
             document["groups"] = [
@@ -273,8 +289,10 @@ class Catalog(Document):
         return document
 
     def to_json(self, *, indent: int | None = 2) -> str:
-        """The document as JSON text (``Document.to_json``); the overview with one
-        record per line instead of one line per key."""
+        """Return the document as JSON text (``Document.to_json``).
+
+        The overview with one record per line instead of one line per key.
+        """
         if indent is None or self.view != OVERVIEW:
             return super().to_json(indent=indent)
         return _records_json(self.to_dict(), indent)

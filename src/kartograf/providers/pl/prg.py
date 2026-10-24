@@ -20,12 +20,13 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import rasterio
 import requests
 from rasterio.features import rasterize
-from rasterio.transform import from_origin
+from rasterio.transform import Affine, from_origin
 from rasterio.windows import Window
 
 from kartograf.cache.metadata import MetadataCache
@@ -138,7 +139,8 @@ def _ring(element: ET.Element) -> list[list[float]]:
         raise DownloadError("PRG WFS: nieprawidlowa lista punktow GML") from e
     if values.size < 8 or values.size % 2 or not np.isfinite(values).all():
         raise DownloadError("PRG WFS: nieprawidlowa lista punktow GML")
-    return values.reshape(-1, 2)[:, ::-1].tolist()
+    pairs: list[list[float]] = values.reshape(-1, 2)[:, ::-1].tolist()
+    return pairs
 
 
 def _polygon(element: ET.Element) -> list[list[list[float]]]:
@@ -150,7 +152,7 @@ def _polygon(element: ET.Element) -> list[list[list[float]]]:
     ]
 
 
-def _land_geometries(root: ET.Element, layer: str) -> tuple[dict, ...]:
+def _land_geometries(root: ET.Element, layer: str) -> tuple[dict[str, Any], ...]:
     """Decode all returned features, rejecting partial or unsupported answers."""
     members = root.findall(_WFS_MEMBER)
     returned = root.get("numberReturned", "")
@@ -163,7 +165,7 @@ def _land_geometries(root: ET.Element, layer: str) -> tuple[dict, ...]:
         raise DownloadError(
             f"PRG WFS: niepelna odpowiedz {layer} (numberMatched={matched})"
         )
-    geometries: list[dict] = []
+    geometries: list[dict[str, Any]] = []
     for member in members:
         feature = member.find(layer.replace("ms:", _MS))
         geom = feature.find(f"{_MS}msGeometry") if feature is not None else None
@@ -192,10 +194,12 @@ ABROAD, LAND, SEA = 0, 1, 2
 class LandMask:
     """Polish country polygon minus territorial and internal sea water."""
 
-    country: tuple[dict, ...]
-    water: tuple[dict, ...]
+    country: tuple[dict[str, Any], ...]
+    water: tuple[dict[str, Any], ...]
 
-    def burn(self, transform, shape: tuple[int, int]) -> np.ndarray:
+    def burn(
+        self, transform: Affine, shape: tuple[int, int]
+    ) -> np.ndarray[Any, np.dtype[Any]]:
         """Classes of a grid window: ``LAND``, ``SEA`` (W02/W03) or ``ABROAD``.
 
         Pixel membership is decided by its centre (``all_touched=False``): A00
@@ -203,7 +207,7 @@ class LandMask:
         affine transform of the window (EPSG:2180), ``shape`` its (rows,
         columns); the caller keeps windows small (row strips).
         """
-        classes = rasterize(
+        classes: np.ndarray[Any, np.dtype[Any]] = rasterize(
             [(geometry, LAND) for geometry in self.country],
             out_shape=shape,
             transform=transform,
@@ -221,10 +225,13 @@ class LandMask:
         return classes
 
     def has_land(self, area: BBox, pixel: float) -> bool:
-        """Whether a pixel centre of the ``pixel`` grid of ``area`` (EPSG:2180)
-        lies on land (``burn`` in row strips, stops at the first land pixel).
+        """Check whether a pixel centre of the ``pixel`` grid of ``area`` lies on land.
+
+        ``area`` is in EPSG:2180 (``burn`` in row strips, stops at the first land
+        pixel).
         ``False``: a cutout of the area would be nodata only (sea, abroad) -
-        decided from the mask alone, before any WCS request."""
+        decided from the mask alone, before any WCS request.
+        """
         if not self.country:
             return False
         width = max(1, round((area.max_x - area.min_x) / pixel))
@@ -263,7 +270,7 @@ class LandMask:
         logger.debug("PRG land mask: masked=%s zero_on_land=%s", masked, zero_on_land)
         return masked, zero_on_land
 
-    def to_payload(self) -> dict:
+    def to_payload(self) -> dict[str, Any]:
         """JSON payload of the mask (metadata cache)."""
         return {"country": list(self.country), "water": list(self.water)}
 

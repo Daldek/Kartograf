@@ -126,7 +126,7 @@ class TestPL2000BBoxReferenceValues:
     @pytest.mark.parametrize(
         "scale, expected_height, expected_width",
         [(s, h, w) for s, (h, w) in SHEET_DIMENSIONS_2000.items()],
-        ids=[s for s in SHEET_DIMENSIONS_2000],
+        ids=list(SHEET_DIMENSIONS_2000),
     )
     def test_dimensions_match_constant(self, scale, expected_height, expected_width):
         """Verify that SHEET_DIMENSIONS_2000 agrees with the computed dimensions."""

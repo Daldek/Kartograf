@@ -1,5 +1,6 @@
-"""``soil download`` and ``soil hsg`` (ADR-044); ``soil list-layers`` is in
-``layers_cmd``.
+"""``soil download`` and ``soil hsg`` (ADR-044).
+
+``soil list-layers`` is in ``layers_cmd``.
 
 The CLI translates flags to the corresponding command-level API functions.
 """
@@ -7,6 +8,7 @@ The CLI translates flags to the corresponding command-level API functions.
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from kartograf.cli._args import library_arguments
 from kartograf.cli.download_cmd import (
@@ -53,8 +55,10 @@ def _soil_download(args: argparse.Namespace) -> int:
 def _print_soil(
     args: argparse.Namespace, report: SoilReport, update: UpdateMode | None
 ) -> int:
-    """A status line per file and the errors per unit of a SoilGrids report; the
-    exit code."""
+    """Print a status line per file and the errors per unit of a SoilGrids report.
+
+    It returns the exit code.
+    """
     out = Path(args.output)
     for item in report.files:
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
@@ -88,7 +92,7 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
     return run_with_plan_file(args, lambda a: _hsg_task(a, selection))
 
 
-def _hsg_task(args: argparse.Namespace, selection: dict) -> int:
+def _hsg_task(args: argparse.Namespace, selection: dict[str, Any]) -> int:
     """One ``soil hsg`` request: plan or inputs plus the derived raster."""
     arguments = {**selection, "output_dir": Path(args.output)}
     on_notice = notice_printer(args)
@@ -108,8 +112,11 @@ def _hsg_task(args: argparse.Namespace, selection: dict) -> int:
 def _print_hsg(
     args: argparse.Namespace, result: HsgReport, update: UpdateMode | None
 ) -> int:
-    """A status line per file, the errors per unit, the statistics of the raster
-    (``--summary``) and the legend of an HSG report; the exit code."""
+    """Print a status line per file, the errors per unit, the statistics and the legend.
+
+    The statistics of the raster (``--summary``) and the legend are for an HSG report;
+    the exit code is returned.
+    """
     out = Path(args.output)
     for item in (*result.inputs, *result.files):
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
@@ -126,8 +133,8 @@ def _print_hsg(
     return 0 if result.ok else 1
 
 
-def _print_summary(summary: dict) -> None:
-    """The statistics of the HSG raster (``report.summary``) as text."""
+def _print_summary(summary: dict[str, Any]) -> None:
+    """Print the statistics of the HSG raster (``report.summary``) as text."""
     print()
     print("Statystyki HSG obszaru zadania (grupy: % powierzchni z danymi):")
     groups = dict(summary)

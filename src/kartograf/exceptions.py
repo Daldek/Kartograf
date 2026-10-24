@@ -61,7 +61,7 @@ class KartografError(Exception):
         self.hint = hint
 
     def details(self) -> dict[str, object]:
-        """The attributes of ``DETAIL_FIELDS`` as JSON-ready values.
+        """Return the attributes of ``DETAIL_FIELDS`` as JSON-ready values.
 
         Empty values (``None``, empty text or collection) are left out;
         the others go through the encoder of ``kartograf.serialization``
@@ -80,7 +80,7 @@ class KartografError(Exception):
 
 
 def _names(value: Sequence[str] | None, argument: str) -> tuple[str, ...] | None:
-    """A sequence of names as a tuple (a bare string is a mistake, not a name)."""
+    """Return a sequence of names as a tuple (a bare string is a mistake)."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -134,9 +134,10 @@ class ValidationError(KartografError):
 
 
 class UsageError(ValidationError):
-    """
-    Wrong use of a command: an unknown command or flag, a missing positional
-    argument, a value outside the allowed choices.
+    """Wrong use of a command.
+
+    An unknown command or flag, a missing positional argument, a value outside the
+    allowed choices.
 
     Raised by the parser of the command catalog (``parse_command``, the CLI in
     the ``--json`` mode). A subclass of ``ValidationError``: wrong use is
@@ -307,9 +308,9 @@ class CacheError(KartografError):
 
 
 class InvalidSidecarError(KartografError):
-    """
-    A ``kartograf-meta/1`` sidecar that cannot be read (``read_sidecar``,
-    ADR-045): missing, not a JSON object, or another schema.
+    """A ``kartograf-meta/1`` sidecar that cannot be read (``read_sidecar``, ADR-045).
+
+    Missing, not a JSON object, or another schema.
 
     ``iter_store`` never raises it: the store scan reports such a file as an
     entry with ``problem`` ``missing_sidecar``/``invalid_sidecar``.

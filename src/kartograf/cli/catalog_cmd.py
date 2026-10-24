@@ -28,10 +28,12 @@ _FOOTER = (
 
 
 def _selection(args: argparse.Namespace) -> tuple[str | None, str | None]:
-    """``(group, command)`` arguments of ``get_catalog`` for the words of the
-    line: ``GRUPA`` is a group, or - for ``parse`` and the commands only the API
-    has - the id of a command without a group; ``KOMENDA`` is the name of a
-    command inside the group (``download``)."""
+    """Return the ``(group, command)`` arguments of ``get_catalog`` for the line.
+
+    ``GRUPA`` is a group, or - for ``parse`` and the commands only the API has - the id
+    of a command without a group; ``KOMENDA`` is the name of a command inside the group
+    (``download``).
+    """
     group, name = args.group, args.command
     if group is None:
         if name is not None:
@@ -90,9 +92,11 @@ def _row(cells: tuple[str, ...], widths: list[int], indent: str) -> str:
 
 
 def _param_lines(command: CommandInfo, indent: str) -> list[str]:
-    """The parameters of a command: a table of flag, API argument, kind and
-    whether it is required, each row followed by its allowed values and
-    description."""
+    """Return the parameters of a command.
+
+    A table of flag, API argument, kind and whether it is required, each row followed by
+    its allowed values and description.
+    """
     params = command.params or ()
     if not params:
         return []
@@ -132,7 +136,7 @@ def _example_lines(command: CommandInfo) -> list[str]:
 
 
 def _command_view(command: CommandInfo) -> list[str]:
-    """The description of one command."""
+    """Return the description of one command."""
     lines = [f"{command.id}: {command.summary}", ""]
     lines += _wrap(command.description, "")
     facts = [
@@ -177,10 +181,12 @@ def _group_view(group: GroupInfo, by_id: dict[str, CommandInfo]) -> list[str]:
 
 
 def format_catalog(catalog: Catalog, *, command: str | None = None) -> str:
-    """The text of a catalog view: the description of ``command`` when one was
-    asked for, else the groups (and the commands without a group) with one line
-    per command, followed by the description of every command when the view has
-    parameters."""
+    """Return the text of a catalog view.
+
+    The description of ``command`` when one was asked for, else the groups (and the
+    commands without a group) with one line per command, followed by the description of
+    every command when the view has parameters.
+    """
     by_id = {c.id: c for c in catalog.commands}
     if command is not None:
         return "\n".join(_command_view(by_id[command])) + "\n"

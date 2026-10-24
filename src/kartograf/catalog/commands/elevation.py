@@ -52,13 +52,15 @@ def _resolutions() -> list[str]:
 
 
 def _vertical_systems() -> list[str]:
-    """The height systems of every variant, registry order."""
+    """Return the height systems of every variant, registry order."""
     return list(dict.fromkeys(v.vertical_crs for v in variants() if v.vertical_crs))
 
 
 def _formats() -> list[str]:
-    """The ``--format`` tokens: the file formats of the PL sheet products and
-    the CZ contours."""
+    """Return the ``--format`` tokens.
+
+    The file formats of the PL sheet products and the CZ contours.
+    """
     found = tuple(
         v
         for product in _SHEET_PRODUCTS
@@ -68,13 +70,16 @@ def _formats() -> list[str]:
 
 
 def _models() -> list[str]:
-    """The CUZK models of the CZ point clouds."""
+    """Return the CUZK models of the CZ point clouds."""
     found = variants(product="laz", country="CZ")
     return list(dict.fromkeys(v.model for v in found if v.model is not None))
 
 
 def _sheet_systems() -> list[str]:
-    """The PL sheet systems the registry has variants for (``--sheet-system``)."""
+    """Return the PL sheet systems the registry has variants for.
+
+    They are the values of ``--sheet-system``.
+    """
     found = variants(country="PL")
     return sorted({system for v in found for system in v.systems})
 

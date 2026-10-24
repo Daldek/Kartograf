@@ -1,5 +1,8 @@
-"""Structured data notices shared by command-level results and CLI output,
-and the text helpers of user messages (sizes, counted nouns, flag names)."""
+"""Provide structured data notices and the text helpers of user messages.
+
+The notices are shared by command-level results and CLI output; the helpers
+cover sizes, counted nouns and flag names.
+"""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -77,7 +80,9 @@ OF_TILES = ("kafla", "kafli", "kafli")
 
 
 def count_text(count: int, one: str, few: str, many: str) -> str:
-    """A count with its Polish noun form: ``1 plik``, ``3 pliki``, ``5 plikow``.
+    """Return a count with its Polish noun form.
+
+    ``1 plik``, ``3 pliki``, ``5 plikow``.
 
     ``one`` for 1, ``few`` for 2-4, 22-24, 32-34, ... (not 12-14), ``many``
     for the rest (0, 5-21, 25-31, ...). After a preposition taking the
@@ -100,8 +105,11 @@ LISTED_UNITS = 10
 
 
 def names_text(names: Sequence[str]) -> str:
-    """The names of the units of a notice: ``a, b, c``; over ``LISTED_UNITS``
-    of them the first ones and the rest counted: ``a, b, ..., j i 3 inne``."""
+    """Return the names of the units of a notice.
+
+    ``a, b, c``; over ``LISTED_UNITS`` of them the first ones and the rest counted:
+    ``a, b, ..., j i 3 inne``.
+    """
     if len(names) <= LISTED_UNITS:
         return ", ".join(names)
     rest = count_text(len(names) - LISTED_UNITS, "inny", "inne", "innych")
@@ -109,8 +117,11 @@ def names_text(names: Sequence[str]) -> str:
 
 
 def cli_flag(name: str) -> str:
-    """The CLI flag of a library parameter in messages: ``sheet_system`` ->
-    ``--sheet-system`` (keys of the source registry are parameter names)."""
+    """Return the CLI flag of a library parameter in messages.
+
+    ``sheet_system`` -> ``--sheet-system`` (keys of the source registry are parameter
+    names).
+    """
     return "--" + name.replace("_", "-")
 
 
@@ -123,6 +134,7 @@ class Notice:
     text: str
 
     def __post_init__(self) -> None:
+        """Check that the text of the notice is ASCII."""
         if not self.text.isascii():
             raise ValueError("Tekst komunikatu musi byc zapisany w ASCII")
 

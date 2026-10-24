@@ -78,8 +78,10 @@ def _reaches(wgs: BBox, code: str) -> bool:
 
 
 def outside_country(area: BBox, code: str, *, flag: str = "--bbox") -> str | None:
-    """Error text of the area of an explicit country (``--country pl|cz``)
-    lying outside the country's envelope - mostly numbers in another CRS than
+    """Return the error text of an area outside its explicit country.
+
+    The text applies to the area of an explicit country (``--country pl|cz``) lying
+    outside the country's envelope - mostly numbers in another CRS than
     ``--bbox-crs`` says or swapped axes; ``None``: the area reaches it.
 
     ``flag``: the choice of the area (``--bbox``, ``--geometry``: the

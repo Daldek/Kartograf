@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlencode
 
 import requests
@@ -43,9 +44,12 @@ _OGC_TEXT = re.compile(
 
 
 def horizontal_crs_of(value: str | None) -> tuple[str | None, int | None]:
-    """``(system, zone)`` of a record; ``(None, None)`` = record without a CRS
+    """Return the ``(system, zone)`` of a record.
+
+    ``(None, None)`` = record without a CRS
     (rejected in ``select_sheet_record``). Parser: ``parse_pl_system`` (D3).
-    Shared by the WMS (orto) and WFS (NMT/NMPT) record parsers."""
+    Shared by the WMS (orto) and WFS (NMT/NMPT) record parsers.
+    """
     return parse_pl_system(value) or (None, None)
 
 
@@ -59,6 +63,8 @@ def metres(value: str | None) -> float | None:
 
 @dataclass(frozen=True)
 class SkorowidzRecord:
+    """One record of a GUGiK sheet index layer."""
+
     url: str
     sheet: str
     aktualnosc: str
@@ -75,7 +81,7 @@ class SkorowidzRecord:
         """The record's ``format`` field (NMT: ``ARC/INFO ASCII GRID``; orto: none)."""
         return self.raw.get("format")
 
-    def to_source(self, endpoint: str) -> dict:
+    def to_source(self, endpoint: str) -> dict[str, Any]:
         """Metadata of the selected file for the sidecar and the record cache.
 
         Keys follow the sidecar schema ``kartograf-meta/1`` (English names,
@@ -103,7 +109,7 @@ class SkorowidzRecord:
         }
 
     @classmethod
-    def from_source(cls, source: dict) -> "SkorowidzRecord":
+    def from_source(cls, source: dict[str, Any]) -> "SkorowidzRecord":
         """Restore the selected record from a cache payload (no reselection).
 
         Raises ``KeyError`` when a required key (``url``, ``sheet``,
@@ -167,7 +173,8 @@ def is_skorowidz_answer(text: str) -> bool:
 
 def _decode_value(literal: str) -> str:
     try:
-        return json.loads(literal)
+        decoded: str = json.loads(literal)
+        return decoded
     except ValueError:  # non-JSON escape (e.g. \') — literal value
         return literal[1:-1]
 
@@ -310,8 +317,10 @@ def select_campaign_records(
     predicate: Callable[[SkorowidzRecord], bool] | None = None,
     require_resolution: bool = True,
 ) -> list[SkorowidzRecord]:
-    """All records passing the ``select_sheet_record`` filter, without
-    duplicate URLs, descending by ``(aktualnosc, dt_pzgik, url)``."""
+    """Return all records passing the ``select_sheet_record`` filter.
+
+    Without duplicate URLs, descending by ``(aktualnosc, dt_pzgik, url)``.
+    """
     sheet = SheetParser(sheet).sheet
     unique: dict[str, SkorowidzRecord] = {}
     for record in records:
@@ -391,7 +400,7 @@ class SkorowidzQuery:
     no_coverage: Callable[[SheetParser, list[SkorowidzRecord]], NoCoverageError]
     resolution_m: float | None = None
     predicate: Callable[[SkorowidzRecord], bool] | None = None
-    source_extra: dict | None = None
+    source_extra: dict[str, Any] | None = None
     # False only for products without a resolution in the index (TIN/TTN)
     require_resolution: bool = True
 
@@ -402,9 +411,11 @@ def _zone(parser: SheetParser) -> int | None:
 
 
 def _cached_no_coverage_message(sheet: str) -> str:
-    """Message of a cached no-coverage entry written without one (before
-    2026-10-07). A cache hit never calls the provider's ``no_coverage`` -
-    that may query the network (variant hints, P10)."""
+    """Return the message of a cached no-coverage entry written without one.
+
+    Written before 2026-10-07. A cache hit never calls the provider's ``no_coverage`` -
+    that may query the network (variant hints, P10).
+    """
     return f"Brak danych dla {sheet} (z cache metadanych)"
 
 
@@ -412,7 +423,7 @@ def _cached_no_coverage_message(sheet: str) -> str:
 _OLD_FLAGS = ("--system ", "--target-crs")
 
 
-def _current_texts(cached: dict) -> bool:
+def _current_texts(cached: dict[str, Any]) -> bool:
     """Whether a cached no-coverage entry carries current texts.
 
     Entries written before 0.8.0 may hold a message or hints with Polish
@@ -432,14 +443,14 @@ class SourceInfoMixin:
 
     def __init__(self) -> None:
         super().__init__()
-        self._sources: dict[str, dict] = {}
+        self._sources: dict[str, dict[str, Any]] = {}
         self._sources_lock = threading.Lock()
 
-    def _remember_source(self, sheet: str, source: dict) -> None:
+    def _remember_source(self, sheet: str, source: dict[str, Any]) -> None:
         with self._sources_lock:
             self._sources[SheetParser(sheet).sheet] = dict(source)
 
-    def source_info(self, sheet: str) -> dict | None:
+    def source_info(self, sheet: str) -> dict[str, Any] | None:
         """Origin of the sheet's index record (URL, layer, acquisition date).
 
         Filled by the single-record flow (``_resolve_record``: ``download``,
@@ -482,7 +493,10 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     announces_size: bool = False
 
     def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
-        """Provider hook: cache key, endpoint and product filter for a sheet."""
+        """Return the cache key, endpoint and product filter for a sheet.
+
+        Provider hook.
+        """
         raise NotImplementedError
 
     def _resolve_sheet(self, sheet: str, timeout: int | None = None) -> SkorowidzRecord:
@@ -510,7 +524,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         timeout: int,
         query_bbox: str,
     ) -> list[SkorowidzRecord]:
-        """Records of one layer at the sheet's centre point."""
+        """Return the records of one layer at the sheet's centre point."""
         return query_skorowidz_layer(
             self._sessions.get(),
             endpoint,
@@ -741,7 +755,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             )
         )
 
-    def record_source(self, record: SkorowidzRecord) -> dict:
+    def record_source(self, record: SkorowidzRecord) -> dict[str, Any]:
         """Record metadata (``to_source``) with the endpoint and ``source_extra``."""
         query = self._skorowidz_query(SheetParser(record.sheet))
         source = record.to_source(query.endpoint or "")
@@ -767,9 +781,11 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         )
 
     def record_length(self, record: SkorowidzRecord) -> int | None:
-        """``Content-Length`` of the record file from ``HEAD``; ``None`` when
-        the server gives none or the request fails (the download that follows
-        reports its own failure)."""
+        """Return the ``Content-Length`` of the record file from ``HEAD``.
+
+        ``None`` when the server gives none or the request fails (the download that
+        follows reports its own failure).
+        """
         try:
             signal = head_signal(
                 self._sessions.get(),
@@ -781,7 +797,8 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         except DownloadError as e:
             logger.debug("HEAD %s: %s", record.url, e)
             return None
-        return signal["content_length"]
+        length: int | None = signal["content_length"]
+        return length
 
     def __init__(self) -> None:
         super().__init__()

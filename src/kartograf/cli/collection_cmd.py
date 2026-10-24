@@ -1,6 +1,7 @@
-"""
-``download`` of the collection groups (``boundaries``, ``cadastre``,
-``models3d``, ``hydro``, ``names``, ``maps``, ``geodesy``): flags ->
+"""``download`` of the collection groups.
+
+The groups are ``boundaries``, ``cadastre``, ``models3d``, ``hydro``, ``names``,
+``maps`` and ``geodesy``: flags ->
 ``download_collection``/``check_collection`` (ADR-037, ADR-042 D9).
 
 The CLI only translates: ``library_arguments`` turns the flags of a group into
@@ -40,9 +41,11 @@ from kartograf.download.fetch import UpdateMode
 
 
 def cmd_collection_download(args: argparse.Namespace, group: str) -> int:
-    """``<group> download``: the group's ``--product`` (a missing one names
-    only the group's products), then the plan file cycle around one
-    ``download_collection``/``check_collection`` call."""
+    """Run ``<group> download``.
+
+    The group's ``--product`` (a missing one names only the group's products), then the
+    plan file cycle around one ``download_collection``/``check_collection`` call.
+    """
     require_collection_product(args.product, group)
     return run_with_plan_file(args, _collection_download)
 
@@ -72,11 +75,13 @@ def _collection_download(args: argparse.Namespace) -> int:
 def _print_collection(
     args: argparse.Namespace,
     report: CollectionReport,
-    on_progress,
+    on_progress: object,
     update: UpdateMode | None,
 ) -> int:
-    """Status lines, summary, failures and stale positions of a collection
-    report; the exit code."""
+    """Print status lines, summary, failures and stale positions of a report.
+
+    It returns the exit code.
+    """
     _end_progress(on_progress)
     output = Path(args.output)
     if not args.quiet:

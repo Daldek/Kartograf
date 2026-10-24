@@ -39,15 +39,18 @@ import time
 import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
 import requests
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.sources.edition import Edition, edition_label
+
+if TYPE_CHECKING:
+    from kartograf.auth import AuthProxyClient
 from kartograf.transform.bbox import envelope_from_2180
 from kartograf.transport.http import (
     MAX_RETRIES,
@@ -63,8 +66,9 @@ _WMS = "{http://www.opengis.net/wms}"
 
 
 def _raster_layer_name(content: bytes, year: int, *, what: str) -> str:
-    """The name of the raster layer of the CLC ``year`` in a WMS 1.3.0
-    GetCapabilities of the EEA service of that year.
+    """Return the raster layer name of the CLC ``year`` from a WMS capabilities.
+
+    Read from a WMS 1.3.0 GetCapabilities of the EEA service of that year.
 
     The layer is found by its title ``Corine Land Cover <year> raster``: its
     NAME differs per year (``12`` in CLC2018, ``Corine_Land_Cover_2012_raster59601``
@@ -97,10 +101,12 @@ def _raster_layer_name(content: bytes, year: int, *, what: str) -> str:
 
 
 def _is_blank(path: Path) -> bool:
-    """Whether the preview image at ``path`` has no visible pixel: every pixel
-    transparent (alpha 0, or the transparent colour of a palette) - the WMS
-    answered an area without data. An unreadable file is not blank (it is the
-    answer as it came, never rejected on a guess)."""
+    """Check whether the preview image at ``path`` has no visible pixel.
+
+    Every pixel is transparent (alpha 0, or the transparent colour of a palette) - the
+    WMS answered an area without data. An unreadable file is not blank (it is the
+    answer as it came, never rejected on a guess).
+    """
     import rasterio
     from rasterio.errors import NotGeoreferencedWarning, RasterioError
 
@@ -119,10 +125,10 @@ def _is_blank(path: Path) -> bool:
 
 
 # Lazy import to avoid circular dependency
-_auth_proxy_client = None
+_auth_proxy_client: "AuthProxyClient | None" = None
 
 
-def _get_auth_proxy():
+def _get_auth_proxy() -> "AuthProxyClient":
     """Get singleton AuthProxyClient instance."""
     global _auth_proxy_client
     if _auth_proxy_client is None:
@@ -139,7 +145,7 @@ class CLMSAuth:
     Uses RSA private key to generate JWT and exchange for access token.
     """
 
-    def __init__(self, credentials: dict):
+    def __init__(self, credentials: dict[str, Any]):
         """
         Initialize CLMS auth handler.
 
@@ -227,7 +233,7 @@ class CLMSAuth:
             response.raise_for_status()
             result = response.json()
 
-            access_token = result.get("access_token")
+            access_token: str | None = result.get("access_token")
             if not access_token:
                 raise DownloadError(f"Brak access_token w odpowiedzi: {result}")
 
@@ -379,15 +385,17 @@ class CorineProvider(LandCoverProvider):
         return "https://land.copernicus.eu/en/products/corine-land-cover"
 
     def uses_clms(self, year: int) -> bool:
-        """True when ``year`` is downloaded as CLMS data (else a WMS preview)."""
+        """Check whether ``year`` is downloaded as CLMS data (else a WMS preview)."""
         return year in self.CLMS_YEARS and self.has_clms_token
 
     @property
     def clms_credentials_problem(self) -> str | None:
-        """Why ``CLMS_CREDENTIALS`` of the environment cannot be used (a text
-        of the auth proxy - the one process that reads it), else ``None``:
-        the variable is not set, credentials were given to the provider or
-        the proxy is not used."""
+        """Return why ``CLMS_CREDENTIALS`` cannot be used, else ``None``.
+
+        The problem is a text of the auth proxy - the one process that reads the
+        environment variable. ``None``: the variable is not set, credentials were
+        given to the provider or the proxy is not used.
+        """
         if (
             self._clms_auth is not None
             or not self._use_proxy
@@ -522,13 +530,14 @@ class CorineProvider(LandCoverProvider):
         return self._download_via_wms(bbox, output_path, year, timeout)
 
     def _eea_endpoint(self, year: int) -> str:
-        """The WMS service of the EEA for the CLC ``year``."""
+        """Return the WMS service URL of the EEA for the CLC ``year``."""
         return f"{self.EEA_WMS_BASE}/CLC{year}_WM/MapServer/WMSServer"
 
     def _eea_raster_layer(self, year: int, timeout: int) -> str:
-        """The name of the raster layer of the EEA WMS of ``year``, read from the
-        GetCapabilities of that service (once per provider: the names carry
-        numbers that change when EEA republishes a service).
+        """Return the raster layer name of the EEA WMS of ``year``.
+
+        Read from the GetCapabilities of that service (once per provider: the names
+        carry numbers that change when EEA republishes a service).
 
         Raises
         ------
@@ -698,7 +707,7 @@ class CorineProvider(LandCoverProvider):
 
     def _download_via_clms_proxy(
         self,
-        request_data: dict,
+        request_data: dict[str, Any],
         output_path: Path,
         year: int,
         timeout: int,
@@ -751,7 +760,7 @@ class CorineProvider(LandCoverProvider):
 
     def _poll_clms_task_proxy(
         self,
-        proxy,
+        proxy: "AuthProxyClient",
         task_id: str,
         timeout: int,
     ) -> str:
@@ -774,7 +783,7 @@ class CorineProvider(LandCoverProvider):
 
             status = task_info.get("Status", "")
             if status == "Finished":
-                download_url = task_info.get("DownloadURL")
+                download_url: str | None = task_info.get("DownloadURL")
                 if download_url:
                     return download_url
                 raise DownloadError("Zadanie CLMS zakonczone bez DownloadURL")
@@ -793,7 +802,7 @@ class CorineProvider(LandCoverProvider):
 
     def _download_via_clms_direct(
         self,
-        request_data: dict,
+        request_data: dict[str, Any],
         output_path: Path,
         year: int,
         timeout: int,
@@ -858,7 +867,7 @@ class CorineProvider(LandCoverProvider):
     def _poll_clms_task(
         self,
         session: requests.Session,
-        headers: dict,
+        headers: dict[str, Any],
         task_id: str,
         timeout: int,
     ) -> str:
@@ -885,7 +894,7 @@ class CorineProvider(LandCoverProvider):
 
                 status = task_info.get("Status", "")
                 if status == "Finished":
-                    download_url = task_info.get("DownloadURL")
+                    download_url: str | None = task_info.get("DownloadURL")
                     if download_url:
                         return download_url
                     raise DownloadError("Zadanie CLMS zakonczone bez DownloadURL")

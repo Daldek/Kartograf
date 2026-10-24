@@ -223,10 +223,13 @@ class ProductVariant:
 
     @property
     def source_file(self) -> bool:
-        """An archive of the sheet index (``--format`` required): the file is
-        kept as published (no cutout, no mosaic). A variant without a sheet
-        index (ATOM voivodeship files) has one format - its product format -
-        even when it is an archive format of the index (XYZ ZIP)."""
+        """Check whether the variant is an archive of the sheet index.
+
+        An archive of the sheet index (``--format`` required): the file is kept as
+        published (no cutout, no mosaic). A variant without a sheet index (ATOM
+        voivodeship files) has one format - its product format - even when it is an
+        archive format of the index (XYZ ZIP).
+        """
         known = _BY_TOKEN.get(self.format)
         return known is not None and known.source_file and self.index_ref is not None
 
@@ -259,7 +262,7 @@ def parse_resolution(label: str) -> Decimal | None:
 
 
 def file_format(token: str) -> FileFormat:
-    """The ``FileFormat`` of a token (``KeyError`` for an unknown one)."""
+    """Return the ``FileFormat`` of a token (``KeyError`` for an unknown one)."""
     return _BY_TOKEN[token]
 
 
@@ -288,7 +291,7 @@ def variants(
     format: str | None = None,
     model: str | None = None,
 ) -> tuple[ProductVariant, ...]:
-    """Registered variants matching every given filter (registry order).
+    """Return the registered variants matching every given filter.
 
     ``resolution`` compares the label K2 (``"0.5m"``), ``system`` looks into
     ``ProductVariant.systems``, ``format`` compares the token (``"ASC"``),
@@ -321,15 +324,20 @@ def _system_name(vertical_crs: str | None) -> str:
 
 
 def _named_systems(found: tuple[ProductVariant, ...]) -> list[str]:
-    """Height systems of the variants a ``--vertical-crs`` can name, sorted
-    (a variant without one takes no flag)."""
+    """Return the sorted height systems a ``--vertical-crs`` can name.
+
+    Height systems of the variants a ``--vertical-crs`` can name, sorted (a variant
+    without one takes no flag).
+    """
     return sorted({v.vertical_crs for v in found if v.vertical_crs is not None})
 
 
 def labels_by_vertical_crs(found: tuple[ProductVariant, ...]) -> str:
-    """``EVRF2007: 0.5m, 1m; KRON86: 1m`` - labels of the variants per height
-    system (registry order of the systems; variants without one under
-    ``UNKNOWN_VERTICAL``)."""
+    """Format the variant labels per height system.
+
+    ``EVRF2007: 0.5m, 1m; KRON86: 1m`` - labels of the variants per height system
+    (registry order of the systems; variants without one under ``UNKNOWN_VERTICAL``).
+    """
     groups: dict[str | None, list[ProductVariant]] = {}
     for variant in found:
         groups.setdefault(variant.vertical_crs, []).append(variant)
@@ -362,7 +370,7 @@ def variant_error(
     vertical_crs: str | None,
     format: str | None = None,
 ) -> ValidationError | None:
-    """The error of a variant choice (``None`` = the choice fits a variant).
+    """Return the error of a variant choice (``None`` = the choice fits a variant).
 
     ``format=None`` = the product format (PL: ``ASC`` grids); a source-file
     format must be named (``--format``). ``resolution=None`` is valid when
@@ -463,7 +471,7 @@ def find_variant(
     vertical_crs: str | None,
     format: str | None = None,
 ) -> ProductVariant:
-    """The one variant of a choice; the ``variant_error`` of the choice is raised.
+    """Return the one variant of a choice, or raise its ``variant_error``.
 
     ``resolution=None`` selects the only variant of the format and height
     system (``GRD``: 5m, ``TIN``: none); ``format=None`` = product format;
@@ -547,7 +555,7 @@ def cz_resolution_text(product: str) -> str:
 
 
 def cz_models() -> tuple[str, ...]:
-    """The models of LAZ CZ (``--model``), registry order."""
+    """Return the models of LAZ CZ (``--model``) in registry order."""
     return tuple(
         dict.fromkeys(
             v.model
@@ -569,7 +577,7 @@ def cz_variant_error(
     vertical_crs: str | None,
     system: str | None = None,
 ) -> ValidationError | None:
-    """The error of a CZ raster choice (``None`` = the choice has a variant).
+    """Return the error of a CZ raster choice (``None`` = it has a variant).
 
     ``system``: ``"sm5"``/``"tm33"`` of a sheet code, ``None`` for an area
     (a cutout of the ImageServer: any label of the product). An SM5 sheet
@@ -633,7 +641,7 @@ def find_cz_variant(
     vertical_crs: str,
     system: str,
 ) -> ProductVariant:
-    """The row of the route table of a CZ raster sheet (decision 2 of plan B).
+    """Return the route table row of a CZ raster sheet (decision 2 of plan B).
 
     ``resolution=None`` selects the only SM5 label of the product.
 
@@ -662,7 +670,7 @@ def find_cz_variant(
 def cz_laz_error(
     *, model: str | None, vertical_crs: str | None, system: str | None = None
 ) -> ValidationError | None:
-    """The error of a LAZ CZ choice (``None`` = the choice has a variant).
+    """Return the error of a LAZ CZ choice (``None`` = the choice has a variant).
 
     ``system``: ``"sm5"``/``"tm33"`` of a sheet code, ``None`` for an area
     (the height system decides the files). The files exist only in the pairs
@@ -711,7 +719,7 @@ def cz_laz_error(
 def find_cz_laz_variant(
     *, model: str | None, vertical_crs: str, system: str | None = None
 ) -> ProductVariant:
-    """The LAZ CZ row of a model and height system (``system``: of a sheet code).
+    """Return the LAZ CZ row of a model and height system.
 
     Raises
     ------

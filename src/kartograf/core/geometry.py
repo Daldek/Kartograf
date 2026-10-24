@@ -330,7 +330,10 @@ class LayerChoice:
 def _gpkg_layer_choice(
     conn: sqlite3.Connection, filepath: Path, layer: str | None
 ) -> LayerChoice:
-    """Validated GPKG layer choice (first feature table by default), no logging."""
+    """Return the validated GPKG layer choice (first feature table by default).
+
+    Does no logging.
+    """
     tables = tuple(_get_gpkg_feature_tables(conn))
     if not tables:
         raise ValidationError(f"Brak tabel obiektow w GeoPackage: {filepath}")

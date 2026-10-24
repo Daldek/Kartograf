@@ -16,8 +16,8 @@ from typing import Any
 import requests
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import BBox
 from kartograf.core.parser_tm33 import ParserTM33
-from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.cuzk.client import CuzkClient, wkid
@@ -88,14 +88,17 @@ class CuzkLazProvider(BaseProvider):
 
     @property
     def name(self) -> str:
+        """Return the provider name."""
         return f"CUZK LAZ ({self._source_name})"
 
     @property
     def base_url(self) -> str:
+        """Return the endpoint of the LAZ service."""
         return self._endpoint
 
     @property
     def default_extension(self) -> str:
+        """Return the default extension of the downloaded files."""
         return ".laz"
 
     @property
@@ -137,7 +140,7 @@ class CuzkLazProvider(BaseProvider):
         return self.sheet_index.file_sheets(self._system, area)
 
     def file_url(self, sheet: str) -> str:
-        """openzu ZIP of a sheet code of this provider's system.
+        """Openzu ZIP of a sheet code of this provider's system.
 
         Raises
         ------

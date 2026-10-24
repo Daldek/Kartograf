@@ -1,6 +1,6 @@
-"""
-CuzkRasterProvider - CUZK rasters: NMT (DMR 5G 2 m, DMR 4G 5 m) and NMPT (DMP 1G
-2 m, DMP OK 0.5 m).
+"""CuzkRasterProvider - CUZK rasters: NMT and NMPT.
+
+NMT: DMR 5G 2 m, DMR 4G 5 m; NMPT: DMP 1G 2 m, DMP OK 0.5 m.
 
 The route of a request is a row of the variant registry (ADR-041 supplement,
 plan B decision 2): an SM5 sheet = the S-JTSK file (openzu, EPSG:5514, Bpv),
@@ -119,8 +119,9 @@ _CHUNK_PIXELS = 4_000_000
 
 @dataclasses.dataclass(frozen=True)
 class CzRasterRoute:
-    """How one CZ raster request is served: a row of the route table (plan B,
-    decision 2) with the operations it performs.
+    """Describe how one CZ raster request is served: a row of the route table.
+
+    A row of the route table (plan B, decision 2) with the operations it performs.
 
     ``channel``: the CUZK file of the sheet system (``DIRECT_FILES``) or the
     ImageServer (``ARCGIS_IMAGE``); ``horizontal_crs``: the CRS of the result
@@ -147,8 +148,11 @@ class CzRasterRoute:
 
 
 class CuzkRasterProvider(BaseProvider):
-    """CZ raster of one product and resolution: ``nmt`` 2m (DMR 5G) / 5m (DMR
-    4G), ``nmpt`` 0.5m (DMP OK) / 2m (DMP 1G); Bpv or EVRF2007 heights."""
+    """Provide a CZ raster of one product and resolution.
+
+    ``nmt`` 2m (DMR 5G) / 5m (DMR 4G), ``nmpt`` 0.5m (DMP OK) / 2m (DMP 1G);
+    Bpv or EVRF2007 heights.
+    """
 
     def __init__(
         self,
@@ -211,14 +215,17 @@ class CuzkRasterProvider(BaseProvider):
 
     @property
     def name(self) -> str:
+        """Return the provider name."""
         return f"CUZK {self._model} ({self._resolution})"
 
     @property
     def base_url(self) -> str:
+        """Return the endpoint of the ImageServer."""
         return self._image.endpoint
 
     @property
     def default_extension(self) -> str:
+        """Return the default extension of the downloaded files."""
         return ".tif"
 
     @property
@@ -228,6 +235,7 @@ class CuzkRasterProvider(BaseProvider):
 
     @property
     def resolution(self) -> str:
+        """Return the resolution of the product."""
         return self._resolution
 
     @property
@@ -241,8 +249,10 @@ class CuzkRasterProvider(BaseProvider):
         return self._sheet_index
 
     def horizontal_transform(self, target_crs: str) -> PinnedTransform | None:
-        """Pinned ``EPSG:5514 -> target_crs`` operation used to reproject the
-        raster CONTENT; ``None`` when the result stays in the native CRS.
+        """Return the pinned ``EPSG:5514 -> target_crs`` operation of the raster.
+
+        It reprojects the raster CONTENT; ``None`` when the result stays in the
+        native CRS.
 
         The same instance as used during download (``_transforms`` cache), so
         the description and accuracy in the sidecar describe the operation
@@ -255,8 +265,10 @@ class CuzkRasterProvider(BaseProvider):
         )
 
     def route(self, sheet: str | None = None) -> CzRasterRoute:
-        """The route of a sheet code (``None``: a bbox cutout), decision 2 of
-        plan B: the channel, the CRS of the result and its pinned operations.
+        """Return the route of a sheet code (``None``: a bbox cutout).
+
+        Decision 2 of plan B: the channel, the CRS of the result and its pinned
+        operations.
 
         A sheet is validated (CZ system, the variant of the product and
         resolution, the TM33 grid) and every operation of the route is built
@@ -308,8 +320,10 @@ class CuzkRasterProvider(BaseProvider):
         )
 
     def _vertical_for(self, channel: AccessChannel) -> PinnedTransform | None:
-        """Pinned operation from the native heights of ``channel`` to the
-        requested ones; ``None`` when the channel serves them natively."""
+        """Return the pinned operation from the native heights to the requested ones.
+
+        For ``channel``; ``None`` when the channel serves them natively.
+        """
         options = channel.vertical_crs_options
         requested = resolve_vertical_crs(self._vertical_crs, options)
         if requested in options:
@@ -366,7 +380,9 @@ class CuzkRasterProvider(BaseProvider):
         *,
         on_download: Callable[[], None] | None = None,
     ) -> Path:
-        """A single cutout for any bbox (other CRS than EPSG:5514 => local warp).
+        """Produce a single cutout for any bbox.
+
+        Another CRS than EPSG:5514 => local warp.
 
         ``on_download``: called once right before the first ``exportImage``
         request, after format and CRS validation (see :meth:`download`).
@@ -471,7 +487,7 @@ class CuzkRasterProvider(BaseProvider):
         )
 
     def file_url(self, sheet: str) -> str:
-        """openzu URL of the CUZK file of a sheet (its route is a file).
+        """Openzu URL of the CUZK file of a sheet (its route is a file).
 
         Raises
         ------
@@ -491,8 +507,10 @@ class CuzkRasterProvider(BaseProvider):
     def file_signal(
         self, sheet: str, timeout: int = _DEFAULT_TIMEOUT
     ) -> dict[str, Any]:
-        """Current HTTP signal of the CUZK file of a sheet (``HEAD``), without
-        downloading it."""
+        """Return the current HTTP signal of the CUZK file of a sheet (``HEAD``).
+
+        The file is not downloaded.
+        """
         return head_signal(self._session, self.file_url(sheet), timeout=timeout)
 
     def _download_file(
@@ -504,8 +522,10 @@ class CuzkRasterProvider(BaseProvider):
         on_download: Callable[[], None] | None = None,
         on_response: Callable[[requests.Response], None] | None = None,
     ) -> None:
-        """A CUZK sheet file from openzu (ZIP: ``.tif`` + ``.tfw``) + the CRS
-        of its channel written into the GeoTIFF (metadata repair)."""
+        """Fetch a CUZK sheet file from openzu (ZIP: ``.tif`` + ``.tfw``).
+
+        The CRS of its channel is written into the GeoTIFF (metadata repair).
+        """
         url = channel.endpoint.format(sheet=sheet)
         if channel.horizontal_crs == CZ_SYSTEM_CRS["sm5"]:
             self._sheet_index.sm5_sheet(sheet)  # validation before download
@@ -682,7 +702,9 @@ def _center_of(bbox: BBox) -> tuple[float, float]:
 
 
 def _assign_crs(path: Path, crs: str) -> None:
-    """Repair the metadata of a CUZK TIFF file: write the CRS of its channel
+    """Repair the metadata of a CUZK TIFF file.
+
+    Write the CRS of its channel
     (georeferencing is in .tfw; SM5 EPSG:5514, ETRS89 tiles EPSG:3045).
 
     Mirror of `_overwrite_crs` in client.py: the whole body in try/except,

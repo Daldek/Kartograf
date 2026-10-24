@@ -1,7 +1,9 @@
-"""``kartograf imagery``: GUGiK images - orthophotomap (sheets and WCS cutout),
-intensity images, true orthophotomap (sheets and WCS cutout), oblique
-orthophotomap (PL) - and CUZK SM5 orthophoto sheets (CZ) (ADR-039, ADR-042
-D13, D14, plan E1)."""
+"""Declare ``kartograf imagery``.
+
+GUGiK images - orthophotomap (sheets and WCS cutout), intensity images, true
+orthophotomap (sheets and WCS cutout), oblique orthophotomap (PL) - and CUZK SM5
+orthophoto sheets (CZ) (ADR-039, ADR-042 D13, D14, plan E1).
+"""
 
 from dataclasses import replace
 
@@ -50,13 +52,13 @@ def _products() -> list[tuple[str, str]]:
 
 
 def _directions() -> list[str]:
-    """The view directions of the image products (the oblique orthophotomap)."""
+    """Return the view directions of the image products (the oblique orthophotomap)."""
     found = (d for product in IMAGERY_PRODUCTS for d in image_directions(product))
     return list(dict.fromkeys(found))
 
 
 def _coverages() -> list[str]:
-    """The WCS variants of the orthophotomap cutout (``standard``, ``high``)."""
+    """Return the WCS variants of the orthophotomap cutout (``standard``, ``high``)."""
     return [
         channel.params.variant
         for channel in wcs_cutout_channels(ORTO_KEY)
@@ -65,7 +67,7 @@ def _coverages() -> list[str]:
 
 
 def _cutout_resolutions() -> list[str]:
-    """The pixels of every WCS cutout channel of the image products."""
+    """Return the pixels of every WCS cutout channel of the image products."""
     labels: list[str] = []
     for product in IMAGERY_PRODUCTS:
         source = image_source(product)
@@ -77,7 +79,10 @@ def _cutout_resolutions() -> list[str]:
 
 
 def _sheet_systems() -> list[str]:
-    """The PL sheet systems the registry has variants for (``--sheet-system``)."""
+    """Return the PL sheet systems the registry has variants for.
+
+    They are the values of ``--sheet-system``.
+    """
     found = variants(country="PL")
     return sorted({system for v in found for system in v.systems})
 

@@ -1,5 +1,8 @@
-"""``kartograf landcover``: BDOT10k and BDOO (GUGiK), CORINE Land Cover,
-ZABAGED, Data50 and Data250 (CUZK) (ADR-039, ADR-042 D15, ADR-043)."""
+"""Declare ``kartograf landcover``.
+
+BDOT10k and BDOO (GUGiK), CORINE Land Cover, ZABAGED, Data50 and Data250 (CUZK)
+(ADR-039, ADR-042 D15, ADR-043).
+"""
 
 from dataclasses import replace
 
@@ -41,7 +44,7 @@ def _products() -> list[tuple[str, str]]:
 
 
 def _formats() -> list[str]:
-    """The BDOT10k formats: the current packages and the yearly archive."""
+    """Return the BDOT10k formats: the current packages and the yearly archive."""
     archive = (
         dict(variant.choice)["format"]
         for channel in get_source(_BDOT10K).channels
@@ -52,9 +55,11 @@ def _formats() -> list[str]:
 
 
 def _national_file_crs() -> list[str]:
-    """``--horizontal-crs`` values: the CRSs in which the national files of the
-    land cover sources on the collection engines are published (the ATOM
-    channels of the registry)."""
+    """Return the ``--horizontal-crs`` values.
+
+    The CRSs in which the national files of the land cover sources on the collection
+    engines are published (the ATOM channels of the registry).
+    """
     return list(
         dict.fromkeys(
             crs

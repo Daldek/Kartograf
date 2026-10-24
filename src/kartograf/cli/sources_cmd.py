@@ -26,8 +26,10 @@ _NOTE = (
 
 
 def _collapse(values: Sequence[str | int]) -> list[str]:
-    """Consecutive ascending whole numbers as ``a-b`` (``2021, 2022, 2023`` ->
-    ``2021-2023``); other values as they are."""
+    """Collapse consecutive ascending whole numbers into ``a-b``.
+
+    ``2021, 2022, 2023`` becomes ``2021-2023``; other values stay as they are.
+    """
     runs: list[list[str | int]] = []
     for value in values:
         last = runs[-1][-1] if runs else None
@@ -39,8 +41,11 @@ def _collapse(values: Sequence[str | int]) -> list[str]:
 
 
 def _metavars(group: str) -> dict[str, str]:
-    """The placeholders of the flags of ``<group> download`` (``--property
-    WLASCIWOSC``): what ``list-sources`` writes for a value the caller chooses."""
+    """Return the placeholders of the flags of ``<group> download``.
+
+    A placeholder is like ``--property WLASCIWOSC``: what ``list-sources`` writes for a
+    value the caller chooses.
+    """
     for command in declared().commands:
         if command.id == f"{group} download":
             return {p.name: p.metavar for p in command.params if p.metavar}
@@ -48,7 +53,7 @@ def _metavars(group: str) -> dict[str, str]:
 
 
 def _choice(select: dict[str, SelectValue], metavars: dict[str, str]) -> str:
-    """The options of ``select`` as the flags that choose the source."""
+    """Return the options of ``select`` as the flags that choose the source."""
     parts = []
     for option, value in select.items():
         if value is None:
@@ -62,8 +67,7 @@ def _choice(select: dict[str, SelectValue], metavars: dict[str, str]) -> str:
 
 
 def cmd_list_sources(args: argparse.Namespace, group: str) -> int:
-    """Print the sources of ``group`` (``--json``: the document of
-    ``list_sources``)."""
+    """Print the sources of ``group`` (``--json``: the document of ``list_sources``)."""
     sources = list_sources(group=group)
     if wants_json(args):
         return emit_document(sources)

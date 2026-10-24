@@ -10,10 +10,11 @@ import pytest
 from kartograf import download_landcover
 from kartograf.exceptions import ValidationError
 from kartograf.notices import CLASSES_ABSENT, UNIT_LIST, WHOLE_COUNTRY_SIZE
-from tests.integration.test_bdoo import BORDER, TRIMMED, route, serve
+from tests.integration.test_bdoo import TRIMMED, route, serve
 from tests.integration.test_collections_cz import _page_size
 from tests.integration.test_cz_data50_250 import AREA, DATA50, DATA250, NATIONAL
 from tests.integration.test_cz_data50_250 import serve as serve_cuzk
+from tests.integration.test_nmt_100m import BORDER
 from tests.support.fake_packages import zip_bytes
 from tests.support.parity import assert_notices_printed, assert_same_store, run_both
 

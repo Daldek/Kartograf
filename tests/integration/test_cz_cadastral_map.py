@@ -124,9 +124,13 @@ def test_cz_cadastral_map_area_ku_discovery_and_etag(tmp_path, router):
         serve_package(router, f"cz_km_shp_{code}", [f"{code}/{m}" for m in SHP_MEMBERS])
         for code in AREA_KU
     ]
-    request = dict(
-        product="map", country="cz", bbox=AREA, format="SHP", output_dir=tmp_path
-    )
+    request = {
+        "product": "map",
+        "country": "cz",
+        "bbox": AREA,
+        "format": "SHP",
+        "output_dir": tmp_path,
+    }
 
     first = download_collection(**request, cache=False)
 

@@ -1,5 +1,6 @@
-"""``landcover download`` (ADR-037, ADR-044); ``landcover list-layers`` is in
-``layers_cmd``.
+"""``landcover download`` (ADR-037, ADR-044).
+
+``landcover list-layers`` is in ``layers_cmd``.
 
 The CLI translates flags to ``download_landcover`` / ``check_landcover``.
 """
@@ -69,11 +70,13 @@ def _landcover_task(args: argparse.Namespace) -> int:
 def _print_landcover(
     args: argparse.Namespace,
     result: LandCoverReport,
-    on_progress,
+    on_progress: object,
     update: UpdateMode | None,
 ) -> int:
-    """A status line per file, the errors per unit and the summary of a land cover
-    report; the exit code."""
+    """Print a status line per file, the errors per unit and the summary.
+
+    It is for a land cover report and returns the exit code.
+    """
     _end_progress(on_progress)
     out = Path(args.output)
     statuses = []

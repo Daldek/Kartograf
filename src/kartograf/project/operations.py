@@ -17,6 +17,7 @@ import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 from kartograf import _clock
 from kartograf._version import build_version
@@ -60,8 +61,11 @@ _GEOMETRY_PARTS = (".shp", ".shx", ".dbf", ".prj")
 
 
 def _saved_path(path: str | Path, project_dir: Path) -> str:
-    """A path as written in the manifest (spec 3.2): given relatively - relative
-    to the project directory; given absolutely - absolute; always ``/``."""
+    """Return a path as written in the manifest (spec 3.2).
+
+    Given relatively - relative to the project directory; given absolutely - absolute;
+    always ``/``.
+    """
     given = Path(path)
     if given.is_absolute():
         return given.as_posix()
@@ -166,9 +170,11 @@ def add_project_task(
     command: str,
     options: Mapping[str, object],
 ) -> Project:
-    """Add a task: a data command (``"elevation download"``, ...) with its
-    ``options`` - the library arguments of that command without
-    ``output_dir`` (``BBox``, ``Path``, per-country mappings, sequences).
+    """Add a task: a data command with its ``options``.
+
+    The command is e.g. ``"elevation download"``; ``options`` are the library arguments
+    of that command without ``output_dir`` (``BBox``, ``Path``, per-country mappings,
+    sequences).
 
     The choice is checked without network by the checks the command's
     download function runs before its first request (the same error as the
@@ -210,8 +216,10 @@ def add_project_task(
 
 
 def remove_project_task(project_dir: str | Path, *, name: str) -> Project:
-    """Remove a task with its pins; the store files stay (other projects may
-    pin them; Kartograf never deletes store versions).
+    """Remove a task with its pins.
+
+    The store files stay (other projects may pin them; Kartograf never deletes store
+    versions).
 
     Raises
     ------
@@ -237,7 +245,7 @@ class _NotPinnable(Exception):
 
 
 def _error_text(error: Exception) -> str:
-    """The text of a library error with the remedy of a ``TransformError``."""
+    """Return the text of a library error with the remedy of a ``TransformError``."""
     remedy = getattr(error, "remedy", None)
     return f"{error}" + (f" Remedium: {remedy}" if remedy else "")
 
@@ -252,8 +260,11 @@ def _prefixed(sink: NoticeSink, task: str) -> Callable[[Notice], None]:
 
 
 def pin_state(store: Path, pin: PinnedFile) -> PinStatus:
-    """``ok``, ``missing`` (no version file or sidecar) or ``corrupt`` (another
-    size) of a pinned version - ``stat`` only, no data read (spec 4.9)."""
+    """Classify a pinned version as ``ok``, ``missing`` or ``corrupt``.
+
+    ``missing`` = no version file or sidecar, ``corrupt`` = another size; ``stat`` only,
+    no data read (spec 4.9).
+    """
     data = store / pin.version
     try:
         size = data.stat().st_size
@@ -265,7 +276,7 @@ def pin_state(store: Path, pin: PinnedFile) -> PinStatus:
 
 
 def _geometry_files(path: Path) -> list[Path]:
-    """The files of a geometry: a GPKG, or the present parts of a shapefile."""
+    """Return the files of a geometry: a GPKG, or the present parts of a shapefile."""
     if path.suffix.lower() == ".shp":
         return sorted(
             part
@@ -278,8 +289,10 @@ def _geometry_files(path: Path) -> list[Path]:
 
 
 def geometry_digest(options: Mapping[str, object]) -> dict[str, str] | None:
-    """``{file name: sha256}`` of the task's geometry files; ``None`` without
-    ``geometry`` in the (library) options or when the file is missing."""
+    """Return ``{file name: sha256}`` of the task's geometry files.
+
+    ``None`` without ``geometry`` in the (library) options or when the file is missing.
+    """
     geometry = options.get("geometry")
     if not isinstance(geometry, Path):
         return None
@@ -288,7 +301,7 @@ def geometry_digest(options: Mapping[str, object]) -> dict[str, str] | None:
 
 
 def _pin(store: Path, role: PinRole, unit: str, file: VersionedFile) -> PinnedFile:
-    """The pin of one result file (decision 6 of the plan)."""
+    """Return the pin of one result file (decision 6 of the plan)."""
     try:
         path = file.path.relative_to(store).as_posix()
         version = file.version_path.relative_to(store).as_posix()
@@ -317,8 +330,10 @@ def _pin(store: Path, role: PinRole, unit: str, file: VersionedFile) -> PinnedFi
 
 
 def _pins(store: Path, files: TaskFiles) -> tuple[list[PinnedFile], list[str]]:
-    """Pins of a result in result order without repeated versions, and the
-    files that cannot be pinned."""
+    """Return the pins of a result in result order without repeated versions.
+
+    The files that cannot be pinned are returned too.
+    """
     pins: list[PinnedFile] = []
     errors: list[str] = []
     seen: set[str] = set()
@@ -338,7 +353,7 @@ def _failed(task: ProjectTask, errors: Sequence[str]) -> TaskResult:
     return TaskResult(task.name, "failed", (), (), tuple(errors))
 
 
-def _commit(project: Project, before: dict, task: ProjectTask) -> str | None:
+def _commit(project: Project, before: dict[str, Any], task: ProjectTask) -> str | None:
     """Write one task; the error text when it could not be written."""
     try:
         conflicts = commit_tasks(
@@ -421,7 +436,7 @@ def download_project(
 def _download_task(
     project: Project,
     task: ProjectTask,
-    before: dict,
+    before: dict[str, Any],
     update: UpdateMode | None,
     workers: int | None,
     cache: MetadataCache | bool,
@@ -530,8 +545,10 @@ def _download_task(
 
 
 def _repair_advice(project: Project, task: str) -> str:
-    """The ways back from a corrupt pinned version: the copy of the store or
-    ``--force`` (``_set_aside_corrupt``)."""
+    """Return the ways back from a corrupt pinned version.
+
+    They are the copy of the store or ``--force`` (``_set_aside_corrupt``).
+    """
     return (
         "przywroc katalog wersji z kopii magazynu albo uruchom "
         f"{project_command(project.directory, 'download', '--force', task)} "
@@ -547,10 +564,11 @@ def _corrupt_text(project: Project, task: str, pin: PinnedFile) -> str:
 
 
 def _set_aside_corrupt(project: Project, task: ProjectTask) -> tuple[PinnedFile, ...]:
-    """The repair of ``--force``: the pinned versions that ``verify`` calls
-    corrupt are set aside (``_set_aside``) before the download, so it makes them
-    again; the pins that return with the same bytes keep their version path and
-    label (``_repin_repaired``).
+    """Run the repair of ``--force``.
+
+    The pinned versions that ``verify`` calls corrupt are set aside (``_set_aside``)
+    before the download, so it makes them again; the pins that return with the same
+    bytes keep their version path and label (``_repin_repaired``).
 
     Raises
     ------
@@ -569,11 +587,12 @@ def _set_aside_corrupt(project: Project, task: ProjectTask) -> tuple[PinnedFile,
 
 
 def _set_aside(store: Path, pin: PinnedFile) -> None:
-    """Move the data file and the sidecar of a pinned version into the hidden
-    directory ``.<label>_<sha8>.corrupt-<time>`` next to it: Kartograf never
-    deletes a version, and a hidden directory is none for ``list_versions``
-    and ``iter_store``. The standard path (a hardlink of the same bytes) is
-    linked anew by the download.
+    """Move the data file and the sidecar of a pinned version aside.
+
+    They go into the hidden directory ``.<label>_<sha8>.corrupt-<time>`` next to it:
+    Kartograf never deletes a version, and a hidden directory is none for
+    ``list_versions`` and ``iter_store``. The standard path (a hardlink of the same
+    bytes) is linked anew by the download.
 
     Raises
     ------
@@ -618,9 +637,12 @@ def _set_aside(store: Path, pin: PinnedFile) -> None:
 def _repin_repaired(
     store: Path, repaired: tuple[PinnedFile, ...], pins: list[PinnedFile]
 ) -> list[str]:
-    """The pinned version directory of a repaired pin back when the download gave
-    its bytes under another version (``_repin_version``); the errors of that.
-    Other bytes (the source changed) are no repair: ``--force`` re-pins them."""
+    """Put the pinned version directory of a repaired pin back and return the errors.
+
+    This applies when the download gave its bytes under another version
+    (``_repin_version``). Other bytes (the source changed) are no repair: ``--force``
+    re-pins them.
+    """
     problems = []
     for pin in repaired:
         same = next(
@@ -640,7 +662,7 @@ def _repin_repaired(
 
 
 def _upgrade_hint(project: Project, task: str) -> str:
-    """The command that re-pins a task to a new version (``--upgrade``)."""
+    """Return the command that re-pins a task to a new version (``--upgrade``)."""
     return project_command(project.directory, "download", "--upgrade", task)
 
 
@@ -652,10 +674,12 @@ def _restore(
     pins: list[PinnedFile],
     pin_errors: list[str],
 ) -> TaskResult:
-    """Missing pinned versions back from the result - identical SHA-256 only
-    (spec 4.6 point 3), also when other pins of the task fail. The bytes go
-    back under the pinned ``version`` path (``_repin_version``): the pins and
-    the manifest never change."""
+    """Restore the missing pinned versions from the result.
+
+    Identical SHA-256 only (spec 4.6 point 3), also when other pins of the task fail.
+    The bytes go back under the pinned ``version`` path (``_repin_version``): the pins
+    and the manifest never change.
+    """
     restored: list[PinnedFile] = []
     problems: list[str] = []
     for pin in missing:
@@ -692,9 +716,10 @@ def _restore(
 
 
 def _repin_version(store: Path, pin: PinnedFile, found: PinnedFile) -> None:
-    """The pinned version directory back for the same bytes the download
-    stored under another version (``found``; e.g. another download date): a
-    hardlink of its data and its sidecar with the pinned label, written once
+    """Restore the pinned version directory for the same bytes.
+
+    The download stored them under another version (``found``; e.g. another download
+    date): a hardlink of its data and its sidecar with the pinned label, written once
     (D18). Nothing to do when the download used the pinned version itself.
 
     Raises
@@ -826,29 +851,37 @@ def _inspect_project(
 def get_project_status(
     project_dir: str | Path, *, tasks: Sequence[str] | None = None
 ) -> ProjectCheck:
-    """Check pinned version and sidecar existence and data size, without hashing
-    or network access. ``ok`` requires every selected task to have intact pins."""
+    """Check pinned version and sidecar existence and data size.
+
+    No hashing or network access. ``ok`` requires every selected task to have intact
+    pins.
+    """
     return _inspect_project(project_dir, tasks, verify=False)
 
 
 def verify_project(
     project_dir: str | Path, *, tasks: Sequence[str] | None = None
 ) -> ProjectCheck:
-    """Verify full SHA-256, size, version sidecars, and symlink containment of
-    every pinned file. Neither the store nor the manifest is modified."""
+    """Verify full SHA-256, size, version sidecars, and symlink containment.
+
+    It covers every pinned file. Neither the store nor the manifest is modified.
+    """
     return _inspect_project(project_dir, tasks, verify=True)
 
 
 def _plan_key(item: PlanItem) -> str:
-    """The same standard store path as ``PinnedFile.path``."""
+    """Return the same standard store path as ``PinnedFile.path``."""
     return PurePosixPath(item.segment, item.hierarchy, item.name).as_posix()
 
 
 def _matched(
     items: tuple[PlanItem, ...], pins: tuple[PinnedFile, ...]
 ) -> tuple[dict[int, PinnedFile], tuple[PinnedFile, ...]]:
-    """Within a standard path pair equal labels first, then only a unique
-    remaining item and pin (multiple campaigns must not be guessed)."""
+    """Match items and pins within a standard path pair.
+
+    Equal labels go first, then only a unique remaining item and pin (multiple campaigns
+    must not be guessed).
+    """
     by_path: dict[str, list[int]] = {}
     pins_by_path: dict[str, list[PinnedFile]] = {}
     for index, item in enumerate(items):
@@ -953,8 +986,11 @@ def check_project(
     cache: MetadataCache | bool = False,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> ProjectCheck:
-    """Check source freshness relative to the task's pins, not the store's
-    latest files. Unpinned tasks are skipped; nothing is downloaded or written."""
+    """Check source freshness relative to the task's pins.
+
+    Not the store's latest files. Unpinned tasks are skipped; nothing is downloaded or
+    written.
+    """
     project = open_project(project_dir)
     _require_store(project)
     selected = _select(project, tasks)

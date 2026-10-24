@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import IO, Optional
+from typing import IO, Any, Optional
 
 import requests
 
@@ -56,7 +56,7 @@ class AuthProxyClient:
     # Subprocess state is CLASS state, like _proxy_port: a second object
     # (a lost __new__ race, or an explicitly reset singleton) must see the
     # already running child instead of starting a second proxy.
-    _proxy_process: subprocess.Popen | None = None
+    _proxy_process: subprocess.Popen[str] | None = None
     _proxy_port: int | None = None
     # Why the proxy has no credentials although a source is configured (the
     # ``credentials_error`` of its last health check: a text, never a secret).
@@ -66,7 +66,7 @@ class AuthProxyClient:
     # a live process with _proxy_port still unset and builds "None/health".
     _lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls) -> "AuthProxyClient":
         """Singleton pattern - only one proxy instance.
 
         Double-checked under ``_lock``: the first client is routinely built
@@ -81,7 +81,7 @@ class AuthProxyClient:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize proxy client."""
         if not hasattr(self, "_initialized"):
             self._initialized = True
@@ -91,7 +91,7 @@ class AuthProxyClient:
             self._session = requests.Session()
             atexit.register(self._cleanup)
 
-    def _cleanup(self):
+    def _cleanup(self) -> None:
         """Cleanup proxy process on exit."""
         proc = AuthProxyClient._proxy_process
         if proc:
@@ -280,7 +280,7 @@ class AuthProxyClient:
             if resp.status_code == 200:
                 data = resp.json()
                 AuthProxyClient._credentials_error = data.get("credentials_error")
-                return data.get("credentials_available", False)
+                return bool(data.get("credentials_available", False))
         except requests.RequestException as e:
             logger.debug(f"Health check failed: {e}")
 
@@ -305,9 +305,9 @@ class AuthProxyClient:
         self,
         url: str,
         method: str = "GET",
-        headers: dict | None = None,
-        payload: dict | None = None,
-    ) -> dict | None:
+        headers: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         """
         Send authenticated request through proxy.
 
@@ -343,7 +343,8 @@ class AuthProxyClient:
                 timeout=120,
             )
             if resp.status_code == 200:
-                return resp.json()
+                answer: dict[str, Any] = resp.json()
+                return answer
             else:
                 self.last_error = f"Proxy request failed: {resp.text}"
         except requests.RequestException as e:
@@ -455,6 +456,6 @@ class AuthProxyClient:
 
         return True
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """Explicitly shutdown the proxy."""
         self._cleanup()

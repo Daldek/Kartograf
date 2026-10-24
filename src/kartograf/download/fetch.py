@@ -19,7 +19,7 @@ import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from kartograf.download.links import ensure_link
 from kartograf.download.plan import ItemStatus, PlanItem, Track
@@ -54,13 +54,13 @@ FileStatus = Literal["new", "unchanged", "relabeled", "local", "reused"]
 
 # Download into the staged path; returns the HTTP signal of the response
 # (``response_signal``) or ``None`` for a channel without one.
-Fetch = Callable[[Path], dict | None]
+Fetch = Callable[[Path], dict[str, Any] | None]
 # Current HTTP signal of the source file (``HEAD``); raises ``DownloadError``.
-Probe = Callable[[], dict]
+Probe = Callable[[], dict[str, Any]]
 # Current edition of the source (signal ``metadata``, D29/D30); raises
 # ``DownloadError``. Memoized by the caller: one request per job (spec 4.1).
 EditionLookup = Callable[[], Edition]
-WriteSidecar = Callable[[Path, VersionRef, ContentDigest, dict | None], None]
+WriteSidecar = Callable[[Path, VersionRef, ContentDigest, dict[str, Any] | None], None]
 
 
 def validate_update(update: object, *, check: str | None = None) -> None:
@@ -94,10 +94,11 @@ def validate_update(update: object, *, check: str | None = None) -> None:
 
 
 def refreshes_cache(update: UpdateMode | None) -> bool:
-    """Whether a download mode refreshes the metadata cache instead of
-    reading it: ``"upgrade"`` and ``"force"`` ask the source like
-    ``--check-updates`` (a flight published within the cache TTL is seen);
-    the default mode reads it (TTL 7 days)."""
+    """Return whether a download mode refreshes the metadata cache, not reads it.
+
+    ``"upgrade"`` and ``"force"`` ask the source like ``--check-updates`` (a flight
+    published within the cache TTL is seen); the default mode reads it (TTL 7 days).
+    """
     return update in ("upgrade", "force")
 
 
@@ -174,13 +175,15 @@ def link_version(std: Path, version: LocalVersion, *, refresh: bool) -> None:
 
 
 def local_version(slot: FileSlot) -> LocalVersion | None:
-    """The newest valid local version of the slot (``None``: none)."""
+    """Return the newest valid local version of the slot (``None``: none)."""
     return newest_version(list_versions(slot.versions_root, slot.name))
 
 
 def _prune_empty(start: Path, stop: Path) -> None:
-    """Remove ``start`` and its parents while empty, never ``stop`` (a failed
-    first download leaves no empty ``versions/.incoming`` tree)."""
+    """Remove ``start`` and its parents while empty, never ``stop``.
+
+    A failed first download leaves no empty ``versions/.incoming`` tree.
+    """
     current = start
     while current != stop and stop in current.parents:
         try:
@@ -201,17 +204,19 @@ def discard_staging(staged: Path, slot: FileSlot) -> None:
     _prune_empty(staged.parent.parent, slot.output_dir)
 
 
-def _signal_label(signal: dict) -> str:
+def _signal_label(signal: dict[str, Any]) -> str:
     return str(signal.get("etag") or signal.get("last_modified") or "?")
 
 
 def _check_label_args(
     signal: SignalKind, version: VersionRef | None, edition: EditionLookup | None
 ) -> None:
-    """``metadata``: the edition labels the version; ``index``: ``version``
-    (the caller selected the file by its record, LAZ) or ``edition`` (the
-    label of the unit's index record, compared like an edition, ADR-043);
-    other signals: ``version``."""
+    """Check the label arguments against the freshness signal.
+
+    ``metadata``: the edition labels the version; ``index``: ``version`` (the caller
+    selected the file by its record, LAZ) or ``edition`` (the label of the unit's
+    index record, compared like an edition, ADR-043); other signals: ``version``.
+    """
     if signal == "metadata":
         if edition is None or version is not None:
             raise ValidationError(
@@ -240,7 +245,8 @@ def _keep_local(
     The default mode asks no source (no ``HEAD``, no edition lookup) and
     keeps the local version ``"unchecked"`` (ADR-036 erratum 3); the label
     of an index record (signal ``index``) was already asked for the
-    selection and is still compared."""
+    selection and is still compared.
+    """
     if update is None and (
         (signal == "http" and probe is not None)
         or (signal == "metadata" and edition is not None)
@@ -288,7 +294,7 @@ def use_local(
     probe: Probe | None = None,
     edition: EditionLookup | None = None,
 ) -> VersionedFile | None:
-    """The local version to use, or ``None`` = the file must be downloaded.
+    """Return the local version to use, or ``None`` when the file must be downloaded.
 
     Spec 4.2 table (plan 2/3 4, plan 3/3 decision 2). Without ``"force"``
     an existing local version is used. The default mode asks no source for
@@ -380,11 +386,11 @@ def store_file(
     *,
     version: VersionRef,
     write_sidecar: WriteSidecar,
-    http: dict | None,
+    http: dict[str, Any] | None,
     signal: SignalKind,
     coverage: bool = False,
 ) -> VersionedFile:
-    """The staged file (``new_staging``) as a version of the slot, linked.
+    """Return the staged file (``new_staging``) as a version of the slot, linked.
 
     sha256 from one read (D20), ``commit_version`` and the hardlink of the
     standard path. ``http`` (headers of the download) is passed to
@@ -498,7 +504,7 @@ def inspect_version(
     signal: SignalKind,
     probe: Probe | None = None,
     edition: EditionLookup | None = None,
-    available: tuple[str | None, dict | None] = (None, None),
+    available: tuple[str | None, dict[str, Any] | None] = (None, None),
 ) -> PlanItem:
     """Plan position of one file WITHOUT downloading (``--check-updates``).
 

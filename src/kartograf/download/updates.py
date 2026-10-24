@@ -1,5 +1,7 @@
 """Internal PL-sheet plan item construction for ``DownloadManager.check_sheets``."""
 
+from typing import Any
+
 from kartograf.download.manager import DownloadManager, SheetInspection, _Pick
 from kartograf.download.plan import ItemStatus, PlanItem
 from kartograf.download.versions import LocalVersion, newest_version
@@ -16,7 +18,7 @@ def _where(manager: DownloadManager, sheet: str) -> tuple[str, str]:
     )
 
 
-def _signal(pick: _Pick) -> dict:
+def _signal(pick: _Pick) -> dict[str, Any]:
     record = pick.record
     return {"url": record.url, "date": record.aktualnosc, "pzgik_date": record.dt_pzgik}
 
@@ -35,7 +37,7 @@ def _items(manager: DownloadManager, inspection: SheetInspection) -> list[PlanIt
         name: str,
         local: LocalVersion | None,
         label: str | None,
-        signal: dict | None,
+        signal: dict[str, Any] | None,
         status: ItemStatus,
         error: str | None = None,
     ) -> PlanItem:

@@ -185,9 +185,12 @@ def product(
     *,
     section: str = SELECTION_TITLE,
 ) -> Param:
-    """``--product`` of a group: ``products`` are the allowed values and the
-    parser choices, ``choices_text(products)`` names them in the description
-    (``Produkt (wymagany): nmt (...), nmpt (...)``)."""
+    """``--product`` of a group.
+
+    ``products`` are the allowed values and the parser choices,
+    ``choices_text(products)`` names them in the description (``Produkt (wymagany): nmt
+    (...), nmpt (...)``).
+    """
 
     def description() -> str:
         return f"Produkt (wymagany): {choices_text(tuple(resolve(products)))}"
@@ -204,8 +207,10 @@ def product(
 def country(
     countries: Values, description: Text, *, section: str = SELECTION_TITLE
 ) -> Param:
-    """``--country`` of a command: ``countries`` are the allowed values and the
-    parser choices."""
+    """``--country`` of a command.
+
+    ``countries`` are the allowed values and the parser choices.
+    """
     return replace(
         COUNTRY,
         description=description,
@@ -223,10 +228,12 @@ def area(
     geometry: Text = GEOMETRY_HELP,
     section: str = SELECTION_TITLE,
 ) -> tuple[Param, ...]:
-    """One area choice of a request: ``sheet`` (when ``sheet`` is the text of its
-    description; ``accepts`` are the sheet systems it takes), ``bbox`` with
-    ``bbox_crs``, ``geometry`` with ``layer``. Exactly one is checked by the
-    library (a ``one_of`` constraint of the command)."""
+    """One area choice of a request.
+
+    ``sheet`` (when ``sheet`` is the text of its description; ``accepts`` are the sheet
+    systems it takes), ``bbox`` with ``bbox_crs``, ``geometry`` with ``layer``. Exactly
+    one is checked by the library (a ``one_of`` constraint of the command).
+    """
     params: list[Param] = []
     if sheet is not None:
         if accepts is None:
@@ -242,8 +249,11 @@ def area(
 
 
 def output_dir(files: Text) -> Param:
-    """``--output``/``-o``: the store directory of a data command; ``files`` says
-    where its files go (``pliki w <KATALOG>/nmt/...``)."""
+    """``--output``/``-o``.
+
+    The store directory of a data command; ``files`` says where its files go (``pliki w
+    <KATALOG>/nmt/...``).
+    """
 
     def description() -> str:
         return f"Katalog magazynu (wymagany): {resolve(files)} (wersje w versions/)"
@@ -252,17 +262,22 @@ def output_dir(files: Text) -> Param:
 
 
 def workers(description: Text, default: int | None) -> Param:
-    """``--workers``/``-w``: parallel transfers; ``default`` is the number the
-    library function uses (and the flag)."""
+    """``--workers``/``-w``.
+
+    Parallel transfers; ``default`` is the number the library function uses (and the
+    flag).
+    """
     return replace(WORKERS, description=description, default=default)
 
 
 def update_params(
     *, check: Text, upgrade: Text, force: Text, plan: Text | None = None
 ) -> tuple[Param, ...]:
-    """Update modes of a store command: the exclusive flags ``--check-updates``,
-    ``--upgrade`` and ``--force``, the API argument ``update`` and, when ``plan``
-    is the text of its description, ``--plan``."""
+    """Update modes of a store command.
+
+    The exclusive flags ``--check-updates``, ``--upgrade`` and ``--force``, the API
+    argument ``update`` and, when ``plan`` is the text of its description, ``--plan``.
+    """
     params = [
         replace(CHECK_UPDATES, description=check),
         replace(UPGRADE, description=upgrade),
@@ -277,9 +292,11 @@ def update_params(
 def product_summaries(
     products: Sequence[str], choices_text: Callable[[Sequence[str]], str]
 ) -> list[tuple[str, str]]:
-    """The ``(product, summary)`` pairs of a group: the text in the parentheses of
-    ``choices_text`` of one product (``nmt (Numeryczny Model Terenu; PL i CZ)``
-    gives ``Numeryczny Model Terenu; PL i CZ``)."""
+    """Return the ``(product, summary)`` pairs of a group.
+
+    The text in the parentheses of ``choices_text`` of one product (``nmt (Numeryczny
+    Model Terenu; PL i CZ)`` gives ``Numeryczny Model Terenu; PL i CZ``).
+    """
     pairs = []
     for name in products:
         text = choices_text([name])
@@ -291,10 +308,12 @@ def product_summaries(
 
 
 def list_sources_command(group: str, products: Values) -> Command:
-    """``<group> list-sources``: the registered sources of the group's ``products``
-    (the registry, no network). The API function ``list_sources`` serves every
-    group, so ``group`` is an API-only parameter with the one value of this
-    command and ``product`` narrows the list."""
+    """``<group> list-sources``.
+
+    The registered sources of the group's ``products`` (the registry, no network). The
+    API function ``list_sources`` serves every group, so ``group`` is an API-only
+    parameter with the one value of this command and ``product`` narrows the list.
+    """
     return Command(
         f"{group} list-sources",
         "Wypisz zrodla danych grupy (rejestr zrodel, bez sieci)",

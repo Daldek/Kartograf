@@ -9,7 +9,8 @@ sheet hierarchy (as NMT) - ``download.storage.unit_slot``. HSG is a derived
 product without a descriptor: its prefix lives here.
 """
 
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.bbox import BBox
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.storage import bbox_cutout_path, token_segment
 from kartograf.exceptions import ValidationError
 

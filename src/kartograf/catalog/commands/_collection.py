@@ -1,7 +1,7 @@
-"""
-``download`` and ``list-sources`` of a collection group (``boundaries``,
-``cadastre``, ``models3d``, ``hydro``, ``names``, ``maps``, ``geodesy``;
-ADR-042 D9).
+"""Declare ``download`` and ``list-sources`` of a collection group.
+
+The groups are ``boundaries``, ``cadastre``, ``models3d``, ``hydro``, ``names``,
+``maps`` and ``geodesy`` (ADR-042 D9).
 
 Every collection group has the same command shape: ``--product`` and
 ``--country`` like ``elevation``/``imagery`` (the countries of the group's
@@ -54,8 +54,10 @@ Content = Callable[[Products], Sequence[Param]]
 
 
 def choice_values(products: Sequence[str], key: str) -> list[str]:
-    """The values of the option ``key`` over the products and countries of a group
-    (registry order, each once)."""
+    """Return the values of the option ``key`` over a group, each once.
+
+    The products and countries of the group are walked in registry order.
+    """
     found = (
         value
         for product in products
@@ -66,8 +68,11 @@ def choice_values(products: Sequence[str], key: str) -> list[str]:
 
 
 def choice_text(products: Sequence[str], key: str) -> str:
-    """``admin PL: a, b; admin CZ: c``: the values of the option ``key`` per
-    product and country (the texts of ``--format``, ``--network``, ...)."""
+    """Return the values of the option ``key`` per product and country.
+
+    The text is like ``admin PL: a, b; admin CZ: c`` (the texts of ``--format``,
+    ``--network``, ...).
+    """
     return "; ".join(
         f"{product} {country}: {', '.join(values)}"
         for product in products
@@ -76,7 +81,7 @@ def choice_text(products: Sequence[str], key: str) -> str:
 
 
 def collection_group(name: str, summary: str, description: str) -> Group:
-    """The CLI group of a collection: its products with the registry's texts."""
+    """Return the CLI group of a collection: its products with the registry's texts."""
 
     def products() -> list[tuple[str, str]]:
         return shared.product_summaries(

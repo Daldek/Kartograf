@@ -1157,7 +1157,7 @@ class TestCmdDownload:
                 succeeded=[],
                 failed=["A", "B", "C", "D"],
                 skipped=[],
-                errors={sheet: "zrodlo 503" for sheet in ("A", "B", "C", "D")},
+                errors=dict.fromkeys(("A", "B", "C", "D"), "zrodlo 503"),
             )
         )
 
@@ -1360,7 +1360,7 @@ class TestCmdDownload:
         mock_manager.count_sheets.return_value = 4
         mock_manager.download_hierarchy.return_value = DownloadResult(
             failed=["A", "B", "C", "D"],
-            errors={sheet: "siec" for sheet in ("A", "B", "C", "D")},
+            errors=dict.fromkeys(("A", "B", "C", "D"), "siec"),
         )
         mock_manager_class.return_value = mock_manager
 
@@ -4829,26 +4829,26 @@ def _cz_args(tmp_path, **overrides):
     """Namespace for direct _cmd_download_cz calls (2m/Bpv; SM5 sheets: 5m only)."""
     sheet = overrides.get("sheet", "302_5550")
     sm5 = sheet is not None and re.fullmatch(r"\s*[A-Z]{4}\d{2}\s*", sheet)
-    base = dict(
-        sheet="302_5550",
-        bbox=None,
-        bbox_crs="EPSG:2180",
-        geometry=None,
-        layer=None,
-        scale=None,
-        output=str(tmp_path),
-        force=False,
-        quiet=True,
-        vertical_crs="Bpv",
-        resolution=None if sm5 else "2m",
-        product="nmt",
-        sheet_system=None,
-        country="cz",
-        horizontal_crs=None,
-        workers=1,
-        year=None,
-        min_density=None,
-    )
+    base = {
+        "sheet": "302_5550",
+        "bbox": None,
+        "bbox_crs": "EPSG:2180",
+        "geometry": None,
+        "layer": None,
+        "scale": None,
+        "output": str(tmp_path),
+        "force": False,
+        "quiet": True,
+        "vertical_crs": "Bpv",
+        "resolution": None if sm5 else "2m",
+        "product": "nmt",
+        "sheet_system": None,
+        "country": "cz",
+        "horizontal_crs": None,
+        "workers": 1,
+        "year": None,
+        "min_density": None,
+    }
     base.update(overrides)
     return argparse.Namespace(**base)
 

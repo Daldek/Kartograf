@@ -72,8 +72,11 @@ SelectValue = str | int | tuple[str | int, ...] | None
 
 @dataclass(frozen=True)
 class SourceLicense:
-    """The license of a source: its registry ``id``, the ready-made
-    ``attribution`` text and the ``url`` of the terms (may be empty)."""
+    """The license of a source.
+
+    Its registry ``id``, the ready-made ``attribution`` text and the ``url`` of the
+    terms (may be empty).
+    """
 
     id: str
     attribution: str
@@ -147,8 +150,11 @@ class SourceList(Document):
 
 @dataclass(frozen=True)
 class LayerInfo:
-    """A layer, a soil property or a statistic: its ``code`` (the value to pass)
-    and the ``description`` (``None``: the source names the layer only)."""
+    """A layer, a soil property or a statistic.
+
+    Its ``code`` (the value to pass) and the ``description`` (``None``: the source names
+    the layer only).
+    """
 
     code: str
     description: str | None
@@ -156,10 +162,13 @@ class LayerInfo:
 
 @dataclass(frozen=True)
 class PropertyInfo(LayerInfo):
-    """A SoilGrids property: its ``code`` and ``description`` (the text names the
-    unit), the ``unit`` of the integer values in the file (the ISRIC "mapped
-    units"), the ``conventional_unit`` and the ``divisor``: the familiar value is
-    ``value / divisor``; ``depths``: the depth intervals published for it."""
+    """A SoilGrids property.
+
+    Its ``code`` and ``description`` (the text names the unit), the ``unit`` of the
+    integer values in the file (the ISRIC "mapped units"), the ``conventional_unit`` and
+    the ``divisor``: the familiar value is ``value / divisor``; ``depths``: the depth
+    intervals published for it.
+    """
 
     unit: str
     conventional_unit: str
@@ -169,9 +178,12 @@ class PropertyInfo(LayerInfo):
 
 @dataclass(frozen=True)
 class YearInfo:
-    """A CORINE release: ``year`` (the reference year, the value of ``year``),
-    ``data`` - ``clms`` (the CLMS data; the WMS preview without credentials) or
-    ``wms`` (the preview only) - and the ``description`` of it."""
+    """A CORINE release.
+
+    ``year`` (the reference year, the value of ``year``), ``data`` - ``clms`` (the CLMS
+    data; the WMS preview without credentials) or ``wms`` (the preview only) - and the
+    ``description`` of it.
+    """
 
     year: int
     data: str
@@ -205,7 +217,7 @@ class LayerList(Document):
 
 
 def list_sources(*, group: str, product: str | None = None) -> SourceList:
-    """The registered sources of a command group, with the options choosing each.
+    """Return the registered sources of a command group, with the options choosing each.
 
     Parameters
     ----------
@@ -255,7 +267,7 @@ def list_sources(*, group: str, product: str | None = None) -> SourceList:
 
 
 def list_layers(*, group: str, product: str | None = None) -> LayerList:
-    """The layers a product of ``landcover`` or ``soil`` offers.
+    """Return the layers a product of ``landcover`` or ``soil`` offers.
 
     Parameters
     ----------
@@ -318,7 +330,7 @@ def list_layers(*, group: str, product: str | None = None) -> LayerList:
 
 
 def _group_products(group: str) -> tuple[str, ...]:
-    """The products of ``group`` in the order of its ``download`` command."""
+    """Return the products of ``group`` in the order of its ``download`` command."""
     if group not in SOURCE_GROUPS:
         raise ValidationError(
             f"group {group!r}: nieznana wartosc - dostepne: {', '.join(SOURCE_GROUPS)}",
@@ -358,7 +370,7 @@ def _source_info(group: str, source: SourceDescriptor) -> SourceInfo:
 
 
 def _select(group: str, source: SourceDescriptor) -> dict[str, SelectValue]:
-    """The options that choose ``source`` in the ``download`` function of ``group``."""
+    """Return the options that choose ``source`` in ``download`` of ``group``."""
     if group == "elevation":
         return _elevation_select(source)
     if group == "landcover":
@@ -376,10 +388,12 @@ def _one_or_choice[T](values: tuple[T, ...]) -> T | tuple[T, ...]:
 
 
 def _elevation_select(source: SourceDescriptor) -> dict[str, SelectValue]:
-    """Every required choice of ``elevation download``, from the variant
-    registry: ``country``, ``resolution``/``format``/``model`` and
-    ``vertical_crs`` with the height systems of the source (none for NMT
-    100 m; contours take only Bpv, which may be omitted)."""
+    """Every required choice of ``elevation download``, from the variant registry.
+
+    ``country``, ``resolution``/``format``/``model`` and ``vertical_crs`` with the
+    height systems of the source (none for NMT 100 m; contours take only Bpv, which may
+    be omitted).
+    """
     select: dict[str, SelectValue] = {
         "product": source.product,
         "country": source.country.lower(),
@@ -411,8 +425,10 @@ def _elevation_select(source: SourceDescriptor) -> dict[str, SelectValue]:
 
 
 def _landcover_select(source: SourceDescriptor) -> dict[str, SelectValue]:
-    """``product`` of a descriptor (``bdot10k``) with the releases of a product
-    that requires ``year`` (BDOO, CORINE)."""
+    """Return the ``product`` of a descriptor (``bdot10k``) with its releases.
+
+    The ``year`` is required by some products (BDOO, CORINE).
+    """
     select: dict[str, SelectValue] = {"product": source.product}
     if source.product == "bdoo":
         select["year"] = _one_or_choice(_release_years(source.key))
@@ -422,7 +438,7 @@ def _landcover_select(source: SourceDescriptor) -> dict[str, SelectValue]:
 
 
 def _release_years(key: str) -> tuple[int, ...]:
-    """The release years of the unit packages of source ``key``, ascending."""
+    """Return the release years of the unit packages of source ``key``, ascending."""
     return tuple(
         sorted(
             {
@@ -472,8 +488,11 @@ def _landcover_layers(product: str) -> LayerList:
 
 
 def _release_classes(key: str) -> dict[str, tuple[str, ...]]:
-    """The class codes ``layers`` may keep from the packages of source ``key``,
-    by release year (``{}``: the source has no class selection)."""
+    """Return the class codes ``layers`` may keep from the packages of ``key``.
+
+    The codes are given by release year (``{}``: the source has no class
+    selection).
+    """
     return {
         dict(variant.choice)["year"]: variant.classes
         for channel in get_source(key).channels

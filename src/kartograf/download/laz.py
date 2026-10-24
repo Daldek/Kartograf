@@ -37,9 +37,9 @@ from typing import Any
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.bbox import bbox_coords
+from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.core.coverage import Polygon
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.area import bbox_to_2180
 from kartograf.download.arguments import require_bool, require_int, require_workers
 from kartograf.download.fetch import (
@@ -85,9 +85,12 @@ NO_TILES_MESSAGE = (
 
 
 def no_tiles_message(selection: LazTileSelection, min_density: int | None) -> str:
-    """The text of an empty tile selection. When ``--min-density`` dropped the
+    """Return the text of an empty tile selection.
+
+    The text of an empty tile selection. When ``--min-density`` dropped the
     tiles of the area, the filter is named with the best density the area
-    has (an empty answer of the WFS says ``NO_TILES_MESSAGE``)."""
+    has (an empty answer of the WFS says ``NO_TILES_MESSAGE``).
+    """
     if min_density is None or not selection.below_density:
         return NO_TILES_MESSAGE
     densities = [t.density for t in selection.below_density if t.density is not None]
@@ -140,7 +143,7 @@ def laz_version_ref(tile: LazTile) -> VersionRef:
 
 
 def laz_slot(storage: FileStorage, tile: LazTile) -> FileSlot:
-    """Standard path and version hierarchy in the tile's own horizontal system."""
+    """Return the standard path and version hierarchy in the tile's own system."""
     system = tile.system
     return FileSlot(
         output_dir=storage.output_dir,
@@ -152,7 +155,7 @@ def laz_slot(storage: FileStorage, tile: LazTile) -> FileSlot:
 
 
 def write_laz_sidecar(
-    provider,
+    provider: GugikLazProvider,
     tile: LazTile,
     target: Path,
     bbox: BBox,
@@ -162,7 +165,7 @@ def write_laz_sidecar(
     all_campaigns: bool = False,
     min_year: int | None = None,
     max_year: int | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
     digest: ContentDigest,
     version: VersionRef,
 ) -> None:
@@ -182,7 +185,7 @@ def write_laz_sidecar(
     from kartograf.sources.registry import horizontal_crs_for_system
     from kartograf.sources.sidecar import emit_sidecar
 
-    request: dict = {
+    request: dict[str, Any] = {
         "bbox": bbox_coords(bbox),
         "bbox_crs": bbox.crs,
     }
@@ -196,7 +199,7 @@ def write_laz_sidecar(
         request["min_year"] = min_year
     if max_year is not None:
         request["max_year"] = max_year
-    extra: dict = {
+    extra: dict[str, Any] = {
         "tile_sheet": tile.sheet,
         "year": tile.year,
         "nominal_density": tile.density,
@@ -228,7 +231,7 @@ def write_laz_sidecar(
 def _check_selection(
     selection: LazTileSelection,
     *,
-    provider,
+    provider: GugikLazProvider,
     output_dir: str | Path,
 ) -> UpdatePlan:
     """Inspect selected WFS tiles without downloading any LAZ bytes."""
@@ -254,7 +257,7 @@ def _check_selection(
 def _run_laz_download(
     selection: LazTileSelection,
     *,
-    provider,
+    provider: GugikLazProvider,
     bbox: BBox,
     output_dir: str | Path,
     year: int | None = None,
@@ -266,7 +269,7 @@ def _run_laz_download(
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     on_progress: LazProgressCallback | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
 ) -> LazDownloadResult:
     """Version selected LAZ tiles, collecting per-tile download failures.
 
@@ -396,8 +399,11 @@ def _validate_area(bbox: BBox | None, sheet: str | None) -> BBox | None:
 
 
 def _query_area(bbox: BBox | None, sheet: str | None) -> tuple[BBox, Polygon | None]:
-    """EPSG:2180 WFS query window of the request and the sheet frame
-    (``None`` for a bbox: the window is the area)."""
+    """Return the EPSG:2180 query window and the sheet frame.
+
+    EPSG:2180 WFS query window of the request and the sheet frame
+    (``None`` for a bbox: the window is the area).
+    """
     if sheet is not None:
         return SheetParser(sheet).get_bbox(crs="EPSG:2180"), sheet_frame_2180(sheet)
     assert bbox is not None  # _validate_area
@@ -421,7 +427,9 @@ def _selected(
     force: bool,
     sink: NoticeSink,
 ) -> Iterator[tuple[GugikLazProvider, LazTileSelection, BBox]]:
-    """Provider, WFS tile selection and EPSG:2180 query window of one LAZ
+    """Select the WFS tiles of one LAZ request.
+
+    Provider, WFS tile selection and EPSG:2180 query window of one LAZ
     request (a sheet: tiles of its frame, not of the envelope).
 
     The ``LAZ_SUPERSEDED`` notice is emitted right after the selection; an

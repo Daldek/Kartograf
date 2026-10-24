@@ -8,8 +8,8 @@ in the 2026-08-10 research). Pure maths, zero IO - modelled on Parser2000.
 
 import math
 
+from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import CZ_TM33_PATTERN
-from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ParseError, ValidationError
 
 TM33_CRS = "EPSG:3045"
@@ -60,6 +60,7 @@ class ParserTM33:
         return f"{e_km:03d}_{n_km:04d}"
 
     def __repr__(self) -> str:
+        """Return the constructor-like text of the parser."""
         return f"ParserTM33('{self.sheet}')"
 
 

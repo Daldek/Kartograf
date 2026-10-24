@@ -51,9 +51,12 @@ def cmd_project_init(args: argparse.Namespace) -> int:
 
 
 def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
-    """A task is the options of a data command: the flags of a run (``--upgrade``,
-    ``--workers``...) and of the output (``--summary``, ``--quiet``, ``--json``,
-    ``--output`` of another store) are an error, not a silently dropped value."""
+    """Parse a task, the options of a data command.
+
+    The flags of a run (``--upgrade``, ``--workers``...) and of the output
+    (``--summary``, ``--quiet``, ``--json``, ``--output`` of another store) are an
+    error, not a silently dropped value.
+    """
     for flag, name in (
         ("--check-updates", "check_updates"),
         ("--upgrade", "upgrade"),
@@ -104,8 +107,10 @@ def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
 
 
 def cmd_project_add(args: argparse.Namespace) -> int:
-    """Read the data command after the task name (``parse_command``) and add it
-    as a task."""
+    """Read the data command after the task name and add it as a task.
+
+    The command is read with ``parse_command``.
+    """
     command_args = args.arguments
     if command_args and command_args[0] == "--":
         command_args = command_args[1:]
@@ -187,8 +192,11 @@ def _check_line(file: FileCheck, checking_updates: bool) -> str:
 
 
 def _unit_file(unit: str, path: str) -> str:
-    """Subject of a project line: the unit and its file name, ``CTES96
-    (CTES96.jpg)`` - the files of one unit stay distinguishable."""
+    """Return the subject of a project line.
+
+    The unit and its file name, ``CTES96 (CTES96.jpg)`` - the files of one unit stay
+    distinguishable.
+    """
     return f"{unit} ({PurePosixPath(path).name})"
 
 
@@ -218,9 +226,13 @@ def _render_check(report: ProjectCheck, *, quiet: bool, checking_updates: bool) 
     return 0 if report.ok else 1
 
 
-def _print_download(args: argparse.Namespace, report: ProjectReport, progress) -> int:
-    """The text of ``download_project``: a line per task and its pins, the
-    errors, the totals; the exit code."""
+def _print_download(
+    args: argparse.Namespace, report: ProjectReport, progress: object
+) -> int:
+    """Print the text of ``download_project``.
+
+    A line per task and its pins, the errors, the totals; the exit code.
+    """
     if getattr(progress, "pending", False):
         print()
     for result in report.tasks:
@@ -287,7 +299,7 @@ def cmd_project_download(args: argparse.Namespace) -> int:
 
 
 def _check(args: argparse.Namespace, report: ProjectCheck) -> int:
-    """The result of ``status``/``verify``: the text or the document."""
+    """Return the result of ``status``/``verify``: the text or the document."""
     if wants_json(args):
         return emit_document(report)
     return _render_check(report, quiet=args.quiet, checking_updates=False)

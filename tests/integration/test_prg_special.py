@@ -110,9 +110,13 @@ def test_special_area_creates_versioned_gpkg(tmp_path, monkeypatch, frozen_clock
     monkeypatch.setitem(registry._SOURCES, SOURCE.key, descriptor)
     service = SpecialService()
     monkeypatch.setattr(col, "_session", lambda: service)
-    request = dict(
-        product="special", output_dir=tmp_path, country="pl", bbox=BBOX, cache=False
-    )
+    request = {
+        "product": "special",
+        "output_dir": tmp_path,
+        "country": "pl",
+        "bbox": BBOX,
+        "cache": False,
+    }
 
     report = download_collection(**request)
 

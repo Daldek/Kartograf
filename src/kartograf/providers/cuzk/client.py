@@ -11,13 +11,14 @@ import threading
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlencode
 
 import rasterio
 import requests
 from rasterio.crs import CRS
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.transport.chunks import (
     Chunk,
@@ -60,13 +61,13 @@ class CuzkClient:
         out_fields: str = "*",
         out_sr: str | None = None,
         return_geometry: bool = True,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """GET {endpoint}/{layer}/query (f=json) with resultOffset pagination.
 
         ``return_geometry=False`` asks for attributes only (``returnGeometry=false``).
         """
         url = f"{endpoint}/{layer}/query"
-        features: list[dict] = []
+        features: list[dict[str, Any]] = []
         offset = 0
         while True:
             params: dict[str, str] = {
@@ -118,7 +119,9 @@ class CuzkClient:
         unzip_single: str | None = None,
         on_response: Callable[[requests.Response], None] | None = None,
     ) -> Path:
-        """Download a file; with unzip_single extract the only file with that
+        """Download a file, optionally extracting the single file inside its ZIP.
+
+        With unzip_single extract the only file with that
         extension (+ the accompanying .tfw), write atomically (both files
         together or neither), delete the ZIP. Any extraction error =>
         DownloadError, leaving no partial results on disk.
@@ -269,8 +272,9 @@ def _overwrite_crs(output_path: Path, image_sr: str) -> None:
 def _extract_zip_pair(
     zip_path: Path, output_path: Path, unzip_single: str, url: str
 ) -> None:
-    """Extract exactly 1 file with the extension unzip_single (+ the optional
-    accompanying .tfw) from zip_path to output_path.
+    """Extract exactly 1 file from zip_path to output_path.
+
+    The file has the extension unzip_single (+ the optional accompanying .tfw).
 
     Both files are first unpacked to temporary locations; only when ALL
     extractions succeed are they committed (os.replace) together.

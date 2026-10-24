@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import ValidationError
 
 
@@ -86,10 +86,12 @@ class BaseProvider(DataSourceProvider):
 
     @property
     def sheet_scale(self) -> str:
-        """Label of the PL-1992 sheets the provider publishes (``SheetParser``
-        labels: ``1:10000`` = 7-part codes, ``1:5000`` = 8-part codes of the
-        true orthophoto). ``DownloadManager`` expands a coarser code to it;
-        a code of this level or a finer one is the sheet itself."""
+        """Return the label of the PL-1992 sheets the provider publishes.
+
+        ``SheetParser`` labels: ``1:10000`` = 7-part codes, ``1:5000`` = 8-part codes of
+        the true orthophoto. ``DownloadManager`` expands a coarser code to it;
+        a code of this level or a finer one is the sheet itself.
+        """
         return "1:10000"
 
     def source_info(self, sheet: str) -> dict[str, Any] | None:
@@ -243,6 +245,7 @@ class LandCoverProvider(DataSourceProvider):
     - By TERYT code (administrative unit)
     - By bbox (bounding box)
     - By sheet (map sheet ID)
+
     Attributes
     ----------
     name : str
@@ -330,7 +333,7 @@ class LandCoverProvider(DataSourceProvider):
         timeout: int = 120,
         **kwargs: Any,
     ) -> Path:
-        """Deprecated alias for download_by_admin_unit."""
+        """Call ``download_by_admin_unit`` (deprecated alias)."""
         return self.download_by_admin_unit(
             teryt, output_path, timeout=timeout, **kwargs
         )
@@ -433,7 +436,7 @@ class LandCoverProvider(DataSourceProvider):
         return len(code) in (4, 7)
 
     def validate_teryt(self, teryt: str) -> bool:
-        """Deprecated alias for validate_admin_unit."""
+        """Call ``validate_admin_unit`` (deprecated alias)."""
         return self.validate_admin_unit(teryt)
 
     def __repr__(self) -> str:

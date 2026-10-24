@@ -510,7 +510,7 @@ class TestRunLazDownload:
         progress: list[tuple[int, int]] = []
         result = _run_laz_download(
             _selection(*tiles),
-            provider=FakeProvider(),
+            provider=FakeProvider(),  # type: ignore[arg-type]
             bbox=BBOX,
             output_dir=tmp_path,
             workers=3,
@@ -541,7 +541,7 @@ class TestRunLazDownload:
         with pytest.raises(KeyboardInterrupt):
             _run_laz_download(
                 _selection(*tiles),
-                provider=Provider(),
+                provider=Provider(),  # type: ignore[arg-type]
                 bbox=BBOX,
                 output_dir=tmp_path,
                 workers=2,
