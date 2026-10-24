@@ -14,12 +14,12 @@ Command groups: `boundaries`, `cadastre`, `elevation`, `geodesy`, `hydro`, `imag
 
 - [AGENTS.md](https://raw.githubusercontent.com/Daldek/Kartograf/main/AGENTS.md): the full guide for agents: interfaces, envelope, error codes, command index, typical flows
 - [README.md](https://raw.githubusercontent.com/Daldek/Kartograf/main/README.md): what Kartograf is for, installation and quick start (Polish)
-- [Usage](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/USAGE.md): task-oriented guide to the CLI, the library and the MCP server (Polish)
-- [Architecture](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/ARCHITECTURE.md): modules, store layout, sidecar, command catalog (Polish)
-- [Scope](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/SCOPE.md): what is in and out of scope (Polish)
+- [Usage](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/USAGE.md): task-oriented guide to the CLI, the library and the MCP server
+- [Architecture](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/ARCHITECTURE.md): modules, store layout, sidecar, command catalog
+- [Scope](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/SCOPE.md): what is in and out of scope
 - [Changelog](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/CHANGELOG.md): changes per release
 
 ## Optional
 
-- [Decisions](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/DECISIONS.md): architecture decision records (Polish)
-- [PRD](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/PRD.md): product requirements (Polish)
+- [Decisions](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/DECISIONS.md): architecture decision records
+- [PRD](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/PRD.md): product requirements

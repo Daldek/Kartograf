@@ -122,7 +122,7 @@ Projekt zapisuje w `kartograf-project.json` zadania i sumy SHA-256
 przypiętych wersji ze wspólnego magazynu; zwykłe `project download`
 odtwarza brakujące wersje tylko przy identycznej treści. Więcej przykładów,
 aktualizacje i przenoszenie magazynu:
-[docs/USAGE.md — Projekt](docs/USAGE.md#8-projekt).
+[docs/USAGE.md — Projekt](docs/USAGE.md#8-project).
 
 ### Biblioteka Python
 
@@ -175,7 +175,7 @@ To samo zadanie daje ten sam wynik w CLI, bibliotece i serwerze MCP:
 - [llms.txt](llms.txt): krótki spis dla agentów (zadania, polecenia, kody
   błędów).
 
-Szczegóły: [docs/USAGE.md — Interfejs dla agentów](docs/USAGE.md#9-interfejs-dla-agentow).
+Szczegóły: [docs/USAGE.md — Interfejs dla agentów](docs/USAGE.md#9-interface-for-agents).
 Agenci z innych repozytoriów pracują nad kodem Kartografa według reguł z
 [CLAUDE.md](CLAUDE.md).
 

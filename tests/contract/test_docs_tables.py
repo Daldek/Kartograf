@@ -134,11 +134,11 @@ def test_document_tables_name_every_registered_schema_once():
     types = sorted(name for names in documents.values() for name in names)
     pattern = re.compile(r"kartograf-[a-z-]+/[1-9][0-9]*")
 
-    usage_rows = _table_rows(_section(_read(USAGE), "Dokumenty JSON"))
+    usage_rows = _table_rows(_section(_read(USAGE), "JSON documents"))
     usage_schemas = [s for row in usage_rows for s in pattern.findall(row[0])]
     assert sorted(usage_schemas) == registered
 
-    architecture_rows = _table_rows(_section(_read(ARCHITECTURE), "Dokumenty JSON"))
+    architecture_rows = _table_rows(_section(_read(ARCHITECTURE), "JSON documents"))
     architecture_schemas = [
         s for row in architecture_rows for s in pattern.findall(row[0])
     ]
