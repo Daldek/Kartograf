@@ -195,10 +195,10 @@ COMMANDS = (
                     "arguments": [
                         "soil",
                         "hsg",
-                        "--sheet",
-                        "N-34-130-D",
                         "--depth",
                         "0-5cm",
+                        "--sheet",
+                        "N-34-130-D",
                     ]
                 },
             ),

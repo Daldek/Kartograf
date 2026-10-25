@@ -2,7 +2,8 @@
 
 **Date:** 2026-10-24
 **Status:** Accepted — amended by ADR-054 (the options `output_dir` and `root`, `check` instead of
-`check_updates`, `store init`); erratum 1: the command layer drives every command (AGI-2.1, decision 6).
+`check_updates`, `store init`); erratum 1: the command layer drives every command (AGI-2.1, decision 6);
+erratum 2: every example is the line `format_command` writes.
 The catalog documents (decisions 1 to 8), the MCP rebuild (decision 9) and the guide for agents
 (decision 10) are implemented.
 
@@ -196,3 +197,11 @@ JSON object of `tasks[].options` and of an MCP tool), and `validate_command` ret
 no default (the functions apply them). The MCP server keeps its own glue between a tool call and the
 functions; `tests/integration/test_commands_catalog.py` compares the layer with the envelope of the
 CLI for every command that runs offline.
+
+**Erratum 2 (2026-10-25, AGI-2.1; request of Archiwista):** Every example of the catalog is canonical:
+the `call` of an example in `kartograf-commands/1` (the same line as the `--help` of the command and the
+hints) is the line `format_command` writes for the call `parse_command` reads from it, the order of the
+flags too, so a tool that exchanges command lines compares them as text. The flags of the data command
+of a `project add` example are declared as words, so their order is the author's: the HSG task had
+`--sheet` before `--depth`, and the parameters of `soil hsg` put `--depth` first. A contract test
+(`tests/contract/test_commands_schema.py`) writes every example back and compares the text.
