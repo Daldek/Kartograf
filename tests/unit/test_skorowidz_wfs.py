@@ -151,16 +151,16 @@ class TestFeatureTypes:
 
         assert odd not in types
         assert len(types) == 17
-        assert odd in caplog.text and "NIE odpytywany" in caplog.text
+        assert odd in caplog.text and "NOT queried" in caplog.text
 
     def test_no_type_is_error(self):
         # the LAZ service has no SkorowidzNMT<year> type
         session = _session(lambda params: wfs_fixture("caps_laz_kron86.xml"))
         index = _index(session, vertical_crs="KRON86")
 
-        with pytest.raises(DownloadError, match="brak typow obiektow SkorowidzNMT"):
+        with pytest.raises(DownloadError, match="no feature types SkorowidzNMT"):
             index.feature_types()
-        with pytest.raises(DownloadError, match="wynik bylby niepelny"):
+        with pytest.raises(DownloadError, match="the result would be incomplete"):
             index.feature_types()  # a failure is not memoized
 
 
@@ -237,7 +237,7 @@ class TestFeatures:
         session = _session(lambda params: pages[params.get("STARTINDEX")])
 
         with pytest.raises(
-            DownloadError, match=r"strona 2.*powtorzony.*wynik bylby niepelny"
+            DownloadError, match=r"page 2.*repeated.*the result would be incomplete"
         ):
             list(_index(session).features(POMORZE, ["gugik:SkorowidzNMT2024"]))
 
@@ -248,7 +248,9 @@ class TestFeatures:
         )
         session = _session(lambda params: body)
 
-        with pytest.raises(DownloadError, match="spoza uslugi.*wynik bylby niepelny"):
+        with pytest.raises(
+            DownloadError, match=("outside the service.*the result would be incomplete")
+        ):
             list(_index(session).features(POMORZE, ["gugik:SkorowidzNMT2024"]))
         assert session.get.call_count == 1
 
@@ -261,7 +263,9 @@ class TestFeatures:
         )
         session = _session(lambda params: answer)
 
-        with pytest.raises(DownloadError, match="numberReturned.*wynik bylby niepelny"):
+        with pytest.raises(
+            DownloadError, match=("numberReturned.*the result would be incomplete")
+        ):
             list(_index(session).features(POMORZE, wfs_types("nmt_evrf2007")))
 
     @pytest.mark.parametrize("status", [400, 200])
@@ -269,7 +273,9 @@ class TestFeatures:
         report = wfs_fixture("exception_report.xml")
         session = _session(lambda params: wfs_response(report, status=status))
 
-        with pytest.raises(DownloadError, match="wynik bylby niepelny") as exc:
+        with pytest.raises(
+            DownloadError, match=("the result would be incomplete")
+        ) as exc:
             list(_index(session).features(POMORZE, ["gugik:SkorowidzNMT1900"]))
         if status == 200:
             assert "TYPENAME 'SkorowidzNMT1900' doesn't exist" in str(exc.value)
@@ -277,14 +283,16 @@ class TestFeatures:
     @pytest.mark.parametrize(
         ("body", "message"),
         [
-            ("Service Unavailable", "nieczytelna"),
-            ("<html><body>Blad</body></html>", "nie jest kolekcja obiektow"),
+            ("Service Unavailable", "unreadable"),
+            ("<html><body>Blad</body></html>", "not a feature collection"),
         ],
     )
     def test_non_gml_answer_is_error(self, body, message):
         session = _session(lambda params: body)
 
-        with pytest.raises(DownloadError, match=f"{message}.*wynik bylby niepelny"):
+        with pytest.raises(
+            DownloadError, match=f"{message}.*the result would be incomplete"
+        ):
             list(_index(session).features(POMORZE, wfs_types("nmt_evrf2007")))
 
     def test_empty_answer_is_empty(self):

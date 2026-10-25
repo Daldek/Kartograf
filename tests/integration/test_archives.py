@@ -306,7 +306,7 @@ class TestIndexSheets:
         session.get = Mock(
             return_value=wfs_response(wfs_fixture("exception_report.xml"), status=400)
         )
-        with pytest.raises(DownloadError, match="wynik bylby niepelny"):
+        with pytest.raises(DownloadError, match="the result would be incomplete"):
             _tbd_25m(session).index_sheets([sheet_frame_2180(SHEET)], system="1992")
 
 

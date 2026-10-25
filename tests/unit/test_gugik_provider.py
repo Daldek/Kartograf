@@ -162,7 +162,7 @@ class TestGugikProviderBasic:
         """Test of the extension for an invalid format."""
         provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 
-        with pytest.raises(ValidationError, match="Nieznany format"):
+        with pytest.raises(ValidationError, match="Unknown format"):
             provider.get_file_extension("InvalidFormat")
 
 
@@ -253,7 +253,7 @@ class TestGugikProviderResolution:
             min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
         )
 
-        with pytest.raises(ValidationError, match="tylko dla siatki NMT 1m"):
+        with pytest.raises(ValidationError, match="available only for the NMT 1m grid"):
             provider.download_bbox(bbox, tmp_path / "test.tif")
 
         session.get.assert_not_called()
@@ -461,7 +461,7 @@ class TestGugikProviderDownloadBbox:
         provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         output_path = tmp_path / "test.xyz"
 
-        with pytest.raises(ValidationError, match="Nieobslugiwany format WCS"):
+        with pytest.raises(ValidationError, match="Unsupported WCS format"):
             provider.download_bbox(sample_bbox, output_path, format="InvalidFormat")
 
     def test_download_bbox_wrong_crs(self, tmp_path):
@@ -851,7 +851,7 @@ class TestGugikProviderGetOpendataUrl:
             )._get_opendata_url(self.SHEET)
 
         assert str(exc_info.value) == (
-            f"Brak danych NMT 1m dla {self.SHEET} (uklad PL-1992, EVRF2007)"
+            f"No NMT 1m data for {self.SHEET} (PL-1992 system, EVRF2007)"
         )
         assert len(wfs_requests(session, _EVRF2007)) == 1
         assert len(wfs_requests(session, _KRON86)) == 1
@@ -996,9 +996,14 @@ class TestGugikProviderGetOpendataUrl:
             )._get_opendata_url(self.SHEET)
 
         assert exc_info.value.hints == (
-            "Skorowidz GUGiK ma ten arkusz w NMT 0.5m EVRF2007 - "
-            "uzyj --resolution 0.5m",
-            "Skorowidz GUGiK ma ten arkusz w NMT 5m EVRF2007 - uzyj --resolution 5m",
+            (
+                "The GUGiK sheet index has this sheet in NMT 0.5m EVRF2007 - use "
+                "--resolution 0.5m"
+            ),
+            (
+                "The GUGiK sheet index has this sheet in NMT 5m EVRF2007 - use "
+                "--resolution 5m"
+            ),
         )
         assert len(wfs_requests(session, _EVRF2007)) == 1
 
@@ -1029,7 +1034,7 @@ class TestGugikProviderGetOpendataUrl:
             assert session.get.call_count == calls
             assert str(cached.value) == str(first.value)
             assert cached.value.hints == first.value.hints
-            assert "uzyj --resolution 0.5m" in str(cached.value)
+            assert "use --resolution 0.5m" in str(cached.value)
         finally:
             cache.close()
 
@@ -1048,8 +1053,10 @@ class TestGugikProviderGetOpendataUrl:
             )._get_opendata_url(sheet)
 
         assert exc_info.value.hints == (
-            "Skorowidz GUGiK ma ten arkusz w NMT 1m KRON86 - "
-            "uzyj --vertical-crs KRON86",
+            (
+                "The GUGiK sheet index has this sheet in NMT 1m KRON86 - use "
+                "--vertical-crs KRON86"
+            ),
         )
         assert [query["TYPENAMES"] for query in wfs_requests(session, _KRON86)] == [
             ",".join(wfs_types("nmt_kron86"))
@@ -1300,12 +1307,18 @@ class TestSkorowidzRegression:
             )._get_opendata_url("6.125.25")
 
         assert exc_info.value.hints == (
-            "Skorowidz GUGiK ma ten arkusz w NMT 10m EVRF2007 - uzyj --resolution 10m",
-            "Skorowidz GUGiK ma ten arkusz w NMT 5m EVRF2007 - uzyj --resolution 5m",
-            "Skorowidz ma ten obszar w PL-1992: M-34-62-C-c-1-1 (1:10000) - "
-            "uzyj tego godla lub --sheet-system 1992",
-            "Skorowidz ma ten obszar w PL-1992: M-34-62-C-c-1-3 (1:10000) - "
-            "uzyj tego godla lub --sheet-system 1992",
+            (
+                "The GUGiK sheet index has this sheet in NMT 10m EVRF2007 - use "
+                "--resolution 10m"
+            ),
+            (
+                "The GUGiK sheet index has this sheet in NMT 5m EVRF2007 - use "
+                "--resolution 5m"
+            ),
+            "The sheet index has this area in PL-1992: M-34-62-C-c-1-1 (1:10000) - "
+            "use this sheet code or --sheet-system 1992",
+            "The sheet index has this area in PL-1992: M-34-62-C-c-1-3 (1:10000) - "
+            "use this sheet code or --sheet-system 1992",
         )
 
     def test_uppercase_asc_is_available(self):
@@ -1363,7 +1376,7 @@ class TestSkorowidzRegression:
     def test_1m_rejects_5m_record(self):
         body = render_wfs_body([wfs_record("N-33-90-C-c-2-4", resolution="5.00 m")])
         session = _index_session(nmt_evrf2007=body)
-        with pytest.raises(NoCoverageError, match="uzyj --resolution 5m"):
+        with pytest.raises(NoCoverageError, match="use --resolution 5m"):
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
             )._get_opendata_url("N-33-90-C-c-2-4")

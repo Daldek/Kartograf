@@ -392,10 +392,14 @@ class TestGugikNmptProviderDownload:
 
         assert exc.value.sheet == sheet
         assert exc.value.hints == (
-            "Skorowidz GUGiK ma ten arkusz w NMPT 0.5m EVRF2007 - uzyj "
-            "--resolution 0.5m",
-            "Skorowidz GUGiK ma ten arkusz w NMPT 0.6m EVRF2007 - uzyj "
-            "--resolution 0.6m",
+            (
+                "The GUGiK sheet index has this sheet in NMPT 0.5m EVRF2007 - use "
+                "--resolution 0.5m"
+            ),
+            (
+                "The GUGiK sheet index has this sheet in NMPT 0.6m EVRF2007 - use "
+                "--resolution 0.6m"
+            ),
         )
         assert len(wfs_requests(session, NMPT_EVRF2007)) == 1
         assert _file_urls(session) == []
@@ -404,7 +408,9 @@ class TestGugikNmptProviderDownload:
         """A broken index answer fails the sheet - never an empty result."""
         session = _index_session({NMPT_EVRF2007: wfs_fixture("exception_report.xml")})
 
-        with pytest.raises(DownloadError, match="wynik bylby niepelny") as exc:
+        with pytest.raises(
+            DownloadError, match=("the result would be incomplete")
+        ) as exc:
             _nmpt(session=session).download(SHEET_E, tmp_path / "s.asc")
 
         assert not isinstance(exc.value, NoCoverageError)
@@ -476,8 +482,8 @@ class TestGugikNmptProviderDownload:
             provider.download_bbox(sample_bbox, tmp_path / "x.tif")
 
         assert str(exc.value) == (
-            "Pobieranie WCS (download_bbox) jest dostepne tylko dla siatki NMPT "
-            f"1m - {provider.describe()} pobierz przez download() (arkusze)"
+            "WCS download (download_bbox) is available only for the NMPT 1m grid - "
+            f"download {provider.describe()} via download() (sheets)"
         )
         session.get.assert_not_called()
 

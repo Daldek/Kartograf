@@ -14,6 +14,7 @@ from typing import Any
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.messages import message
 from kartograf.providers.cuzk.client import CuzkClient
 
 KU_CODE = re.compile(r"[0-9]{6}")
@@ -49,11 +50,16 @@ def cadastral_areas_for_bbox(
     """
     endpoint, _, layer = layer_url.rstrip("/").rpartition("/")
     if not endpoint or not layer.isdigit():
-        raise ValueError(f"Adres warstwy RUIAN bez numeru warstwy: {layer_url!r}")
+        raise ValueError(f"RUIAN layer URL without a layer number: {layer_url!r}")
     if bbox.min_x >= bbox.max_x or bbox.min_y >= bbox.max_y:
         raise ValidationError(
-            f"Niepoprawny bbox: ({bbox.min_x}, {bbox.min_y}, "
-            f"{bbox.max_x}, {bbox.max_y})"
+            message(
+                "core.invalid_bbox",
+                min_x=bbox.min_x,
+                min_y=bbox.min_y,
+                max_x=bbox.max_x,
+                max_y=bbox.max_y,
+            )
         )
     key = _cache_key(layer_url, bbox)
     if cache is not None:
@@ -120,15 +126,15 @@ def _area(feature: dict[str, Any], layer_url: str) -> CadastralArea:
     # bool is an int subclass; a code is a number or a string of digits
     if isinstance(code, bool) or not isinstance(code, int | str):
         raise DownloadError(
-            f"RUIAN {layer_url}: obiekt bez poprawnego pola 'kod': {attrs}"
+            message("providers.ruian_feature_bad_kod", layer_url=layer_url, attrs=attrs)
         )
     text = str(code).strip()
     if not KU_CODE.fullmatch(text):
         raise DownloadError(
-            f"RUIAN {layer_url}: kod katastralniho uzemi spoza wzorca 6 cyfr: {code!r}"
+            message("providers.ruian_code_not_6_digits", layer_url=layer_url, code=code)
         )
     if not isinstance(name, str) or not name.strip():
         raise DownloadError(
-            f"RUIAN {layer_url}: katastralni uzemi {text} bez pola 'nazev'"
+            message("providers.ku_missing_name_field", layer_url=layer_url, code=text)
         )
     return CadastralArea(code=text, name=name.strip())

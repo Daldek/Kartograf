@@ -158,7 +158,7 @@ def test_area_outside_countries_is_validation_error(tmp_path):
         ),
         (
             {"product": "orto", "vertical_crs": None, "cutout": True},
-            "--coverage wymagane z --cutout --product orto",
+            "--coverage required with --cutout --product orto",
         ),
         (
             {

@@ -179,13 +179,13 @@ BASE = {
         (
             {"coverage": None},
             [
-                "--coverage wymagane",
+                "--coverage required",
                 "standard (najnowsze dostepne ortofotomapy)",
                 "high (ortofotomapy o pikselu 10 cm i mniejszym)",
             ],
         ),
         ({"coverage": "medium"}, ["--coverage 'medium'", "standard", "high"]),
-        ({"resolution": None}, ["--resolution wymagane", "0.1m, 0.25m, 0.5m, 1m"]),
+        ({"resolution": None}, ["--resolution required", "0.1m, 0.25m, 0.5m, 1m"]),
         ({"resolution": "0.2m"}, ["--resolution '0.2m'", "0.1m, 0.25m, 0.5m, 1m"]),
         ({"horizontal_crs": None}, ["--horizontal-crs wymagane", "tylko EPSG:2180"]),
         (

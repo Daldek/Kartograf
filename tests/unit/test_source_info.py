@@ -333,7 +333,7 @@ def test_list_layers_bdot10k():
     assert document.source == "BDOT10k"
     assert {"PTWP", "SWRS", "BUBD"} <= set(layers)
     assert list(layers) == sorted(layers)
-    assert layers["PTWP"] == "Wody powierzchniowe"
+    assert layers["PTWP"] == "Surface waters"
     assert document.classes is None
     assert document.years is None
     assert document.properties is None
@@ -388,7 +388,7 @@ def test_list_layers_soil_properties_depths_statistics():
     assert document.source == "SoilGrids"
     assert document.layers == ()
     assert list(properties)[:2] == ["bdod", "cec"]
-    assert "w pliku g/kg" in properties["clay"]
+    assert "in the file g/kg" in properties["clay"]
     assert document.depths == (
         "0-5cm",
         "5-15cm",
@@ -402,7 +402,7 @@ def test_list_layers_soil_properties_depths_statistics():
     assert (clay.unit, clay.conventional_unit, clay.divisor) == ("g/kg", "%", 10)
     assert ocs.depths == ("0-30cm",) and len(clay.depths) == 6
     assert list(statistics) == ["mean", "Q0.05", "Q0.5", "Q0.95", "uncertainty"]
-    assert statistics["Q0.5"] == "mediana"
+    assert statistics["Q0.5"] == "median"
     assert document.classes is None and document.years is None
 
 

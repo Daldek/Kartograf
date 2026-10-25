@@ -140,7 +140,7 @@ def _two_counties_with(matched: str) -> str:
 def test_discover_truncated_result_raises():
     """Review Focus 1: numberReturned < numberMatched = paging cut the list."""
     body = _two_counties_with("400")
-    with pytest.raises(DownloadError, match="niepelna"):
+    with pytest.raises(DownloadError, match="incomplete county list"):
         discover_teryts_for_bbox(BARDO, session=_session(body))
 
 
@@ -148,7 +148,7 @@ def test_unknown_match_count_at_page_limit_raises(monkeypatch):
     """Review Focus 1: 'unknown' count and a full page = maybe cut -> error."""
     monkeypatch.setattr(prg, "_COUNT", 2)
     body = _two_counties_with("unknown")
-    with pytest.raises(DownloadError, match="niepelna"):
+    with pytest.raises(DownloadError, match="incomplete county list"):
         discover_teryts_for_bbox(BARDO, session=_session(body))
 
 
@@ -163,7 +163,7 @@ def test_next_page_link_raises():
     body = re.sub(
         r"(<(?:\w+:)?FeatureCollection)", r'\1 next="https://x/page2"', body, count=1
     )
-    with pytest.raises(DownloadError, match="niepelna"):
+    with pytest.raises(DownloadError, match="incomplete"):
         discover_teryts_for_bbox(BARDO, session=_session(body))
 
 
@@ -175,7 +175,7 @@ def test_real_paged_response_raises():
     the ``next`` link reveals the cut.
     """
     body = (FIX / "truncated_count1.xml").read_text(encoding="utf-8")
-    with pytest.raises(DownloadError, match="niepelna"):
+    with pytest.raises(DownloadError, match="incomplete"):
         discover_teryts_for_bbox(BARDO, session=_session(body))
 
 

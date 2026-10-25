@@ -55,7 +55,7 @@ from kartograf.core.coverage import (
     uncovered_pieces,
 )
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.notices import TILES, count_text
+from kartograf.messages import message
 from kartograf.providers.base import DataSourceProvider
 from kartograf.providers.pl.skorowidz_wfs import (
     GML_NS,
@@ -156,8 +156,7 @@ class LazTile:
         parsed = parse_pl_system(self.crs)
         if parsed is None:
             raise ValidationError(
-                f"Kafel {self.sheet}: nierozpoznany uklad_xy {self.crs!r} "
-                "(oczekiwano 'PL-1992' albo 'PL-2000:S5'..'S8')"
+                message("providers.tile_unknown_xy_crs", sheet=self.sheet, crs=self.crs)
             )
         return parsed[0]
 
@@ -267,7 +266,7 @@ def _local_area(area: BBox | Polygon) -> tuple[float, float, Polygon]:
     """
     if isinstance(area, BBox):
         if area.crs != "EPSG:2180":
-            raise ValidationError(f"obszar musi byc w EPSG:2180, podano {area.crs}")
+            raise ValidationError(message("providers.area_crs_not_2180", crs=area.crs))
         return (
             area.min_x,
             area.min_y,
@@ -557,7 +556,9 @@ def laz_tile(elem: ET.Element) -> LazTile | None:
         # D3: the same parser as the index and the sidecar — a tile without
         # a recognized CRS is skipped (like an index record) rather than
         # guessed from the sheet (pl_2000 segment + EPSG:2180 sidecar)
-        logger.warning(f"Kafel {sheet}: nierozpoznany uklad_xy {crs!r} - pominiety")
+        logger.warning(
+            message("providers.tile_unknown_xy_crs_skipped", sheet=sheet, crs=crs)
+        )
         return None
 
     year_text = feature_text(elem, "akt_rok")
@@ -647,8 +648,11 @@ class GugikLazProvider(DataSourceProvider):
         self._indexes = _laz_indexes()
         if vertical_crs not in self._indexes:
             raise ValidationError(
-                f"Nieobslugiwany uklad wysokosci: '{vertical_crs}'. "
-                f"Obslugiwane: {sorted(self._indexes)}"
+                message(
+                    "providers.unsupported_vertical_crs_init",
+                    vertical_crs=vertical_crs,
+                    indexes=sorted(self._indexes),
+                )
             )
         # One session per thread (the CLI pool downloads tiles in parallel,
         # and requests.Session is not thread-safe); an injected session wins —
@@ -664,7 +668,7 @@ class GugikLazProvider(DataSourceProvider):
     @property
     def name(self) -> str:
         """Return provider name."""
-        return "GUGiK LAZ (chmura punktow)"
+        return message("providers.provider_name")
 
     @property
     def base_url(self) -> str:
@@ -842,28 +846,32 @@ class GugikLazProvider(DataSourceProvider):
         )
 
         if year is not None and (min_year is not None or max_year is not None):
-            raise ValidationError("year wyklucza sie z min_year/max_year")
+            raise ValidationError(message("providers.year_excludes_range"))
         lo, hi = (year, year) if year is not None else (min_year, max_year)
         validate_year_bounds(lo, hi)
         if bbox.crs != "EPSG:2180":
-            raise ValidationError(
-                f"bbox musi byc w EPSG:2180, podano {bbox.crs}. "
-                "Najpierw przelicz (np. SheetParser.get_bbox(crs='EPSG:2180'))."
-            )
+            raise ValidationError(message("providers.bbox_crs_not_2180", crs=bbox.crs))
 
         vcrs = vertical_crs or self._vertical_crs
         if vcrs not in self._indexes:
             raise ValidationError(
-                f"Nieobslugiwany uklad wysokosci: '{vcrs}'. "
-                f"Obslugiwane: {sorted(self._indexes)}"
+                message(
+                    "providers.unsupported_vertical_crs",
+                    vcrs=vcrs,
+                    indexes=sorted(self._indexes),
+                )
             )
 
         available_years = self._get_available_years(vcrs, timeout)
         # `--year Y` reaches the provider as [Y, Y] (CLI): same wording as year=
         if lo is not None and lo == hi and lo not in available_years:
             raise DownloadError(
-                f"rocznik {lo} nie istnieje w usludze {vcrs} "
-                f"(dostepne: {', '.join(map(str, available_years))})"
+                message(
+                    "providers.vintage_not_in_service",
+                    lo=lo,
+                    vcrs=vcrs,
+                    years=", ".join(map(str, available_years)),
+                )
             )
         has_range = lo is not None or hi is not None
         if has_range and not any(in_year_range(y, lo, hi) for y in available_years):
@@ -873,8 +881,12 @@ class GugikLazProvider(DataSourceProvider):
                 else year_range_label(lo, hi)
             )
             raise DownloadError(
-                f"przedzial {label} nie ma rocznika w usludze {vcrs} "
-                f"(dostepne: {', '.join(map(str, available_years))})"
+                message(
+                    "providers.range_no_vintage",
+                    label=label,
+                    vcrs=vcrs,
+                    years=", ".join(map(str, available_years)),
+                )
             )
         found: list[LazTile] = []
         below: list[LazTile] = []
@@ -909,8 +921,8 @@ class GugikLazProvider(DataSourceProvider):
                     lo,
                     hi,
                     total=len(reference.tiles),
-                    unit="kafli obszaru",
-                    subject="kafli LAZ",
+                    unit=message("providers.unit_area_tiles"),
+                    subject=message("providers.subject_laz_tiles"),
                     labels=labels,
                     partial_years=partial_years,
                 )
@@ -941,10 +953,9 @@ class GugikLazProvider(DataSourceProvider):
                 yield tile
         if returned and not kept:
             raise DownloadError(
-                f"WFS {layer}: serwer zwrocil {count_text(returned, *TILES)}, "
-                "zaden nie "
-                "przecina zadanego bboxa - niezgodnosc kolejnosci osi "
-                "(zglos blad)"
+                message(
+                    "providers.wfs_axis_order_mismatch", layer=layer, returned=returned
+                )
             )
 
     @staticmethod

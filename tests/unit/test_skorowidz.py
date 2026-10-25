@@ -155,14 +155,14 @@ class TestParseSkorowidzRecords:
         )
         with caplog.at_level("WARNING"):
             assert parse_skorowidz_records(body, "L") == []
-        assert "URL HTTPS" in caplog.text
+        assert "without HTTPS URL" in caplog.text
 
     def test_record_with_unparseable_sheet_is_dropped(self, caplog):
         record = gfi_record("N-34-130-D-d-2-4")
         record["godlo"] = "???"
         with caplog.at_level("WARNING"):
             assert parse_skorowidz_records(render_gfi_body([record]), "L") == []
-        assert "nieprawidlowe godlo" in caplog.text
+        assert "invalid sheet code" in caplog.text
 
     def test_missing_resolution_and_system_become_none(self):
         body = render_gfi_body(
@@ -193,7 +193,7 @@ class TestParseSkorowidzRecords:
         with caplog.at_level("WARNING"):
             assert len(parse_skorowidz_records(body, "SkorowidzeNMT2024")) == 1
             assert len(parse_skorowidz_records(body, "SkorowidzeNMT2023iStarsze")) == 1
-        assert caplog.text.count("poza partycja") == 2
+        assert caplog.text.count("outside the layer partition") == 2
 
     def test_records_inside_partition_do_not_warn(self, caplog):
         body = render_gfi_body(
@@ -336,7 +336,7 @@ class TestSelectSheetRecord:
                 select_sheet_record(records, sheet="N-34-130-D-d-2-4", system="1992")
                 is None
             )
-        assert caplog.text.count("bez ukladu lub rozdzielczosci") == 2
+        assert caplog.text.count("without CRS or resolution") == 2
 
     def test_newest_wins_regardless_of_full_sheet(self):
         """D9: newest acquisition date, even if ``calyArkuszWypelnionyTrescia: NIE``."""
@@ -517,7 +517,7 @@ class TestQuerySkorowidzLayer:
         session.get.return_value = response(sample("ogc_exception.body"))
         with (
             patch("kartograf.transport.http.time.sleep") as sleep,
-            pytest.raises(DownloadError, match="raport wyjatku OGC") as exc,
+            pytest.raises(DownloadError, match="OGC exception report") as exc,
         ):
             self._query(session)
         assert session.get.call_count == 1
@@ -529,7 +529,7 @@ class TestQuerySkorowidzLayer:
         """P7: an HTTP 200 error page without OGC markers is an error, not nodata."""
         session = Mock(spec=requests.Session)
         session.get.return_value = response("<html><body>502 Bad Gateway</body></html>")
-        with pytest.raises(DownloadError, match="nie jest szablonem skorowidza"):
+        with pytest.raises(DownloadError, match="is not a GUGiK sheet index template"):
             self._query(session)
         assert session.get.call_count == 1
 
@@ -610,9 +610,11 @@ class TestCoverageHints:
         _hint_record("M-34-63-A-c-2-1", "1992"),
     )
     _EXPECTED = {
-        "Dostepny potomek 6.129.30.13.4 - uzyj --scale 1:1000",
-        "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1 (1:10000) - uzyj "
-        "tego godla lub --sheet-system 1992",
+        "Available descendant 6.129.30.13.4 - use --scale 1:1000",
+        (
+            "The sheet index has this area in PL-1992: M-34-63-A-c-2-1 (1:10000) - use "
+            "this sheet code or --sheet-system 1992"
+        ),
     }
 
     def test_helper(self):

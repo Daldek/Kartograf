@@ -530,7 +530,10 @@ class TestGugikProviderCacheIntegration:
         with pytest.raises(NoCoverageError) as first:
             provider._get_opendata_url(sheet)
         assert first.value.hints == (
-            "Skorowidz GUGiK ma ten arkusz w NMT 5m EVRF2007 - uzyj --resolution 5m",
+            (
+                "The GUGiK sheet index has this sheet in NMT 5m EVRF2007 - use "
+                "--resolution 5m"
+            ),
         )
         key = ("pl.gugik.nmt_1m", "1m", "EVRF2007", sheet)
         assert cache.get_record(*key)["hints"] == list(first.value.hints)
@@ -569,7 +572,7 @@ class TestGugikProviderCacheIntegration:
         assert own[0]["TYPENAMES"] == ",".join(wfs_types("nmt_evrf2007"))
         cached = cache.get_record(*NMT_1M)
         assert cached is not None and cached["no_coverage"] is True
-        assert "Brak danych" in cached["message"]
+        assert "No NMT 1m data for" in cached["message"]
 
     def test_query_failure_is_not_cached_as_no_coverage(self, cache):
         """K3-safe: network failure = DownloadError, the cache stays empty."""
@@ -584,7 +587,7 @@ class TestGugikProviderCacheIntegration:
 
         assert not isinstance(excinfo.value, NoCoverageError)
         assert "SkorowidzNMT" in str(excinfo.value)
-        assert "wynik bylby niepelny" in str(excinfo.value)
+        assert "the result would be incomplete" in str(excinfo.value)
         assert mock_session.get.call_count == 3
         assert sleep.call_count == 2
         assert cache.get_record(*NMT_1M) is None

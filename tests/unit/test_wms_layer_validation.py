@@ -151,7 +151,9 @@ class TestWfsFeatureTypes:
         would be incomplete) - no GetFeature, no file, never no coverage."""
         session = _wfs_session({NMT_EVRF2007: [answer]})
 
-        with pytest.raises(DownloadError, match="wynik bylby niepelny") as exc:
+        with pytest.raises(
+            DownloadError, match=("the result would be incomplete")
+        ) as exc:
             self._nmt(session).download(SHEET, tmp_path / "x.asc")
 
         assert not isinstance(exc.value, NoCoverageError)
@@ -165,7 +167,7 @@ class TestWfsFeatureTypes:
 
         with (
             patch("time.sleep"),
-            pytest.raises(DownloadError, match="wynik bylby niepelny"),
+            pytest.raises(DownloadError, match="the result would be incomplete"),
         ):
             self._nmt(session).download(SHEET, tmp_path / "x.asc")
 

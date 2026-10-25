@@ -159,7 +159,7 @@ def test_laz_404_is_sheet_failure(tmp_path):
     (failure,) = result.failed
     assert isinstance(failure, CzLazFailure) and failure.sheet == "CTES86"
     assert failure.error.status_code == 404
-    assert "zweryfikuj godlo w indeksie KladyMapovychListu" in str(failure.error)
+    assert "verify the sheet code in the KladyMapovychListu index" in str(failure.error)
     (file,) = result.files
     assert file.path.read_bytes() == zip_member(CTES96_URL)
     assert sidecar(file.version_path)["extra"]["parent_request"] == parent

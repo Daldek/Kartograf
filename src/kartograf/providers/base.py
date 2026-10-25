@@ -14,6 +14,7 @@ from typing import Any
 
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 
 
 class DataSourceProvider(ABC):
@@ -208,7 +209,7 @@ class BaseProvider(DataSourceProvider):
             "ASC": ".asc",
         }
         if format not in extensions:
-            raise ValidationError(f"Nieznany format: {format}")
+            raise ValidationError(message("providers.unknown_format", format=format))
         return extensions[format]
 
     def validate_sheet(self, sheet: str) -> bool:
@@ -422,7 +423,7 @@ class LandCoverProvider(DataSourceProvider):
             "GTiff": ".tif",
         }
         if format not in extensions:
-            raise ValidationError(f"Nieznany format: {format}")
+            raise ValidationError(message("providers.unknown_format", format=format))
         return extensions[format]
 
     def validate_admin_unit(self, code: str) -> bool:

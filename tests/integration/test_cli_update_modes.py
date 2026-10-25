@@ -119,7 +119,7 @@ def test_check_updates_index_failure_names_no_download(tmp_path, capsys):
         text for text in capsys.readouterr().out.splitlines() if text.startswith(G_PATH)
     )
     assert line.startswith(f"{G_PATH}: nie udalo sie sprawdzic: ")
-    assert line.endswith(" - wynik bylby niepelny")
+    assert line.endswith(" - the result would be incomplete")
 
 
 def test_check_updates_writes_plan_file_and_upgrade_executes_it(tmp_path, capsys):
