@@ -290,6 +290,27 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - A CRS label with surrounding spaces (`" EPSG:5514 "`) no longer fails in the
   pinned transform with PROJ 9.8.
 
+### Data output (ADR-054, in progress)
+
+The Nogat convention ECO-051 / DEV §19 gives every writing command two modes: plain files with
+`--output-dir` (`-o`) and the versioned store with `--root`. The work is on the branch
+`feature/data-output`; the entries below are the steps that have landed. The complete list of
+changes and the migration guide ("Migration guide: data output") are written with the last step.
+
+**Breaking**
+
+- A parameter that names a store root is `root` (ADR-054 decision 1): the download and check
+  functions of every track, `DownloadManager`, `LandCoverManager`, `HSGCalculator`,
+  `run_command`, `check_command`, `validate_command`, `init_project`, the read API
+  (`list_segments`, `list_partitions`, `iter_store`, `describe_store`, `list_store_entries`),
+  `Project.root`, the `root` key of `kartograf-project/1`, `StoreOverview.root` and
+  `StoreEntries.root`. The CLI flag of the store is `--root`; `-o` and `--output` as a store
+  root are gone, without an alias (`output_dir` and `-o` are reserved for the plain directory
+  of the next steps). The layout, the sidecars and every result are unchanged. Consumers:
+  Archiwista (`Project.root`, the read API names, the manifest key), Retman (`root=` in
+  `validate_command`, `run_command`, `check_command` and `DownloadManager(output_dir=...)`),
+  Hydrograf (`DownloadManager(output_dir=...)` in `backend/scripts/download_dem.py`).
+
 ### Breaking changes
 
 - The default mode (without `--check-updates`/`--upgrade`) does not ask the source
