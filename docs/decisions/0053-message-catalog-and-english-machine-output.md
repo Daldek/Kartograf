@@ -2,8 +2,8 @@
 
 **Date:** 2026-10-25
 **Status:** Accepted. The catalog, the language switch of the CLI and the error document
-(decisions 1 to 6) are implemented; the texts of the other modules move area by area
-(decision 7). Amends ADR-037 (Z5, S6: the language of messages).
+(decisions 1 to 6) are implemented; erratum 1: the migration of decision 7 is complete and
+`_PENDING` of decision 6 is gone. Amends ADR-037 (Z5, S6: the language of messages).
 
 **Context:** AGI-9.2 makes every machine output English (`--json`, the error document on
 the last line of stderr, MCP results, descriptions and instructions, `AGENTS.md`,
@@ -82,3 +82,14 @@ a Polish user keeps Polish human output. A new text costs two strings in a catal
 placeholder, an unused entry and a stray Polish literal. A text assembled by an f-string at a
 call site is not translatable and is a defect. Until an area is migrated its texts stay Polish
 (see `_PENDING`); the language switch already works for the messages that are in the catalog.
+
+**Erratum 1 (2026-10-25, decisions 6 and 7):** The migration by area is complete: `core`,
+`transform`, `transport`, `providers`, `sources`, `hydrology`, `landcover`, `cli`, the root
+modules, the MCP server, the command catalog, `download` and `project` all use the catalog. The
+set `_PENDING` of decision 6 is deleted, and the guard
+`test_polish_literals_stay_only_in_the_catalog` allows no Polish literal outside the catalog and
+the generated registry. The sentence of the Consequences, "Until an area is migrated its texts
+stay Polish", describes the state during the migration only. A sentence that wraps a caught
+error is a catalog message with a nested one (`reason(exc)`), so a problem keeps its language
+when composed; this includes a place in a project manifest, the label of a unit or task and the
+owner of a lock (`messages/project.py`).

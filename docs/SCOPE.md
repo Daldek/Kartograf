@@ -436,7 +436,7 @@ kartograf project verify                   # SHA-256 of files and sidecars
 kartograf cache stats|clear|path           # metadata cache (SQLite)
 kartograf commands list --json                   # command catalog (groups, commands, ...); `commands schema --command "<group> <command>"`: options, allowed values, examples (ADR-052)
 kartograf elevation availability --product nmt --sheet <sheet_code> --json # --json in every command: one kartograf-result/1 envelope, error kartograf-error/1 on stderr, exit codes of the Nogat registry (USAGE 9.3)
-kartograf-mcp                              # MCP server (stdio; extra `kartograf[mcp]`): 39 tools 1:1 with commands, read only and plans by default; `--allow-writes --allow-dir DIR` allows writing (USAGE 9.6)
+kartograf-mcp                              # MCP server (stdio; extra `kartograf[mcp]`): 40 tools 1:1 with commands, read only and plans by default; `--allow-writes --allow-dir DIR` allows writing (USAGE 9.6)
 # Full list of options: kartograf <group> <command> --help
 ```
 
@@ -862,7 +862,7 @@ from kartograf import (
 # - library: `to_dict()`/`to_json()` of every report, exceptions with a stable `code`,
 #   `exit_code` and `hint` (`ValidationError.option`/`allowed`), `error_report`;
 # - MCP server `kartograf-mcp` (stdio; optional extra `kartograf[mcp]`, `mcp>=2.3.0,<3`):
-#   39 tools 1:1 with the commands (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope
+#   40 tools 1:1 with the commands (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope
 #   with `outputSchema`, `is_error` only for an error, progress via MCP notifications, absolute paths,
 #   `--tools`, `--allow-dir`, `--allow-writes` (without it only plans), no default values
 #   affecting the data.

@@ -66,11 +66,6 @@ SCOPES = ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
 GENERATED = frozenset({"_errors.py"})
 PLURAL = re.compile(r"\{\w+:plural\([^|(){}]+(?:\|[^|(){}]+){1,2}\)\}")
 
-# Files that still hold Polish string literals outside the catalog. One comment line
-# names an area, so the commit that migrates an area touches only its own lines.
-# A file leaves the set as soon as its last Polish literal does (checked below).
-_PENDING: frozenset[str] = frozenset()
-
 
 def is_polish(value: str) -> bool:
     """Whether a string literal is Polish text: not a domain token, a name or a URL."""
@@ -207,14 +202,13 @@ def test_no_entry_is_unused_and_no_key_like_literal_is_misspelled():
     assert not misspelled, f"literals that look like keys of a catalog: {misspelled}"
 
 
-def test_polish_literals_stay_only_in_the_catalog_and_the_pending_files():
+def test_polish_literals_stay_only_in_the_catalog():
     found = {
         name
         for name, tree in sources()
         if any(is_polish(node.value) for node in string_values(tree))
     }
-    assert found - _PENDING == set(), "a Polish text belongs in kartograf.messages"
-    assert _PENDING - found == set(), "no Polish literal left: drop the file"
+    assert found == set(), "a Polish text belongs in kartograf.messages"
 
 
 # --------------------------------------------------------------------------
