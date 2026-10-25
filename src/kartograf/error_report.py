@@ -77,7 +77,9 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "invalid_input",
         2,
         "wrong value or combination of arguments, a missing required argument, "
-        "an invalid input file (plan, manifest, geometry)",
+        "an invalid input file (plan, manifest, geometry); reasons that refine it: "
+        "exclusive_options (output_dir with root) and store_only_option (an option "
+        "that needs the store, with output_dir)",
     ),
     ErrorCodeSpec(
         "UsageError",

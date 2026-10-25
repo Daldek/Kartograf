@@ -358,6 +358,15 @@ changes and the migration guide ("Migration guide: data output") are written wit
   MCP tools (`check: true` plans without writing) and the project commands. The plan is the
   same document (`kartograf-plan/1`), and no alias is kept. Consumers that pass `check_updates`
   to an MCP tool or `--check-updates` to the CLI change the name.
+- The engine of plain output, `kartograf.output` (ADR-054 decision 3, DEV-19.4 to DEV-19.11; the
+  library only, no command uses it yet): `resolve_target(output_dir=, root=)` (both given is
+  `validation_error`, `details.reason` `exclusive_options`; neither is the default store),
+  `plan_plain` and `refuse` (the target list is checked as a whole before the first byte:
+  `duplicate_output_name`, `output_in_store`, `output_exists`, every offending path in
+  `details.paths`), `Staging` (`<dir>/.kartograf-incoming/<host>_<pid>_<token>/`, one chunked read
+  for size and SHA-256, `os.replace`, removed on success, error, SIGINT and SIGTERM, leftovers
+  over 24 hours removed by the next run) and `FileResult`. `ValidationError` takes an instance
+  `reason`.
 
 ### Breaking changes
 

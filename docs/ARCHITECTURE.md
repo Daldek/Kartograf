@@ -413,6 +413,10 @@ kartograf/
 │                        # are built here), ERROR_CODES/EXIT_CODES - the only source of the USAGE 9.3 tables and the catalog
 ├── interrupt.py         # Interruption: run_parallel (pool with queue cancellation and a stop flag for
 │                        # running units), check_stop, Stopped/Terminated, sigterm_interrupts
+├── marker.py            # The store marker kartograf-store.json (ADR-054): prepare_store, lenient_store,
+│                        # init_store (`store init`), store_around/store_below (stores of any tool by marker name)
+├── output.py            # Plain output (ADR-054, 3.7): Target/resolve_target, plan_plain, refuse, Staging
+│                        # (.kartograf-incoming/<host>_<pid>_<token>/), FileResult, digest_of
 ├── core/                # Base logic, no network IO
 │   ├── bbox.py             # BBox, validate_bbox, transform_bbox (dense envelope: _DENSIFY
 │   │                       # points per edge, transformer cache, operation pinned
@@ -1873,6 +1877,42 @@ section 5; usage: USAGE 9.1):
 File schemas - the sidecar `kartograf-meta/1` (3.2) and the manifest `kartograf-project/1` (3.5) -
 are not result documents and do not enter `SCHEMAS`; the project document is
 `kartograf-project-state/1`.
+
+### 3.7 Write targets and plain output (ADR-054)
+
+A command that writes data writes in one of two modes (DEV §19, ECO-051). **Store mode**
+(`root`, `--root`, or the default root when a call names neither: 3.3, DEV-19.2) is the versioned
+store with sidecars. **Plain mode** (`output_dir`, `-o`, `--output-dir`) is ordinary files in a
+directory, with no sidecar, no hard link, no `versions/` and no standard path, so it works on FAT,
+exFAT and SMB. `output_dir` and `root` exclude each other: both given is a `ValidationError`
+(`details.reason` `exclusive_options`). `kartograf.output.resolve_target(output_dir=, root=)`
+makes the choice (`Target(mode, path)`); the default root comes from `kartograf.config`.
+
+`src/kartograf/output.py` is the one engine of plain mode, used by every track:
+
+- `plan_plain(directory, relative_names, force=)` checks the full target list before the first
+  byte and returns one `PlanEntry(path, action, reason)` per target: `write`, `replace` (an
+  existing target with `force`) or `conflict`. The conflicts are, in this order,
+  `duplicate_output_name` (two targets of one name, every occurrence), `output_in_store` (the
+  directory is, or lies in, a store of any tool, or the write would enter a subdirectory that holds
+  a marker; a store elsewhere below the directory does not matter, so `<data_dir>` is a fine output
+  although the default store lies in it) and `output_exists` (an existing target without `force`).
+  A store is recognised by the marker file name (`kartograf-store.json`, `imgw-store.json`;
+  `kartograf.marker.STORE_MARKERS`), nothing is imported from another tool.
+- `refuse(entries)` raises `ConflictError` for a plan that lists a conflict: `details.reason` is
+  the first reason in that order and `details.paths` lists every offending path of all reasons.
+  A plan (`--check`) lists the conflicts and succeeds; only the run refuses.
+- `Staging(directory, force=)` is the context manager of one run: it creates
+  `<directory>/.kartograf-incoming/<host>_<pid>_<token>/` (and the directory, when it is missing),
+  removes leftovers older than 24 hours, and lets SIGTERM interrupt like Ctrl-C
+  (`interrupt.sigterm_interrupts`). A download writes to `stage_path(name)`, a private path of the
+  same file system with the file name in it; `commit(staged, target)` reads the file once in
+  chunks for its size and SHA-256 (`digest_of`, nothing is read into memory) and moves it with
+  `os.replace`, giving a `FileResult(path, size_bytes, sha256, status)` with `written` or
+  `replaced`; a target that appeared after the plan is not replaced without `force`
+  (`ConflictError`, `output_exists`). Leaving the block removes the staging directory on success,
+  on an error, on SIGINT and on SIGTERM; `discard(staged)` removes the directory of one failed
+  download. Threads of one run (`--workers`) stage and commit at the same time.
 
 ---
 
