@@ -21,7 +21,7 @@ Nie zostala podjeta zadna decyzja produktowa "na zgadywanke"; dwie opcje do decy
 
 ## Przyczyna (potwierdzona pomiarem na udziale)
 
-Udzial `agent-tmp` jest cifs bez `serverino` (`vers=3.1.1,cache=strict,actimeo=1,closetimeo=1,nounix`):
+Udzial `<scratch-dir>` jest cifs bez `serverino` (`vers=3.1.1,cache=strict,actimeo=1,closetimeo=1,nounix`):
 
 - dwie nazwy jednego pliku maja rozne i-wezly (`samefile` zawsze False; np. ino 7324263 vs 7324296),
 - **kazde `open()` sciezki (takze bez odczytu) ustawia `st_nlink == 1` dla TEJ sciezki na ok. 2-2,5 s**
