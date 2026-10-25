@@ -713,6 +713,6 @@ def _print_report(
                 plain=report.output_dir is not None,
             )
     for failure in report.failed:
-        print(f"Error: {failure.error}", file=sys.stderr)
+        print(f"Error: {localized(failure.error)}", file=sys.stderr)
     _report_stale(report.stale)
     return exit_code_of(report)

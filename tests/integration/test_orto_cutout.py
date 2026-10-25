@@ -187,29 +187,32 @@ BASE = {
         ({"coverage": "medium"}, ["--coverage 'medium'", "standard", "high"]),
         ({"resolution": None}, ["--resolution required", "0.1m, 0.25m, 0.5m, 1m"]),
         ({"resolution": "0.2m"}, ["--resolution '0.2m'", "0.1m, 0.25m, 0.5m, 1m"]),
-        ({"horizontal_crs": None}, ["--horizontal-crs wymagane", "tylko EPSG:2180"]),
+        ({"horizontal_crs": None}, ["--horizontal-crs required", "only EPSG:2180"]),
         (
             {"horizontal_crs": "EPSG:5514"},
-            ["--horizontal-crs EPSG:5514", "tylko EPSG:2180 (bez przeprobkowania"],
+            ["--horizontal-crs EPSG:5514", "only EPSG:2180 (no image resampling"],
         ),
         (
             {"bbox": None, "country": None, "sheet": "N-34-139-C-a-3-1"},
-            ["--cutout dziala tylko z --bbox/--geometry"],
+            ["--cutout works only with --bbox/--geometry"],
         ),
-        ({"country": "cz"}, ["--cutout z --product orto", "tylko dla PL"]),
-        ({"vertical_crs": "EVRF2007"}, ["--vertical-crs nie dotyczy --product orto"]),
-        ({"year": 2024}, ["--year nie dziala z --cutout"]),
+        ({"country": "cz"}, ["--cutout with --product orto", "works only for PL"]),
+        (
+            {"vertical_crs": "EVRF2007"},
+            [("--vertical-crs does not apply to --product orto")],
+        ),
+        ({"year": 2024}, ["--year does not work with --cutout"]),
         (
             {"cutout": False, "horizontal_crs": None, "resolution": None},
-            ["--coverage dziala tylko z --cutout --product orto"],
+            ["--coverage works only with --cutout --product orto"],
         ),
         (
             {"product": "nmt", "vertical_crs": "EVRF2007", "resolution": "1m"},
-            ["--coverage dziala tylko z --cutout --product orto"],
+            ["--coverage works only with --cutout --product orto"],
         ),
         (
             {"cutout": False, "horizontal_crs": None, "coverage": None},
-            ["--resolution z --product orto dotyczy tylko wycinka (--cutout)"],
+            ["--resolution with --product orto applies only to a cutout (--cutout)"],
         ),
     ],
 )
@@ -230,7 +233,7 @@ def test_orto_cutout_requires_variant(tmp_path, overrides, fragments):
 @pytest.mark.parametrize(
     ("overrides", "fragment"),
     [
-        ({"horizontal_crs": "EPSG:5514"}, "tylko EPSG:2180"),
+        ({"horizontal_crs": "EPSG:5514"}, "supports only EPSG:2180"),
         ({"coverage": "medium"}, "--coverage 'medium'"),
         ({"resolution": "25cm"}, "0.1m, 0.25m, 0.5m, 1m"),
     ],
@@ -363,7 +366,7 @@ def test_orto_cutout_grid_and_chunks(tmp_path):
     assert result.file.path.name == "566000_243000_566001_243001.tif"
     notice, *subsets = seen
     assert isinstance(notice, Notice) and notice.code == CUTOUT_SIZE
-    assert "4 x 4 px" in notice.message and "4 zapytan" in notice.message
+    assert "4 x 4 px" in notice.message and "4 GUGiK WCS requests" in notice.message
     assert subsets == [  # N->S, W->E: q1, q2, q3, q4
         (566000.0, 566000.5, 243000.5, 243001.0),
         (566000.5, 566001.0, 243000.5, 243001.0),
@@ -487,7 +490,7 @@ def test_orto_cutout_all_black_is_no_coverage(tmp_path):
     args = {**ORTO, "coverage": "high", "resolution": "0.1m"}
     with (
         patch(SESSION_FACTORY, return_value=_session()),
-        pytest.raises(NoCoverageError, match="w calosci 0,0,0.*--coverage standard"),
+        pytest.raises(NoCoverageError, match="entirely 0,0,0.*--coverage standard"),
     ):
         download_image_cutout(bbox=bbox, root=tmp_path, cache=False, **args)
     assert _left_behind(tmp_path) == []

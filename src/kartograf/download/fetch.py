@@ -40,6 +40,7 @@ from kartograf.download.versions import (
 )
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.marker import lenient_store, prepare_store
+from kartograf.messages import message, reason
 from kartograf.notices import CHECK_FAILED, UNVERIFIED_LOCAL, NoticeSink
 from kartograf.output import FileResult, plain_of
 from kartograf.sources.descriptor import SignalKind
@@ -84,16 +85,19 @@ def validate_update(update: object, *, check: str | None = None) -> None:
         build the plan) or an unknown mode.
     """
     if update == "check":
-        hint = f"{check}()" if check else "check_*() danego toru"
+        hint = (
+            message("download.check_function_hint", check=check)
+            if check
+            else message("download.generic_check_hint")
+        )
         raise ValidationError(
-            f"update='check' niczego nie pobiera - uzyj {hint} "
-            "(plan aktualizacji, kartograf-plan/1)",
+            message("download.update_check_downloads_nothing", hint=hint),
             option="update",
             allowed=_UPDATE_VALUES,
         )
     if update not in _UPDATE_MODES:
         raise ValidationError(
-            f"Nieznany tryb update={update!r} (dozwolone: None, 'upgrade', 'force')",
+            message("download.unknown_update_mode", update=update),
             option="update",
             allowed=_UPDATE_VALUES,
         )
@@ -234,7 +238,9 @@ def link_version(std: Path, version: LocalVersion, *, refresh: bool) -> None:
     try:
         ensure_link(std, version.path, version_key(version), refresh=refresh)
     except OSError as e:
-        raise DownloadError(f"dowiazanie {std}: {e}") from e
+        raise DownloadError(
+            message("download.link_version_failed", std=std, error=reason(e))
+        ) from e
 
 
 def local_version(slot: FileSlot) -> LocalVersion | None:
@@ -298,18 +304,12 @@ def _check_label_args(
     """
     if signal == "metadata":
         if edition is None or version is not None:
-            raise ValidationError(
-                "sygnal metadata: wersje etykietuje wydanie (edition=, bez version=)"
-            )
+            raise ValidationError(message("download.metadata_signal_edition_label"))
     elif signal == "index":
         if (version is None) == (edition is None):
-            raise ValidationError(
-                "sygnal index: version= albo edition= (etykieta rekordu indeksu)"
-            )
+            raise ValidationError(message("download.index_signal_label"))
     elif version is None or edition is not None:
-        raise ValidationError(
-            f"sygnal {signal}: wymagane version=, edition= tylko dla metadata i index"
-        )
+        raise ValidationError(message("download.signal_label_required", signal=signal))
 
 
 def _keep_local(
@@ -438,8 +438,12 @@ def emit_file_notices(
         sink.emit(
             "warning",
             CHECK_FAILED,
-            f"{unit}: nie udalo sie sprawdzic zrodla ({error}) - uzyto "
-            f"lokalnej wersji {file.label}",
+            message(
+                "download.source_check_failed",
+                unit=unit,
+                error=error,
+                file_label=file.label,
+            ),
         )
     if (
         unverified_local
@@ -450,8 +454,9 @@ def emit_file_notices(
         sink.emit(
             "info",
             UNVERIFIED_LOCAL,
-            f"{unit}: lokalna wersja {file.label} niesprawdzona - zrodlo "
-            "bez taniego sygnalu; pobierz ponownie: --force",
+            message(
+                "download.local_version_unverified", unit=unit, file_label=file.label
+            ),
         )
 
 
@@ -527,7 +532,7 @@ def store_file(
     shutil.rmtree(staged.parent, ignore_errors=True)
     committed = read_version(commit.path.parent, commit.path.name)
     if committed is None:
-        raise DownloadError(f"{commit.path}: wersja bez czytelnego sidecara")
+        raise DownloadError(message("download.version_no_sidecar", path=commit.path))
     link_version(slot.std, committed, refresh=commit.status != "unchanged")
     return committed_file(slot.std, commit)
 
@@ -628,7 +633,7 @@ def inspect_version(
         ``signal="metadata"`` without ``edition``.
     """
     if signal == "metadata" and edition is None:
-        raise ValidationError("sygnal metadata: wymagane edition=")
+        raise ValidationError(message("download.metadata_signal_needs_edition"))
     plain = plain_of(slot.root)
     if plain is not None:  # the position of a plain target: judged by `new_plan`
         return PlanItem(

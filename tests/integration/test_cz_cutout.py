@@ -219,8 +219,8 @@ def test_native_horizontal_crs_gives_native_provider(tmp_path, monkeypatch):
         Notice(
             "warning",
             ALL_NODATA,
-            f"{result.file.path} jest w calosci nodata - obszar poza pokryciem "
-            "rastra CUZK (poza granica CZ?)",
+            f"{result.file.path} is entirely nodata - area outside the CUZK raster "
+            "coverage (outside the CZ boundary?)",
         ),
     )
 

@@ -149,7 +149,7 @@ def test_teryt_length_matches_unit(tmp_path, session, product, teryt, extra):
 def test_teryt_hint_names_available_selections(tmp_path):
     with pytest.raises(ValidationError) as error:
         validate_collection_request(product="admin", root=tmp_path, teryt="1261")
-    assert "--teryt <2 cyfry>" in str(error.value)
+    assert "--teryt <2 digits>" in str(error.value)
     assert "--whole-country" in str(error.value)
 
 
@@ -159,8 +159,8 @@ def test_selection_hint_names_what_an_area_downloads(tmp_path):
     ``cadastre download --teryt 12`` listed both)."""
     with pytest.raises(ValidationError) as egib:
         validate_collection_request(product="map", root=tmp_path, teryt="12")
-    assert "--bbox/--sheet/--geometry (obiekty obszaru)" in str(egib.value)
-    assert "paczki powiatow obszaru" not in str(egib.value)
+    assert "--bbox/--sheet/--geometry (area features)" in str(egib.value)
+    assert "county packages" not in str(egib.value)
     with pytest.raises(ValidationError) as buildings:
         validate_collection_request(
             product="buildings",
@@ -169,8 +169,10 @@ def test_selection_hint_names_what_an_area_downloads(tmp_path):
             whole_country=True,
             lod=2,
         )
-    assert "--bbox/--sheet/--geometry (paczki powiatow obszaru)" in str(buildings.value)
-    assert "obiekty obszaru" not in str(buildings.value)
+    assert ("--bbox/--sheet/--geometry (packages of the counties in the area)") in str(
+        buildings.value
+    )
+    assert "area features" not in str(buildings.value)
 
 
 def test_choices_of_other_products_rejected(tmp_path):
@@ -245,7 +247,7 @@ def test_country_rules(tmp_path):
         validate_collection_request(
             product="admin", root=tmp_path, whole_country=True, country="auto"
         )
-    with pytest.raises(ValidationError, match="tylko dla PL"):  # RCN: PL only
+    with pytest.raises(ValidationError, match="available only for PL"):  # RCN: PL only
         validate_collection_request(
             product="prices", root=tmp_path, whole_country=True, country="cz"
         )

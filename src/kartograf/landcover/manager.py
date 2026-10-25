@@ -114,7 +114,7 @@ from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.interrupt import run_parallel
 from kartograf.landcover.store import selection_unit
-from kartograf.messages import message
+from kartograf.messages import message, reason
 from kartograf.notices import (
     ALL_NODATA,
     CLASSES_ABSENT,
@@ -445,7 +445,7 @@ def _failure(unit: str, country: str, error: DownloadError) -> UnitFailure:
     kind: FailureKind = (
         "no_coverage" if isinstance(error, NoCoverageError) else "download"
     )
-    return UnitFailure(unit, country, str(error), kind)
+    return UnitFailure(unit, country, reason(error), kind)
 
 
 def _landcover_report(

@@ -524,7 +524,7 @@ def test_ruian_obec_by_kod(tmp_path, monkeypatch, frozen_clock):
 
 def test_auto_level_per_country(tmp_path):
     border = BBox(18.5, 49.6, 18.8, 49.9, "EPSG:4326")
-    with pytest.raises(ValidationError, match=r"pl=<poziom>,cz=<poziom>"):
+    with pytest.raises(ValidationError, match=r"pl=<level>,cz=<level>"):
         check_collection(
             product="admin",
             country="auto",

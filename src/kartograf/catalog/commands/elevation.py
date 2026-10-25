@@ -9,6 +9,9 @@ from kartograf.download.availability import (
     AVAILABILITY_COUNTRIES,
     AVAILABILITY_PRODUCTS,
 )
+from kartograf.download.availability import (
+    COUNTRY_CHOICES as AVAILABILITY_COUNTRY_CHOICES,
+)
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_contours import contours_formats
 from kartograf.download.options import (
@@ -22,6 +25,7 @@ from kartograf.download.options import (
     format_text,
     product_choices,
     product_directory,
+    product_summary,
     resolution_text,
     store_files,
     vertical_crs_text,
@@ -42,7 +46,7 @@ _ACCEPTS = (*PL_SHEETS, "cz_sm5", "cz_tm33")
 
 
 def _products() -> list[tuple[str, str]]:
-    return shared.product_summaries(ELEVATION_PRODUCTS, product_choices)
+    return [(product, product_summary(product)) for product in ELEVATION_PRODUCTS]
 
 
 def _resolutions() -> list[str]:
@@ -139,7 +143,7 @@ def _country_description() -> str:
 def _availability_country_description() -> str:
     return message(
         "catalog_elevation.availability_country_description",
-        countries=", ".join(AVAILABILITY_COUNTRIES.values()),
+        countries=AVAILABILITY_COUNTRY_CHOICES,
     )
 
 

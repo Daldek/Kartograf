@@ -89,7 +89,7 @@ def test_plan_json_round_trip(tmp_path):
 def test_plan_from_json_rejects_unknown_schema(tmp_path):
     payload = json.loads(_manager(tmp_path, c14_fake()).check_sheets([G]).to_json())
     payload["schema"] = "kartograf-plan/2"
-    with pytest.raises(ValidationError, match="schemat"):
+    with pytest.raises(ValidationError, match="Unknown update plan schema"):
         UpdatePlan.from_json(json.dumps(payload))
     with pytest.raises(ValidationError):
         UpdatePlan.from_json("{")
@@ -99,7 +99,7 @@ def test_upgrade_rejects_foreign_store(tmp_path):
     fake = c14_fake()
     plan = _manager(tmp_path / "a", fake).check_sheets([G])
     fake.resolve_calls.clear()
-    with pytest.raises(ValidationError, match="innego magazynu"):
+    with pytest.raises(ValidationError, match="different store"):
         _manager(tmp_path / "b", fake).download_sheets([G], update="upgrade", plan=plan)
     assert fake.resolve_calls == [] and fake.downloads == []
 
@@ -287,7 +287,7 @@ def test_check_sheets_of_one_sheet_without_data_raises_its_own_error(tmp_path):
 def test_check_sheets_without_any_data_fails_like_the_download(tmp_path):
     with pytest.raises(NoCoverageError) as caught:
         _manager(tmp_path, c14_fake()).check_sheets([NO_DATA, "N-34-139-C-a-1-2"])
-    assert str(caught.value) == "GUGiK nie ma danych dla zadnego z 2 arkuszy obszaru"
+    assert str(caught.value) == "GUGiK has no data for any of the 2 sheets of the area"
 
 
 def test_check_sheets_year_conflicts_are_one_error_for_all_the_sheets(tmp_path):
@@ -296,4 +296,4 @@ def test_check_sheets_year_conflicts_are_one_error_for_all_the_sheets(tmp_path):
     with pytest.raises(YearRangeError) as caught:
         manager.check_sheets([*sheets, NO_DATA])
     assert set(caught.value.sheets) == {G, "N-34-139-C-a-3-3"}
-    assert "dla 2 z 5 arkuszy" in str(caught.value)
+    assert "for 2 of 5 sheets" in str(caught.value)

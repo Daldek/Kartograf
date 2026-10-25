@@ -246,7 +246,7 @@ def test_whole_country_crs(data, monkeypatch, tmp_path):
     assert item.file.path.read_bytes() == body
     assert [n.code for n in result.notices] == [WHOLE_COUNTRY_SIZE]
     assert events == [
-        f"{data.name} CZ: plik krajowy {data.file} - {size_text(len(body))}"
+        f"{data.name} CZ: nationwide file {data.file} - {size_text(len(body))}"
     ]
     meta = _meta(item.file.path)
     assert meta["horizontal_crs"] == "EPSG:5514"

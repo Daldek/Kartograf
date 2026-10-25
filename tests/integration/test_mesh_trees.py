@@ -136,7 +136,7 @@ def test_mesh_tiles_from_bbox(tmp_path, router, monkeypatch):
         f"2000/7/{name}" for name in sorted(bodies)
     ]
     units = [n.message for n in notices if n.code == UNIT_LIST]
-    assert len(units) == 1 and "kafle obszaru (4)" in units[0]
+    assert len(units) == 1 and "tiles of the area (4)" in units[0]
     item = next(f for f in report.files if f.unit == "2000/7/78944_6777_74230_55482")
     path = item.file.path
     assert path == tmp_path / "models3d/pl_mesh/2000/7/78944_6777_74230_55482.zip"
@@ -216,7 +216,7 @@ def test_mesh_tile_of_two_works_and_year(tmp_path, router, monkeypatch):
     )
     with pytest.raises(NoCoverageError) as missing:
         check_collection(**_mesh(tmp_path, year=2020))
-    assert "lata w indeksie: 2021, 2023" in str(missing.value)
+    assert "years in the index: 2021, 2023" in str(missing.value)
 
 
 def _serve_krakow(router: Router) -> list[str]:
@@ -245,13 +245,13 @@ def test_mesh_city_area_over_the_file_limit(tmp_path, router):
     with pytest.raises(ValidationError) as refused:
         download_collection(**_mesh(tmp_path, bbox=KRAKOW_122))
     text = str(refused.value)
-    assert "122 pliki do pobrania" in text and "limit" in text
+    assert "122 files to download" in text and "limit" in text
     heads = [url for method, url in router.calls if method == "HEAD"]
     assert len(heads) == VOLUME_SAMPLE
     sizes = MESH_FILES["area_122"]["content_length"]
     estimate = sum(sizes[url] for url in heads) * 122 // VOLUME_SAMPLE
     whole, tenth = divmod(round(estimate / 10**8), 10)
-    assert f"szacunkowo ok. {whole},{tenth} GB" in text
+    assert f"an estimated approx. {whole}.{tenth} GB" in text
     assert router.gets("https://opendata.geoportal.gov.pl/") == 0
     assert not list(tmp_path.rglob("*.zip"))
 

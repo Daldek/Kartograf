@@ -377,8 +377,8 @@ def test_newer_and_unverified_become_notices(tmp_path):
         Notice(
             "info",
             NEWER_AVAILABLE,
-            f"dostepna nowsza kampania dla 1 arkusza ({G}) - "
-            "uzyto lokalnych wersji; pobierz: --upgrade",
+            f"newer campaign available for 1 sheet ({G}) - "
+            "used local versions; download with: --upgrade",
         ),
     )
     assert received == list(newer.notices)
@@ -391,8 +391,8 @@ def test_newer_and_unverified_become_notices(tmp_path):
         Notice(
             "warning",
             CHECK_FAILED,
-            f"{G}: skorowidz GUGiK niedostepny - uzyto lokalnej "
-            "wersji bez sprawdzenia nowszej "
+            f"{G}: GUGiK sheet index not available - used local version "
+            "without checking for a newer one "
             f"({unverified.unverified[G]})",
         ),
     )
@@ -665,7 +665,7 @@ def test_content_mismatch_removes_file_and_fails(tmp_path):
     m = DownloadManager(provider=fake, root=tmp_path)
     std = m.download_sheet(G2).succeeded[0]
     fake.records = {"newest": [new]}
-    with pytest.raises(DownloadError, match="tresc nie jest"):
+    with pytest.raises(DownloadError, match="content is not"):
         m.download_sheet(G2, update="upgrade")
     bad = campaign_path(tmp_path, new, G2)
     assert not bad.exists() and not sidecar(bad).exists()
@@ -677,7 +677,7 @@ def test_record_url_without_sheet_fails_before_download(tmp_path):
     bad = dataclasses.replace(REC["84183"], url="https://x/NMT/84183/84183_1_G.asc")
     fake = FakeCampaignProvider({"newest": [bad]})
     m = DownloadManager(provider=fake, root=tmp_path)
-    with pytest.raises(DownloadError, match="nie zawiera godla"):
+    with pytest.raises(DownloadError, match="does not contain sheet code"):
         m.download_sheet(G)
     assert fake.downloads == []
 
@@ -690,7 +690,7 @@ def test_neighbour_extent_removes_campaign_file(tmp_path):
         {"newest": [rec]}, contents={rec.url: asc_for(G, shift_x=b.max_x - b.min_x)}
     )
     m = DownloadManager(provider=fake, root=tmp_path)
-    with pytest.raises(DownloadError, match="zasieg"):
+    with pytest.raises(DownloadError, match="file extent"):
         m.download_sheet(G)
     bad = campaign_path(tmp_path, rec)
     assert not bad.exists() and not sidecar(bad).exists()
@@ -926,8 +926,8 @@ def test_year_with_min_year_is_validation_error(tmp_path, bound):
     with pytest.raises(ValidationError) as exc:
         DownloadManager(provider=c14_fake(), root=tmp_path, year=2025, **{bound: 2024})
     assert str(exc.value) == (
-        "--year wyklucza sie z --min-year/--max-year "
-        "(--year Y to skrot --min-year Y --max-year Y)"
+        "--year excludes --min-year/--max-year "
+        "(--year Y is shorthand for --min-year Y --max-year Y)"
     )
 
 
@@ -1000,7 +1000,7 @@ def test_manager_check_failure_aborts_whole_task(tmp_path):
     )
     with pytest.raises(DownloadError, match="N-34-139-C-a-3-4") as exc:
         manager.download_sheets([f"N-34-139-C-a-3-{i}" for i in range(1, 5)])
-    assert "blad skorowidza" in str(exc.value)
+    assert "sheet index error" in str(exc.value)
     assert not fake.downloads
     assert not list(tmp_path.rglob("*.asc"))
 
@@ -1107,7 +1107,7 @@ def test_range_index_down_one_missing_fails_task(tmp_path):
     fake.downloads.clear()
     fake.resolve_error = _transport_error(G, 503)
     m = DownloadManager(provider=fake, min_year=2024, root=tmp_path)
-    with pytest.raises(DownloadError, match="nie udalo sie sprawdzic"):
+    with pytest.raises(DownloadError, match="could not check the data year"):
         m.download_sheets([G, g2])
     assert fake.downloads == []
 
@@ -1118,7 +1118,7 @@ def test_range_index_down_upgrade_and_force_fail_task(tmp_path, update):
     DownloadManager(provider=fake, root=tmp_path).download_sheet(G)
     fake.resolve_error = _transport_error(G, 503)
     m = DownloadManager(provider=fake, min_year=2024, root=tmp_path)
-    with pytest.raises(DownloadError, match="nie udalo sie sprawdzic"):
+    with pytest.raises(DownloadError, match="could not check the data year"):
         m.download_sheet(G, update=update)
 
 
@@ -1127,7 +1127,7 @@ def test_range_index_down_local_outside_range_fails_task(tmp_path):
     DownloadManager(provider=fake, root=tmp_path).download_sheet(G)  # 2025 flight
     fake.resolve_error = _transport_error(G, 503)
     m = DownloadManager(provider=fake, max_year=2024, root=tmp_path)
-    with pytest.raises(DownloadError, match="nie udalo sie sprawdzic"):
+    with pytest.raises(DownloadError, match="could not check the data year"):
         m.download_sheet(G)
 
 
@@ -1322,7 +1322,7 @@ def test_manager_coverage_read_error_does_not_fail_sheet(tmp_path, caplog):
         result = manager.download_sheet(G)
     assert result.failed == []
     assert "84183" in linked(std_path(tmp_path))
-    assert "pokrycia" in caplog.text
+    assert "No coverage measurement" in caplog.text
     assert "coverage" not in meta(campaign_path(tmp_path, REC["84183"]))["extra"]
     flights = meta(std_path(tmp_path))["extra"]["flights"]
     assert all("coverage" not in flight for flight in flights)
@@ -1361,7 +1361,7 @@ def test_campaign_count_logged_at_info(tmp_path, caplog):
         r.name == "kartograf.download.manager"
         and r.levelno == logging.INFO
         and G in r.getMessage()
-        and "4 kampanii" in r.getMessage()
+        and "4 campaigns" in r.getMessage()
         for r in caplog.records
     )
 
@@ -1404,9 +1404,9 @@ def test_provider_without_campaigns_versions_by_download_date(tmp_path):
 
 
 def test_provider_without_campaigns_rejects_all_and_min_year(tmp_path):
-    with pytest.raises(ValidationError, match="nie obsluguje kampanii"):
+    with pytest.raises(ValidationError, match="does not support campaigns"):
         DownloadManager(provider=_mock_provider(), all_campaigns=True, root=tmp_path)
-    with pytest.raises(ValidationError, match="nie obsluguje kampanii"):
+    with pytest.raises(ValidationError, match="does not support campaigns"):
         DownloadManager(provider=_mock_provider(), min_year=2024, root=tmp_path)
 
 
@@ -1502,7 +1502,7 @@ def test_link_failure_is_sheet_failure_and_list_continues(
     assert campaign_path(tmp_path, REC["84183"]).is_file()
     assert not std_path(tmp_path).exists()
     failed = next(e for e in events if e.sheet == G and e.status == "failed")
-    assert "dowiazanie" in failed.message and "dysk pelny" in failed.message
+    assert "link" in failed.message and "dysk pelny" in failed.message
 
 
 def test_link_failure_reported_together_with_campaign_errors(tmp_path, monkeypatch):
@@ -1512,7 +1512,7 @@ def test_link_failure_reported_together_with_campaign_errors(tmp_path, monkeypat
     with pytest.raises(DownloadError) as exc:
         m.download_sheet(G)
     assert "2023-09-05_78047" in str(exc.value)
-    assert "dowiazanie" in str(exc.value)
+    assert "link" in str(exc.value)
     for key in ("84183", "83233", "73021"):
         assert campaign_path(tmp_path, REC[key]).is_file()
 
@@ -1524,7 +1524,7 @@ def test_invalid_aktualnosc_is_campaign_failure_links_best_valid(tmp_path):
     m = DownloadManager(provider=fake, all_campaigns=True, root=tmp_path)
     with pytest.raises(DownloadError, match="84183_1852496") as exc:
         m.download_sheet(G)
-    assert "nie pobrano 1 z 4 kampanii" in str(exc.value)
+    assert "1 of 4 campaigns not downloaded" in str(exc.value)
     assert "2025-04-27_83233" in linked(std_path(tmp_path))
     for key in ("83233", "78047", "73021"):
         assert campaign_path(tmp_path, REC[key]).is_file()
@@ -1761,8 +1761,8 @@ def test_newest_record_of_other_vertical_crs_fails_before_download(tmp_path):
         m.download_sheet(GK)
     message = str(exc.value)
     assert GK in message
-    assert "deklaruje uklad wysokosci PL-KRON86-NH" in message
-    assert "zadano EVRF2007 (oczekiwano PL-EVRF2007-NH)" in message
+    assert "declares vertical CRS PL-KRON86-NH" in message
+    assert "but EVRF2007 was requested (expected PL-EVRF2007-NH)" in message
     assert fake.downloads == []
     assert not (tmp_path / SEGMENT).exists()
 
@@ -1776,7 +1776,7 @@ def test_all_campaign_of_other_vertical_crs_fails_others_kept(tmp_path):
     records = [bad if r is REC["78047"] else r for r in C14_ALL]
     fake = FakeCampaignProvider({"all": records})
     m = DownloadManager(provider=fake, all_campaigns=True, root=tmp_path)
-    with pytest.raises(DownloadError, match="nie pobrano 1 z 4 kampanii") as exc:
+    with pytest.raises(DownloadError, match="1 of 4 campaigns not downloaded") as exc:
         m.download_sheet(G)
     assert "2023-09-05_78047" in str(exc.value)
     assert "PL-KRON86-NH" in str(exc.value)
@@ -1926,7 +1926,7 @@ def test_full_link_failure_fails_sheet(tmp_path, monkeypatch):
     m = DownloadManager(provider=c14_fake(), all_campaigns=True, root=tmp_path)
     with pytest.raises(DownloadError) as exc:
         m.download_sheet(G)
-    assert "dowiazanie" in str(exc.value) and "full_sheet" in str(exc.value)
+    assert "link" in str(exc.value) and "full_sheet" in str(exc.value)
     assert linked_version(std_path(tmp_path)) == campaign_path(tmp_path, REC["84183"])
 
 
@@ -2035,7 +2035,7 @@ def test_full_sheet_flag_with_all_adds_nothing(tmp_path):
 
 
 def test_full_sheet_requires_campaign_provider(tmp_path):
-    with pytest.raises(ValidationError, match="nie obsluguje kampanii"):
+    with pytest.raises(ValidationError, match="does not support campaigns"):
         DownloadManager(provider=_mock_provider(), full_sheet=True, root=tmp_path)
 
 
@@ -2077,8 +2077,8 @@ def test_all_campaigns_reports_each_flight_before_download(tmp_path):
         ("campaign", 2, 2),
     ]
     assert events[0].message == (
-        "2025-10-21_84183 lokalna, 2025-04-27_83233 do pobrania, "
-        "2023-09-05_78047 do pobrania"
+        "2025-10-21_84183 local, 2025-04-27_83233 to download, 2023-09-05_78047 to "
+        "download"
     )
     assert [e.message for e in events[1:]] == ["2025-04-27_83233", "2023-09-05_78047"]
 

@@ -291,7 +291,7 @@ def test_missing_dependency_error_names_the_install_command():
 
 def test_error_report_document():
     exc = ValidationError(
-        "--vertical-crs wymagane",
+        "--vertical-crs required",
         option="vertical_crs",
         allowed=("EVRF2007", "KRON86"),
     )
@@ -313,7 +313,7 @@ def test_error_report_document():
         "schema": "kartograf-error/1",
         "code": "validation_error",
         "title": "Invalid input",
-        "message": "--vertical-crs wymagane",
+        "message": "--vertical-crs required",
         "hint": "Allowed values of --vertical-crs: EVRF2007, KRON86. Example: "
         "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
         "--resolution 1m --vertical-crs EVRF2007 --root ./data",
@@ -608,7 +608,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "product",
         None,
         _COLLECTIONS.collection_products(),
-        "--product wymagane",
+        "--product required",
     ),
     _row(
         kartograf.download_collection,
@@ -616,7 +616,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "product",
         None,
         _COLLECTIONS.collection_products(),
-        "Nieznany produkt 'xyz'",
+        "Unknown product 'xyz'",
     ),
     _row(
         _COLLECTIONS.require_collection_product,
@@ -624,7 +624,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "product",
         None,
         _COLLECTIONS.collection_products("boundaries"),
-        "--product wymagane",
+        "--product required",
     ),
     _row(
         _COLLECTIONS.require_collection_product,
@@ -632,7 +632,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "product",
         None,
         _COLLECTIONS.collection_products("boundaries"),
-        "nieznana wartosc",
+        "unknown value",
     ),
     _row(
         kartograf.download_collection,
@@ -640,7 +640,7 @@ COLLECTION_OPTION_SCENARIOS = [
         None,
         ("teryt", *_AREA_NAMES),
         None,
-        "Podaj dokladnie jeden wybor",
+        "Give exactly one choice",
     ),
     _row(
         kartograf.check_collection,
@@ -655,7 +655,7 @@ COLLECTION_OPTION_SCENARIOS = [
         None,
         ("teryt", "bbox"),
         None,
-        "Podaj dokladnie jeden wybor",
+        "Give exactly one choice",
     ),
     _row(
         kartograf.download_collection,
@@ -663,7 +663,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "country",
         None,
         ("pl", "cz", "auto"),
-        "Nieznany kraj --country 'xx'",
+        "Unknown country --country 'xx'",
     ),
     _row(
         kartograf.download_collection,
@@ -671,7 +671,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "country",
         None,
         ("pl", "cz", "auto"),
-        "--country wymagane z --bbox/--geometry",
+        "--country required with --bbox/--geometry",
     ),
     _row(
         kartograf.download_collection,
@@ -685,7 +685,7 @@ COLLECTION_OPTION_SCENARIOS = [
         None,
         ("teryt", "country"),
         None,
-        "usun --country cz",
+        "remove --country cz",
     ),
     _row(
         kartograf.download_collection,
@@ -693,7 +693,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "teryt",
         None,
         None,
-        "Nieprawidlowy kod TERYT",
+        "Invalid TERYT code",
     ),
     _row(
         kartograf.download_collection,
@@ -701,7 +701,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "teryt",
         None,
         None,
-        "nie ma wojewodztwa o kodzie 99",
+        "no voivodeship with code 99",
     ),
     _row(
         kartograf.download_collection,
@@ -709,7 +709,7 @@ COLLECTION_OPTION_SCENARIOS = [
         None,
         ("ku", "country"),
         None,
-        "usun --country pl",
+        "remove --country pl",
     ),
     _row(
         kartograf.download_collection,
@@ -717,7 +717,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "ku",
         None,
         None,
-        "Nieprawidlowy kod katastralniho uzemi",
+        "Invalid cadastral area code",
     ),
     _row(
         kartograf.download_collection,
@@ -730,7 +730,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "country",
         None,
         ("pl", "cz"),
-        "--whole-country wymaga --country pl albo --country cz",
+        "--whole-country requires --country pl or --country cz",
     ),
     _row(
         kartograf.download_collection,
@@ -743,7 +743,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "country",
         None,
         ("pl",),
-        "jest dostepny tylko dla PL",
+        "is available only for PL",
     ),
     _row(
         kartograf.download_collection,
@@ -757,7 +757,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "format",
         None,
         ("GPKG", "FGDB"),
-        "niedostepne dla --whole-country geographic (CZ)",
+        "not available for --whole-country geographic (CZ)",
     ),
     _row(
         kartograf.download_collection,
@@ -785,7 +785,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "format",
         None,
         None,
-        "dotyczy tylko --product map (CZ",
+        "applies only to --product map (CZ",
     ),
     _row(
         kartograf.download_collection,
@@ -827,7 +827,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "horizontal_crs",
         None,
         ("EPSG:2180",),
-        "sa zawsze w ukladzie uslugi EPSG:2180",
+        "are always in the service CRS EPSG:2180",
     ),
     _row(
         kartograf.download_collection,
@@ -864,7 +864,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "year",
         None,
         None,
-        "nie dotyczy obiektow obszaru produktu admin",
+        "does not apply to area features of product admin",
     ),
     _row(
         kartograf.download_collection,
@@ -878,7 +878,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "level",
         None,
         None,
-        "nie paczek buildings",
+        "not to buildings packages",
     ),
     _row(
         kartograf.download_collection,
@@ -892,7 +892,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "level",
         None,
         None,
-        "(stala zawartosc",
+        "(fixed content",
     ),
     _row(
         kartograf.download_collection,
@@ -906,7 +906,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "lod",
         None,
         None,
-        "nie dotyczy obiektow obszaru produktu map",
+        "does not apply to area features of product map",
     ),
     _row(
         kartograf.download_collection,
@@ -914,7 +914,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "level",
         None,
         _COLLECTIONS.collection_levels("admin")["PL"],
-        "--level wymagane",
+        "--level required",
     ),
     _row(
         kartograf.download_collection,
@@ -928,7 +928,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "level",
         None,
         _COLLECTIONS.collection_levels("admin")["PL"],
-        "nieznany poziom admin (PL)",
+        "unknown level of admin (PL)",
     ),
     _row(
         kartograf.download_collection,
@@ -942,7 +942,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "network",
         None,
         _COLLECTIONS.collection_choice_values("control", "network")["PL"],
-        "--network xyz: niedostepne dla obszaru control (PL)",
+        "--network xyz: not available for area control (PL)",
     ),
     _row(
         kartograf.download_collection,
@@ -950,7 +950,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "network",
         None,
         _COLLECTIONS.collection_choice_values("control", "network")["PL"],
-        "--network wymagane dla obszaru control (PL)",
+        "--network required for area control (PL)",
     ),
     _row(
         kartograf.download_collection,
@@ -963,7 +963,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "whole_country",
         None,
         None,
-        "nie ma pliku krajowego",
+        "has no national file",
     ),
     _row(
         kartograf.download_collection,
@@ -976,7 +976,7 @@ COLLECTION_OPTION_SCENARIOS = [
         None,
         ("sheet", "country"),
         None,
-        "a podano --country cz",
+        "but --country cz was given",
     ),
     _row(
         kartograf.download_collection,
@@ -1004,7 +1004,7 @@ COLLECTION_OPTION_SCENARIOS = [
         None,
         ("plan", "update"),
         None,
-        "Plan aktualizacji wymaga update='upgrade'",
+        "The update plan requires update='upgrade'",
     ),
     _row(
         kartograf.download_collection,
@@ -1019,7 +1019,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "workers",
         None,
         None,
-        "workers musi byc >= 1",
+        "workers must be >= 1",
     ),
 ]
 
@@ -1414,7 +1414,7 @@ OPTION_SCENARIOS = [
         "product",
         None,
         _DATA_PRODUCTS,
-        "--product wymagane",
+        "--product required",
     ),
     _row(
         kartograf.download_data,
@@ -1422,7 +1422,7 @@ OPTION_SCENARIOS = [
         "product",
         None,
         _DATA_PRODUCTS,
-        "nieznana wartosc",
+        "unknown value",
     ),
     _row(
         kartograf.check_data,
@@ -1430,7 +1430,7 @@ OPTION_SCENARIOS = [
         "product",
         None,
         _DATA_PRODUCTS,
-        "--product wymagane",
+        "--product required",
     ),
     _row(
         require_product,
@@ -1438,7 +1438,7 @@ OPTION_SCENARIOS = [
         "product",
         None,
         ("nmt", "nmpt"),
-        "nieznana wartosc",
+        "unknown value",
     ),
     _row(
         kartograf.download_data,
@@ -1446,7 +1446,7 @@ OPTION_SCENARIOS = [
         "vertical_crs",
         None,
         ("EVRF2007", "KRON86"),
-        "--vertical-crs wymagane dla --product nmt (PL)",
+        "--vertical-crs required for --product nmt (PL)",
     ),
     _row(
         kartograf.download_data,
@@ -1454,7 +1454,7 @@ OPTION_SCENARIOS = [
         "vertical_crs",
         None,
         ("EVRF2007", "KRON86"),
-        "nie jest ukladem wysokosci PL",
+        "is not a PL vertical CRS",
     ),
     _row(
         kartograf.download_data,
@@ -1478,7 +1478,7 @@ OPTION_SCENARIOS = [
         None,
         _AREA_NAMES,
         None,
-        "Podaj wybor obszaru",
+        "Provide an area choice",
     ),
     _row(
         kartograf.download_data,
@@ -1486,7 +1486,7 @@ OPTION_SCENARIOS = [
         None,
         ("sheet", "bbox"),
         None,
-        "Podaj dokladnie jeden wybor",
+        "Provide exactly one area choice",
     ),
     _row(
         kartograf.download_data,
@@ -1537,7 +1537,7 @@ OPTION_SCENARIOS = [
         "workers",
         None,
         None,
-        "--workers musi byc >= 1, podano 0",
+        "--workers must be >= 1, got 0",
     ),
     _row(
         kartograf.check_data,
@@ -1564,7 +1564,7 @@ OPTION_SCENARIOS = [
         "sheet_system",
         None,
         ("1992", "2000"),
-        "nieznana wartosc",
+        "unknown value",
     ),
     _row(
         kartograf.download_data,
@@ -1572,7 +1572,7 @@ OPTION_SCENARIOS = [
         "sheet_system",
         None,
         ("1992", "2000"),
-        "--sheet-system wymagane",
+        "--sheet-system is required",
     ),
     _row(
         kartograf.download_data,
@@ -1580,7 +1580,7 @@ OPTION_SCENARIOS = [
         "scale",
         None,
         ("1:5000", "1:2000", "1:1000", "1:500"),
-        "Nieznana skala PL-2000",
+        "Unknown PL-2000 scale",
     ),
     _row(
         kartograf.download_data,
@@ -1588,7 +1588,7 @@ OPTION_SCENARIOS = [
         "scale",
         None,
         ("1:5000", "1:2000", "1:1000", "1:500"),
-        "--scale wymagane dla arkuszy PL-2000",
+        "--scale is required for PL-2000 sheets",
     ),
     _row(
         kartograf.download_data,
@@ -1596,7 +1596,7 @@ OPTION_SCENARIOS = [
         "country",
         None,
         ("pl", "cz", "auto"),
-        "nieznana wartosc",
+        "unknown value",
     ),
     _row(
         kartograf.download_data,
@@ -1604,7 +1604,7 @@ OPTION_SCENARIOS = [
         "country",
         None,
         ("pl", "cz", "auto"),
-        "--country wymagane z --bbox/--geometry",
+        "--country required with --bbox/--geometry",
     ),
     _row(
         kartograf.download_data,
@@ -1612,7 +1612,7 @@ OPTION_SCENARIOS = [
         None,
         ("min_year", "max_year"),
         None,
-        "nie moze byc wiekszy",
+        "must not be greater",
     ),
     _row(
         kartograf.download_data,
@@ -1620,7 +1620,7 @@ OPTION_SCENARIOS = [
         "year",
         None,
         None,
-        "--year musi byc liczba calkowita",
+        "--year must be an integer",
     ),
     _row(
         kartograf.download_data,
@@ -1628,7 +1628,7 @@ OPTION_SCENARIOS = [
         "year",
         None,
         None,
-        "--year musi byc liczba calkowita",
+        "--year must be an integer",
     ),
     _row(
         kartograf.download_data,
@@ -1636,7 +1636,7 @@ OPTION_SCENARIOS = [
         "max_year",
         None,
         None,
-        "--max-year musi byc liczba calkowita",
+        "--max-year must be an integer",
     ),
     _row(
         kartograf.download_data,
@@ -1652,7 +1652,7 @@ OPTION_SCENARIOS = [
         "cutout",
         None,
         None,
-        "musi byc przelacznikiem",
+        "must be a switch",
     ),
     _row(
         kartograf.download_data,
@@ -1660,7 +1660,7 @@ OPTION_SCENARIOS = [
         "min_density",
         None,
         None,
-        "--min-density musi byc liczba calkowita",
+        "--min-density must be an integer",
     ),
     _row(
         kartograf.download_data,
@@ -1668,7 +1668,7 @@ OPTION_SCENARIOS = [
         "workers",
         None,
         None,
-        "--workers musi byc liczba calkowita",
+        "--workers must be an integer",
     ),
     _row(
         kartograf.download_data,
@@ -1676,7 +1676,7 @@ OPTION_SCENARIOS = [
         None,
         ("layer", "geometry"),
         None,
-        "--layer dotyczy tylko --geometry",
+        "--layer applies only to --geometry",
     ),
     _row(
         kartograf.download_data,
@@ -1684,7 +1684,7 @@ OPTION_SCENARIOS = [
         "resolution",
         None,
         None,
-        "nieprawidlowa wartosc",
+        "invalid value",
     ),
     _row(
         kartograf.download_data,
@@ -1692,7 +1692,7 @@ OPTION_SCENARIOS = [
         None,
         ("cutout", "sheet"),
         None,
-        "--cutout dziala tylko z --bbox/--geometry",
+        "--cutout works only with --bbox/--geometry",
     ),
     _row(
         kartograf.download_data,
@@ -1700,7 +1700,7 @@ OPTION_SCENARIOS = [
         "horizontal_crs",
         None,
         CUTOUT_CRS,
-        "--horizontal-crs wymagane z --cutout",
+        "--horizontal-crs is required with --cutout",
     ),
     _row(
         kartograf.download_data,
@@ -1708,7 +1708,7 @@ OPTION_SCENARIOS = [
         None,
         ("horizontal_crs", "cutout"),
         None,
-        "dziala tylko z --cutout",
+        "works only with --cutout",
     ),
     _row(
         kartograf.download_data,
@@ -1716,7 +1716,7 @@ OPTION_SCENARIOS = [
         "horizontal_crs",
         None,
         CUTOUT_CRS,
-        "nieznana wartosc",
+        "unknown value",
     ),
     _row(
         kartograf.download_data,
@@ -1724,7 +1724,7 @@ OPTION_SCENARIOS = [
         None,
         ("year", "cutout"),
         None,
-        "--year nie dziala z --cutout",
+        "--year does not work with --cutout",
     ),
     _row(
         kartograf.download_data,
@@ -1732,7 +1732,7 @@ OPTION_SCENARIOS = [
         None,
         ("model", "product"),
         None,
-        "--model dotyczy tylko --product laz",
+        "--model applies only to --product laz",
     ),
     _row(
         kartograf.download_data,
@@ -1740,7 +1740,7 @@ OPTION_SCENARIOS = [
         "resolution",
         None,
         None,
-        "--resolution nie dotyczy LAZ",
+        "--resolution does not apply to LAZ",
     ),
     _row(
         kartograf.download_data,
@@ -1748,7 +1748,7 @@ OPTION_SCENARIOS = [
         "format",
         None,
         None,
-        "--format dotyczy tylko --product nmt i nmpt",
+        "--format applies only to --product nmt and nmpt",
     ),
     _row(
         kartograf.download_data,
@@ -1756,7 +1756,7 @@ OPTION_SCENARIOS = [
         None,
         ("sheet_system", "resolution"),
         None,
-        "nie dotyczy --resolution 100m",
+        "does not apply to --resolution 100m",
     ),
     _row(
         kartograf.download_data,
@@ -1764,7 +1764,7 @@ OPTION_SCENARIOS = [
         "format",
         None,
         contours_formats(),
-        "--format wymagane dla --product contours",
+        "--format required for --product contours",
     ),
     _row(
         kartograf.download_data,
@@ -1778,7 +1778,7 @@ OPTION_SCENARIOS = [
         "resolution",
         None,
         None,
-        "--resolution nie dotyczy --product contours",
+        "--resolution does not apply to --product contours",
     ),
     _row(
         kartograf.download_data,
@@ -1786,7 +1786,7 @@ OPTION_SCENARIOS = [
         "vertical_crs",
         None,
         ("Bpv", "EVRF2007"),
-        "--vertical-crs wymagane dla NMT CZ",
+        "--vertical-crs is required for NMT CZ",
     ),
     _row(
         kartograf.download_data,
@@ -1794,7 +1794,7 @@ OPTION_SCENARIOS = [
         "format",
         None,
         None,
-        "--format dotyczy w CZ tylko --product contours",
+        "--format applies in CZ only to --product contours",
     ),
     _row(
         kartograf.download_data,
@@ -1829,7 +1829,7 @@ OPTION_SCENARIOS = [
         "vertical_crs",
         None,
         None,
-        "--vertical-crs nie dotyczy --product orto",
+        "--vertical-crs does not apply to --product orto",
     ),
     _row(
         kartograf.download_data,
@@ -1844,7 +1844,7 @@ OPTION_SCENARIOS = [
         None,
         ("cutout", "horizontal_crs"),
         None,
-        "dodaj --cutout --horizontal-crs",
+        "add --cutout --horizontal-crs",
     ),
     _row(
         kartograf.download_data,
@@ -1873,7 +1873,7 @@ OPTION_SCENARIOS = [
         "horizontal_crs",
         None,
         ("EPSG:2180",),
-        "wycinek ortofotomapy tylko EPSG:2180",
+        "an orthophoto cutout supports only EPSG:2180",
     ),
     _row(
         kartograf.download_data,
@@ -1886,7 +1886,7 @@ OPTION_SCENARIOS = [
         "direction",
         None,
         ("n", "e", "s", "w"),
-        "--direction 'x': nieznana wartosc",
+        "--direction 'x': unknown value",
     ),
     _row(
         kartograf.download_data,
@@ -1894,7 +1894,7 @@ OPTION_SCENARIOS = [
         None,
         ("direction", "product"),
         None,
-        "--direction dotyczy tylko --product",
+        "--direction applies only to --product",
     ),
     _row(
         kartograf.download_data,
@@ -1902,7 +1902,7 @@ OPTION_SCENARIOS = [
         "update",
         None,
         ("upgrade", "force"),
-        "Nieznany tryb update",
+        "Unknown update mode",
     ),
     _row(
         kartograf.download_data,
@@ -1910,7 +1910,7 @@ OPTION_SCENARIOS = [
         "update",
         None,
         ("upgrade", "force"),
-        "update='check' niczego nie pobiera",
+        "update='check' downloads nothing",
     ),
     _row(
         kartograf.download_data,
@@ -1918,7 +1918,7 @@ OPTION_SCENARIOS = [
         None,
         ("plan", "update"),
         None,
-        "Plan aktualizacji wymaga update='upgrade'",
+        "The update plan requires update='upgrade'",
     ),
     _row(
         kartograf.download_data,
@@ -1926,7 +1926,7 @@ OPTION_SCENARIOS = [
         None,
         ("sheet", "country"),
         None,
-        "nalezy do systemu",
+        "belongs to system",
     ),
     _row(
         kartograf.download_data,
@@ -1939,7 +1939,7 @@ OPTION_SCENARIOS = [
         None,
         ("product", "sheet"),
         None,
-        "nie ma danych PL",
+        "has no data for PL",
     ),
     _row(
         kartograf.download_data,
@@ -1953,7 +1953,7 @@ OPTION_SCENARIOS = [
         None,
         ("model", "sheet"),
         None,
-        "pomin --model dla PL",
+        "omit --model for PL",
     ),
     _row(
         kartograf.download_data,
@@ -1977,7 +1977,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "obszar nie przecina zasiegu zadnego znanego kraju",
+        "the area does not intersect the extent of any known country",
     ),
     _row(
         kartograf.download_data,
@@ -1991,7 +1991,7 @@ OPTION_SCENARIOS = [
         "year",
         None,
         None,
-        "CZ (CUZK) nie ma kampanii",
+        "CZ (CUZK) has no campaigns",
     ),
     _row(
         kartograf.download_data,
@@ -2006,7 +2006,7 @@ OPTION_SCENARIOS = [
         None,
         ("all_campaigns", "min_year"),
         None,
-        "CZ (CUZK) nie ma kampanii",
+        "CZ (CUZK) has no campaigns",
     ),
     _row(
         kartograf.download_data,
@@ -2020,7 +2020,7 @@ OPTION_SCENARIOS = [
         None,
         ("product", "country"),
         None,
-        "jest dostepny tylko dla CZ",
+        "is available only for CZ",
     ),
     _row(
         kartograf.download_data,
@@ -2034,7 +2034,7 @@ OPTION_SCENARIOS = [
         "model",
         None,
         cz_models(),
-        "obszar siega CZ: podaj --model",
+        "area extends into CZ: give --model",
     ),
     _row(
         kartograf.check_availability,
@@ -2042,7 +2042,7 @@ OPTION_SCENARIOS = [
         "product",
         None,
         ("nmt", "nmpt", "laz"),
-        "--product wymagane",
+        "--product required",
     ),
     _row(
         kartograf.check_availability,
@@ -2050,7 +2050,7 @@ OPTION_SCENARIOS = [
         "product",
         None,
         ("nmt", "nmpt", "laz"),
-        "nieznana wartosc",
+        "unknown value",
     ),
     _row(
         kartograf.check_availability,
@@ -2058,7 +2058,7 @@ OPTION_SCENARIOS = [
         "country",
         None,
         ("pl", "cz", "auto"),
-        "--country wymagane z --bbox/--geometry",
+        "--country required with --bbox/--geometry",
     ),
     _row(
         kartograf.check_availability,
@@ -2066,7 +2066,7 @@ OPTION_SCENARIOS = [
         "country",
         None,
         ("pl", "cz", "auto"),
-        "raport dostepnosci obejmuje",
+        "the availability report covers",
     ),
     _row(
         kartograf.check_availability,
@@ -2074,7 +2074,7 @@ OPTION_SCENARIOS = [
         None,
         ("sheet", "country"),
         None,
-        "nalezy do systemu",
+        "belongs to system",
     ),
     _row(
         kartograf.check_availability,
@@ -2082,7 +2082,7 @@ OPTION_SCENARIOS = [
         None,
         ("sheet", "bbox"),
         None,
-        "Podaj dokladnie jeden wybor",
+        "Provide exactly one area choice",
     ),
     _row(
         kartograf.check_availability,
@@ -2096,7 +2096,7 @@ OPTION_SCENARIOS = [
         None,
         ("min_year", "max_year"),
         None,
-        "nie moze byc wiekszy",
+        "must not be greater",
     ),
     _row(
         kartograf.check_availability,
@@ -2104,7 +2104,7 @@ OPTION_SCENARIOS = [
         "min_year",
         None,
         None,
-        "--min-year musi byc liczba calkowita",
+        "--min-year must be an integer",
     ),
     _row(
         kartograf.check_availability,
@@ -2112,7 +2112,7 @@ OPTION_SCENARIOS = [
         "year",
         None,
         None,
-        "CZ (CUZK) nie publikuje lat nalotu",
+        "CZ (CUZK) does not publish survey years",
     ),
     _row(
         kartograf.check_availability,
@@ -2126,7 +2126,7 @@ OPTION_SCENARIOS = [
         None,
         ("min_year", "max_year"),
         None,
-        "CZ (CUZK) nie publikuje lat nalotu",
+        "CZ (CUZK) does not publish survey years",
     ),
     _row(
         kartograf.check_availability,
@@ -2134,7 +2134,7 @@ OPTION_SCENARIOS = [
         "year",
         None,
         None,
-        "nie ma rocznika",
+        "has no vintage",
     ),
     _row(
         kartograf.check_availability,
@@ -2148,7 +2148,7 @@ OPTION_SCENARIOS = [
         None,
         ("min_year", "max_year"),
         None,
-        "nie ma rocznika",
+        "has no vintage",
     ),
     _row(
         kartograf.check_availability,

@@ -63,6 +63,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import bbox_cutout_path, bbox_slot
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.messages import message
 from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice, NoticeSink
 from kartograf.output import plain_of, preflight, writing
 from kartograf.sources.descriptor import TransportKind
@@ -93,13 +94,17 @@ def wcs_time_text(requests: int) -> str:
     """Return the estimated time of ``requests`` WCS requests one after another.
 
     Estimated time of ``requests`` WCS requests one after another:
-    ``ok. 50-80 s`` below 2 minutes, else ``ok. 7-11 min``.
+    ``approx. 50-80 s`` below 2 minutes, else ``approx. 7-11 min``.
     """
     low, high = (requests * seconds for seconds in WCS_REQUEST_SECONDS)
     if high < 120:
-        return f"ok. {low}-{high} s"
+        return message("cutouts.wcs_time_seconds", low=low, high=high)
     low_min = max(1, round(low / 60))
-    return f"ok. {low_min}-{max(low_min, round(high / 60))} min"
+    return message(
+        "cutouts.wcs_time_minutes",
+        low=low_min,
+        high=max(low_min, round(high / 60)),
+    )
 
 
 # Layers of the PL land mask (sidecar ``extra.mask.layers``, ADR-035).
@@ -195,12 +200,19 @@ def _prepare_pl_cutout(
     bbox = validate_request_bbox(bbox)
     if product not in CUTOUT_PRODUCTS:
         raise ValidationError(
-            f"Produkt wycinka PL: {' albo '.join(CUTOUT_PRODUCTS)} (podano {product})"
+            message(
+                "cutouts.cutout_product_invalid",
+                cutout_products=CUTOUT_PRODUCTS,
+                product=product,
+            )
         )
     if horizontal_crs not in CUTOUT_CRS:
         raise ValidationError(
-            f"Nieobslugiwany uklad docelowy wycinka PL: {horizontal_crs} "
-            f"(dostepne: {', '.join(CUTOUT_CRS)})"
+            message(
+                "cutouts.cutout_crs_unsupported",
+                horizontal_crs=horizontal_crs,
+                cutout_crs=", ".join(CUTOUT_CRS),
+            )
         )
     if wcs_variant(product, vertical_crs) is None:
         systems = sorted(
@@ -211,8 +223,12 @@ def _prepare_pl_cutout(
             }
         )
         raise ValidationError(
-            f"Uklad wysokosci {product.upper()} PL: {' albo '.join(systems)} "
-            f"(podano {vertical_crs})"
+            message(
+                "cutouts.cutout_vertical_crs_invalid",
+                product=product.upper(),
+                systems=systems,
+                vertical_crs=vertical_crs,
+            )
         )
 
     from kartograf.providers.cuzk.raster import bbox_to_crs
@@ -278,7 +294,7 @@ def _cutout_descriptor_key(product: str, vertical_crs: str) -> str:
     """Source descriptor of the cutout (the WCS variant: 1 m grid)."""
     variant = wcs_variant(product, vertical_crs)
     if variant is None:  # pragma: no cover - guarded by _prepare_pl_cutout
-        raise ValidationError(f"{product.upper()} PL nie ma wycinka WCS")
+        raise ValidationError(message("cutouts.no_wcs_cutout", product=product.upper()))
     return variant.source
 
 
@@ -297,9 +313,12 @@ def _require_matching_provider(cutout: PlCutout, provider: Any) -> None:
         actual = getattr(provider, attr, None)
         if isinstance(actual, str) and actual != expected:
             raise ValidationError(
-                f"Provider niezgodny z wycinkiem: {attr} providera {actual}, "
-                f"wycinka {expected} - podaj provider z produktem, pionem "
-                "i rozdzielczoscia wycinka"
+                message(
+                    "cutouts.provider_cutout_mismatch",
+                    attr=attr,
+                    actual=actual,
+                    expected=expected,
+                )
             )
 
 
@@ -328,9 +347,14 @@ def _check_wcs_disk_space(cutout: PlCutout, staged: Path) -> None:
     if free < need:
         height, width = cutout.grid_shape
         raise ValidationError(
-            f"Za malo miejsca na dysku dla wycinka: potrzeba co najmniej "
-            f"~{need / 2**30:.1f} GiB (siatka {width} x {height} px float32 i plik "
-            f"roboczy EPSG:2180), wolne ~{free / 2**30:.1f} GiB w {probe}"
+            message(
+                "cutouts.cutout_disk_space_low",
+                needed_gib=need / 2**30,
+                width=width,
+                height=height,
+                free_gib=free / 2**30,
+                probe=probe,
+            )
         )
 
 
@@ -486,7 +510,9 @@ def _cutout_result(
         )
     version = read_version(file.version_path.parent, file.version_path.name)
     if version is None:
-        raise DownloadError(f"{file.version_path}: wersja bez czytelnego sidecara")
+        raise DownloadError(
+            message("cutouts.version_no_sidecar", version_path=file.version_path)
+        )
     extra = version.meta.get("extra") or {}
     return PlCutoutResult(
         file=file,
@@ -573,24 +599,32 @@ def _run_pl_wcs_cutout(
         if not mask.has_land(b, cutout.pixel_size):
             # the sheet mode has no record there either: no version, no WCS
             raise NoCoverageError(
-                f"wycinek {cutout.product.upper()}: obszar w calosci poza ladem PL "
-                "(maska PRG: granica panstwa bez morza terytorialnego i wod "
-                "wewnetrznych) - GUGiK nie ma tu danych; zmien --bbox"
+                message("cutouts.cutout_outside_land", product=cutout.product.upper())
             )
         if sink is not None and (chunks > 1 or cutout.estimated_bytes >= 2**30):
             height, width = cutout.grid_shape
             sink.emit(
                 "info",
                 CUTOUT_SIZE,
-                f"wycinek {width} x {height} px float32 "
-                f"(~{cutout.estimated_bytes / 2**20:.0f} MiB), {chunks} zapytan "
-                f"WCS GUGiK pobieranych po kolei - {wcs_time_text(chunks)} "
-                f"({WCS_REQUEST_SECONDS[0]}-{WCS_REQUEST_SECONDS[1]} s na "
-                "zapytanie wg pomiaru)",
+                message(
+                    "cutouts.cutout_size_estimate",
+                    width=width,
+                    height=height,
+                    size_mib=cutout.estimated_bytes / 2**20,
+                    chunks=chunks,
+                    wcs_time_text=wcs_time_text(chunks),
+                    wcs_request_seconds=WCS_REQUEST_SECONDS[0],
+                    wcs_request_seconds_2=WCS_REQUEST_SECONDS[1],
+                ),
             )
-        description = (
-            f"wycinek {cutout.product.upper()} {cutout.vertical_crs} "
-            f"({b.min_x:.0f},{b.min_y:.0f})-({b.max_x:.0f},{b.max_y:.0f})"
+        description = message(
+            "cutouts.cutout_description",
+            product=cutout.product.upper(),
+            vertical_crs=cutout.vertical_crs,
+            min_x=b.min_x,
+            min_y=b.min_y,
+            max_x=b.max_x,
+            max_y=b.max_y,
         )
         work = staged.parent / f"{staged.stem}.wcs.tif"
         try:
@@ -741,7 +775,6 @@ def download_pl_cutout(
         sink.emit(
             "warning",
             ALL_NODATA,
-            "wycinek w calosci nodata - WCS GUGiK nie zwrocil danych dla obszaru "
-            "(na ladzie wg maski PRG)",
+            message("cutouts.cutout_all_nodata"),
         )
     return replace(result, notices=sink.notices)

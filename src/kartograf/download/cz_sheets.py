@@ -51,6 +51,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import storage_for_provider
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.notices import UNVERIFIED_LOCAL, Notice, NoticeSink
 from kartograf.output import plain_of, preflight, writing
 from kartograf.providers.cuzk.raster import CuzkRasterProvider
@@ -173,7 +174,7 @@ def _run_cz_sheet(
     """
     validate_update(update)
     if plan is not None and update != "upgrade":
-        raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+        raise ValidationError(message("hydrology.plan_requires_upgrade"))
     sheet = sheet.strip()
     # the route (variant, channel, pinned operations) before any request
     route = provider.route(sheet)
@@ -194,7 +195,9 @@ def _run_cz_sheet(
         fresh = _check_sheet(provider, sheet, root=root).items
         if fresh[0].status == "check_failed":
             raise DownloadError(
-                f"Nie udalo sie sprawdzic arkusza CZ {sheet}: {fresh[0].error}"
+                message(
+                    "tracks.cz_sheet_check_failed", sheet=sheet, error=fresh[0].error
+                )
             )
         todo, rejected = select_planned(scoped, list(fresh), "cz_sheet")
         stale = tuple(rejected)
@@ -250,7 +253,7 @@ def _run_cz_sheet(
                     extra["cz_share"] = info.podil
             except Exception as e:  # noqa: BLE001 — data matters more than metadata
                 logger.warning(
-                    f"Sidecar {sheet} bez extra.cz_share (PODIL; blad indeksu): {e}"
+                    message("tracks.sidecar_no_cz_share", sheet=sheet, error=reason(e))
                 )
         emit_sidecar(
             provider.descriptor_key,
@@ -293,9 +296,9 @@ def _run_cz_sheet(
                 Notice(
                     "info",
                     UNVERIFIED_LOCAL,
-                    f"{sheet}: lokalna wersja {file.label} bez sygnalu HTTP pliku "
-                    "CUZK (np. kafel wyciety z ImageServer przez wczesniejsza "
-                    "wersje Kartografa) - niesprawdzona; plik CUZK: --force",
+                    message(
+                        "tracks.unverified_local_version", sheet=sheet, label=file.label
+                    ),
                 ),
             )
     return CzSheetResult(file, empty, stale, notices)

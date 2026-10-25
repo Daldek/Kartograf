@@ -122,7 +122,7 @@ def test_laz_wrong_pair_rejected(vertical_crs, sheet, tmp_path):
 def test_exactly_one_selection(selection, tmp_path):
     with (
         recorded(CuzkSession()) as session,
-        pytest.raises(ValidationError, match="dokladnie jedno"),
+        pytest.raises(ValidationError, match="give exactly one of sheet"),
     ):
         download_cz_laz(model="dmr4g", vertical_crs="Bpv", root=tmp_path, **selection)
     assert session.calls == []

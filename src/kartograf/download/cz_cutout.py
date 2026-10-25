@@ -40,6 +40,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import bbox_slot
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.notices import ALL_NODATA, Notice, NoticeSink
 from kartograf.output import plain_of, preflight, writing
 from kartograf.providers.cuzk.client import wkid
@@ -75,8 +76,7 @@ def emit_cz_all_nodata(
         sink.emit(
             "warning",
             ALL_NODATA,
-            f"{file.path} jest w calosci nodata - obszar poza pokryciem rastra CUZK "
-            "(poza granica CZ?)",
+            message("cutouts.cz_all_nodata", path=file.path),
         )
 
 
@@ -103,7 +103,7 @@ def _all_nodata(path: Path, nodata: float | None) -> bool:
     try:
         return not has_valid_pixels(path, CUZK_NODATA if nodata is None else nodata)
     except Exception as e:  # noqa: BLE001 — a flag never aborts the download
-        logger.debug(f"Kontrola nodata {path} pominieta: {e}")
+        logger.debug(f"Nodata check of {path} skipped: {e}")
         return False
 
 
@@ -231,7 +231,7 @@ def _run_cz_cutout(
     validate_update(update)
     if plan is not None:
         if update != "upgrade":
-            raise ValidationError("Plan wycinka CZ wymaga update='upgrade'")
+            raise ValidationError(message("cutouts.cz_cutout_requires_upgrade"))
         require_store(plan, store_id(root))
     # the route (pinned operations) before any request
     route = provider.route()
@@ -317,8 +317,11 @@ def _cz_provider(
 
     if horizontal_crs not in CUTOUT_CRS:
         raise ValidationError(
-            f"Nieobslugiwany uklad docelowy wycinka CZ: {horizontal_crs!r} "
-            f"(dostepne: {', '.join(CUTOUT_CRS)})"
+            message(
+                "cutouts.cz_cutout_unsupported_crs",
+                horizontal_crs=horizontal_crs,
+                cutout_crs=", ".join(CUTOUT_CRS),
+            )
         )
     provider = create_cz_raster_provider(
         product=product,

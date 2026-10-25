@@ -37,6 +37,7 @@ from typing import Any
 
 from kartograf.download.versions import ensure_dir, read_version, version_key
 from kartograf.exceptions import DownloadError
+from kartograf.messages import message, reason
 from kartograf.sources.sidecar import file_digest
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ def link_atomic(target: Path, link: Path) -> None:
             errno.EMLINK,
         ):
             raise DownloadError(
-                f"{link}: magazyn wersji wymaga systemu plikow z hardlinkami (D22): {e}"
+                message("download.hardlink_fs_required", link=link, error=reason(e))
             ) from e
         raise
     # rename(2) onto the same inode (link is already a hardlink of the
@@ -220,7 +221,11 @@ def write_link_sidecar(link: Path, target: Path) -> None:
         if meta is None:
             sidecar.unlink(missing_ok=True)
             logger.warning(
-                f"Sidecar wersji {target} nieczytelny - brak sidecara {sidecar}"
+                message(
+                    "download.version_sidecar_unreadable",
+                    target=target,
+                    sidecar=sidecar,
+                )
             )
             return
         extra = meta.get("extra")
@@ -239,8 +244,7 @@ def write_link_sidecar(link: Path, target: Path) -> None:
         with contextlib.suppress(OSError):
             sidecar.unlink(missing_ok=True)
         logger.warning(
-            f"Nie udalo sie zapisac sidecara {sidecar}: {e} - stary sidecar "
-            "usuniety (nastepne uruchomienie odtworzy dowiazanie)"
+            message("download.sidecar_write_failed", sidecar=sidecar, error=reason(e))
         )
 
 
@@ -260,7 +264,7 @@ def update_sidecar_extra(data_path: Path, updates: dict[str, Any]) -> None:
     try:
         payload = _read_json(sidecar)
         if payload is None:
-            raise ValueError("nieczytelny JSON sidecara")
+            raise ValueError("unreadable sidecar JSON")
         extra = payload.get("extra")
         if not isinstance(extra, dict):
             extra = {}
@@ -277,7 +281,9 @@ def update_sidecar_extra(data_path: Path, updates: dict[str, Any]) -> None:
     except Exception as e:  # noqa: BLE001 — metadata must not abort a download
         with contextlib.suppress(OSError):
             tmp.unlink(missing_ok=True)
-        logger.warning(f"Nie udalo sie dopisac danych do sidecara {sidecar}: {e}")
+        logger.warning(
+            message("download.sidecar_append_failed", sidecar=sidecar, error=reason(e))
+        )
 
 
 def ensure_link(

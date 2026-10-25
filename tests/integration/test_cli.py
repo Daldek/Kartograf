@@ -1986,7 +1986,7 @@ class TestCreateProviderAndStorage:
         """LAZ has a separate flow (_cmd_download_laz) - it must not get here."""
         from kartograf.download.data import _create_provider_and_storage
 
-        with pytest.raises(ValidationError, match="Nieobslugiwany produkt"):
+        with pytest.raises(ValidationError, match="Unsupported PL sheet product"):
             _create_provider_and_storage("laz", tmp_path, "EVRF2007", "1m")
 
     def test_unknown_product_raises_validation_error(self, tmp_path):
@@ -2255,7 +2255,7 @@ class TestNmt5mKron86Rejected:
         resolve_pl_options(ns("EVRF2007"), code_system="1992")
         with pytest.raises(ValidationError) as missing:
             resolve_pl_options(ns(None), code_system="1992")
-        assert "--vertical-crs wymagane" in str(missing.value)
+        assert "--vertical-crs required" in str(missing.value)
         assert "KRON86" in str(missing.value)
         task = ns("KRON86")
         with pytest.raises(ValidationError) as kron:
@@ -2409,7 +2409,7 @@ class TestRegistryVariantsCli:
         assert listed == {
             (product, system, label)
             for product in ("nmt", "nmpt")
-            for system, label in _registry_grids(product)
+            for system, label in _registry_grids(product, "pl")
         }
 
     def test_list_sources_has_every_variant_source(self, capsys):
@@ -6496,7 +6496,7 @@ class TestCountryDispatch:
                 "dmpok",
                 "Bpv",
                 "0.5m",
-                "--model dotyczy tylko --product laz",
+                "--model applies only to --product laz",
             ),
             (
                 "N-34-130-D-d-2-4",
@@ -6504,7 +6504,7 @@ class TestCountryDispatch:
                 "dmr4g",
                 "EVRF2007",
                 None,
-                "--model dotyczy tylko --product laz w CZ",
+                "--model applies only to --product laz in CZ",
             ),
             (
                 "760_5518",
@@ -9191,8 +9191,8 @@ class TestCampaignOptions:
         ("flags", "expected"),
         [
             (["--min-year", "2025", "--max-year", "2023"], "--min-year (2025)"),
-            (["--max-year", "2200"], "--max-year musi byc"),
-            (["--year", "2200"], "--year musi byc"),
+            (["--max-year", "2200"], "--max-year must be"),
+            (["--year", "2200"], "--year must be"),
         ],
     )
     @patch("kartograf.download.data.DownloadManager")
@@ -9478,11 +9478,11 @@ class TestCampaignOptions:
 
         (notice,) = run.sink.notices
         lines = notice.message.splitlines()
-        assert "dla 12 arkuszy" in lines[0]
+        assert "for 12 sheets" in lines[0]
         assert len(lines) == 12
         assert "N-34-139-C-a-3-00" in lines[1]
         assert "N-34-139-C-a-3-09" in lines[10]
-        assert lines[11] == "  ... i 2 innych"
+        assert lines[11] == "  ... and 2 more"
         assert "N-34-139-C-a-3-10" not in "\n".join(lines)
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
@@ -10225,7 +10225,7 @@ class TestCampaignOptions:
         )
         assert rc == 2
         err = capsys.readouterr().err
-        assert "Error: --min-year musi byc" in err and "1800" in err
+        assert "Error: --min-year must be" in err and "1800" in err
         assert " min_year" not in err
 
     @patch("kartograf.download.data.DownloadManager")

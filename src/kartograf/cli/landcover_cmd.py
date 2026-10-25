@@ -9,6 +9,7 @@ import argparse
 import sys
 
 from kartograf.cli._args import library_arguments, target_arguments
+from kartograf.cli._language import localized
 from kartograf.cli.download_cmd import (
     _end_progress,
     _plan_context,
@@ -86,7 +87,7 @@ def _print_landcover(
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
         statuses.append(item.file.status)
     for failure in result.failed:
-        print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
+        print(f"Error: {failure.unit}: {localized(failure.error)}", file=sys.stderr)
     _report_stale(result.stale)
     if args.product in _UNIT_SOURCES and args.teryt is None and not args.quiet:
         _print_version_summary(

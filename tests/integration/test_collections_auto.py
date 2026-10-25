@@ -100,10 +100,10 @@ def test_pl_only_area_downloads_pl_when_cz_has_no_cadastral_area(tmp_path, route
     )
     (failure,) = report.failed
     assert (failure.unit, failure.country, failure.kind) == ("CZ", "CZ", "no_coverage")
-    assert "katastralniho uzemi (RUIAN)" in failure.error
+    assert "cadastral territory (RUIAN)" in failure.error
     (partial,) = [n for n in report.notices if n.code == AUTO_PARTIAL_SUCCESS]
     assert partial.level == "warning"
-    assert "czesc CZ" in partial.message and "pobrano PL" in partial.message
+    assert "part CZ" in partial.message and "downloaded PL" in partial.message
 
 
 def test_pl_only_area_check_plans_pl_and_warns_about_cz(tmp_path, router):
@@ -115,8 +115,8 @@ def test_pl_only_area_check_plans_pl_and_warns_about_cz(tmp_path, router):
     assert {item.segment for item in plan.items} == {"cadastre/pl_egib"}
     warnings = [n for n in plan.notices if n.level == "warning"]
     assert [n.code for n in warnings] == [CHECK_FAILED, AUTO_PARTIAL_SUCCESS]
-    assert warnings[0].message.startswith("CZ: map: obszar nie przecina")
-    assert "nie mogla zostac sprawdzona" in warnings[1].message
+    assert warnings[0].message.startswith("CZ: map: the area does not intersect")
+    assert "could not be checked" in warnings[1].message
 
 
 def test_cz_only_area_keeps_cz_when_the_pl_part_fails(tmp_path, monkeypatch):
@@ -137,7 +137,9 @@ def test_cz_only_area_keeps_cz_when_the_pl_part_fails(tmp_path, monkeypatch):
     (failure,) = report.failed
     assert (failure.country, failure.kind) == ("PL", "download")
     (partial,) = [n for n in report.notices if n.code == AUTO_PARTIAL_SUCCESS]
-    assert "czesc PL" in partial.message and "pobrano CZ" in partial.message
+    assert (
+        "part PL of the task" in partial.message and "downloaded CZ" in partial.message
+    )
 
 
 def test_every_country_failing_is_a_failure(tmp_path, monkeypatch):
@@ -160,7 +162,7 @@ def test_explicit_country_without_units_stays_no_coverage(tmp_path, router):
     always was: there is no other country to fall back on."""
     _no_cadastral_area(router)
 
-    with pytest.raises(NoCoverageError, match="katastralniho uzemi"):
+    with pytest.raises(NoCoverageError, match="any cadastral territory"):
         download_collection(
             **{**CADASTRAL_MAP, "country": "cz"}, bbox=CZ_ONLY, root=tmp_path
         )
@@ -187,5 +189,5 @@ def test_no_units_in_any_country_is_one_no_coverage_error(tmp_path, router):
         )
 
     text = str(caught.value)
-    assert "indeks nie ma rekordow" in text
-    assert "obszar nie przecina zadnego arkusza" in text
+    assert "the index has no records" in text
+    assert "the area does not intersect any sheet" in text

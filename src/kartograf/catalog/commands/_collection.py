@@ -38,6 +38,7 @@ from kartograf.download.collections import (
     collection_choice_values,
     collection_countries,
     collection_product_choices,
+    collection_product_sources,
     collection_products,
 )
 from kartograf.download.options import country_choices, store_files
@@ -84,9 +85,10 @@ def collection_group(name: str, summary: str, description: str) -> Group:
     """Return the CLI group of a collection: its products with the registry's texts."""
 
     def products() -> list[tuple[str, str]]:
-        return shared.product_summaries(
-            collection_products(name), collection_product_choices
-        )
+        return [
+            (product, collection_product_sources(product))
+            for product in collection_products(name)
+        ]
 
     return Group(name, summary, description, products=products)
 

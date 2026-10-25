@@ -655,7 +655,7 @@ def test_sheet_without_record_is_not_a_unit(tmp_path, router, monkeypatch):
             on_notice=notices.append,
         )
     assert [n.code for n in notices] == [UNIT_LIST]
-    assert "bez rekordu w indeksie (1): M-34-64-D-d-1" in notices[0].message
+    assert "without an index record (1): M-34-64-D-d-1" in notices[0].message
 
 
 def test_cuzk_layer_sheet_units(tmp_path, router, monkeypatch):
@@ -871,7 +871,7 @@ def test_feature_channel_by_choice(tmp_path, router, monkeypatch, frozen_clock):
         validate_collection_request(
             product="e0control", root=tmp_path, country="pl", bbox=GRAV_AREA
         )
-    assert "--network wymagane" in str(missing.value)
+    assert "--network required" in str(missing.value)
     assert "vertical, gravity" in str(missing.value)
 
     report = download_collection(
@@ -937,7 +937,7 @@ def test_selection_key_names_several_layers(tmp_path, monkeypatch):
         validate_collection_request(
             product="e0control", root=tmp_path, country="cz", bbox=TESIN
         )
-    assert "--network wymagane" in str(missing.value)
+    assert "--network required" in str(missing.value)
     assert "horizontal, vertical" in str(missing.value)
     with pytest.raises(ValidationError):  # the levels of other products do not apply
         validate_collection_request(
@@ -965,10 +965,10 @@ def test_selection_key_names_several_layers(tmp_path, monkeypatch):
             "--scale",
         ),
         ("e0ztm", {"sheet": "0510-D-11", "sheet_system": "etrs89"}, "--format"),
-        ("e0km", {"ku": "62316", "format": "SHP"}, "6 cyfr"),
+        ("e0km", {"ku": "62316", "format": "SHP"}, "6 digits"),
         ("e0km", {"ku": "623164"}, "SHP, DXF"),
         ("e0km", {"ku": "623164", "format": "SHP", "country": "pl"}, "CZ"),
-        ("e0km", {"teryt": "1261", "format": "SHP"}, "tylko dla CZ"),
+        ("e0km", {"teryt": "1261", "format": "SHP"}, "available only for CZ"),
         (
             "e0control",
             {"bbox": GRAV_AREA, "country": "pl", "network": "magnetic"},

@@ -494,8 +494,8 @@ def test_cz_all_nodata_notice(tmp_path):
     expected = Notice(
         "warning",
         ALL_NODATA,
-        f"{result.file.path} jest w calosci nodata - obszar poza pokryciem rastra "
-        "CUZK (poza granica CZ?)",
+        f"{result.file.path} is entirely nodata - area outside the CUZK raster "
+        "coverage (outside the CZ boundary?)",
     )
     assert result.notices == (expected,)
     assert seen == [expected]
@@ -882,4 +882,4 @@ def test_existing_tm33_warp_upgrade_reported_once(tmp_path):
         )
     assert report.ok
     assert [notice.code for notice in report.notices] == [UNVERIFIED_LOCAL]
-    assert "bez sygnalu HTTP pliku CUZK" in report.notices[0].message
+    assert "has no HTTP signal from the CUZK file" in report.notices[0].message

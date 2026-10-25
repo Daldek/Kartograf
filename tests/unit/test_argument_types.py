@@ -55,9 +55,9 @@ def test_download_data_rejects_text_density_and_workers(tmp_path):
 
 def test_layers_text_is_not_read_character_by_character(tmp_path):
     manager = LandCoverManager("bdot10k", cache=False, root=tmp_path)
-    with pytest.raises(ValidationError, match="--layers: podaj liste kodow"):
+    with pytest.raises(ValidationError, match="--layers: provide a list of codes"):
         manager.download(teryt="1465", layers="SWRS,PTWP")
-    with pytest.raises(ValidationError, match="--layers: podaj liste kodow"):
+    with pytest.raises(ValidationError, match="--layers: provide a list of codes"):
         manager.check(teryt="1465", layers="SWRS")
 
 
@@ -66,7 +66,7 @@ def test_layers_text_is_not_read_character_by_character(tmp_path):
     [
         ("corine", {"year": "2018"}, "--year .*'2018'"),
         ("bdot10k", {"keep_raw": "true"}, "--keep-raw"),
-        ("bdot10k", {"layers": ["SWRS", 7]}, "kody musza byc napisami"),
+        ("bdot10k", {"layers": ["SWRS", 7]}, "codes must be strings"),
     ],
 )
 def test_landcover_rejects_wrong_option_types(tmp_path, source, options, match):

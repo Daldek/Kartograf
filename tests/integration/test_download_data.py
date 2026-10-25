@@ -82,10 +82,10 @@ def test_pl_sheet_report_files_and_ok(tmp_path):
 @pytest.mark.parametrize(
     ("kwargs", "text"),
     [
-        ({"product": None}, "--product wymagane"),
-        ({"vertical_crs": None}, "--vertical-crs wymagane dla --product nmt"),
+        ({"product": None}, "--product required"),
+        ({"vertical_crs": None}, "--vertical-crs required for --product nmt"),
         ({"year": 2020, "min_year": 2019}, "--year wyklucza sie"),
-        ({"min_density": 4}, "--min-density dziala tylko z --product laz"),
+        ({"min_density": 4}, "--min-density works only with --product laz"),
     ],
 )
 def test_validation_errors_before_any_download(tmp_path, kwargs, text):
@@ -105,7 +105,7 @@ def test_validation_errors_before_any_download(tmp_path, kwargs, text):
 
 
 def test_area_outside_countries_is_validation_error(tmp_path):
-    with pytest.raises(ValidationError, match="nie przecina zasiegu"):
+    with pytest.raises(ValidationError, match="does not intersect the extent"):
         download_data(
             product="nmt",
             root=tmp_path,
@@ -119,15 +119,15 @@ def test_area_outside_countries_is_validation_error(tmp_path):
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
-        ({"product": "foo"}, "--product 'foo': nieznana wartosc - dostepne: nmt"),
-        ({"country": "xx"}, "--country 'xx': nieznana wartosc - dostepne: pl"),
+        ({"product": "foo"}, "--product 'foo': unknown value - available: nmt"),
+        ({"country": "xx"}, "--country 'xx': unknown value - available: pl"),
         (
             {"sheet_system": "1993"},
-            "--sheet-system '1993': nieznana wartosc - dostepne: 1992",
+            "--sheet-system '1993': unknown value - available: 1992",
         ),
         (
             {"cutout": True, "horizontal_crs": "EPSG:3857"},
-            "--horizontal-crs 'EPSG:3857': nieznana wartosc - dostepne: EPSG:2180",
+            "--horizontal-crs 'EPSG:3857': unknown value - available: EPSG:2180",
         ),
         (
             {
@@ -138,23 +138,23 @@ def test_area_outside_countries_is_validation_error(tmp_path):
                 "cutout": True,
                 "horizontal_crs": "EPSG:3857",
             },
-            "--horizontal-crs 'EPSG:3857': nieznana wartosc - dostepne: EPSG:2180",
+            "--horizontal-crs 'EPSG:3857': unknown value - available: EPSG:2180",
         ),
         (
             {"sheet": "N-34-130-D-d-2-4", "bbox": None, "cutout": True},
-            "--cutout dziala tylko z --bbox/--geometry",
+            "--cutout works only with --bbox/--geometry",
         ),
         (
             {"sheet_system": None, "cutout": True},
-            "--horizontal-crs wymagane z --cutout (uklad wycinka): EPSG:2180",
+            "--horizontal-crs is required with --cutout (cutout CRS): EPSG:2180",
         ),
         (
             {"horizontal_crs": "EPSG:2180"},
-            "--horizontal-crs dziala tylko z --cutout",
+            "--horizontal-crs works only with --cutout",
         ),
         (
             {"product": "laz", "cutout": True},
-            "--cutout dziala tylko z --product nmt, nmpt, orto albo true-orto",
+            "--cutout works only with --product nmt, nmpt, orto or true-orto",
         ),
         (
             {"product": "orto", "vertical_crs": None, "cutout": True},
@@ -168,8 +168,10 @@ def test_area_outside_countries_is_validation_error(tmp_path):
                 "sheet_system": None,
                 "bbox": BBox(-740000, -1050000, -739000, -1049000, "EPSG:5514"),
             },
-            "obszar CZ (CUZK) jest pobierany tylko jako jeden wycinek - dodaj "
-            "--cutout --horizontal-crs",
+            (
+                "a CZ (CUZK) area is downloaded only as a single cutout - add --cutout "
+                "--horizontal-crs"
+            ),
         ),
         (
             {
@@ -178,7 +180,7 @@ def test_area_outside_countries_is_validation_error(tmp_path):
                 "vertical_crs": {"pl": "EVRF2007", "cz": "Bpv"},
                 "bbox": BBox(15.85, 50.45, 15.95, 50.55, "EPSG:4326"),
             },
-            "obszar siega CZ, a CUZK daje dla obszaru tylko jeden wycinek",
+            "the area extends into CZ, and CUZK provides only a single cutout",
         ),
         (
             {"bbox": BBox(10, 10, 5, 5, "EPSG:2180")},
@@ -290,7 +292,7 @@ def test_laz_start_progress_uses_resolved_pl_vertical_crs(tmp_path):
             cache=False,
         )
     assert report.ok
-    assert events == [DownloadProgress(0, 1, "kafli LAZ", "start", "WFS GUGiK, KRON86")]
+    assert events == [DownloadProgress(0, 1, "LAZ tiles", "start", "WFS GUGiK, KRON86")]
 
 
 def _border_tracks(order: list[str], *, cz_error: Exception | None = None):
@@ -334,7 +336,7 @@ def test_partial_success_auto_ok_true_with_notice(tmp_path):
     assert [(f.country, f.kind) for f in report.failed] == [("CZ", "download")]
     assert "CUZK 503" in report.failed[0].error
     partial = [n for n in report.notices if n.code == AUTO_PARTIAL_SUCCESS]
-    assert len(partial) == 1 and "pobrano PL" in partial[0].message
+    assert len(partial) == 1 and "downloaded PL" in partial[0].message
     assert seen == list(report.notices)
 
 
@@ -434,7 +436,7 @@ def test_per_country_wrong_type_fails_before_source(tmp_path, operation, flag, i
         patch("kartograf.download.data._create_provider_and_storage") as provider,
         pytest.raises(
             ValidationError,
-            match=f"--{flag.replace('_', '-')}: nieprawidlowa wartosc",
+            match=f"--{flag.replace('_', '-')}: invalid value",
         ),
     ):
         operation(**selection)
@@ -520,7 +522,7 @@ def test_cz_cutout_unknown_horizontal_crs_is_validation_error(tmp_path, operatio
     with (
         patch(CZ_FACTORY) as factory,
         pytest.raises(
-            ValidationError, match="Nieobslugiwany uklad docelowy wycinka CZ"
+            ValidationError, match="Unsupported target CRS for the CZ cutout"
         ),
     ):
         operation(
@@ -568,7 +570,7 @@ def test_pl_sheet_list_failure_contains_per_sheet_cause(tmp_path):
     assert len(report.failed) == 1
     assert report.failed[0].kind == "download"
     assert f"{failed}: zrodlo HTTP 503" in report.failed[0].error
-    assert "GUGiK nie ma danych" in next(
+    assert "GUGiK has no data for" in next(
         n.message for n in report.notices if n.code == NO_COVERAGE_SOME
     )
 
@@ -588,7 +590,7 @@ def test_check_data_auto_partial_names_failed_country_without_download_claim(tmp
         )
     assert [item.track for item in plan.items] == ["pl_cutout"]
     partial = next(n for n in notices if n.code == AUTO_PARTIAL_SUCCESS)
-    assert "sprawdzono PL" in partial.message and "pobrano" not in partial.message
+    assert "checked PL" in partial.message and "downloaded" not in partial.message
     failed = [n for n in notices if n.code == CHECK_FAILED]
     assert len(failed) == 1 and failed[0].message == "CZ: CUZK 503"
 
@@ -633,9 +635,9 @@ def test_check_data_partial_coverage_is_a_plan_with_the_warning_of_the_download(
     download = next(n for n in report.notices if n.code == NO_COVERAGE_SOME)
     assert check.level == download.level == "warning"
     assert check.message.rsplit("; ", 1)[0] == download.message.rsplit("; ", 1)[0]
-    assert "GUGiK nie ma danych dla 1 z 2 arkuszy" in check.message
-    assert check.message.endswith("sprawdzono 1") and download.message.endswith(
-        "pobrano 1"
+    assert "GUGiK has no data for 1 of 2 sheets" in check.message
+    assert check.message.endswith("checked 1") and download.message.endswith(
+        "downloaded 1"
     )
 
 
@@ -672,8 +674,8 @@ def test_year_conflict_is_year_out_of_range_in_the_download_and_the_check(tmp_pa
     assert [f.kind for f in report.failed] == ["year_out_of_range"]
     assert [f.kind for f in single.failed] == ["year_out_of_range"]
     assert set(caught.value.sheets) == {G, "N-34-139-C-a-3-3"}
-    assert "dla 2 z 4 arkuszy" in str(caught.value)
-    assert "dla 2 z 4 arkuszy" in report.failed[0].error
+    assert "for 2 of 4 sheets" in str(caught.value)
+    assert "for 2 of 4 sheets" in report.failed[0].error
 
 
 def test_check_failed_stays_for_an_index_transport_failure(tmp_path):

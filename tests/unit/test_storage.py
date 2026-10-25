@@ -942,8 +942,8 @@ class TestRegistryVariantStorage:
             )
 
         message = str(exc.value)
-        assert message.startswith(f"Nieobslugiwana rozdzielczosc: '{resolution}'")
-        listed = re.findall(r"'([^']+)'", message.split("Obslugiwane", 1)[1])
+        assert message.startswith(f"Unsupported resolution: '{resolution}'")
+        listed = re.findall(r"'([^']+)'", message.split("Supported", 1)[1])
         assert listed == _grid_labels(product)
 
     def test_segment_from_variant(self, tmp_path):
@@ -1056,7 +1056,7 @@ class TestStorageVariant:
 
     @pytest.mark.parametrize("variant", ["", "CIR", "b/w", "_cir"])
     def test_invalid_variant_rejected(self, tmp_path, variant):
-        with pytest.raises(ValidationError, match="wariant"):
+        with pytest.raises(ValidationError, match="segment variant"):
             FileStorage(
                 tmp_path,
                 product="orto",

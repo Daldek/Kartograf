@@ -83,6 +83,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import bbox_slot, token_segment
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.notices import CUTOUT_SIZE, Notice, NoticeSink
 from kartograf.output import preflight, writing
 from kartograf.providers.pl.gugik_orto import (
@@ -105,10 +106,7 @@ from kartograf.transport.chunks import GridSpec, align_bbox
 # The only CRS of the cutout: the service grid, never resampled locally.
 ORTO_CUTOUT_CRS = PL_1992_CRS
 # ``--cutout`` with ``--product orto`` outside PL (validation text).
-ORTO_CUTOUT_PL_ONLY = (
-    "--cutout z --product orto dziala tylko dla PL (wycinek z WCS GUGiK) - "
-    "dla obszaru PL uzyj --country pl, ortofotomapa CZ: bez --cutout"
-)
+ORTO_CUTOUT_PL_ONLY = message("cutouts.orto_cutout_pl_only")
 _TRACK: Track = "pl_cutout"
 # Bytes per pixel of the result: 3 bands uint8 (RGB).
 _RGB_BYTES = 3
@@ -134,16 +132,22 @@ def orto_cutout_error(
     product = get_source(key).product
     if horizontal_crs is None:
         return ValidationError(
-            f"--horizontal-crs wymagane z --cutout --product {product}: tylko "
-            f"{ORTO_CUTOUT_CRS} (bez przeprobkowania obrazu)",
+            message(
+                "cutouts.orto_cutout_crs_required",
+                product=product,
+                orto_cutout_crs=ORTO_CUTOUT_CRS,
+            ),
             option="horizontal_crs",
             allowed=(ORTO_CUTOUT_CRS,),
         )
     if horizontal_crs != ORTO_CUTOUT_CRS:
         return ValidationError(
-            f"--horizontal-crs {horizontal_crs} nie dziala z --product {product}: "
-            f"wycinek ortofotomapy tylko {ORTO_CUTOUT_CRS} (bez przeprobkowania "
-            "obrazu)",
+            message(
+                "cutouts.orto_cutout_crs_unsupported",
+                horizontal_crs=horizontal_crs,
+                product=product,
+                orto_cutout_crs=ORTO_CUTOUT_CRS,
+            ),
             option="horizontal_crs",
             allowed=(ORTO_CUTOUT_CRS,),
         )
@@ -301,9 +305,14 @@ def _check_disk_space(cutout: _OrtoCutout, staged: Path) -> None:
     free = shutil.disk_usage(probe).free
     if free < need:
         raise ValidationError(
-            f"Za malo miejsca na dysku dla wycinka: potrzeba co najmniej "
-            f"~{need / 2**30:.1f} GiB (siatka {cutout.width} x {cutout.height} px "
-            f"RGB i kawalki WCS), wolne ~{free / 2**30:.1f} GiB w {probe}"
+            message(
+                "cutouts.orto_disk_space_low",
+                need_gib=need / 2**30,
+                width=cutout.width,
+                height=cutout.height,
+                free_gib=free / 2**30,
+                probe=probe,
+            )
         )
 
 
@@ -325,12 +334,18 @@ def _check_result(path: Path, cutout: _OrtoCutout) -> None:
             epsg = src.crs.to_epsg() if src.crs is not None else None
     except RasterioError as e:
         raise DownloadError(
-            f"WCS ortofotomapy: nieczytelny GeoTIFF wycinka: {e}"
+            message("cutouts.orto_wcs_unreadable_tiff", error=reason(e))
         ) from e
     problems = []
     if size != (cutout.width, cutout.height):
         problems.append(
-            f"{size[0]} x {size[1]} px zamiast {cutout.width} x {cutout.height}"
+            message(
+                "cutouts.cutout_size_mismatch",
+                width_px=size[0],
+                height_px=size[1],
+                expected_width=cutout.width,
+                expected_height=cutout.height,
+            )
         )
     if (
         abs(t.a - step) > tol
@@ -338,20 +353,39 @@ def _check_result(path: Path, cutout: _OrtoCutout) -> None:
         or abs(t.b) > tol
         or abs(t.d) > tol
     ):
-        problems.append(f"piksel {t.a:g} x {-t.e:g} m zamiast {step:g} m")
+        problems.append(
+            message(
+                "cutouts.pixel_size_mismatch",
+                pixel_width=t.a,
+                pixel_height=-t.e,
+                step=step,
+            )
+        )
     if abs(t.c - grid.min_x) > tol or abs(t.f - grid.max_y) > tol:
         problems.append(
-            f"naroznik NW {t.c:.3f}/{t.f:.3f} zamiast {grid.min_x:.3f}/{grid.max_y:.3f}"
+            message(
+                "cutouts.nw_corner_mismatch",
+                origin_x=t.c,
+                origin_y=t.f,
+                min_x=grid.min_x,
+                max_y=grid.max_y,
+            )
         )
     if bands != (3, {"uint8"}):
         problems.append(
-            f"{bands[0]} pasm {'/'.join(sorted(bands[1]))} zamiast 3 pasm uint8 (RGB)"
+            message(
+                "cutouts.band_layout_mismatch",
+                band_count=bands[0],
+                dtypes="/".join(sorted(bands[1])),
+            )
         )
     if epsg != 2180:
-        problems.append(f"uklad EPSG:{epsg} zamiast {ORTO_CUTOUT_CRS}")
+        problems.append(
+            message("cutouts.crs_mismatch", epsg=epsg, expected_crs=ORTO_CUTOUT_CRS)
+        )
     if problems:
         raise DownloadError(
-            "WCS ortofotomapy zwrocil inna siatke niz zapytanie: " + "; ".join(problems)
+            message("cutouts.orto_wcs_grid_mismatch", problems="; ".join(problems))
         )
 
 
@@ -370,25 +404,16 @@ def _no_image_error(cutout: _OrtoCutout) -> NoCoverageError:
     The error carries the reason and the remedy of its WCS channel.
     """
     if cutout.key != ORTO_KEY:
-        what = (
-            "wycinek true orto: WCS GUGiK nie ma w tym obszarze prawdziwej "
-            "ortofotomapy - obejmuje tylko wybrane miasta, np. Gdansk"
-        )
-        remedy = "zmien --bbox"
+        what = message("cutouts.true_orto_no_coverage")
+        remedy = message("cutouts.remedy_change_bbox")
     elif cutout.coverage == "high":
-        what = (
-            "wycinek ortofotomapy high: WCS GUGiK nie ma w tym obszarze "
-            "ortofotomapy o pikselu 10 cm i mniejszym"
-        )
-        remedy = "zmien --bbox albo uzyj --coverage standard"
+        what = message("cutouts.high_orto_no_coverage")
+        remedy = message("cutouts.remedy_bbox_or_standard")
     else:
-        what = (
-            f"wycinek ortofotomapy {cutout.coverage}: WCS GUGiK nie ma w tym "
-            "obszarze ortofotomapy (np. morze albo obszar za granica)"
-        )
-        remedy = "zmien --bbox"
+        what = message("cutouts.orto_no_coverage_area", coverage=cutout.coverage)
+        remedy = message("cutouts.remedy_change_bbox")
     return NoCoverageError(
-        f"{what}, a obraz obszaru jest w calosci 0,0,0; wersja nie powstala, {remedy}"
+        message("cutouts.cutout_image_all_zero", what=what, remedy=remedy)
     )
 
 
@@ -495,10 +520,15 @@ def _run(
             sink.emit(
                 "info",
                 CUTOUT_SIZE,
-                f"wycinek {cutout.width} x {cutout.height} px RGB uint8 "
-                f"(~{cutout.estimated_bytes / 2**20:.0f} MiB), {chunks} zapytan "
-                f"WCS GUGiK ({cutout.variant} {cutout.resolution}) pobieranych "
-                "po kolei",
+                message(
+                    "cutouts.cutout_size_notice",
+                    width=cutout.width,
+                    height=cutout.height,
+                    size_mib=cutout.estimated_bytes / 2**20,
+                    chunks=chunks,
+                    variant=cutout.variant,
+                    resolution=cutout.resolution,
+                ),
             )
         _check_disk_space(cutout, staged)
         grid = cutout.grid
@@ -507,8 +537,15 @@ def _run(
             staged,
             "GTiff",
             provider.WCS_CUTOUT_READ_TIMEOUT,
-            f"wycinek ortofotomapy {cutout.variant} {cutout.resolution} "
-            f"({grid.min_x:.0f},{grid.min_y:.0f})-({grid.max_x:.0f},{grid.max_y:.0f})",
+            message(
+                "cutouts.orto_cutout_download_label",
+                variant=cutout.variant,
+                resolution=cutout.resolution,
+                min_x=grid.min_x,
+                min_y=grid.min_y,
+                max_x=grid.max_x,
+                max_y=grid.max_y,
+            ),
         )
         _check_result(staged, cutout)
         if not _has_image(staged):
@@ -546,10 +583,7 @@ def _cutout_key(product: str) -> str:
     """Descriptor key of the WCS cutout of an image ``product``."""
     source = image_source(product)
     if source is None or not wcs_cutout_channels(source.key):
-        raise ValidationError(
-            f"--product {product!r}: brak wycinka WCS obrazu - wycinek maja "
-            "--product orto i true-orto"
-        )
+        raise ValidationError(message("cutouts.no_wcs_image_cutout", product=product))
     return source.key
 
 

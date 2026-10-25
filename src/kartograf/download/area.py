@@ -14,6 +14,7 @@ from typing import Any
 
 from kartograf.core.bbox import BBox, bbox_coords, is_czech_crs, transform_bbox
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.notices import (
     AUTO_AREA_OUTSIDE,
     AUTO_CLIPPED,
@@ -59,15 +60,22 @@ def resolve_geometry_layer(
 
     filepath = Path(path)
     if not filepath.exists():
-        raise ValidationError(f"Brak pliku: {filepath}", option="geometry")
+        raise ValidationError(
+            message("download.geometry_file_missing", filepath=filepath),
+            option="geometry",
+        )
     choice = resolve_layer(filepath, layer)
     if choice.defaulted and len(choice.available) > 1:
         sink.emit(
             "info",
             GEOMETRY_LAYER_DEFAULT,
-            f"{filepath.name}: liczba warstw {len(choice.available)}, uzyto "
-            f"pierwszej '{choice.name}' (pozostale: "
-            f"{', '.join(choice.available[1:])}); inna warstwa: --layer NAZWA",
+            message(
+                "download.geometry_layer_default",
+                name=filepath.name,
+                available_count=len(choice.available),
+                choice_name=choice.name,
+                other_layers=", ".join(choice.available[1:]),
+            ),
         )
     return choice.name
 
@@ -190,8 +198,8 @@ def pl_only_flags(
 
 
 def _deg(value: float, unit: str) -> str:
-    """``54,90 st.N`` - degrees with a decimal comma (Polish ASCII messages)."""
-    return f"{value:.2f}".replace(".", ",") + f" st.{unit}"
+    """Degrees of a bound: ``54.90 deg N`` (Polish: ``54,90 st.N``)."""
+    return message("download.degrees", value=value, hemisphere=unit)
 
 
 def area_outside_extents(
@@ -262,31 +270,27 @@ def emit_clipping_notices(
         if not part.clipped:
             continue
         extent = get_country(code).extent_wgs84
-        edges = ", ".join(
-            f"{edge}: {_deg(getattr(extent, attr), unit)}"
+        edges = [
+            message(
+                "download.clip_edge",
+                edge=edge,
+                degrees=_deg(getattr(extent, attr), unit),
+            )
             for edge, attr, _is_min, unit in EDGES
             if edge in part.clipped
-        )
+        ]
         if code == "PL" and pl_sheet_list and not sheet_files:
-            result = (
-                "arkusze wyznaczono z przycietego bboxa, sidecar ma "
-                "request.sheet; oryginal w extra.parent_request.bbox"
-            )
+            result = message("download.clip_sheets_sidecar")
         elif sheet_files:
-            result = (
-                "arkusze/kafle wyznaczono z przycietego bboxa; oryginal "
-                "w extra.parent_request.bbox"
-            )
+            result = message("download.clip_sheets_tiles")
         else:
-            result = (
-                "plik i request.bbox niosa zasieg przyciety, oryginal "
-                "w extra.parent_request.bbox"
-            )
+            result = message("download.clip_file_bbox")
         sink.emit(
             "info",
             AUTO_CLIPPED,
-            f"--country auto: czesc {code} przycieta do obwiedni kraju "
-            f"({edges}); {result}",
+            message(
+                "download.auto_part_clipped", code=code, edges=edges, result=result
+            ),
         )
     if not any(parts[code].clipped for code in countries):
         return
@@ -301,11 +305,15 @@ def emit_clipping_notices(
     sink.emit(
         "info",
         AUTO_AREA_OUTSIDE,
-        f"--country auto: obszar {_deg(lost.min_x, 'E')}-{_deg(lost.max_x, 'E')}"
-        f" x {_deg(lost.min_y, 'N')}-{_deg(lost.max_y, 'N')} (~{share * 100:.0f} % "
-        "powierzchni zadania) lezy poza zasiegiem PL/CZ i zostal pominiety; "
-        f"caly bbox pobiera jawne --country {explicit} (za granica: arkusze "
-        "bez danych / nodata)",
+        message(
+            "download.auto_area_outside",
+            min_x=_deg(lost.min_x, "E"),
+            max_x=_deg(lost.max_x, "E"),
+            min_y=_deg(lost.min_y, "N"),
+            max_y=_deg(lost.max_y, "N"),
+            percent=share * 100,
+            explicit=explicit,
+        ),
     )
 
 
@@ -326,15 +334,15 @@ def emit_partial_success(
     failed countries could not be made (``--check``).
     """
     if check:
-        text = (
-            f"czesc {', '.join(failed)} zadania nie mogla zostac sprawdzona "
-            f"- sprawdzono {', '.join(succeeded)}; kod 0 "
-            "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)"
+        text = message(
+            "download.partial_check_failed",
+            failed=", ".join(failed),
+            succeeded=", ".join(succeeded),
         )
     else:
-        text = (
-            f"czesc {', '.join(failed)} zadania zakonczyla sie bledem "
-            f"(patrz Error) - pobrano {', '.join(succeeded)}; kod 0 "
-            "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)"
+        text = message(
+            "download.partial_download_failed",
+            failed=", ".join(failed),
+            succeeded=", ".join(succeeded),
         )
     sink.emit("warning", AUTO_PARTIAL_SUCCESS, text)

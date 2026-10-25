@@ -93,11 +93,11 @@ def test_cz_cadastral_map_selection_checked_before_any_request(tmp_path):
         ValidationError, match="^--format required: SHP, DXF, DGN, VFK$"
     ):
         validate_collection_request(product="map", ku="623164", root=tmp_path)
-    with pytest.raises(ValidationError, match="--ku to kod katastralniho uzemi"):
+    with pytest.raises(ValidationError, match="--ku is a cadastral area code"):
         validate_collection_request(
             product="map", ku="623164", country="pl", format="SHP", root=tmp_path
         )
-    with pytest.raises(ValidationError, match="6 cyfr, np. 623164"):
+    with pytest.raises(ValidationError, match="6 digits"):
         validate_collection_request(
             product="map", ku="62316", format="SHP", root=tmp_path
         )
@@ -110,8 +110,8 @@ def test_cz_cadastral_map_selection_checked_before_any_request(tmp_path):
             root=tmp_path,
         )
     assert str(national.value) == (
-        "--whole-country: map (CZ) nie ma pliku krajowego; dostepne: --ku <6 cyfr> "
-        "(paczka katastralniho uzemi), --bbox/--geometry (katastralni uzemi obszaru)"
+        "--whole-country: map (CZ) has no national file; available: --ku <6 digits> "
+        "(cadastral area package), --bbox/--geometry (cadastral areas of the area)"
     )
 
 
@@ -141,7 +141,7 @@ def test_cz_cadastral_map_area_ku_discovery_and_etag(tmp_path, router):
     (listed,) = [n for n in first.notices if n.code == UNIT_LIST]
     assert (
         listed.message
-        == "map: katastralni uzemi obszaru wg RUIAN (3): " + ", ".join(AREA_KU)
+        == "map: cadastral territories of the area per RUIAN (3): " + ", ".join(AREA_KU)
     )
     meta = _meta(first.files[0].file.version_path)
     assert meta["request"] == {"ku": "652954", "format": "SHP"}

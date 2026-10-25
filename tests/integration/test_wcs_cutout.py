@@ -611,7 +611,7 @@ def test_all_outside_land_is_error_before_wcs(tmp_path):
     session = _recorded_session()
     with (
         patch(MASK, return_value=abroad),
-        pytest.raises(NoCoverageError, match="w calosci poza ladem PL"),
+        pytest.raises(NoCoverageError, match="entirely outside PL land"),
     ):
         _run_pl_wcs_cutout(
             _cutout(tmp_path),
@@ -717,8 +717,10 @@ def test_cutout_size_notice_before_first_wcs_request(tmp_path):
         Notice(
             "info",
             CUTOUT_SIZE,
-            "wycinek 20 x 20 px float32 (~0 MiB), 2 zapytan WCS GUGiK "
-            "pobieranych po kolei - ok. 50-80 s (25-40 s na zapytanie wg pomiaru)",
+            (
+                "cutout 20 x 20 px float32 (~0 MiB), 2 GUGiK WCS requests fetched "
+                "sequentially - approx. 50-80 s (25-40 s per request as measured)"
+            ),
         ),
         "wcs",
     ]
@@ -743,8 +745,10 @@ def test_all_nodata_notice(tmp_path):
     expected = Notice(
         "warning",
         ALL_NODATA,
-        "wycinek w calosci nodata - WCS GUGiK nie zwrocil danych dla obszaru "
-        "(na ladzie wg maski PRG)",
+        (
+            "cutout is entirely nodata - GUGiK WCS returned no data for the area (on "
+            "land per PRG mask)"
+        ),
     )
     assert result.all_nodata
     assert result.notices == (expected,)
@@ -779,7 +783,10 @@ def test_all_nodata_notice(tmp_path):
 )
 def test_provider_mismatch_rejected(tmp_path, cutout_kwargs, provider):
     session = _recorded_session()
-    with patch(MASK) as mask, pytest.raises(ValidationError, match="niezgodny"):
+    with (
+        patch(MASK) as mask,
+        pytest.raises(ValidationError, match=("does not match the cutout")),
+    ):
         _run_pl_wcs_cutout(
             _cutout(tmp_path, **cutout_kwargs), provider=provider(session), now=NOW
         )

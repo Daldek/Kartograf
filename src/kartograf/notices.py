@@ -1,14 +1,14 @@
 """Provide structured data notices and the text helpers of user messages.
 
 The notices are shared by command-level results and CLI output; the helpers
-cover sizes, counted nouns and flag names.
+cover sizes, lists of names and flag names.
 """
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from kartograf.messages import Lang, localize
+from kartograf.messages import Lang, localize, message
 
 SHEET_LIST = "sheet_list"
 GEOMETRY_LAYER_DEFAULT = "geometry_layer_default"
@@ -69,37 +69,8 @@ LARGE_FILE_BYTES = 100 * 1024 * 1024
 def size_text(length: int | None) -> str:
     """Size of a file in notices (``Content-Length`` of ``HEAD`` or a feed)."""
     if length is None:
-        return "rozmiar nieznany (serwer nie podal Content-Length)"
-    return f"{length} B (ok. {length / 1e6:.0f} MB)"
-
-
-# Noun forms of ``count_text`` (one, few, many): the nominative/accusative
-# (``obszar daje 2 pliki``) and the genitive after ``dla``/``z`` (``OF_*``).
-FILES = ("plik", "pliki", "plikow")
-SHEETS = ("arkusz", "arkusze", "arkuszy")
-TILES = ("kafel", "kafle", "kafli")
-OF_FILES = ("pliku", "plikow", "plikow")
-OF_SHEETS = ("arkusza", "arkuszy", "arkuszy")
-OF_TILES = ("kafla", "kafli", "kafli")
-
-
-def count_text(count: int, one: str, few: str, many: str) -> str:
-    """Return a count with its Polish noun form.
-
-    ``1 plik``, ``3 pliki``, ``5 plikow``.
-
-    ``one`` for 1, ``few`` for 2-4, 22-24, 32-34, ... (not 12-14), ``many``
-    for the rest (0, 5-21, 25-31, ...). After a preposition taking the
-    genitive (``dla``, ``z``) pass the genitive forms - the singular for one,
-    the plural for few and many: ``dla 1 arkusza``, ``dla 3 arkuszy``.
-    """
-    if count == 1:
-        form = one
-    elif count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14):
-        form = few
-    else:
-        form = many
-    return f"{count} {form}"
+        return message("notices.size_unknown")
+    return message("notices.size_known", length=length, megabytes=length / 1e6)
 
 
 # The units a ``UNIT_LIST`` notice names; the rest is only counted (an area of
@@ -112,12 +83,25 @@ def names_text(names: Sequence[str]) -> str:
     """Return the names of the units of a notice.
 
     ``a, b, c``; over ``LISTED_UNITS`` of them the first ones and the rest counted:
-    ``a, b, ..., j i 3 inne``.
+    ``a, b, ..., j and 3 others``.
     """
     if len(names) <= LISTED_UNITS:
         return ", ".join(names)
-    rest = count_text(len(names) - LISTED_UNITS, "inny", "inne", "innych")
-    return f"{', '.join(names[:LISTED_UNITS])} i {rest}"
+    return message(
+        "notices.names_more",
+        listed=", ".join(names[:LISTED_UNITS]),
+        rest=len(names) - LISTED_UNITS,
+    )
+
+
+def ascii_text(text: str, errors: str = "replace") -> str:
+    """Return ``text`` for a `Notice`, whose message must be ASCII.
+
+    An ASCII text is returned as it is, so a catalog message stays translatable; any
+    other text gets its non-ASCII characters replaced (``errors`` is a codec error
+    handler: ``"replace"``, ``"backslashreplace"``).
+    """
+    return text if text.isascii() else text.encode("ascii", errors).decode("ascii")
 
 
 def cli_flag(name: str) -> str:

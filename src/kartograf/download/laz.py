@@ -65,7 +65,8 @@ from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.interrupt import run_parallel
-from kartograf.notices import LAZ_SUPERSEDED, TILES, Notice, NoticeSink, count_text
+from kartograf.messages import message
+from kartograf.notices import LAZ_SUPERSEDED, Notice, NoticeSink
 from kartograf.output import preflight, writing
 from kartograf.providers.pl.gugik_laz import (
     COVERAGE_TOLERANCE_M,
@@ -80,10 +81,7 @@ from kartograf.providers.pl.skorowidz_wfs import sheet_frame_2180
 # thread; ``(0, total)`` comes once before the first tile download.
 LazProgressCallback = Callable[[int, int], None]
 
-NO_TILES_MESSAGE = (
-    "Brak kafli LAZ dla podanego obszaru (sprawdz obszar, --year, "
-    "--min-year, --max-year i --vertical-crs; wszystkie roczniki WFS odpowiedzialy)"
-)
+NO_TILES_MESSAGE = message("tracks.no_laz_tiles")
 
 
 def no_tiles_message(selection: LazTileSelection, min_density: int | None) -> str:
@@ -97,14 +95,15 @@ def no_tiles_message(selection: LazTileSelection, min_density: int | None) -> st
         return NO_TILES_MESSAGE
     densities = [t.density for t in selection.below_density if t.density is not None]
     best = (
-        f"najwyzsza gestosc nominalna {max(densities)} pkt/m2"
+        message("tracks.best_density", max_densities=max(densities))
         if densities
-        else "kafle nie podaja gestosci nominalnej"
+        else message("tracks.no_nominal_density")
     )
-    return (
-        f"Brak kafli LAZ dla podanego obszaru: --min-density {min_density} "
-        f"odrzucilo {count_text(len(selection.below_density), *TILES)} obszaru "
-        f"({best}) - obniz albo pomin --min-density"
+    return message(
+        "tracks.no_tiles_min_density",
+        min_density=min_density,
+        below_density_count=len(selection.below_density),
+        best=best,
     )
 
 
@@ -389,9 +388,7 @@ def _validate_area(bbox: BBox | None, sheet: str | None) -> BBox | None:
     a sheet) - callers go on with it.
     """
     if (bbox is None) == (sheet is None):
-        raise ValidationError(
-            "LAZ PL: podaj dokladnie jedno z sheet (godlo) albo bbox (obszar)"
-        )
+        raise ValidationError(message("tracks.laz_area_exactly_one"))
     if sheet is not None:
         SheetParser(sheet)  # ParseError: an invalid sheet code
     if bbox is not None:
@@ -457,8 +454,11 @@ def _selected(
             )
         elif vertical_crs != provider.vertical_crs:
             raise ValidationError(
-                f"vertical_crs={vertical_crs} niezgodny z providerem "
-                f"({provider.vertical_crs})"
+                message(
+                    "tracks.vertical_crs_mismatch",
+                    vertical_crs=vertical_crs,
+                    provider_vertical_crs=provider.vertical_crs,
+                )
             )
         selection = provider.select_tiles(
             area,
@@ -492,16 +492,17 @@ def _emit_superseded(
     covered = [entry for entry in superseded if entry.covered_by]
     if not covered:
         return
-    lines = [
-        f"pominieto {count_text(len(covered), *TILES)} LAZ - obszar pokrywaja "
-        "nowsze kafle "
-        "(domyslnie najnowszy rocznik per obszar; inny rocznik: "
-        "--year/--min-year/--max-year)"
-    ]
+    lines = [message("tracks.laz_tiles_superseded", covered_count=len(covered))]
     for entry in covered:
         covering = ", ".join(_tile_label(t) for t in entry.covered_by)
-        lines.append(f"  {_tile_label(entry.tile)}: pokryty przez {covering}")
-    sink.emit("info", LAZ_SUPERSEDED, "\n".join(lines))
+        lines.append(
+            message(
+                "tracks.tile_covered_by",
+                tile_label=_tile_label(entry.tile),
+                covering=covering,
+            )
+        )
+    sink.emit("info", LAZ_SUPERSEDED, message("notices.lines", lines=lines))
 
 
 def check_laz_area(

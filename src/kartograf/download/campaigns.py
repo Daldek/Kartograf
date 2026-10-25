@@ -25,6 +25,7 @@ from urllib.parse import urlparse
 
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ValidationError, YearRangeError
+from kartograf.messages import message, reason
 from kartograf.sources.sidecar import read_asc_header
 from kartograf.sources.variants import FORMATS
 
@@ -59,7 +60,7 @@ _TIFF_SIGNATURES = (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+")
 _FORMAT_NAMES = {
     ".asc": "AAIGrid (ARC/INFO ASCII GRID)",
     ".tif": "TIFF",
-    ".zip": "archiwum ZIP",
+    ".zip": message("campaigns.format_zip"),
     ".ttn": "Intergraph TTN",
     ".grd": "Intergraph GRD",
     ".dxf": "DXF",
@@ -102,12 +103,14 @@ def validate_year_bounds(min_year: int | None, max_year: int | None) -> None:
             or not 1900 <= year <= 2100
         ):
             raise ValidationError(
-                f"{name} musi byc liczba calkowita 1900..2100, otrzymano {year!r}",
+                message("campaigns.year_not_integer", name=name, year=year),
                 option=name,
             )
     if min_year is not None and max_year is not None and min_year > max_year:
         raise ValidationError(
-            f"min_year ({min_year}) nie moze byc wiekszy niz max_year ({max_year})",
+            message(
+                "campaigns.min_year_exceeds_max", min_year=min_year, max_year=max_year
+            ),
             options=("min_year", "max_year"),
         )
 
@@ -128,18 +131,20 @@ def in_year_range(year: int | None, min_year: int | None, max_year: int | None) 
 
 
 def year_range_label(min_year: int | None, max_year: int | None) -> str:
-    """Polish label of a single year, lower bound, upper bound or closed range."""
+    """Label of a single year, lower bound, upper bound or closed range."""
     if min_year is not None and max_year is not None:
         return (
-            f"z roku {min_year}"
+            message("campaigns.year_label_single", min_year=min_year)
             if min_year == max_year
-            else f"z lat {min_year}-{max_year}"
+            else message(
+                "campaigns.year_label_range", min_year=min_year, max_year=max_year
+            )
         )
     if min_year is not None:
-        return f"od roku {min_year}"
+        return message("campaigns.year_label_from", min_year=min_year)
     if max_year is not None:
-        return f"do roku {max_year}"
-    raise ValueError("year_range_label wymaga co najmniej jednej granicy")
+        return message("campaigns.year_label_until", max_year=max_year)
+    raise ValueError("year_range_label requires at least one bound")
 
 
 def year_range_hints(
@@ -173,19 +178,31 @@ def year_range_hints(
     if newer and all(newer):
         upper = max(min(years) for years in newer)
         if min_year is None:
-            hints.append(f"--max-year {upper} (rok {upper} i starsze)")
+            hints.append(message("campaigns.hint_max_year_older", upper=upper))
         elif min_year == max_year:
-            hints.append(f"--min-year {min_year} (rok {min_year} i nowsze)")
+            hints.append(message("campaigns.hint_min_year_newer", min_year=min_year))
         else:
-            hints.append(f"--max-year {upper} ({year_range_label(min_year, upper)})")
+            hints.append(
+                message(
+                    "campaigns.max_year_hint",
+                    upper=upper,
+                    year_range=year_range_label(min_year, upper),
+                )
+            )
     if older and all(older):
         lower = min(max(years) for years in older)
         if max_year is None:
-            hints.append(f"--min-year {lower} (rok {lower} i nowsze)")
+            hints.append(message("campaigns.hint_min_year_lower", lower=lower))
         elif min_year == max_year:
-            hints.append(f"--max-year {max_year} (rok {max_year} i starsze)")
+            hints.append(message("campaigns.hint_max_year_single", max_year=max_year))
         else:
-            hints.append(f"--min-year {lower} ({year_range_label(lower, max_year)})")
+            hints.append(
+                message(
+                    "campaigns.min_year_hint",
+                    lower=lower,
+                    year_range=year_range_label(lower, max_year),
+                )
+            )
     return tuple(hints)
 
 
@@ -195,8 +212,8 @@ def year_range_error(
     max_year: int | None,
     *,
     total: int,
-    unit: str = "arkuszy",
-    subject: str = "danych",
+    unit: str = message("cli.unit_sheets"),
+    subject: str = message("campaigns.default_subject"),
     labels: Mapping[str, str] | None = None,
     partial_years: Mapping[str, AbstractSet[int]] | None = None,
 ) -> YearRangeError:
@@ -212,26 +229,36 @@ def year_range_error(
     }
     hints = year_range_hints(sheets, min_year, max_year)
     lines = [
-        f"brak {subject} {year_range_label(min_year, max_year)} "
-        f"dla {len(sheets)} z {total} {unit} - nic nie pobrano:"
+        message(
+            "campaigns.year_range_no_data",
+            subject=subject,
+            year_range_label=year_range_label(min_year, max_year),
+            sheets_count=len(sheets),
+            total=total,
+            unit=unit,
+        )
     ]
 
     def year_text(sheet: str, year: int) -> str:
         if partial_years and year in partial_years.get(sheet, ()):
-            return f"{year} (tylko arkusze niepelne)"
+            return message("campaigns.year_partial_sheets", year=year)
         return str(year)
 
     lines.extend(
-        f"  {sheet}{' ' + labels[sheet] if labels and sheet in labels else ''}: "
-        f"dostepne roczniki {', '.join(year_text(sheet, y) for y in years)}"
+        message(
+            "campaigns.sheet_available_vintages",
+            sheet=sheet,
+            label_suffix=" " + labels[sheet] if labels and sheet in labels else "",
+            year_texts=[year_text(sheet, y) for y in years],
+        )
         for sheet, years in list(sheets.items())[:20]
     )
     if len(sheets) > 20:
-        lines.append(f"  ... i {len(sheets) - 20} innych")
+        lines.append(message("campaigns.sheets_more_count", remaining=len(sheets) - 20))
     if hints:
-        lines.append(f"Podpowiedz: {' albo '.join(hints)}")
+        lines.append(message("campaigns.year_range_hint", hints=hints))
     return YearRangeError(
-        "\n".join(lines),
+        message("notices.lines", lines=lines),
         sheets=sheets,
         min_year=min_year,
         max_year=max_year,
@@ -295,8 +322,7 @@ class CampaignRef:
         date = record.aktualnosc
         if not isinstance(date, str) or not _DATE.fullmatch(date):
             raise DownloadError(
-                f"Rekord skorowidza ma niepoprawna aktualnosc {date!r} "
-                f"(oczekiwano RRRR-MM-DD)",
+                message("campaigns.record_invalid_freshness", date=date),
                 sheet=getattr(record, "sheet", None),
             )
         raw = record.raw or {}
@@ -399,17 +425,22 @@ def verify_record_vertical_crs(
     declared = (raw.get("ukladWspolrzednychPionowych") or "").strip()
     if not declared:
         logger.debug(
-            "%s: rekord skorowidza bez ukladWspolrzednychPionowych - uklad "
-            "wysokosci niesprawdzony (%s)",
+            "%s: sheet index record without ukladWspolrzednychPionowych "
+            "- vertical CRS not checked (%s)",
             sheet,
             record.url,
         )
         return
     if declared.upper() != expected:
         raise DownloadError(
-            f"{sheet}: rekord skorowidza deklaruje uklad wysokosci {declared}, "
-            f"a zadano {vertical_crs} (oczekiwano {expected}) - plik nie "
-            f"zostal pobrany: {record.url}",
+            message(
+                "campaigns.record_vertical_crs_mismatch",
+                sheet=sheet,
+                declared=declared,
+                vertical_crs=vertical_crs,
+                expected=expected,
+                url=record.url,
+            ),
             sheet=sheet,
         )
 
@@ -428,8 +459,12 @@ def campaign_extension(ref: CampaignRef, default_ext: str) -> str:
     if known is not None and known.lower() == default_ext.lower():
         return default_ext
     raise DownloadError(
-        f"Kampania {ref.dirname}: format {fmt!r} nieobslugiwany "
-        f"(produkt: {default_ext})"
+        message(
+            "campaigns.campaign_format_unsupported",
+            dirname=ref.dirname,
+            fmt=fmt,
+            default_ext=default_ext,
+        )
     )
 
 
@@ -453,7 +488,9 @@ def verify_file_format(path: Path, ext: str) -> None:
     (``OSError``) raises DownloadError.
     """
     if ext not in _FORMAT_NAMES:
-        raise DownloadError(f"{path.name}: brak weryfikacji formatu dla {ext!r}")
+        raise DownloadError(
+            message("campaigns.no_format_verification", name=path.name, ext=ext)
+        )
     try:
         with path.open("rb") as fh:
             head = fh.read(64)
@@ -473,11 +510,19 @@ def verify_file_format(path: Path, ext: str) -> None:
         else:  # .grd
             ok = _intergraph(head)
     except OSError as e:
-        raise DownloadError(f"{path.name}: odczyt do weryfikacji formatu: {e}") from e
+        raise DownloadError(
+            message(
+                "campaigns.format_verify_read_failed", name=path.name, error=reason(e)
+            )
+        ) from e
     if not ok:
         raise DownloadError(
-            f"{path.name}: tresc nie jest {_FORMAT_NAMES[ext]} "
-            f"(naglowek: {head[:16]!r})"
+            message(
+                "campaigns.file_format_mismatch",
+                name=path.name,
+                format_name=_FORMAT_NAMES[ext],
+                head_bytes=head[:16],
+            )
         )
 
 
@@ -529,15 +574,24 @@ class AscCoverage:
                 raise self._error
             cols, rows = self._header["ncols"], self._header["nrows"]
             if cols <= 0 or rows <= 0 or not cols.is_integer() or not rows.is_integer():
-                raise ValueError("niepoprawne wymiary siatki")
+                raise ValueError("invalid grid dimensions")
         except (ValueError, KeyError) as e:
             raise DownloadError(
-                f"{self._name}: nie udalo sie zmierzyc pokrycia: {e}"
+                message(
+                    "campaigns.coverage_measure_failed",
+                    name=self._name,
+                    error=reason(e),
+                )
             ) from e
         expected = int(cols * rows)
         if self._count != expected:
             raise DownloadError(
-                f"{self._name}: ASC ma {self._count} komorek, oczekiwano {expected}"
+                message(
+                    "campaigns.asc_cell_count_mismatch",
+                    name=self._name,
+                    count=self._count,
+                    expected=expected,
+                )
             )
         return round(self._valid / expected, 4)
 
@@ -582,7 +636,9 @@ def measure_coverage(path: Path, ext: str) -> float | None:
                     counter.feed(chunk)
         except OSError as e:
             raise DownloadError(
-                f"{path.name}: nie udalo sie zmierzyc pokrycia: {e}"
+                message(
+                    "campaigns.coverage_measure_failed", name=path.name, error=reason(e)
+                )
             ) from e
         return counter.result()
     if ext == ".tif":
@@ -605,9 +661,13 @@ def measure_coverage(path: Path, ext: str) -> float | None:
                 return round(valid / total, 4)
         except (OSError, ValueError, rasterio.errors.RasterioError) as e:
             raise DownloadError(
-                f"{path.name}: nie udalo sie zmierzyc pokrycia: {e}"
+                message(
+                    "campaigns.coverage_measure_failed", name=path.name, error=reason(e)
+                )
             ) from e
-    raise DownloadError(f"{path.name}: brak pomiaru pokrycia dla {ext!r}")
+    raise DownloadError(
+        message("campaigns.no_coverage_measurement", name=path.name, ext=ext)
+    )
 
 
 def _alnum(text: str) -> str:
@@ -636,8 +696,9 @@ def verify_record_url(url: str, sheet: str, suffix: str = "") -> None:
     if suffix:
         if not stem.lower().endswith(suffix.lower()):
             raise DownloadError(
-                f"URL rekordu skorowidza nie konczy sie godlem {sheet} "
-                f"z przyrostkiem {suffix}: {url}",
+                message(
+                    "campaigns.url_suffix_mismatch", sheet=sheet, suffix=suffix, url=url
+                ),
                 sheet=sheet,
             )
         stem = stem[: -len(suffix)]
@@ -651,7 +712,8 @@ def verify_record_url(url: str, sheet: str, suffix: str = "") -> None:
         named = None
     if named != expected and _alnum(token) != _alnum(expected):
         raise DownloadError(
-            f"URL rekordu skorowidza nie zawiera godla {sheet}: {url}", sheet=sheet
+            message("campaigns.url_missing_sheet_code", sheet=sheet, url=url),
+            sheet=sheet,
         )
 
 
@@ -676,8 +738,12 @@ def verify_sheet_extent(path: Path, sheet: str, ext: str) -> None:
         x1, y1 = x0 + h["ncols"] * cell, y0 + h["nrows"] * cell
     except KeyError as e:
         raise DownloadError(
-            f"{path.name}: niepelny naglowek ASC (brak {e}) - nie mozna "
-            f"sprawdzic zasiegu arkusza {sheet}",
+            message(
+                "campaigns.asc_header_incomplete",
+                name=path.name,
+                error=reason(e),
+                sheet=sheet,
+            ),
             sheet=sheet,
         ) from e
     parser = SheetParser(sheet)
@@ -687,8 +753,19 @@ def verify_sheet_extent(path: Path, sheet: str, ext: str) -> None:
     area = (x1 - x0) * (y1 - y0)
     if area <= 0 or ix * iy < MIN_FRAME_OVERLAP * area:
         raise DownloadError(
-            f"{path.name}: zasieg pliku ({x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}) "
-            f"nie pokrywa sie z rama godla {sheet} ({frame.min_x:.0f}, "
-            f"{frame.min_y:.0f}, {frame.max_x:.0f}, {frame.max_y:.0f}, {frame.crs})",
+            message(
+                "campaigns.sheet_extent_mismatch",
+                name=path.name,
+                x0=x0,
+                y0=y0,
+                x1=x1,
+                y1=y1,
+                sheet=sheet,
+                min_x=frame.min_x,
+                min_y=frame.min_y,
+                max_x=frame.max_x,
+                max_y=frame.max_y,
+                crs=frame.crs,
+            ),
             sheet=sheet,
         )

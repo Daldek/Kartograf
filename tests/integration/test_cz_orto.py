@@ -461,20 +461,23 @@ def test_cz_orto_area_plan_downloads_planned_sheets(tmp_path, cuzk):
 @pytest.mark.parametrize(
     ("choice", "message"),
     [
-        ({"year": 2024}, "--year dotyczy tylko PL"),
-        ({"min_year": 2020}, "--min-year dotyczy tylko PL"),
-        ({"max_year": 2025}, "--max-year dotyczy tylko PL"),
-        ({"all_campaigns": True}, "--all-campaigns dotyczy tylko PL"),
-        ({"full_sheet": True}, "--full-sheet dotyczy tylko PL"),
-        ({"sheet_system": "1992"}, "--sheet-system dotyczy tylko PL"),
-        ({"scale": "1:5000"}, "--scale dotyczy tylko PL"),
-        ({"vertical_crs": "Bpv"}, "--vertical-crs nie dotyczy --product orto"),
-        ({"resolution": "5m"}, "--resolution z --product orto dotyczy tylko wycinka"),
-        ({"format": "XYZ"}, "--format nie dotyczy ortofoto CZ"),
-        ({"sheet": "302_5550"}, "ortofoto CZ ma arkusze SM5 (np. CTES96, AS91)"),
+        ({"year": 2024}, "--year applies to PL only"),
+        ({"min_year": 2020}, "--min-year applies to PL only"),
+        ({"max_year": 2025}, "--max-year applies to PL only"),
+        ({"all_campaigns": True}, "--all-campaigns applies to PL only"),
+        ({"full_sheet": True}, "--full-sheet applies to PL only"),
+        ({"sheet_system": "1992"}, "--sheet-system applies to PL only"),
+        ({"scale": "1:5000"}, "--scale applies to PL only"),
+        ({"vertical_crs": "Bpv"}, "--vertical-crs does not apply to --product orto"),
+        (
+            {"resolution": "5m"},
+            ("--resolution with --product orto applies only to a cutout"),
+        ),
+        ({"format": "XYZ"}, "--format does not apply to CZ orthophoto"),
+        ({"sheet": "302_5550"}, "CZ orthophoto has SM5 sheets (e.g. CTES96, AS91)"),
         (
             {"sheet": None, "bbox": AREA, "year": 2024},
-            "--year dotyczy tylko PL",
+            "--year applies to PL only",
         ),
         (
             {
@@ -483,7 +486,7 @@ def test_cz_orto_area_plan_downloads_planned_sheets(tmp_path, cuzk):
                 "country": "auto",
                 "all_campaigns": True,
             },
-            "--all-campaigns dotyczy tylko PL",
+            "--all-campaigns applies to PL only",
         ),
     ],
 )

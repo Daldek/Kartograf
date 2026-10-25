@@ -392,24 +392,6 @@ def update_params(
     return tuple(params)
 
 
-def product_summaries(
-    products: Sequence[str], choices_text: Callable[[Sequence[str]], str]
-) -> list[tuple[str, str]]:
-    """Return the ``(product, summary)`` pairs of a group.
-
-    The text in the parentheses of ``choices_text`` of one product (``nmt (Numeryczny
-    Model Terenu; PL i CZ)`` gives ``Numeryczny Model Terenu; PL i CZ``).
-    """
-    pairs = []
-    for name in products:
-        text = choices_text([name])
-        prefix = f"{name} ("
-        if not (text.startswith(prefix) and text.endswith(")")):
-            raise ValueError(f"{text!r} is not '{name} (<summary>)'")
-        pairs.append((name, text[len(prefix) : -1]))
-    return pairs
-
-
 # What a command that only reads can raise: a wrong argument and, in the MCP server, a
 # path outside the allowed directories (ERR-1).
 READ_ERRORS = ("validation_error", "io_error", "forbidden")

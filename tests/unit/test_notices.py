@@ -4,6 +4,7 @@ import pytest
 
 from kartograf import Notice
 from kartograf.exceptions import ValidationError
+from kartograf.messages import localize
 from kartograf.notices import (
     CACHE_DISABLED,
     CUTOUT_SIZE,
@@ -46,10 +47,15 @@ def test_names_text_lists_all_names_up_to_the_limit_then_counts_the_rest() -> No
 
     assert names_text([]) == ""
     assert names_text(names[:LISTED_UNITS]) == ", ".join(names[:LISTED_UNITS])
-    # the first names, then the number of the rest in its Polish noun form
+    # the first names, then the number of the rest in the noun form of the language
     first = ", ".join(names[:LISTED_UNITS])
-    assert names_text(names[: LISTED_UNITS + 1]) == f"{first} i 1 inny"
-    assert names_text(names[: LISTED_UNITS + 2]) == f"{first} i 2 inne"
-    assert names_text(names[: LISTED_UNITS + 5]) == f"{first} i 5 innych"
+    for rest, english, polish in (
+        (1, "other", "inny"),
+        (2, "others", "inne"),
+        (5, "others", "innych"),
+    ):
+        text = names_text(names[: LISTED_UNITS + rest])
+        assert text == f"{first} and {rest} {english}"
+        assert localize(text, "pl") == f"{first} i {rest} {polish}"
     # a very long list stays one short line
     assert len(names_text([f"2000/7/78944_{i}" for i in range(3884)])) < 300

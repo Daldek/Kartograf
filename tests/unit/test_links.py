@@ -261,7 +261,7 @@ def test_failed_sidecar_write_drops_stale_sidecar_and_heals(
     assert _hardlinked(link, b)
     assert not _sidecar(link).exists()
     assert not list(link.parent.glob("*.tmp"))
-    assert "Nie udalo sie zapisac sidecara" in caplog.text
+    assert "Could not write sidecar" in caplog.text
     assert linked_version(link) is None
     assert ensure_link(link, b, k_b).changed is True
     meta = json.loads(_sidecar(link).read_text())

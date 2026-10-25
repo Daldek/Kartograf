@@ -324,9 +324,8 @@ Notes that are easy to overlook:
 - `transport ──> cache`: `transport/atom.py` keeps the index of the ATOM service
   feed in `MetadataCache` (the `atom_cache` table with the feed `ETag`, ADR-042
   D12); `cache` does not import `transport`.
-- `transport ──> notices`: the collection engines (`transport/unit_package.py`,
-  `transport/atom.py`) compose error messages from `notices` (`count_text`,
-  `FILES`, `cli_flag`); `notices` imports nothing internal.
+- `transport ──> notices`: `transport/unit_package.py` takes `cli_flag` from `notices`
+  (the flag of a parameter in a message); `notices` imports only `messages`.
 - `transport ──> providers`: the only edge is `transport/index_records.py`
   (file index records, ADR-043), which imports at module level
   `providers.pl.skorowidz_wfs` (`WfsIndex` and the WFS query constants). The

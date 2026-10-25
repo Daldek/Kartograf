@@ -33,6 +33,7 @@ from kartograf import _clock
 from kartograf.download.campaigns import AscCoverage, measure_coverage
 from kartograf.exceptions import DownloadError
 from kartograf.interrupt import check_stop
+from kartograf.messages import message, reason
 from kartograf.sources.sidecar import file_digest
 
 logger = logging.getLogger(__name__)
@@ -150,7 +151,11 @@ def read_content(path: Path, *, ext: str, coverage: bool) -> ContentDigest:
                 counter.result() if counter is not None else measure_coverage(path, ext)
             )
         except DownloadError as e:
-            logger.warning(f"Brak pomiaru pokrycia {path.name}: {e}")
+            logger.warning(
+                message(
+                    "download.coverage_not_measured", name=path.name, error=reason(e)
+                )
+            )
     return ContentDigest(digest.hexdigest(), size, share)
 
 
@@ -216,12 +221,14 @@ def read_version(directory: Path, name: str) -> LocalVersion | None:
     except (OSError, ValueError, KeyError, TypeError):
         _warn_once(
             directory,
-            f"Pominieto wersje bez czytelnego sidecara: {directory} "
-            "(naprawi ja nastepny zapis tej samej tresci)",
+            message("download.skipped_version_no_sidecar", directory=directory),
         )
         return None
     if not isinstance(sha256, str) or not sha256.startswith(match.group(1)):
-        _warn_once(directory, f"Pominieto wersje o niezgodnym sha256: {directory}")
+        _warn_once(
+            directory,
+            message("download.skipped_version_sha256_mismatch", directory=directory),
+        )
         return None
     return LocalVersion(data, str(label), str(label_source), sha256, meta)
 
@@ -475,8 +482,12 @@ def commit_version(
         if existing != digest.sha256:
             _discard(staged)
             raise DownloadError(
-                f"{target}: plik wersji ma inne sha256 ({existing[:8]}) niz pobrany "
-                f"({digest.sha256[:8]}) - kolizja albo uszkodzony plik"
+                message(
+                    "download.version_sha256_mismatch",
+                    target=target,
+                    existing_prefix=existing[:8],
+                    downloaded_prefix=digest.sha256[:8],
+                )
             ) from None
         if _sidecar(target).exists():
             _discard(staged)
@@ -489,10 +500,13 @@ def commit_version(
             vdir.rmdir()  # only when empty: created by this call
         if isinstance(e, NotImplementedError) or e.errno in _NO_HARDLINK:
             raise DownloadError(
-                f"{target}: magazyn wersji wymaga systemu plikow z hardlinkami "
-                f"(D22): {e}"
+                message(
+                    "download.store_needs_hardlinks", target=target, error=reason(e)
+                )
             ) from e
-        raise DownloadError(f"{target}: nie udalo sie zapisac wersji: {e}") from e
+        raise DownloadError(
+            message("download.version_save_failed", target=target, error=reason(e))
+        ) from e
     _discard(staged)
 
     try:
@@ -509,7 +523,7 @@ def commit_version(
         if isinstance(e, DownloadError):
             raise
         raise DownloadError(
-            f"{target}: nie udalo sie zapisac sidecara wersji: {e}"
+            message("download.sidecar_save_failed", target=target, error=reason(e))
         ) from e
     return VersionCommit(
         status, target, digest.sha256, digest.size_bytes, version.label, same_as

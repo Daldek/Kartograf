@@ -236,7 +236,7 @@ class TestParallelDownloadHierarchy:
     @pytest.mark.parametrize("count", [0, -5])
     def test_workers_below_1_rejected(self, tmp_path, mock_provider, count):
         """A worker count below 1 is an input error (not silently one worker)."""
-        with pytest.raises(ValidationError, match="workers musi byc >= 1") as error:
+        with pytest.raises(ValidationError, match="workers must be >= 1") as error:
             DownloadManager(provider=mock_provider, workers=count, root=tmp_path)
         assert error.value.option == "workers"
 

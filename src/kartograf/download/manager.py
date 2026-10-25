@@ -81,16 +81,15 @@ from kartograf.exceptions import (
 )
 from kartograf.interrupt import run_parallel
 from kartograf.marker import lenient_store, prepare_store
-from kartograf.messages import message
+from kartograf.messages import message, reason
 from kartograf.notices import (
     CHECK_FAILED,
     DOWNLOAD_SIZE,
     LARGE_FILE_BYTES,
     NEWER_AVAILABLE,
-    OF_SHEETS,
     Notice,
     NoticeSink,
-    count_text,
+    ascii_text,
     size_text,
 )
 from kartograf.output import plain_of, preflight, resolve_target, store_only, writes
@@ -390,11 +389,14 @@ def _campaign_list(picks: list[_Pick]) -> str:
     ``<label> lokalna, <label> do pobrania, ...`` of a sheet's flights (message of
     the ``campaigns`` progress event).
     """
-    return ", ".join(
-        f"{pick.local.label} lokalna"
-        if pick.local is not None and pick.local_ref is not None
-        else f"{pick.ref.dirname} do pobrania"
-        for pick in picks
+    return message(
+        "notices.list",
+        items=[
+            message("campaigns.campaign_local", label=pick.local.label)
+            if pick.local is not None and pick.local_ref is not None
+            else message("campaigns.campaign_to_download", dirname=pick.ref.dirname)
+            for pick in picks
+        ],
     )
 
 
@@ -509,7 +511,7 @@ def no_coverage_text(total: int) -> str:
     The download (``download_data``) and the check
     (``DownloadManager.check_sheets``) of the same area say it the same way.
     """
-    return f"GUGiK nie ma danych dla zadnego z {count_text(total, *OF_SHEETS)} obszaru"
+    return message("campaigns.no_coverage_text", total=total)
 
 
 def incomplete_text(sheet: str, record: SkorowidzRecord) -> str:
@@ -631,10 +633,7 @@ class DownloadManager:
         require_bool(full_sheet, "full_sheet")
         if year is not None:
             if min_year is not None or max_year is not None:
-                raise ValidationError(
-                    "--year wyklucza sie z --min-year/--max-year "
-                    "(--year Y to skrot --min-year Y --max-year Y)"
-                )
+                raise ValidationError(message("campaigns.year_excludes_bounds"))
             min_year = max_year = year
         validate_year_bounds(min_year, max_year)
         self._provider = provider
@@ -704,8 +703,7 @@ class DownloadManager:
             all_campaigns or min_year is not None or max_year is not None or full_sheet
         ):
             raise ValidationError(
-                f"Provider {self._provider.name} nie obsluguje kampanii "
-                f"(--all-campaigns/--min-year/--max-year/--year/--full-sheet)"
+                message("campaigns.provider_no_campaigns", name=self._provider.name)
             )
         self._all_campaigns = all_campaigns
         self._min_year = min_year
@@ -798,9 +796,7 @@ class DownloadManager:
         ``selected`` and not a conflict.
         """
         if not self._campaign_aware or not (self._has_range or plain):
-            raise ValidationError(
-                "Sprawdzenie przedzialu wymaga kampanii PL i granicy roku"
-            )
+            raise ValidationError(message("campaigns.range_check_requirements"))
 
         def classify(
             sheet: str,
@@ -859,7 +855,9 @@ class DownloadManager:
             elif isinstance(error, DownloadError):
                 failed[sheet] = error
             elif not years:
-                no_data[sheet] = NoCoverageError(f"Brak kampanii {sheet}", sheet=sheet)
+                no_data[sheet] = NoCoverageError(
+                    message("providers.no_campaign", sheet=sheet), sheet=sheet
+                )
             elif partial is not None:
                 incomplete[sheet] = partial
                 available[sheet] = years
@@ -901,10 +899,12 @@ class DownloadManager:
         ):
             names = ", ".join(check.failed)
             raise DownloadError(
-                f"nie udalo sie sprawdzic roku danych dla {len(check.failed)} z "
-                f"{count_text(len(sheets), *OF_SHEETS)} (blad skorowidza, nie brak "
-                f"danych): "
-                f"{names} - ponow pobranie"
+                message(
+                    "campaigns.year_check_failed",
+                    failed_count=len(check.failed),
+                    sheets_count=len(sheets),
+                    names=names,
+                )
             )
         if check.conflicts:
             raise year_range_error(
@@ -950,8 +950,9 @@ class DownloadManager:
         std = self._storage.get_path(sheet, self._default_ext)
         self._link(std, version.path, version_key(version), refresh=False)
         logger.debug(
-            f"{sheet}: skorowidz GUGiK niedostepny ({error}) - uzyto lokalnej "
-            f"wersji {version.label} z zakresu lat bez sprawdzenia nowszej"
+            f"{sheet}: GUGiK sheet index not available ({error}) - used local "
+            f"version {version.label} from the year range without checking for "
+            f"a newer one"
         )
         full = self._storage.get_full_sheet_path(sheet, self._default_ext)
         return SheetFetch(
@@ -991,7 +992,7 @@ class DownloadManager:
         """
         validate_update(update, check="check_sheets")
         if plan is not None and update != "upgrade":
-            raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+            raise ValidationError(message("hydrology.plan_requires_upgrade"))
         parser = SheetParser(sheet)
         if self.is_hierarchy(sheet):
             return self.download_hierarchy(
@@ -1134,7 +1135,7 @@ class DownloadManager:
         """
         validate_update(update, check="check_sheets")
         if plan is not None and update != "upgrade":
-            raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+            raise ValidationError(message("hydrology.plan_requires_upgrade"))
         if plan is not None:
             require_store(plan, store_id(self._storage.root))
         leaves = self._leaves(sheets)
@@ -1399,9 +1400,14 @@ class DownloadManager:
                 )
             except DownloadError as error:
                 result.failed.append(sheet)
-                result.errors[sheet] = str(error)
+                result.errors[sheet] = reason(error)
                 self._emit(
-                    on_progress, result.total, len(sheets), sheet, "failed", str(error)
+                    on_progress,
+                    result.total,
+                    len(sheets),
+                    sheet,
+                    "failed",
+                    reason(error),
                 )
                 continue
             status = "skipped" if fetch.skipped else "completed"
@@ -1559,7 +1565,7 @@ class DownloadManager:
             ),
         )
         if result.status == "local":
-            logger.info(f"{sheet}: lokalna wersja {result.label}")
+            logger.info(f"{sheet}: local version {result.label}")
         return SheetFetch(
             sheet,
             std,
@@ -1578,7 +1584,9 @@ class DownloadManager:
         try:
             return ensure_link(link, target, key, refresh=refresh).target
         except OSError as e:
-            raise DownloadError(f"dowiazanie {link}: {e}") from e
+            raise DownloadError(
+                message("campaigns.link_error", link=link, error=reason(e))
+            ) from e
 
     def _download_version(
         self,
@@ -1642,11 +1650,21 @@ class DownloadManager:
         if length is None or length <= LARGE_FILE_BYTES:
             return
         key = getattr(self._provider, "descriptor_key", None)
-        what = get_source(key).product if isinstance(key, str) else "plik"
+        what = (
+            get_source(key).product
+            if isinstance(key, str)
+            else message("cli.source_file")
+        )
         notice = Notice(
             "warning",
             DOWNLOAD_SIZE,
-            f"{what} PL {sheet}: duzy plik {record.url} - {size_text(length)}",
+            message(
+                "campaigns.large_file_notice",
+                what=what,
+                sheet=sheet,
+                url=record.url,
+                size_text=size_text(length),
+            ),
         )
         with self._size_lock:
             self._size_notices.append(notice)
@@ -1845,7 +1863,7 @@ class DownloadManager:
         else:
             chosen, no_full_flight = self._resolve_chosen(sheet, records)
         logger.info(
-            "%s: %d kampanii (%s)",
+            "%s: %d campaigns (%s)",
             sheet,
             len(chosen),
             "all" if self._all_campaigns else "newest",
@@ -1868,7 +1886,7 @@ class DownloadManager:
 
         for pick in picks:
             if pick.local is not None and pick.local_ref is not None:
-                logger.info(f"{sheet} {pick.local.label}: lokalna wersja")
+                logger.info(f"{sheet} {pick.local.label}: local version")
                 if pick.newer:
                     newer = pick.ref.dirname
                 reused.append(pick.local.path)
@@ -1928,16 +1946,27 @@ class DownloadManager:
             full_target = linked_version(full)  # existing link stays untouched
         # Q10: full failure list
         if errors or link_error is not None or full_link_error is not None:
-            problems = []
+            problems: list[str] = []
             if errors:
-                listing = ", ".join(f"{name}: {e}" for name, e in errors)
+                listing = [
+                    message("campaigns.error_item", name=name, error=reason(e))
+                    for name, e in errors
+                ]
                 problems.append(
-                    f"nie pobrano {len(errors)} z {len(chosen)} kampanii ({listing})"
+                    message(
+                        "campaigns.campaigns_not_downloaded",
+                        errors_count=len(errors),
+                        chosen_count=len(chosen),
+                        listing=listing,
+                    )
                 )
             problems.extend(
-                str(e) for e in (link_error, full_link_error) if e is not None
+                reason(e) for e in (link_error, full_link_error) if e is not None
             )
-            raise DownloadError(f"{sheet}: " + "; ".join(problems), sheet=sheet)
+            raise DownloadError(
+                message("campaigns.sheet_problems", sheet=sheet, problems=problems),
+                sheet=sheet,
+            )
         better_coverage = None
         if self._has_range and self._all_campaigns and linked_target is not None:
             better_coverage = self._add_range_flights(std, local, linked_target)
@@ -2045,8 +2074,8 @@ class DownloadManager:
         except (OSError, DownloadError):
             return None
         logger.debug(
-            f"{sheet}: skorowidz GUGiK niedostepny ({error}) - uzyto lokalnej "
-            f"wersji {target} bez sprawdzenia nowszej"
+            f"{sheet}: GUGiK sheet index not available ({error}) - used local "
+            f"version {target} without checking for a newer one"
         )
         version = read_version(target.parent, target.name)
         if version is None:
@@ -2115,10 +2144,10 @@ class DownloadManager:
                 )
         except NoCoverageError as e:
             logger.debug("No data for %s: %s", sheet, e)
-            return (sheet, None, "no_coverage", str(e), e.hints)
+            return (sheet, None, "no_coverage", reason(e), e.hints)
         except DownloadError as e:
             logger.debug("Failed to download %s: %s", sheet, e)
-            return (sheet, None, "failed", str(e), ())
+            return (sheet, None, "failed", reason(e), ())
         if fetch.skipped:
             return (sheet, fetch, "skipped", "Already exists", ())
         return (sheet, fetch, "completed", "", ())
@@ -2177,23 +2206,23 @@ class DownloadManager:
             sheets = list(result.unverified)
             if single:
                 sheet = sheets[0]
-                text = (
-                    f"{sheet}: skorowidz GUGiK niedostepny - uzyto lokalnej "
-                    "wersji bez sprawdzenia nowszej "
-                    f"({result.unverified[sheet]})"
+                text = message(
+                    "campaigns.index_unavailable_unverified",
+                    sheet=sheet,
+                    unverified_reason=result.unverified[sheet],
                 )
             else:
                 shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
-                text = (
-                    "skorowidz GUGiK niedostepny - dla "
-                    f"{count_text(len(sheets), *OF_SHEETS)} "
-                    "uzyto lokalnych wersji bez sprawdzenia nowszej "
-                    f"({shown}) ({result.unverified[sheets[0]]})"
+                text = message(
+                    "campaigns.index_unavailable_many_sheets",
+                    sheets_count=len(sheets),
+                    shown=shown,
+                    unverified_reason=result.unverified[sheets[0]],
                 )
             sink.emit(
                 "warning",
                 CHECK_FAILED,
-                text.encode("ascii", "backslashreplace").decode("ascii"),
+                ascii_text(text, "backslashreplace"),
             )
         if result.newer:
             sheets = list(result.newer)
@@ -2201,9 +2230,11 @@ class DownloadManager:
             sink.emit(
                 "info",
                 NEWER_AVAILABLE,
-                "dostepna nowsza kampania dla "
-                f"{count_text(len(sheets), *OF_SHEETS)} ({shown}) - "
-                "uzyto lokalnych wersji; pobierz: --upgrade",
+                message(
+                    "campaigns.newer_campaign_available",
+                    sheets_count=len(sheets),
+                    shown=shown,
+                ),
             )
         result.notices = (*self._drain_size_notices(), *sink.notices)
         return result
@@ -2283,7 +2314,7 @@ class DownloadManager:
                     )
                 except Exception as e:
                     logger.debug("Unexpected error downloading %s: %s", sheet, e)
-                    return sheet, None, "failed", str(e), ()
+                    return sheet, None, "failed", reason(e), ()
 
             def finished(
                 ended: int,
@@ -2442,8 +2473,11 @@ class DownloadManager:
             source = self._campaign_provider.record_source(record)
         except Exception as e:  # noqa: BLE001 — mandatory sidecar: campaign failure
             raise DownloadError(
-                f"Nie udalo sie zapisac obowiazkowego sidecara kampanii "
-                f"{ref.dirname}: {e}",
+                message(
+                    "campaigns.campaign_sidecar_failed",
+                    dirname=ref.dirname,
+                    error=reason(e),
+                ),
                 sheet=sheet,
             ) from e
         extra: dict[str, Any] = {"source": source, "campaign": ref.to_extra()}

@@ -47,6 +47,11 @@ ELEVATION = [
 # the same request without the vertical CRS: an input error before any store is touched
 NO_VERTICAL_CRS = [x for x in ELEVATION if x not in ("--vertical-crs", "EVRF2007")]
 VERTICAL_CRS_REQUIRED = (
+    "--vertical-crs required for --product nmt (PL): EVRF2007 (PL-EVRF2007-NH, "
+    "current system), KRON86 (PL-KRON86-NH, historical system)"
+)
+# the same error on the terminal, which speaks Polish by default
+VERTICAL_CRS_REQUIRED_PL = (
     "--vertical-crs wymagane dla --product nmt (PL): EVRF2007 (PL-EVRF2007-NH, "
     "uklad obowiazujacy), KRON86 (PL-KRON86-NH, uklad historyczny)"
 )
@@ -72,7 +77,7 @@ def test_input_error_exits_2_in_text_mode(capsys):
 
     assert code == 2
     assert out == ""
-    assert without_error_document(err) == f"Error: {VERTICAL_CRS_REQUIRED}\n"
+    assert without_error_document(err) == f"Error: {VERTICAL_CRS_REQUIRED_PL}\n"
     assert error_document(err)["message"] == VERTICAL_CRS_REQUIRED
 
 
@@ -503,7 +508,7 @@ def test_library_warnings_pass_with_debug_in_json_mode(capsys, tmp_path, monkeyp
         main(["sheet", "parse", "N-34", "--json"])
 
     assert capsys.readouterr().err.startswith(
-        "Warning: Pominieto wersje bez czytelnego sidecara"
+        "Warning: Skipped version without a readable sidecar"
     )
 
 

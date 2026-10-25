@@ -23,6 +23,7 @@ from kartograf.download.options import (
     SHEET_SYSTEM_CHOICES,
     product_choices,
     product_directory,
+    product_summary,
     store_files,
 )
 from kartograf.download.orto_cutout import (
@@ -47,7 +48,7 @@ _CAMPAIGNS = message("catalog.section_year_flights")
 
 
 def _products() -> list[tuple[str, str]]:
-    return shared.product_summaries(IMAGERY_PRODUCTS, product_choices)
+    return [(product, product_summary(product)) for product in IMAGERY_PRODUCTS]
 
 
 def _directions() -> list[str]:
