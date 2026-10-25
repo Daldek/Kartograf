@@ -921,7 +921,7 @@ class TestLazDiscoveryOnRealWfs:
         with pytest.raises(YearRangeError) as caught:
             download_laz_area(
                 bbox=W2_BBOX,
-                output_dir=tmp_path,
+                root=tmp_path,
                 provider=provider,
                 year=2024,
                 vertical_crs="EVRF2007",

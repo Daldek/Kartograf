@@ -161,7 +161,7 @@ def test_check_compares_with_pin_not_current_store_version(tmp_path):
     old = open_project(project).tasks[0].files[0]
     copied = copy_manifest(project, tmp_path / "second")
     doc = json.loads((copied / MANIFEST_NAME).read_text(encoding="utf-8"))
-    doc["output_dir"] = "../projekt/data"
+    doc["root"] = "../projekt/data"
     (copied / MANIFEST_NAME).write_text(json.dumps(doc), encoding="utf-8")
     fake.records = {"newest": [REC["84183"]]}
     with pl_sheets(fake):

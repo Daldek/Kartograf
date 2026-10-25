@@ -27,18 +27,18 @@ def _manifest(project: Path) -> dict:
 
 def test_init_creates_store_and_refuses_existing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    project = init_project("projekt", output_dir="projekt/data")
+    project = init_project("projekt", root="projekt/data")
     assert project.directory == tmp_path / "projekt"
-    assert project.output_dir == tmp_path / "projekt" / "data"
-    assert project.output_dir.is_dir() and project.tasks == ()
+    assert project.root == tmp_path / "projekt" / "data"
+    assert project.root.is_dir() and project.tasks == ()
     assert _manifest(tmp_path / "projekt") == {
         "schema": "kartograf-project/1",
-        "output_dir": "data",
+        "root": "data",
         "tasks": [],
     }
     before = (tmp_path / "projekt" / MANIFEST_NAME).read_bytes()
     with pytest.raises(ValidationError) as caught:
-        init_project("projekt", output_dir="inny")
+        init_project("projekt", root="inny")
     assert str(caught.value) == (
         f"projekt juz istnieje: {tmp_path / 'projekt' / MANIFEST_NAME}"
     )
@@ -52,8 +52,8 @@ def test_paths_saved_relative_to_project(tmp_path, monkeypatch):
     monkeypatch.chdir(work)
     area = _shapefile(work)
     shared = tmp_path / "wspolny"
-    init_project("../projekt", output_dir="../magazyn")
-    assert _manifest(tmp_path / "projekt")["output_dir"] == "../magazyn"
+    init_project("../projekt", root="../magazyn")
+    assert _manifest(tmp_path / "projekt")["root"] == "../magazyn"
     project = add_project_task(
         "../projekt",
         name="gleby",
@@ -69,28 +69,26 @@ def test_paths_saved_relative_to_project(tmp_path, monkeypatch):
     tasks = _manifest(tmp_path / "projekt")["tasks"]
     assert tasks[0]["options"] == {"geometry": "../praca/area.shp", "depth": "0-5cm"}
     assert tasks[1]["options"]["geometry"] == area.as_posix()
-    assert project.output_dir == tmp_path / "magazyn"
-    init_project(tmp_path / "drugi", output_dir=shared)
-    assert _manifest(tmp_path / "drugi")["output_dir"] == shared.as_posix()
+    assert project.root == tmp_path / "magazyn"
+    init_project(tmp_path / "drugi", root=shared)
+    assert _manifest(tmp_path / "drugi")["root"] == shared.as_posix()
 
 
 def test_moved_project_with_store_resolves(tmp_path):
-    init_project(
-        tmp_path / "a" / "projekt", output_dir=tmp_path / "a" / "projekt" / "data"
-    )
+    init_project(tmp_path / "a" / "projekt", root=tmp_path / "a" / "projekt" / "data")
     manifest = tmp_path / "a" / "projekt" / MANIFEST_NAME
     doc = json.loads(manifest.read_text(encoding="utf-8"))
-    doc["output_dir"] = "data"  # relative: moves together with the project
+    doc["root"] = "data"  # relative: moves together with the project
     manifest.write_text(json.dumps(doc), encoding="utf-8")
     shutil.move(tmp_path / "a", tmp_path / "b")
     project = open_project(tmp_path / "b" / "projekt")
-    assert project.output_dir == tmp_path / "b" / "projekt" / "data"
-    assert project.output_dir.is_dir()
+    assert project.root == tmp_path / "b" / "projekt" / "data"
+    assert project.root.is_dir()
 
 
 def test_missing_store_dir_is_error(tmp_path):
-    project = init_project(tmp_path / "p", output_dir=tmp_path / "magazyn")
-    project.output_dir.rmdir()
+    project = init_project(tmp_path / "p", root=tmp_path / "magazyn")
+    project.root.rmdir()
     for operation in (
         lambda: add_project_task(
             tmp_path / "p", name="t", command="elevation download", options=PL_SHEET
@@ -106,7 +104,7 @@ def test_missing_store_dir_is_error(tmp_path):
 
 
 def test_add_records_library_arguments_in_json_form(tmp_path):
-    init_project(tmp_path / "p", output_dir=tmp_path / "data")
+    init_project(tmp_path / "p", root=tmp_path / "data")
     project = add_project_task(
         tmp_path / "p",
         name="krakow-nmt",
@@ -145,11 +143,11 @@ def test_add_records_library_arguments_in_json_form(tmp_path):
 
 
 def test_add_validates_without_network(tmp_path):
-    init_project(tmp_path / "p", output_dir=tmp_path / "data")
+    init_project(tmp_path / "p", root=tmp_path / "data")
     before = (tmp_path / "p" / MANIFEST_NAME).read_bytes()
     choice = {"product": "nmt", "sheet": G, "resolution": "1m"}  # no vertical CRS
     with pytest.raises(ValidationError) as library:
-        download_data(output_dir=tmp_path / "data", cache=False, **choice)
+        download_data(root=tmp_path / "data", cache=False, **choice)
     with pytest.raises(ValidationError) as caught:
         add_project_task(
             tmp_path / "p", name="teren", command="elevation download", options=choice
@@ -161,7 +159,7 @@ def test_add_validates_without_network(tmp_path):
 
 @pytest.mark.parametrize("name", ["Teren", "-teren", "te ren", "t" * 65, ""])
 def test_add_bad_name(tmp_path, name):
-    init_project(tmp_path / "p", output_dir=tmp_path / "data")
+    init_project(tmp_path / "p", root=tmp_path / "data")
     with pytest.raises(ValidationError):
         add_project_task(
             tmp_path / "p", name=name, command="elevation download", options=PL_SHEET
@@ -170,7 +168,7 @@ def test_add_bad_name(tmp_path, name):
 
 
 def test_add_duplicate_name_keeps_first_task(tmp_path, monkeypatch):
-    init_project(tmp_path / "p", output_dir=tmp_path / "data")
+    init_project(tmp_path / "p", root=tmp_path / "data")
     add_project_task(
         tmp_path / "p", name="teren", command="elevation download", options=PL_SHEET
     )
@@ -196,7 +194,7 @@ def test_add_duplicate_name_keeps_first_task(tmp_path, monkeypatch):
 
 def test_add_missing_geometry_file(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    init_project("p", output_dir="data")
+    init_project("p", root="data")
     with pytest.raises(ValidationError) as caught:
         add_project_task(
             "p",
@@ -209,7 +207,7 @@ def test_add_missing_geometry_file(tmp_path, monkeypatch):
 
 
 def test_add_rejects_non_data_command_and_foreign_option(tmp_path):
-    init_project(tmp_path / "p", output_dir=tmp_path / "data")
+    init_project(tmp_path / "p", root=tmp_path / "data")
     with pytest.raises(ValidationError):
         add_project_task(
             tmp_path / "p", name="t", command="elevation list-sources", options={}
@@ -225,7 +223,7 @@ def test_add_rejects_non_data_command_and_foreign_option(tmp_path):
 
 
 def test_remove_unknown_task_names_the_tasks(tmp_path):
-    init_project(tmp_path / "p", output_dir=tmp_path / "data")
+    init_project(tmp_path / "p", root=tmp_path / "data")
     add_project_task(
         tmp_path / "p", name="teren", command="elevation download", options=PL_SHEET
     )

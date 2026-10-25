@@ -266,29 +266,29 @@ class TestLandCoverManager:
 
     def test_init_with_provider_name(self):
         """Test initialization with provider name."""
-        manager = LandCoverManager(output_dir="data", provider="corine")
+        manager = LandCoverManager(root="data", provider="corine")
         assert manager.provider_name == "CORINE Land Cover"
 
     def test_init_with_provider_instance(self):
         """Test initialization with provider instance."""
         provider = CorineProvider()
-        manager = LandCoverManager(output_dir="data", provider=provider)
+        manager = LandCoverManager(root="data", provider=provider)
         assert manager.provider_name == "CORINE Land Cover"
 
     def test_init_invalid_provider(self):
         """Test initialization with invalid provider."""
         with pytest.raises(ValidationError):
-            LandCoverManager(output_dir="data", provider="invalid")
+            LandCoverManager(root="data", provider="invalid")
 
     def test_set_provider_by_name(self):
         """Test setting provider by name."""
-        manager = LandCoverManager(output_dir="data", provider="bdot10k")
+        manager = LandCoverManager(root="data", provider="bdot10k")
         manager.set_provider("corine")
         assert manager.provider_name == "CORINE Land Cover"
 
     def test_set_provider_by_instance(self):
         """Test setting provider by instance."""
-        manager = LandCoverManager(output_dir="data", provider="corine")
+        manager = LandCoverManager(root="data", provider="corine")
         manager.set_provider(Bdot10kProvider())
         assert manager.provider_name == "BDOT10k"
 
@@ -300,19 +300,19 @@ class TestLandCoverManager:
 
     def test_download_no_selection(self):
         """Test download with no selection method."""
-        manager = LandCoverManager(output_dir="data", provider="bdot10k")
+        manager = LandCoverManager(root="data", provider="bdot10k")
         with pytest.raises(ValidationError):
             manager.download()
 
     def test_download_multiple_selection(self):
         """Test download with multiple selection methods."""
-        manager = LandCoverManager(output_dir="data", provider="bdot10k")
+        manager = LandCoverManager(root="data", provider="bdot10k")
         with pytest.raises(ValidationError):
             manager.download(teryt="1465", sheet="N-34-130-D")
 
     def test_repr(self):
         """Test string representation."""
-        manager = LandCoverManager(output_dir="data", provider="bdot10k")
+        manager = LandCoverManager(root="data", provider="bdot10k")
         repr_str = repr(manager)
         assert "LandCoverManager" in repr_str
         assert "BDOT10k" in repr_str
@@ -399,7 +399,9 @@ class TestLandCoverCLI:
         """Test download without selection method."""
         from kartograf.cli.commands import main
 
-        result = main(["landcover", "download", "--product", "bdot10k", "-o", "unused"])
+        result = main(
+            ["landcover", "download", "--product", "bdot10k", "--root", "unused"]
+        )
         assert result == 2
         captured = capsys.readouterr()
         assert "Error: Podaj dokladnie jeden wybor" in captured.err
@@ -414,7 +416,7 @@ class TestLandCoverCLI:
                 "download",
                 "--product",
                 "bdot10k",
-                "-o",
+                "--root",
                 "unused",
                 "--bbox",
                 "invalid",
@@ -443,7 +445,7 @@ class TestLandCoverCLI:
                     "--product",
                     "bdot10k",
                     f"--bbox={bbox}",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                 ]
             )
@@ -490,7 +492,7 @@ class TestLandCoverInvalidOptions:
     def test_invalid_option_is_user_error(self, command, fragment, tmp_path, capsys):
         from kartograf.cli.commands import main
 
-        rc = main([*command, "--sheet", "N-34-130-D", "-o", str(tmp_path)])
+        rc = main([*command, "--sheet", "N-34-130-D", "--root", str(tmp_path)])
         err = capsys.readouterr().err
         assert rc == 2
         assert fragment in err
@@ -527,7 +529,7 @@ class TestBdot10kShpFormat:
                     "1465",
                     "--format",
                     "SHP",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                 ]
             )
@@ -1504,9 +1506,7 @@ class TestBdot10kMergeOnNetworkShare:
 
         monkeypatch.setattr(sqlite3, "connect", fake_connect)
 
-    def test_merge_succeeds_when_sqlite_locked_in_output_dir(
-        self, tmp_path, monkeypatch
-    ):
+    def test_merge_succeeds_when_sqlite_locked_in_root(self, tmp_path, monkeypatch):
         src = tmp_path / "src"
         src.mkdir()
         out_dir = tmp_path / "share"
@@ -1634,13 +1634,13 @@ class TestLandCoverNoSideEffectsOnInit:
         assert main(argv) == 0
         assert _tree(empty_cwd) == []
 
-    def test_bdot10k_download_creates_output_dir_and_file(self, empty_cwd):
+    def test_bdot10k_download_creates_root_and_file(self, empty_cwd):
         out_dir = empty_cwd / "data"
         provider = Bdot10kProvider()
         session = Mock()
         session.get.return_value = _stream_response(b"PK zip", "application/zip")
         provider._sessions.injected = session
-        manager = LandCoverManager(output_dir=out_dir, provider=provider)
+        manager = LandCoverManager(root=out_dir, provider=provider)
         assert not out_dir.exists()
 
         file = manager.download(teryt="1465", format="SHP").files[0].file
@@ -1650,9 +1650,9 @@ class TestLandCoverNoSideEffectsOnInit:
         assert Path(f"{file.version_path}.meta.json").exists()
 
     @pytest.mark.parametrize("source", ["bdot10k", "corine", "soilgrids"])
-    def test_failed_download_leaves_no_output_dir(self, empty_cwd, source):
+    def test_failed_download_leaves_no_root(self, empty_cwd, source):
         out_dir = empty_cwd / "out"
-        manager = LandCoverManager(output_dir=out_dir, provider=source)
+        manager = LandCoverManager(root=out_dir, provider=source)
         if source == "corine":
             manager.set_provider(CorineProvider(use_proxy=False))
         session = Mock()
@@ -1839,7 +1839,7 @@ class TestBdot10kSidecarSource:
         """P1: a re-download whose raw ZIP write fails leaves the previous
         versions and links untouched and no staging behind."""
         out = tmp_path / "out"
-        manager = LandCoverManager(output_dir=out, provider="bdot10k")
+        manager = LandCoverManager(root=out, provider="bdot10k")
         z1, z2 = tmp_path / "z1", tmp_path / "z2"
         z1.mkdir()
         z2.mkdir()
@@ -1890,7 +1890,7 @@ class TestBdot10kSidecarSource:
             raise OSError(28, "No space left on device")
 
         body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
-        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
+        manager = LandCoverManager(root=tmp_path / "out", provider="bdot10k")
         manager.provider._sessions = SessionPerThread(self._session(body, {}))
         monkeypatch.setattr(Path, "write_bytes", disk_full)
         report = manager.download(teryt="0262", keep_raw=True)
@@ -1937,7 +1937,7 @@ class TestBdot10kSidecarSource:
                     "bdot10k",
                     "--teryt",
                     "0262",
-                    "-o",
+                    "--root",
                     str(out),
                 ]
             )
@@ -1954,9 +1954,7 @@ class TestLandCoverManagerCache:
         from kartograf.cache.metadata import MetadataCache
 
         cache = MetadataCache(db_path=tmp_path / "c.db")
-        manager = LandCoverManager(
-            output_dir=tmp_path, provider="soilgrids", cache=cache
-        )
+        manager = LandCoverManager(root=tmp_path, provider="soilgrids", cache=cache)
         assert manager.provider._cache is cache
 
 
@@ -1997,7 +1995,7 @@ class TestLandCoverCliManyCounties:
                     "bdot10k",
                     "--bbox",
                     "340000,290000,350000,300000",
-                    "-o",
+                    "--root",
                     str(tmp_path / "out"),
                 ]
             )
@@ -2028,7 +2026,7 @@ class TestLandCoverCliManyCounties:
                     "bdot10k",
                     "--bbox",
                     "340000,290000,350000,300000",
-                    "-o",
+                    "--root",
                     str(tmp_path / "out"),
                 ]
             )

@@ -107,8 +107,8 @@ MESSAGES = {
         "Najnowsza kompletna kombinacja: {label}",
     ),
     "download_hint_line": Text(
-        "  Download (add --output DIR): kartograf {hint}",
-        "  Pobranie (dodaj --output KATALOG): kartograf {hint}",
+        "  Download (add --root DIR): kartograf {hint}",
+        "  Pobranie (dodaj --root KATALOG): kartograf {hint}",
     ),
     "project_hint_line": Text(
         "  In a project: kartograf project add NAME {hint}",
@@ -125,9 +125,9 @@ MESSAGES = {
         "pliku: --details)",
     ),
     "complete_cz_combinations": Text(
-        "Complete CZ combinations (download: add --output DIR; in a project: "
+        "Complete CZ combinations (download: add --root DIR; in a project: "
         "kartograf project add NAME instead of kartograf):",
-        "Kompletne kombinacje CZ (pobranie: dodaj --output KATALOG; w projekcie: "
+        "Kompletne kombinacje CZ (pobranie: dodaj --root KATALOG; w projekcie: "
         "kartograf project add NAZWA zamiast kartograf):",
     ),
     "remaining_commands_cz": Text(
@@ -323,10 +323,10 @@ MESSAGES = {
     "version_summary": Text(
         "New: {counts_new}, relabelled: {counts_relabeled}, unchanged: "
         "{counts_unchanged}, local: {counts_local}, {reused}errors: {failed} "
-        "({output_dir})",
+        "({root})",
         "Nowe: {counts_new}, nowa etykieta: {counts_relabeled}, bez zmian: "
         "{counts_unchanged}, lokalne: {counts_local}, {reused}bledy: {failed} "
-        "({output_dir})",
+        "({root})",
     ),
     # ``cli.layers_cmd``.
     "classes_note": Text(
@@ -448,7 +448,7 @@ MESSAGES = {
     ),
     # ``cli.project_cmd``.
     "project_created": Text("Created project: {path}", "Utworzono projekt: {path}"),
-    "project_store": Text("Store: {output_dir}", "Magazyn: {output_dir}"),
+    "project_store": Text("Store: {root}", "Magazyn: {root}"),
     "project_add_task_hint": Text(
         "Add a task: {project_command}",
         "Dodaj zadanie: {project_command}",
@@ -485,11 +485,11 @@ MESSAGES = {
         "--json nie jest czescia zadania (to tryb wyniku komendy project add); podaj "
         "go przed nazwa zadania: {project_command}",
     ),
-    "run_option_output": Text(
-        "the task downloads to the project store ({store}), but --output points to "
-        "{resolved_path}; remove --output",
-        "zadanie pobiera do magazynu projektu ({store}), a --output wskazuje "
-        "{resolved_path}; usun --output",
+    "run_option_root": Text(
+        "the task downloads to the project store ({store}), but --root points to "
+        "{resolved_path}; remove --root",
+        "zadanie pobiera do magazynu projektu ({store}), a --root wskazuje "
+        "{resolved_path}; usun --root",
     ),
     "project_option_position": Text(
         "give --project before the task name (before NAME)",
@@ -589,10 +589,10 @@ MESSAGES = {
     "directory_crs": Text("<crs>", "<uklad>"),
     "directory_vertical_crs": Text("<vertical-crs>", "<uklad-wys>"),
     "list_sources_note": Text(
-        "CHOICE: a|b = one of the values. DIRECTORY: under --output; <crs> and "
+        "CHOICE: a|b = one of the values. DIRECTORY: under --root; <crs> and "
         "<vertical-crs> follow from the choice, variant choices (scale, format, "
         "vintage) append _<value> segments.",
-        "WYBOR: a|b = jedna z wartosci. KATALOG: pod --output; <uklad> i <uklad-wys> "
+        "WYBOR: a|b = jedna z wartosci. KATALOG: pod --root; <uklad> i <uklad-wys> "
         "wynikaja z wyboru, wybory wariantu (skala, format, rocznik) dopisuja czlony "
         "_<wartosc>.",
     ),
@@ -603,21 +603,21 @@ MESSAGES = {
     ),
     # ``cli.store_cmd``.
     "header_product": Text("PRODUCT", "PRODUKT"),
-    "output_required": Text(
-        "-o/--output is required (store directory)",
-        "-o/--output jest wymagane (katalog magazynu)",
+    "root_required": Text(
+        "--root is required (store directory)",
+        "--root jest wymagane (katalog magazynu)",
     ),
     "store_empty": Text(
-        "Store {output_dir} is empty (no segments)",
-        "Magazyn {output_dir} jest pusty (brak segmentow)",
+        "Store {root} is empty (no segments)",
+        "Magazyn {root} jest pusty (brak segmentow)",
     ),
     "segment_unknown_registry": Text(
         "{name} [unknown in the registry]",
         "{name} [nieznany w rejestrze]",
     ),
     "store_segments_header": Text(
-        "Store {output_dir} ({rows_count} segments):",
-        "Magazyn {output_dir} ({rows_count} segmentow):",
+        "Store {root} ({rows_count} segments):",
+        "Magazyn {root} ({rows_count} segmentow):",
     ),
     "more_entries_suffix": Text(", there are more", ", sa dalsze"),
     "segment_entries_header": Text(

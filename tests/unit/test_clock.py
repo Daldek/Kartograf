@@ -54,9 +54,9 @@ def test_assert_same_store_reports_first_difference(tmp_path):
 
 
 def test_run_both_captures_cli_output_and_api_result(tmp_path):
-    def api_call(output_dir):
-        output_dir.mkdir()
-        (output_dir / "data.bin").write_bytes(b"payload")
+    def api_call(root):
+        root.mkdir()
+        (root / "data.bin").write_bytes(b"payload")
         return "api-result"
 
     result = run_both(["--help"], api_call, tmp_path)

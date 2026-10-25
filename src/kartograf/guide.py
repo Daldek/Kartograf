@@ -71,8 +71,8 @@ _PRINCIPLES: Final[tuple[str, ...]] = (
     "`{opt:bbox_crs}`, or `{opt:geometry}`, exactly one; `{opt:country}` goes with a "
     "bbox or a geometry. Nothing is guessed: a missing argument is an error with a "
     "hint.",
-    "**Absolute paths, outside the repository and /tmp:** `{opt:output_dir}` (CLI "
-    "`--output`) is the store; a version is never overwritten, so a rerun is safe.",
+    "**Absolute paths, outside the repository and /tmp:** `{opt:root}` (CLI "
+    "`--root`) is the store; a version is never overwritten, so a rerun is safe.",
     "**Check, then run:** `--check-updates` (MCP: `check_updates`) plans without "
     "fetching; `--upgrade` fetches newer content, `--force` fetches again, and "
     "`--plan` runs a saved plan.",
@@ -161,14 +161,14 @@ _FLOWS: Final[tuple[_Flow, ...]] = (
                 "the plan (`kartograf-plan/1`): what a run would fetch; nothing is "
                 "written.",
                 f"kartograf elevation download --product nmt --sheet {_SHEET} "
-                f"--resolution 1m --vertical-crs EVRF2007 --output {_STORE} "
+                f"--resolution 1m --vertical-crs EVRF2007 --root {_STORE} "
                 "--check-updates --json",
             ),
             _Step(
                 "the run: `kartograf-download/1`, `files[].path` of the versions "
                 "written below the store.",
                 f"kartograf elevation download --product nmt --sheet {_SHEET} "
-                f"--resolution 1m --vertical-crs EVRF2007 --output {_STORE} --json",
+                f"--resolution 1m --vertical-crs EVRF2007 --root {_STORE} --json",
             ),
         ),
     ),
@@ -181,12 +181,12 @@ _FLOWS: Final[tuple[_Flow, ...]] = (
                 "the elevation model of the sheets that cover the area.",
                 "kartograf elevation download --product nmt --country pl --bbox "
                 "565000,242000,569000,246000 --sheet-system 1992 --resolution 1m "
-                f"--vertical-crs EVRF2007 --output {_STORE} --json",
+                f"--vertical-crs EVRF2007 --root {_STORE} --json",
             ),
             _Step(
                 "LAZ point clouds of the area.",
                 "kartograf elevation download --product laz --country pl --bbox "
-                f"530000,382000,533000,386000 --vertical-crs KRON86 --output {_STORE} "
+                f"530000,382000,533000,386000 --vertical-crs KRON86 --root {_STORE} "
                 "--json",
             ),
         ),
@@ -199,18 +199,18 @@ _FLOWS: Final[tuple[_Flow, ...]] = (
             _Step(
                 "BDOT10k of a county (TERYT code).",
                 f"kartograf landcover download --product bdot10k --teryt 1465 "
-                f"--output {_STORE} --json",
+                f"--root {_STORE} --json",
             ),
             _Step(
                 "a SoilGrids layer for an area.",
                 "kartograf soil download --property clay --depth 0-5cm --stat mean "
-                f"--bbox 626000,480000,628000,482000 --output {_STORE} --json",
+                f"--bbox 626000,480000,628000,482000 --root {_STORE} --json",
             ),
             _Step(
                 "the HSG raster from the texture layers, with the share of each "
                 "group in `result.summary`.",
                 "kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 "
-                f"--output {_STORE} --summary --json",
+                f"--root {_STORE} --summary --json",
             ),
         ),
     ),
@@ -221,7 +221,7 @@ _FLOWS: Final[tuple[_Flow, ...]] = (
         (
             _Step(
                 "the project and its store.",
-                f"kartograf project init --output {_STORE} --json",
+                f"kartograf project init --root {_STORE} --json",
             ),
             _Step(
                 "a task: a data command with its options.",
@@ -243,7 +243,7 @@ _BLOCK_LINES: Final[tuple[str, ...]] = (
     f"kartograf sheet parse {_SHEET} --json",
     f"kartograf elevation availability --product nmt --sheet {_SHEET} --json",
     f"kartograf elevation download --product nmt --sheet {_SHEET} --resolution 1m "
-    f"--vertical-crs EVRF2007 --output {_STORE} --check-updates --json",
+    f"--vertical-crs EVRF2007 --root {_STORE} --check-updates --json",
 )
 _PYTHON_CALL: Final = (
     "kartograf.download_data",
@@ -252,7 +252,7 @@ _PYTHON_CALL: Final = (
         "sheet": _SHEET,
         "resolution": "1m",
         "vertical_crs": "EVRF2007",
-        "output_dir": _STORE,
+        "root": _STORE,
     },
 )
 
@@ -324,11 +324,11 @@ def _checked_line(line: str) -> str:
         parsed = parse_command_line(parser, words[1:])
         if getattr(parsed, "_command_id", None) in data:
             call = parse_command(words[1:])
-            output_dir = call.run.get("output_dir")
+            root = call.run.get("root")
             validate_command(
                 call.command,
                 call.options,
-                output_dir=None if output_dir is None else str(output_dir),
+                root=None if root is None else str(root),
             )
     except (ValidationError, ValueError) as error:
         raise ValueError(

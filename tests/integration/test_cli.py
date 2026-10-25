@@ -576,7 +576,7 @@ class TestCommandGroups:
             patch("kartograf.cli.download_cmd.download_data") as download,
             pytest.raises(SystemExit) as exc,
         ):
-            main([*argv, "-o", "out"])
+            main([*argv, "--root", "out"])
         assert exc.value.code == 2
         assert replacement in capsys.readouterr().err
         download.assert_not_called()
@@ -590,7 +590,14 @@ class TestCommandGroups:
     ):
         with patch("kartograf.cli.download_cmd.download_data") as download:
             rc = main(
-                [group, "download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]
+                [
+                    group,
+                    "download",
+                    "--sheet",
+                    "N-34-130-D-d-2-4",
+                    "--root",
+                    str(tmp_path),
+                ]
             )
         assert rc == 2
         err = capsys.readouterr().err
@@ -642,8 +649,7 @@ class TestCommandGroups:
             "--geometry",
             "--layer",
             "--whole-country",
-            "--output",
-            "-o",
+            "--root",
             "--check-updates",
             "--upgrade",
             "--force",
@@ -712,12 +718,12 @@ class TestCreateParserDownload:
         assert args.scale == "1:10000"
 
     def test_download_output_option(self):
-        """Test --output option."""
+        """Test --root option."""
         parser = create_parser()
         args = parser.parse_args(
-            ["elevation", "download", "--sheet", "N-34-130-D", "-o", "/custom/path"]
+            ["elevation", "download", "--sheet", "N-34-130-D", "--root", "/custom/path"]
         )
-        assert args.output == "/custom/path"
+        assert args.root == "/custom/path"
 
     def test_download_force_flag(self):
         """Test --force flag."""
@@ -892,7 +898,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -925,7 +931,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -935,7 +941,7 @@ class TestCmdDownload:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -961,7 +967,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -973,7 +979,7 @@ class TestCmdDownload:
                 "7.171.21",
                 "--scale",
                 "1:2000",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -994,7 +1000,7 @@ class TestCmdDownload:
         main(
             ["elevation", "download", "--product", "nmt", "--country", "pl"]
             + ["--resolution", "1m", "--vertical-crs", "EVRF2007"]
-            + ["--sheet", "7.171.21", "--scale", "1:2000", "-o", str(tmp_path)]
+            + ["--sheet", "7.171.21", "--scale", "1:2000", "--root", str(tmp_path)]
         )
 
         out = capsys.readouterr().out
@@ -1018,7 +1024,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1028,7 +1034,7 @@ class TestCmdDownload:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "--force",
                 "-q",
@@ -1055,7 +1061,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1065,7 +1071,7 @@ class TestCmdDownload:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -1091,7 +1097,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1103,7 +1109,7 @@ class TestCmdDownload:
                 "N-34-130-D",
                 "--scale",
                 "1:invalid",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -1128,7 +1134,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1138,7 +1144,7 @@ class TestCmdDownload:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -1177,7 +1183,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1187,7 +1193,7 @@ class TestCmdDownload:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -1216,7 +1222,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1226,7 +1232,7 @@ class TestCmdDownload:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -1255,7 +1261,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1265,7 +1271,7 @@ class TestCmdDownload:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -1293,7 +1299,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1303,7 +1309,7 @@ class TestCmdDownload:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -1338,7 +1344,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1348,7 +1354,7 @@ class TestCmdDownload:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -1380,7 +1386,7 @@ class TestCmdDownload:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1392,7 +1398,7 @@ class TestCmdDownload:
                 "7.171.21",
                 "--scale",
                 "1:2000",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -1413,7 +1419,7 @@ class TestDownloadCLIIntegration:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -1475,7 +1481,7 @@ class TestCmdDownloadProduct:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1487,7 +1493,7 @@ class TestCmdDownloadProduct:
                 "N-34-130-D-d-2-4",
                 "--product",
                 "nmpt",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -1523,7 +1529,7 @@ class TestCmdDownloadProduct:
                 "N-34-130-D-d-2-4",
                 "--product",
                 "orto",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -1557,7 +1563,7 @@ class TestCmdDownloadProduct:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1567,7 +1573,7 @@ class TestCmdDownloadProduct:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -1600,7 +1606,7 @@ class TestCmdDownloadProduct:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1612,7 +1618,7 @@ class TestCmdDownloadProduct:
                 "630000,480000,637000,487000",
                 "--product",
                 "nmpt",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -1649,7 +1655,7 @@ class TestCmdDownloadProduct:
                 "pl",
                 "--product",
                 "orto",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -1674,7 +1680,7 @@ class TestCmdDownloadProduct:
 
         result = main(
             ["imagery", "download", "--product", "orto"]
-            + ["--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]
+            + ["--sheet", "N-34-130-D-d-2-4", "--root", str(tmp_path)]
         )
 
         assert result == 0
@@ -1719,7 +1725,7 @@ class TestCmdDownloadProduct:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1730,7 +1736,7 @@ class TestCmdDownloadProduct:
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 mode,
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -1750,7 +1756,7 @@ class TestCmdDownloadProduct:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1766,7 +1772,7 @@ class TestCmdDownloadProduct:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1813,7 +1819,7 @@ class TestCmdDownloadProduct:
             succeeded=[tmp_path / "t.asc"]
         )
 
-        rc = main([*argv, "-o", str(tmp_path), "-q"])
+        rc = main([*argv, "--root", str(tmp_path), "-q"])
 
         assert rc == 0
         assert seen == [old]
@@ -1835,7 +1841,7 @@ class TestCmdDownloadProduct:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1849,7 +1855,7 @@ class TestCmdDownloadProduct:
                 "nmpt",
                 "--resolution",
                 "5m",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -1876,7 +1882,7 @@ class TestCmdDownloadProduct:
         """Orthophoto has no vertical CRS or point density: an elevation flag
         in ``imagery download`` is an input error, not a no-op."""
         argv = ["imagery", "download", "--product", "orto"]
-        argv += ["--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), *flag]
+        argv += ["--sheet", "N-34-130-D-d-2-4", "--root", str(tmp_path), *flag]
         with pytest.raises(SystemExit) as exc:
             main(argv)
 
@@ -1904,7 +1910,7 @@ class TestCmdDownloadProduct:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -1920,7 +1926,7 @@ class TestCmdDownloadProduct:
                 "nmpt",
                 "--resolution",
                 "5m",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -2136,7 +2142,7 @@ class TestNmt5mKron86Rejected:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2149,7 +2155,7 @@ class TestNmt5mKron86Rejected:
                 "5m",
                 "--vertical-crs",
                 "KRON86",
-                "-o",
+                "--root",
                 str(tmp_path / "out"),
                 "-q",
             ]
@@ -2193,7 +2199,7 @@ class TestNmt5mKron86Rejected:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2208,7 +2214,7 @@ class TestNmt5mKron86Rejected:
                 "5m",
                 "--vertical-crs",
                 "KRON86",
-                "-o",
+                "--root",
                 str(tmp_path / "out"),
                 "-q",
             ]
@@ -2305,7 +2311,7 @@ class TestRegistryVariantsCli:
 
         rc = main(
             ["elevation", "download", "--sheet", self.SHEET, *_variant_flags(variant)]
-            + ["-o", str(tmp_path / "cli"), "-q"]
+            + ["--root", str(tmp_path / "cli"), "-q"]
         )
 
         assert rc == 0, capsys.readouterr().err
@@ -2313,7 +2319,7 @@ class TestRegistryVariantsCli:
 
         report = download_data(
             product=variant.product,
-            output_dir=tmp_path / "api",
+            root=tmp_path / "api",
             sheet=self.SHEET,
             vertical_crs=variant.vertical_crs,
             resolution=variant.label,
@@ -2335,7 +2341,7 @@ class TestRegistryVariantsCli:
         rc = main(
             ["elevation", "download", "--product", "nmt", "--sheet", self.SHEET]
             + ["--vertical-crs", "EVRF2007", "--resolution", label]
-            + ["-o", str(tmp_path), "-q"]
+            + ["--root", str(tmp_path), "-q"]
         )
 
         assert rc == 2
@@ -2353,7 +2359,7 @@ class TestRegistryVariantsCli:
         registry grids."""
         rc = main(
             ["elevation", "download", "--product", "nmpt", "--sheet", self.SHEET]
-            + ["--vertical-crs", "EVRF2007", "-o", str(tmp_path), "-q"]
+            + ["--vertical-crs", "EVRF2007", "--root", str(tmp_path), "-q"]
         )
         assert rc == 2
         err = capsys.readouterr().err
@@ -2361,7 +2367,7 @@ class TestRegistryVariantsCli:
         with pytest.raises(ValidationError) as exc:
             download_data(
                 product="nmpt",
-                output_dir=tmp_path,
+                root=tmp_path,
                 sheet=self.SHEET,
                 vertical_crs="EVRF2007",
                 cache=False,
@@ -2470,7 +2476,7 @@ class TestRegistryVariantsCli:
             assert (args.product, args.country, args.model) == ("laz", "cz", model)
             validate_data_request(
                 **library_arguments(args),
-                output_dir=tmp_path / key,
+                root=tmp_path / key,
             )
 
     def test_help_cz_uses_variant_models(self, capsys):
@@ -2524,7 +2530,7 @@ class TestPlCutoutOnly1m:
                 ["elevation", "download", "--product", product, *self.BBOX]
                 + ["--cutout", "--horizontal-crs", "EPSG:2180"]
                 + ["--vertical-crs", "EVRF2007", *extra]
-                + ["-o", str(tmp_path / "out"), "-q"]
+                + ["--root", str(tmp_path / "out"), "-q"]
             )
         return rc, session, mask
 
@@ -2567,7 +2573,7 @@ class TestCmdDownloadBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2577,7 +2583,7 @@ class TestCmdDownloadBBox:
                 "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -2602,7 +2608,7 @@ class TestCmdDownloadBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2612,7 +2618,7 @@ class TestCmdDownloadBBox:
                 "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -2638,7 +2644,7 @@ class TestCmdDownloadBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2650,7 +2656,7 @@ class TestCmdDownloadBBox:
                 "19.93,50.05,19.95,50.07",
                 "--bbox-crs",
                 "EPSG:4326",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -2669,7 +2675,7 @@ class TestCmdDownloadBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2697,7 +2703,7 @@ class TestCmdDownloadBBox:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2723,7 +2729,7 @@ class TestCmdDownloadBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2767,7 +2773,7 @@ class TestCmdDownloadBBox:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -2776,7 +2782,7 @@ class TestCmdDownloadBBox:
                     "--vertical-crs",
                     "pl=EVRF2007,cz=Bpv",
                     f"--bbox={bbox}",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                     *extra,
@@ -2801,7 +2807,7 @@ class TestCmdDownloadBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2833,7 +2839,7 @@ class TestCmdDownloadBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2845,7 +2851,7 @@ class TestCmdDownloadBBox:
                 "630000,480000,637000,487000",
                 "--scale",
                 "1:100000",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -2869,7 +2875,7 @@ class TestCmdDownloadBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2881,7 +2887,7 @@ class TestCmdDownloadBBox:
                 "19.93,50.05,19.95,50.07",
                 "--bbox-crs",
                 "EPSG:4326",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -2954,7 +2960,7 @@ class TestCmdDownloadBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -2968,7 +2974,7 @@ class TestCmdDownloadBBox:
                 "pl",
                 "--workers",
                 "1",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -3052,7 +3058,7 @@ class TestSheetListExitCode:
                     "1992",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -3062,7 +3068,7 @@ class TestSheetListExitCode:
                     "pl=EVRF2007,cz=Bpv",
                     "--bbox",
                     "630000,480000,637000,487000",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     *extra,
                 ]
@@ -3179,7 +3185,7 @@ class TestSheetListExitCode:
                     "1992",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -3189,7 +3195,7 @@ class TestSheetListExitCode:
                     "pl=EVRF2007,cz=Bpv",
                     "--geometry",
                     str(shp_file),
-                    "-o",
+                    "--root",
                     str(tmp_path),
                 ]
             )
@@ -3231,7 +3237,7 @@ class TestCmdLandcoverDownload:
         with pytest.raises(SystemExit) as exc:
             main(
                 ["soil", "download", "--teryt", "1465", "--property", "soc"]
-                + ["--depth", "0-5cm", "--stat", "mean", "-o", str(out)]
+                + ["--depth", "0-5cm", "--stat", "mean", "--root", str(out)]
             )
         assert exc.value.code == 2
         assert "nieznana opcja --teryt (maja ja: boundaries, cadastre" in (
@@ -3247,7 +3253,7 @@ class TestCmdLandcoverDownload:
                 "download",
                 "--product",
                 "bdot10k",
-                "-o",
+                "--root",
                 "unused",
                 "--teryt",
                 "1465",
@@ -3263,8 +3269,8 @@ class TestCmdLandcoverDownload:
     @pytest.mark.parametrize(
         ("flags", "missing", "choices"),
         [
-            (["-o", "out"], "--product", "bdot10k"),
-            (["--product", "bdot10k"], "--output", "katalog"),
+            (["--root", "out"], "--product", "bdot10k"),
+            (["--product", "bdot10k"], "--root", "katalog"),
         ],
     )
     def test_missing_manager_argument_fails_before_download(
@@ -3309,7 +3315,7 @@ class TestCmdSoil:
                 "hsg",
                 "--sheet",
                 "N-34-999-D",
-                "-o",
+                "--root",
                 str(out),
                 "--depth",
                 "0-5cm",
@@ -3331,7 +3337,7 @@ class TestCmdSoil:
                 "soil",
                 "hsg",
                 f"--bbox={bbox}",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "--depth",
                 "0-5cm",
@@ -3346,17 +3352,17 @@ class TestCmdSoil:
     def test_hsg_missing_output_fails_before_calculation(self, capsys):
         rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"])
         assert rc == 2
-        assert "Error: --output" in capsys.readouterr().err
+        assert "Error: --root" in capsys.readouterr().err
 
     def test_hsg_missing_depth_is_library_error(self, tmp_path, capsys):
         """The library text (same as ``calculate_hsg(depth=None)``), no network."""
-        rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "-o", str(tmp_path)])
+        rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "--root", str(tmp_path)])
         assert rc == 2
         assert capsys.readouterr().err.startswith("Error: --depth wymagane: 0-5cm")
 
     def test_soilgrids_hsg_no_selection(self, capsys):
         """soil hsg without --sheet or --bbox -> exit 2."""
-        result = main(["soil", "hsg", "--output", "unused", "--depth", "0-5cm"])
+        result = main(["soil", "hsg", "--root", "unused", "--depth", "0-5cm"])
         assert result == 2
         captured = capsys.readouterr()
         assert "Error: Podaj dokladnie jeden wybor" in captured.err
@@ -3364,7 +3370,7 @@ class TestCmdSoil:
 
 def test_landcover_download_no_selection(capsys):
     """No selection method -> exit 2."""
-    result = main(["landcover", "download", "--product", "bdot10k", "-o", "unused"])
+    result = main(["landcover", "download", "--product", "bdot10k", "--root", "unused"])
     assert result == 2
     captured = capsys.readouterr()
     assert "Error: Podaj dokladnie jeden wybor" in captured.err
@@ -3405,7 +3411,7 @@ class TestCmdDownloadGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -3415,7 +3421,7 @@ class TestCmdDownloadGeometry:
                 "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp_file),
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -3450,7 +3456,7 @@ class TestCmdDownloadGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -3462,7 +3468,7 @@ class TestCmdDownloadGeometry:
                 str(gpkg_file),
                 "--layer",
                 "my_layer",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -3497,7 +3503,7 @@ class TestCmdDownloadGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -3507,7 +3513,7 @@ class TestCmdDownloadGeometry:
                 "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(gpkg_file),
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -3559,7 +3565,7 @@ class TestCmdDownloadGeometry:
                     "1992",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -3569,7 +3575,7 @@ class TestCmdDownloadGeometry:
                     "pl=EVRF2007,cz=Bpv",
                     "--geometry",
                     str(path),
-                    "-o",
+                    "--root",
                     str(tmp_path),
                 ]
             )
@@ -3587,7 +3593,7 @@ class TestCmdDownloadGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -3599,7 +3605,7 @@ class TestCmdDownloadGeometry:
                 str(gpkg_file),
                 "--layer",
                 "x",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -3620,7 +3626,7 @@ class TestCmdDownloadGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -3653,7 +3659,7 @@ class TestCmdDownloadGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -3683,7 +3689,7 @@ class TestCmdDownloadGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -3709,7 +3715,7 @@ class TestCmdDownloadGeometry:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -3753,7 +3759,7 @@ class TestCmdDownloadGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -3767,7 +3773,7 @@ class TestCmdDownloadGeometry:
                 "pl",
                 "--workers",
                 "1",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -3802,7 +3808,7 @@ class TestCmdLandcoverDownloadGeometry:
                 str(shp_file),
                 "--teryt",
                 "1465",
-                "-o",
+                "--root",
                 str(tmp_path / "out"),
             ]
         )
@@ -3822,7 +3828,7 @@ class TestCmdLandcoverDownloadGeometry:
                 "bdot10k",
                 "--geometry",
                 str(tmp_path / "nonexistent.shp"),
-                "-o",
+                "--root",
                 str(tmp_path / "out"),
             ]
         )
@@ -3855,7 +3861,7 @@ class TestCmdSoilgridsHsgGeometry:
                 str(shp_file),
                 "--sheet",
                 "N-34-130-D",
-                "-o",
+                "--root",
                 str(tmp_path / "out"),
             ]
         )
@@ -4098,7 +4104,7 @@ class TestDownloadBBoxSystem:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4112,7 +4118,7 @@ class TestDownloadBBoxSystem:
                 "2000",
                 "--scale",
                 "1:2000",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4143,7 +4149,7 @@ class TestDownloadBBoxSystem:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4153,7 +4159,7 @@ class TestDownloadBBoxSystem:
                 "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4194,7 +4200,7 @@ class TestDownloadGeometrySystem:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4208,7 +4214,7 @@ class TestDownloadGeometrySystem:
                 "2000",
                 "--scale",
                 "1:2000",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4245,7 +4251,7 @@ class TestDownloadGeometrySystem:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4255,7 +4261,7 @@ class TestDownloadGeometrySystem:
                 "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp_file),
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4353,7 +4359,7 @@ class TestCmdDownloadLaz:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4363,7 +4369,7 @@ class TestCmdDownloadLaz:
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4391,7 +4397,7 @@ class TestCmdDownloadLaz:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4401,7 +4407,7 @@ class TestCmdDownloadLaz:
                 "530000,382000,533000,386000",
                 "--product",
                 "laz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4447,7 +4453,7 @@ class TestCmdDownloadLaz:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4457,7 +4463,7 @@ class TestCmdDownloadLaz:
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4485,7 +4491,7 @@ class TestCmdDownloadLaz:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4499,7 +4505,7 @@ class TestCmdDownloadLaz:
                 "2023",
                 "--min-density",
                 "12",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4537,7 +4543,7 @@ class TestCmdDownloadLaz:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -4547,7 +4553,7 @@ class TestCmdDownloadLaz:
                     "M-34-27-B-b-2-1",
                     "--product",
                     "laz",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                 ]
@@ -4574,7 +4580,7 @@ class TestCmdDownloadLaz:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -4585,7 +4591,7 @@ class TestCmdDownloadLaz:
                     "--product",
                     "laz",
                     *year_args,
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                 ]
@@ -4624,7 +4630,7 @@ class TestCmdDownloadLaz:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4634,7 +4640,7 @@ class TestCmdDownloadLaz:
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4705,7 +4711,7 @@ class TestCmdDownloadLaz:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4717,7 +4723,7 @@ class TestCmdDownloadLaz:
                 "laz",
                 "--vertical-crs",
                 "KRON86",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4762,7 +4768,7 @@ class TestCmdDownloadLaz:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4772,7 +4778,7 @@ class TestCmdDownloadLaz:
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4792,7 +4798,7 @@ class TestCmdDownloadLaz:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4802,7 +4808,7 @@ class TestCmdDownloadLaz:
                 "NOT-A-GODLO!!",
                 "--product",
                 "laz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4816,7 +4822,7 @@ class TestCmdDownloadLaz:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -4826,7 +4832,7 @@ class TestCmdDownloadLaz:
                 str(tmp_path / "missing.shp"),
                 "--product",
                 "laz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -4846,7 +4852,7 @@ def _cz_args(tmp_path, **overrides):
         "geometry": None,
         "layer": None,
         "scale": None,
-        "output": str(tmp_path),
+        "root": str(tmp_path),
         "force": False,
         "quiet": True,
         "vertical_crs": "Bpv",
@@ -4875,7 +4881,7 @@ def _cmd_download_cz(args, bbox=None):
         "--country",
         args.country,
     ]
-    argv += ["-o", str(args.output), "--vertical-crs", args.vertical_crs]
+    argv += ["--root", str(args.root), "--vertical-crs", args.vertical_crs]
     if args.resolution:
         argv += ["--resolution", args.resolution]
     if bbox is not None:
@@ -5017,7 +5023,7 @@ class TestCzDownloadingAfterValidation:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -5029,7 +5035,7 @@ class TestCzDownloadingAfterValidation:
                     "ABCD12",
                     "--country",
                     "cz",
-                    "-o",
+                    "--root",
                     str(out),
                 ]
             )
@@ -5050,7 +5056,7 @@ class TestCzDownloadingAfterValidation:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -5062,7 +5068,7 @@ class TestCzDownloadingAfterValidation:
                     "301_5550",
                     "--country",
                     "cz",
-                    "-o",
+                    "--root",
                     str(tmp_path / "o"),
                 ]
             )
@@ -5242,7 +5248,7 @@ class TestCmdDownloadCz:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -5254,7 +5260,7 @@ class TestCmdDownloadCz:
                     "CTES96",
                     "--country",
                     country,
-                    "-o",
+                    "--root",
                     str(tmp_path / "out"),
                 ]
             )
@@ -5279,7 +5285,7 @@ class TestCmdDownloadCz:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -5291,7 +5297,7 @@ class TestCmdDownloadCz:
                     "CTES96",
                     "--resolution",
                     "2m",
-                    "-o",
+                    "--root",
                     str(tmp_path / "out"),
                 ]
             )
@@ -5313,7 +5319,7 @@ class TestCmdDownloadCz:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -5323,7 +5329,7 @@ class TestCmdDownloadCz:
                     "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "302_5550",
-                    "-o",
+                    "--root",
                     str(tmp_path / "out"),
                     "-q",
                 ]
@@ -5342,7 +5348,7 @@ class TestCmdDownloadCz:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -5355,7 +5361,7 @@ class TestCmdDownloadCz:
                     "EPSG:5514",
                     "--country",
                     "cz",
-                    "-o",
+                    "--root",
                     str(tmp_path / "out"),
                     "-q",
                     "--cutout",
@@ -5419,7 +5425,7 @@ class TestCmdDownloadCz:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -5431,7 +5437,7 @@ class TestCmdDownloadCz:
                     "472887.5,208337.5,473808.0,209409.8",
                     "--country",
                     "cz",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                     "--cutout",
@@ -5509,7 +5515,7 @@ class TestCmdDownloadCz:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -5521,7 +5527,7 @@ class TestCmdDownloadCz:
                     "302_5550",
                     "--country",
                     "cz",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                 ]
             )
@@ -5550,7 +5556,7 @@ class TestCmdDownloadCz:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -5566,7 +5572,7 @@ class TestCmdDownloadCz:
                     "--cutout",
                     "--horizontal-crs",
                     "EPSG:3045",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                 ]
             )
@@ -6003,7 +6009,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6013,7 +6019,7 @@ class TestCountryDispatch:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "302_5550",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6030,7 +6036,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6042,7 +6048,7 @@ class TestCountryDispatch:
                 "CTES96",
                 "--resolution",
                 "5m",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6060,7 +6066,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6072,7 +6078,7 @@ class TestCountryDispatch:
                 "302_5550",
                 "--country",
                 "cz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6090,7 +6096,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6100,7 +6106,7 @@ class TestCountryDispatch:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "302_5550",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6117,7 +6123,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6129,7 +6135,7 @@ class TestCountryDispatch:
                 "CTES96",
                 "--country",
                 "pl",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -6143,7 +6149,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6155,7 +6161,7 @@ class TestCountryDispatch:
                 "N-34-130-D-d-2-4",
                 "--country",
                 "cz",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -6180,7 +6186,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6190,7 +6196,7 @@ class TestCountryDispatch:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6213,7 +6219,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6225,7 +6231,7 @@ class TestCountryDispatch:
                 "N-34-130-D-d-2-4",
                 "--vertical-crs",
                 "KRON86",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6259,7 +6265,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6271,7 +6277,7 @@ class TestCountryDispatch:
                 "N-34-130-D-d-2-4",
                 "--resolution",
                 "2m",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -6285,7 +6291,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6297,7 +6303,7 @@ class TestCountryDispatch:
                 "N-34-130-D-d-2-4",
                 "--vertical-crs",
                 "Bpv",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -6311,7 +6317,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6324,7 +6330,7 @@ class TestCountryDispatch:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:2180",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -6344,7 +6350,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6354,7 +6360,7 @@ class TestCountryDispatch:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "301_5551",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6372,7 +6378,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6385,7 +6391,7 @@ class TestCountryDispatch:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:3045",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -6403,7 +6409,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6419,7 +6425,7 @@ class TestCountryDispatch:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:5514",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -6439,7 +6445,7 @@ class TestCountryDispatch:
                 "760_5518",
                 "--vertical-crs",
                 "EVRF2007",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -6462,7 +6468,7 @@ class TestCountryDispatch:
                 "cz",
                 "--vertical-crs",
                 "Bpv",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -6522,7 +6528,7 @@ class TestCountryDispatch:
             model,
             "--vertical-crs",
             vertical_crs,
-            "-o",
+            "--root",
             str(tmp_path),
         ]
         if resolution is not None:
@@ -6532,7 +6538,7 @@ class TestCountryDispatch:
             download_data(
                 product=product,
                 model=model,
-                output_dir=tmp_path,
+                root=tmp_path,
                 sheet=sheet,
                 resolution=resolution,
                 vertical_crs=vertical_crs,
@@ -6557,7 +6563,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6573,7 +6579,7 @@ class TestCountryDispatch:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:5514",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6599,7 +6605,7 @@ class TestCountryDispatch:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -6614,7 +6620,7 @@ class TestCountryDispatch:
                     "--cutout",
                     "--horizontal-crs",
                     "EPSG:5514",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                 ]
@@ -6641,7 +6647,7 @@ class TestCountryDispatch:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -6656,7 +6662,7 @@ class TestCountryDispatch:
                     "--cutout",
                     "--horizontal-crs",
                     "EPSG:5514",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                 ]
@@ -6691,7 +6697,7 @@ class TestCountryDispatch:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -6706,7 +6712,7 @@ class TestCountryDispatch:
                     "--cutout",
                     "--horizontal-crs",
                     "EPSG:5514",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                 ]
@@ -6727,7 +6733,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6742,7 +6748,7 @@ class TestCountryDispatch:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:3045",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6761,7 +6767,7 @@ class TestCountryDispatch:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6776,7 +6782,7 @@ class TestCountryDispatch:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:5514",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6801,7 +6807,7 @@ class TestCountryDispatch:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -6811,7 +6817,7 @@ class TestCountryDispatch:
                 "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -6851,7 +6857,7 @@ class TestCountryDispatch:
                     "1992",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -6863,7 +6869,7 @@ class TestCountryDispatch:
                     str(shp),
                     "--country",
                     "pl",
-                    "-o",
+                    "--root",
                     str(tmp_path / "out"),
                 ]
             )
@@ -6907,7 +6913,7 @@ class TestAutoSplitBBox:
         "1992",
         "--product",
         "nmt",
-        "-o",
+        "--root",
         "./data",
         "--country",
         "auto",
@@ -6929,7 +6935,7 @@ class TestAutoSplitBBox:
         "1992",
         "--product",
         "nmt",
-        "-o",
+        "--root",
         "./data",
         "--country",
         "auto",
@@ -6949,7 +6955,7 @@ class TestAutoSplitBBox:
         "download",
         "--product",
         "nmt",
-        "-o",
+        "--root",
         "./data",
         "--country",
         "auto",
@@ -6972,7 +6978,7 @@ class TestAutoSplitBBox:
         mock_pl.return_value = 0
         mock_cz.return_value = 0
 
-        result = main(self._BORDER + self._CUTOUT + ["-o", str(tmp_path)])
+        result = main(self._BORDER + self._CUTOUT + ["--root", str(tmp_path)])
 
         assert result == 0
         expected_parent = {
@@ -6995,7 +7001,7 @@ class TestAutoSplitBBox:
             patch("kartograf.download.data._download_cz") as mock_cz,
             patch("kartograf.download.data.DownloadManager") as mock_manager,
         ):
-            result = main(self._BORDER + ["-o", str(tmp_path)])
+            result = main(self._BORDER + ["--root", str(tmp_path)])
         assert result == 2
         err = capsys.readouterr().err
         assert err.startswith("Error: obszar siega CZ") and "--country pl" in err
@@ -7010,7 +7016,7 @@ class TestAutoSplitBBox:
         mock_pl.return_value = 0
         mock_cz.return_value = 0
 
-        main(self._BORDER + self._CUTOUT + ["-o", str(tmp_path)])
+        main(self._BORDER + self._CUTOUT + ["--root", str(tmp_path)])
 
         parent = mock_cz.call_args.kwargs["parent_request"]
         assert parent["countries"] == sorted(parent["countries"])
@@ -7022,7 +7028,7 @@ class TestAutoSplitBBox:
         mock_pl.return_value = 0
         mock_cz.return_value = 0
 
-        main(self._BORDER + self._CUTOUT + ["-o", str(tmp_path)])
+        main(self._BORDER + self._CUTOUT + ["--root", str(tmp_path)])
 
         # the mock holds a REFERENCE to the Namespace — had the PL branch (run
         # after CZ) mutated a shared object, the CZ values would be narrowed
@@ -7043,7 +7049,7 @@ class TestAutoSplitBBox:
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
         mock_manager_class.return_value = mock_manager
 
-        result = main(self._PL_ONLY + ["-o", str(tmp_path)])
+        result = main(self._PL_ONLY + ["--root", str(tmp_path)])
 
         assert result == 0
         mock_cz.assert_not_called()
@@ -7055,7 +7061,7 @@ class TestAutoSplitBBox:
     def test_cz_only_bbox_skips_pl_flow(self, mock_manager_class, mock_cz, tmp_path):
         """A bbox entirely in CZ (13.3-13.5E, west of 14.07E): CUZK only."""
         mock_cz.return_value = 0
-        result = main(self._CZ_ONLY + self._CUTOUT + ["-o", str(tmp_path)])
+        result = main(self._CZ_ONLY + self._CUTOUT + ["--root", str(tmp_path)])
 
         assert result == 0
         mock_manager_class.assert_not_called()
@@ -7064,7 +7070,9 @@ class TestAutoSplitBBox:
     def test_single_country_error_has_no_country_hint(self, tmp_path, capsys):
         """With a single country the --country hint would be empty."""
         result = main(
-            self._CZ_ONLY + self._CUTOUT + ["--resolution", "1m", "-o", str(tmp_path)]
+            self._CZ_ONLY
+            + self._CUTOUT
+            + ["--resolution", "1m", "--root", str(tmp_path)]
         )
         assert result == 2
         err = capsys.readouterr().err
@@ -7080,7 +7088,7 @@ class TestAutoSplitBBox:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -7093,7 +7101,7 @@ class TestAutoSplitBBox:
                 "EPSG:5514",
                 "--country",
                 "cz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
                 *self._CUTOUT,
@@ -7119,7 +7127,7 @@ class TestAutoSplitBBox:
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
         mock_manager_class.return_value = mock_manager
 
-        result = main(self._BORDER + ["--country", "pl", "-o", str(tmp_path)])
+        result = main(self._BORDER + ["--country", "pl", "--root", str(tmp_path)])
 
         assert result == 0
         mock_cz.assert_not_called()
@@ -7150,7 +7158,7 @@ class TestAutoSplitBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -7162,7 +7170,7 @@ class TestAutoSplitBBox:
                 "18.4,49.55,19.5,49.75",
                 "--bbox-crs",
                 "EPSG:4326",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
                 *self._CUTOUT,
@@ -7191,7 +7199,7 @@ class TestAutoSplitBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -7203,7 +7211,7 @@ class TestAutoSplitBBox:
                 bbox,
                 "--bbox-crs",
                 crs,
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
                 *extra,
@@ -7401,7 +7409,7 @@ class TestAutoSplitBBox:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -7414,7 +7422,7 @@ class TestAutoSplitBBox:
                     "EPSG:5514",
                     "--sheet-system",
                     "1992",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                     *self._CUTOUT,
@@ -7441,7 +7449,7 @@ class TestAutoSplitBBox:
         mock_pl.return_value = 0
         mock_cz.return_value = 1  # CZ goes first (sorting) and fails
 
-        result = main(self._BORDER + self._CUTOUT + ["-o", str(tmp_path)])
+        result = main(self._BORDER + self._CUTOUT + ["--root", str(tmp_path)])
 
         assert result == 0
         assert mock_cz.called
@@ -7461,7 +7469,7 @@ class TestAutoSplitBBox:
         )
         mock_cz.return_value = 0
 
-        result = main(self._BORDER + self._CUTOUT + ["-o", str(tmp_path)])
+        result = main(self._BORDER + self._CUTOUT + ["--root", str(tmp_path)])
 
         assert result == 0
         assert mock_cz.called
@@ -7478,7 +7486,7 @@ class TestAutoSplitBBox:
         "download",
         "--product",
         "nmt",
-        "-o",
+        "--root",
         "./data",
         "--country",
         "auto",
@@ -7509,7 +7517,7 @@ class TestAutoSplitBBox:
         )
         mock_cz.return_value = 0
 
-        result = main(self._PRAGUE + ["-o", str(tmp_path)])
+        result = main(self._PRAGUE + ["--root", str(tmp_path)])
 
         assert result == 0
         err = capsys.readouterr().err
@@ -7526,7 +7534,7 @@ class TestAutoSplitBBox:
         mock_pl.return_value = 1
         mock_cz.return_value = 1
 
-        result = main(self._PRAGUE + ["-o", str(tmp_path)])
+        result = main(self._PRAGUE + ["--root", str(tmp_path)])
 
         assert result == 11
         assert "Warning:" not in capsys.readouterr().err
@@ -7539,7 +7547,7 @@ class TestAutoSplitBBox:
         """Explicit --country: the user knows the extent, so a failure is a failure."""
         mock_pl.return_value = 1
 
-        result = main(self._PRAGUE + ["--country", "pl", "-o", str(tmp_path)])
+        result = main(self._PRAGUE + ["--country", "pl", "--root", str(tmp_path)])
 
         assert result == 11
         mock_pl.assert_called_once()
@@ -7559,7 +7567,7 @@ class TestAutoSplitBBox:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -7569,7 +7577,7 @@ class TestAutoSplitBBox:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -7601,7 +7609,7 @@ class TestAutoSplitBBox:
 
         result = main(
             self._BORDER
-            + ["--product", product, "--resolution", label, "-o", str(tmp_path)]
+            + ["--product", product, "--resolution", label, "--root", str(tmp_path)]
         )
 
         assert result == 0
@@ -7623,7 +7631,9 @@ class TestAutoSplitBBox:
         """KRON86 is unreachable for CZ (ADR-023 e): country = PL."""
         self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
 
-        result = main(self._BORDER + ["--vertical-crs", "KRON86", "-o", str(tmp_path)])
+        result = main(
+            self._BORDER + ["--vertical-crs", "KRON86", "--root", str(tmp_path)]
+        )
 
         assert result == 0
         mock_cz.assert_not_called()
@@ -7634,7 +7644,9 @@ class TestAutoSplitBBox:
     def test_border_bbox_with_bpv_unresolvable_for_pl(self, tmp_path, capsys):
         """A plain value inadmissible for one country: the per-country hint."""
         result = main(
-            self._BORDER + self._CUTOUT + ["--vertical-crs", "Bpv", "-o", str(tmp_path)]
+            self._BORDER
+            + self._CUTOUT
+            + ["--vertical-crs", "Bpv", "--root", str(tmp_path)]
         )
         assert result == 2
         err = capsys.readouterr().err
@@ -7661,7 +7673,7 @@ class TestAutoSplitBBox:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -7677,7 +7689,7 @@ class TestAutoSplitBBox:
                 "1992",
                 "--resolution",
                 "1m",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -7693,7 +7705,7 @@ class TestAutoSplitBBox:
         result = main(
             self._BORDER
             + self._CUTOUT
-            + ["--country", "cz", "--sheet-system", "2000", "-o", str(tmp_path)]
+            + ["--country", "cz", "--sheet-system", "2000", "--root", str(tmp_path)]
         )
         assert result == 2
         assert "--sheet-system dotyczy tylko PL" in capsys.readouterr().err
@@ -7714,7 +7726,7 @@ class TestAutoSplitBBox:
                     "EPSG:2180",
                     "--vertical-crs",
                     "EVRF2007",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                 ]
             )
@@ -7734,7 +7746,7 @@ class TestAutoSplitBBox:
             result = main(
                 self._BORDER
                 + self._CUTOUT
-                + ["--resolution", "5m", "-o", str(tmp_path)]
+                + ["--resolution", "5m", "--root", str(tmp_path)]
             )
         assert result == 2
         assert "wycinki PL (--cutout) sa tylko 1 m" in capsys.readouterr().err
@@ -7749,7 +7761,7 @@ class TestAutoSplitBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -7761,7 +7773,7 @@ class TestAutoSplitBBox:
                 "2.0,40.0,2.5,40.5",
                 "--bbox-crs",
                 "EPSG:4326",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -7784,7 +7796,7 @@ class TestAutoSplitBBox:
                 "EPSG:4326",
                 "--vertical-crs",
                 "EVRF2007",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -7812,7 +7824,7 @@ class TestAutoSplitBBox:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -7822,7 +7834,7 @@ class TestAutoSplitBBox:
                     "M-34-86-D-d-4-3",
                     "--product",
                     "laz",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                 ]
             )
@@ -7848,7 +7860,7 @@ class TestAutoSplitBBox:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -7860,7 +7872,7 @@ class TestAutoSplitBBox:
                 "419000,230000,426000,237000",
                 "--country",
                 "cz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
                 *self._CUTOUT,
@@ -7890,7 +7902,7 @@ class TestAutoSplitBBox:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -7902,7 +7914,7 @@ class TestAutoSplitBBox:
                 "18.60,49.752,18.65,49.768",
                 "--bbox-crs",
                 "EPSG:4326",
-                "-o",
+                "--root",
                 str(tmp_path / "out"),
                 "-q",
                 *self._CUTOUT,
@@ -7947,7 +7959,7 @@ class TestAutoSplitGeometry:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -7960,7 +7972,7 @@ class TestAutoSplitGeometry:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:5514",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -8005,7 +8017,7 @@ class TestAutoSplitGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8015,7 +8027,7 @@ class TestAutoSplitGeometry:
                 "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(geometry_file),
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -8058,7 +8070,7 @@ class TestAutoSplitGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8068,7 +8080,7 @@ class TestAutoSplitGeometry:
                 "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(geometry_file),
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -8101,7 +8113,7 @@ class TestAutoSplitGeometry:
                     "EPSG:5514",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -8111,7 +8123,7 @@ class TestAutoSplitGeometry:
                     "pl=EVRF2007,cz=Bpv",
                     "--geometry",
                     str(geometry_file),
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                 ]
@@ -8136,7 +8148,7 @@ class TestAutoSplitGeometry:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8151,7 +8163,7 @@ class TestAutoSplitGeometry:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:5514",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -8180,7 +8192,7 @@ class TestAutoSplitGeometry:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8195,7 +8207,7 @@ class TestAutoSplitGeometry:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:5514",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -8229,7 +8241,7 @@ class TestAutoSplitGeometry:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8244,7 +8256,7 @@ class TestAutoSplitGeometry:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:5514",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -8271,7 +8283,7 @@ class TestAutoSplitGeometry:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8281,7 +8293,7 @@ class TestAutoSplitGeometry:
                 "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(geometry_file),
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -8353,7 +8365,7 @@ class TestPartialSheetWarning:
                 return_value=list(TestSheetListExitCode._SHEETS),
             ),
         ):
-            return main([*argv, "-o", str(tmp_path)])
+            return main([*argv, "--root", str(tmp_path)])
 
     def test_single_sheet_partial_sheet_warns(self, tmp_path, capsys):
         rc = self._run(
@@ -8364,7 +8376,7 @@ class TestPartialSheetWarning:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8397,7 +8409,7 @@ class TestPartialSheetWarning:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8422,7 +8434,7 @@ class TestPartialSheetWarning:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8454,7 +8466,7 @@ class TestPartialSheetWarning:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8490,7 +8502,7 @@ class TestSingleSheetSkipMessage:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -8500,7 +8512,7 @@ class TestSingleSheetSkipMessage:
                     "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "N-34-130-D-d-2-4",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     *extra,
                 ]
@@ -8587,7 +8599,7 @@ class TestUnreadableMetadataCache:
                 return_value=list(sheets),
             ),
         ):
-            rc = main([*argv, "-o", str(out)])
+            rc = main([*argv, "--root", str(out)])
         files = sorted(
             p.name
             for p in out.rglob("*.asc")
@@ -8612,7 +8624,7 @@ class TestUnreadableMetadataCache:
             "1992",
             "--product",
             "nmt",
-            "-o",
+            "--root",
             "./data",
             "--country",
             "auto",
@@ -8651,7 +8663,7 @@ class TestUnreadableMetadataCache:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8684,7 +8696,7 @@ class TestUnreadableMetadataCache:
             "download",
             "--product",
             "nmt",
-            "-o",
+            "--root",
             "./data",
             "--country",
             "auto",
@@ -8734,7 +8746,7 @@ class TestLazSidecarRequestFilters:
                     "EVRF2007",
                 ]
                 + list(extra)
-                + ["-o", str(tmp_path), "-q"]
+                + ["--root", str(tmp_path), "-q"]
             )
         (sidecar,) = (
             p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
@@ -8812,7 +8824,7 @@ class TestSheetCrsMismatchWarning:
                 return_value=[self.SHEET],
             ),
         ):
-            return main([*argv, "-o", str(tmp_path / "out"), "-q"])
+            return main([*argv, "--root", str(tmp_path / "out"), "-q"])
 
     @staticmethod
     def _warnings(err):
@@ -8830,7 +8842,7 @@ class TestSheetCrsMismatchWarning:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8856,7 +8868,7 @@ class TestSheetCrsMismatchWarning:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -8880,7 +8892,7 @@ class TestSheetCrsMismatchWarning:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -8906,7 +8918,7 @@ class TestSheetCrsMismatchWarning:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -8947,7 +8959,7 @@ class TestSheetCrsMismatchWarning:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9040,7 +9052,7 @@ class TestCampaignOptions:
         self, mock_manager_class, mock_find, tmp_path
     ):
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
-        opts = ["--all-campaigns", "--min-year", "2024", "-o", str(tmp_path), "-q"]
+        opts = ["--all-campaigns", "--min-year", "2024", "--root", str(tmp_path), "-q"]
 
         assert (
             main(
@@ -9049,7 +9061,7 @@ class TestCampaignOptions:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -9078,7 +9090,7 @@ class TestCampaignOptions:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -9106,7 +9118,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9118,7 +9130,7 @@ class TestCampaignOptions:
                 "N-34-130-D-d-2-4",
                 "--min-year",
                 "1800",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9139,7 +9151,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9155,7 +9167,7 @@ class TestCampaignOptions:
                 "2024",
                 bound,
                 "2020",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -9183,7 +9195,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9194,7 +9206,7 @@ class TestCampaignOptions:
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 *flags,
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9228,7 +9240,7 @@ class TestCampaignOptions:
             ]
         rc = main(
             [*group, *location, "--product", product, "--year", "2025"]
-            + ["-o", str(tmp_path), "-q"]
+            + ["--root", str(tmp_path), "-q"]
         )
         assert rc == 0
         kwargs = mock_manager_class.call_args.kwargs
@@ -9259,7 +9271,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9270,7 +9282,7 @@ class TestCampaignOptions:
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 *flags,
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -9299,7 +9311,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9310,7 +9322,7 @@ class TestCampaignOptions:
                 *_PL_BBOX_2180,
                 "--max-year",
                 "2022",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -9347,7 +9359,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9358,7 +9370,7 @@ class TestCampaignOptions:
                 *_PL_BBOX_2180,
                 "--year",
                 "2024",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -9422,7 +9434,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9433,7 +9445,7 @@ class TestCampaignOptions:
                 *location,
                 "--year",
                 "2025",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -9480,7 +9492,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9490,7 +9502,7 @@ class TestCampaignOptions:
                 "N-34-130-D-d-2-4",
                 "--product",
                 "laz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -9512,7 +9524,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9525,7 +9537,7 @@ class TestCampaignOptions:
                 "--all-campaigns",
                 "--min-year",
                 "2020",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -9546,7 +9558,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9559,7 +9571,7 @@ class TestCampaignOptions:
                 "--horizontal-crs",
                 "EPSG:2180",
                 "--all-campaigns",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9585,7 +9597,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9599,7 +9611,7 @@ class TestCampaignOptions:
                 "EPSG:2180",
                 flag,
                 "2020",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -9624,7 +9636,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9637,7 +9649,7 @@ class TestCampaignOptions:
                 "--horizontal-crs",
                 "EPSG:2180",
                 "--all-campaigns",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9656,7 +9668,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9669,7 +9681,7 @@ class TestCampaignOptions:
                 "--country",
                 "cz",
                 "--all-campaigns",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9687,7 +9699,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9698,7 +9710,7 @@ class TestCampaignOptions:
                 "--sheet",
                 "302_5550",
                 "--all-campaigns",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9714,7 +9726,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9726,7 +9738,7 @@ class TestCampaignOptions:
                 "302_5550",
                 "--min-year",
                 "2020",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9742,7 +9754,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9753,7 +9765,7 @@ class TestCampaignOptions:
                 "--sheet",
                 "CTES96",
                 "--all-campaigns",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9770,7 +9782,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9782,7 +9794,7 @@ class TestCampaignOptions:
                 sheet,
                 "--year",
                 "2023",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -9800,7 +9812,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9815,7 +9827,7 @@ class TestCampaignOptions:
                 "--country",
                 "cz",
                 "--all-campaigns",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9840,7 +9852,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9854,7 +9866,7 @@ class TestCampaignOptions:
                 "cz",
                 "--min-year",
                 "2020",
-                "-o",
+                "--root",
                 str(tmp_path / "out"),
             ]
         )
@@ -9873,7 +9885,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9883,7 +9895,7 @@ class TestCampaignOptions:
                 "pl=EVRF2007,cz=Bpv",
                 *_CZ_ONLY_BBOX,
                 "--all-campaigns",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9904,7 +9916,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -9915,7 +9927,7 @@ class TestCampaignOptions:
                 *_CZ_ONLY_BBOX,
                 "--min-year",
                 "2020",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -9952,7 +9964,7 @@ class TestCampaignOptions:
                 "pl=EVRF2007,cz=Bpv",
                 *_BORDER_BBOX,
                 *campaign,
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -9981,7 +9993,7 @@ class TestCampaignOptions:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10088,7 +10100,7 @@ class TestCampaignOptions:
                 "pl=EVRF2007,cz=Bpv",
                 *_PL_BBOX_2180,
                 "--all-campaigns",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10119,7 +10131,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10132,7 +10144,7 @@ class TestCampaignOptions:
                 "--horizontal-crs",
                 "EPSG:2180",
                 "--all-campaigns",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10152,7 +10164,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10166,7 +10178,7 @@ class TestCampaignOptions:
                 "--horizontal-crs",
                 "EPSG:2180",
                 "--all-campaigns",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10185,7 +10197,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10197,7 +10209,7 @@ class TestCampaignOptions:
                 "N-34-130-D-d-2-4",
                 "--min-year",
                 "1800",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10222,7 +10234,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10237,7 +10249,7 @@ class TestCampaignOptions:
                 "--all-campaigns",
                 "--min-year",
                 "2021",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -10271,7 +10283,7 @@ class TestCampaignOptions:
                 "1992",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10286,7 +10298,7 @@ class TestCampaignOptions:
                 "--all-campaigns",
                 "--min-year",
                 "2022",
-                "-o",
+                "--root",
                 str(tmp_path / "out"),
                 "-q",
             ]
@@ -10316,7 +10328,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10328,7 +10340,7 @@ class TestCampaignOptions:
                 "N-34-130-D-d-2-4",
                 "--min-year",
                 "2024",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10353,7 +10365,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10363,7 +10375,7 @@ class TestCampaignOptions:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10380,7 +10392,7 @@ class TestCampaignOptions:
             _command_id="elevation download",
             sheet="N-34-130-D-d-2-4",
             bbox=None,
-            output=str(tmp_path),
+            root=str(tmp_path),
             force=False,
             quiet=True,
             scale=None,
@@ -10442,7 +10454,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10452,7 +10464,7 @@ class TestCampaignOptions:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -10486,7 +10498,7 @@ class TestCampaignOptions:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -10496,7 +10508,7 @@ class TestCampaignOptions:
                     "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "N-34-130-D-d-2-4",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                 ]
@@ -10547,7 +10559,7 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10556,7 +10568,7 @@ class TestCampaignOptions:
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 *_PL_BBOX_2180,
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -10584,7 +10596,7 @@ class TestCampaignOptions:
             "download",
             "--product",
             "nmt",
-            "-o",
+            "--root",
             "./data",
             "--country",
             "auto",
@@ -10594,7 +10606,7 @@ class TestCampaignOptions:
             "pl=EVRF2007,cz=Bpv",
             "--sheet",
             sheet,
-            "-o",
+            "--root",
             str(out),
             "-q",
         ]
@@ -10649,7 +10661,7 @@ class TestListMessagesUx:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10659,7 +10671,7 @@ class TestListMessagesUx:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10684,7 +10696,7 @@ class TestListMessagesUx:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10694,7 +10706,7 @@ class TestListMessagesUx:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10769,7 +10781,7 @@ class TestListMessagesUx:
         )
         mock_manager_class.return_value = self._list_manager(result)
 
-        rc = main([*self._BBOX_ARGS, "-o", str(tmp_path)])
+        rc = main([*self._BBOX_ARGS, "--root", str(tmp_path)])
 
         assert rc == 11
         captured = capsys.readouterr()
@@ -10790,7 +10802,7 @@ class TestListMessagesUx:
         )
         with patch("kartograf.download.data.DownloadManager") as cls:
             cls.return_value = TestListMessagesUx._list_manager(result)
-            main([*TestListMessagesUx._BBOX_ARGS, "-o", str(tmp_path)])
+            main([*TestListMessagesUx._BBOX_ARGS, "--root", str(tmp_path)])
         err = capsys.readouterr().err
         return [x for x in err.splitlines() if x.startswith("Info:")]
 
@@ -10832,7 +10844,7 @@ class TestListMessagesUx:
         result = DownloadResult(failed=["A"], no_coverage=["A"])
         mock_manager_class.return_value = self._list_manager(result)
 
-        rc = main([*self._BBOX_ARGS, "-o", str(tmp_path)])
+        rc = main([*self._BBOX_ARGS, "--root", str(tmp_path)])
 
         assert rc == 11
         assert "Info:" not in capsys.readouterr().err
@@ -10852,7 +10864,7 @@ class TestListMessagesUx:
         mock_manager_class.return_value = self._list_manager(result)
 
         flags = ["--all-campaigns"] if all_campaigns else []
-        rc = main([*self._BBOX_ARGS, *flags, "-q", "-o", str(tmp_path)])
+        rc = main([*self._BBOX_ARGS, *flags, "-q", "--root", str(tmp_path)])
 
         assert rc == 11
         captured = capsys.readouterr()
@@ -10869,7 +10881,7 @@ class TestListMessagesUx:
         mock_manager_class.return_value = self._list_manager(result)
 
         flags = ["--all-campaigns"] if all_campaigns else []
-        rc = main([*self._BBOX_ARGS, *flags, "-o", str(tmp_path)])
+        rc = main([*self._BBOX_ARGS, *flags, "--root", str(tmp_path)])
 
         assert rc == 11
         assert "Downloaded" not in capsys.readouterr().out
@@ -10892,7 +10904,7 @@ class TestListMessagesUx:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10902,7 +10914,7 @@ class TestListMessagesUx:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10930,7 +10942,7 @@ class TestErrorWithoutBlankLine:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -10940,7 +10952,7 @@ class TestErrorWithoutBlankLine:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "7.125.11.19",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -10967,7 +10979,7 @@ class TestErrorWithoutBlankLine:
 class TestSoilgridsHsgNoEarlyMkdir:
     """soil hsg does not leave an empty output directory after a validation error."""
 
-    def test_missing_geometry_leaves_no_output_dir(self, capsys, tmp_path, monkeypatch):
+    def test_missing_geometry_leaves_no_root(self, capsys, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         result = main(
             [
@@ -10977,7 +10989,7 @@ class TestSoilgridsHsgNoEarlyMkdir:
                 "nieistniejacy.shp",
                 "--depth",
                 "0-5cm",
-                "-o",
+                "--root",
                 str(tmp_path / "out"),
             ]
         )
@@ -11036,7 +11048,7 @@ class TestLazOnlyOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -11049,7 +11061,7 @@ class TestLazOnlyOptions:
                 product,
                 "--min-density",
                 "12",
-                "-o",
+                "--root",
                 str(out),
             ]
         )
@@ -11085,7 +11097,7 @@ class TestLazOnlyOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -11098,7 +11110,7 @@ class TestLazOnlyOptions:
                 *flags,
                 "--min-density",
                 "12",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -11132,7 +11144,7 @@ class TestFullSheetOption:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -11172,7 +11184,7 @@ class TestFullSheetOption:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -11183,7 +11195,7 @@ class TestFullSheetOption:
                 "--product",
                 "laz",
                 "--full-sheet",
-                "-o",
+                "--root",
                 str(out),
             ]
         )
@@ -11206,7 +11218,7 @@ class TestFullSheetOption:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -11219,7 +11231,7 @@ class TestFullSheetOption:
                 "--horizontal-crs",
                 "EPSG:2180",
                 "--full-sheet",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -11237,7 +11249,7 @@ class TestFullSheetOption:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -11248,7 +11260,7 @@ class TestFullSheetOption:
                 "--sheet",
                 "302_5550",
                 "--full-sheet",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -11264,7 +11276,7 @@ class TestFullSheetOption:
 
         fake = c14_fake()
         out = str(tmp_path / "out")
-        assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out) == 0
+        assert self._run(fake, "--sheet", self.G, "--full-sheet", "--root", out) == 0
         captured = capsys.readouterr()
         assert fake.downloads == [REC["84183"].url, REC["83233"].url]
         assert captured.out.count(f"/{self.G}.asc: nowa wersja ") == 2
@@ -11272,7 +11284,7 @@ class TestFullSheetOption:
         assert self.G in first and "full_sheet/" in first
         assert "uzyj --full-sheet" not in first
 
-        assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out) == 0
+        assert self._run(fake, "--sheet", self.G, "--full-sheet", "--root", out) == 0
         captured = capsys.readouterr()
         assert len(fake.downloads) == 2
         assert captured.out.count(f"/{self.G}.asc: lokalna wersja ") == 2
@@ -11284,7 +11296,8 @@ class TestFullSheetOption:
 
         fake = c14_fake()
         assert (
-            self._run(fake, "--sheet", self.G, "-o", str(tmp_path / "out"), "-q") == 0
+            self._run(fake, "--sheet", self.G, "--root", str(tmp_path / "out"), "-q")
+            == 0
         )
         line = self._partial_warning(capsys.readouterr().err)
         assert self.G in line and "--full-sheet" in line
@@ -11302,7 +11315,9 @@ class TestFullSheetOption:
         records = [dataclasses.replace(r, full_sheet=False) for r in C14_ALL]
         fake = FakeCampaignProvider({"newest": records[:1], "all": records})
         out = str(tmp_path / "out")
-        assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out, "-q") == 0
+        assert (
+            self._run(fake, "--sheet", self.G, "--full-sheet", "--root", out, "-q") == 0
+        )
         line = self._partial_warning(capsys.readouterr().err)
         assert "brak pelnego lotu w skorowidzu" in line and self.G in line
         assert "uzyj --full-sheet" not in line
@@ -11314,7 +11329,8 @@ class TestFullSheetOption:
         fake = c14_fake()
         out = str(tmp_path / "out")
         assert (
-            self._run(fake, "--sheet", self.G, "--all-campaigns", "-o", out, "-q") == 0
+            self._run(fake, "--sheet", self.G, "--all-campaigns", "--root", out, "-q")
+            == 0
         )
         capsys.readouterr()
         argv = [
@@ -11323,7 +11339,7 @@ class TestFullSheetOption:
             "--all-campaigns",
             "--max-year",
             "2024",
-            "-o",
+            "--root",
             out,
             "-q",
         ]
@@ -11353,7 +11369,7 @@ class TestFullSheetOption:
                 )
         fake = FakeCampaignProvider({"all": records})
         out = str(tmp_path / "out")
-        argv = ["--sheet", "N-34-139-C-a-3", "--all-campaigns", "-o", out, "-q"]
+        argv = ["--sheet", "N-34-139-C-a-3", "--all-campaigns", "--root", out, "-q"]
         assert self._run(fake, *argv) == 0
         line = self._partial_warning(capsys.readouterr().err)
         linked, absent = line.split("pelny lot w <segment>/full_sheet/: ")[1].split(
@@ -11382,7 +11398,7 @@ class TestFullSheetOption:
             "--full-sheet",
             "--max-year",
             "2024",
-            "-o",
+            "--root",
             out,
             "-q",
         ]

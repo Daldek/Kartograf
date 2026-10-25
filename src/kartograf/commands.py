@@ -20,12 +20,12 @@ Examples
 --------
 >>> from kartograf import format_command, parse_command
 >>> call = parse_command("elevation download --product nmt --sheet N-34-130-D-d-2-4"
-...                      " --resolution 1m --vertical-crs EVRF2007 -o ./data")
->>> call.options["product"], call.run["output_dir"]
+...                      " --resolution 1m --vertical-crs EVRF2007 --root ./data")
+>>> call.options["product"], call.run["root"]
 ('nmt', './data')
 >>> format_command(call.command, call.options, run=call.run)
 'kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 \
---resolution 1m --vertical-crs EVRF2007 -o ./data'
+--resolution 1m --vertical-crs EVRF2007 --root ./data'
 """
 
 import argparse
@@ -75,7 +75,7 @@ class CommandCall:
         The task options that the line gave, in the JSON form, in the order of the
         parameters of the command; ``bbox`` always comes with ``bbox_crs``.
     run : dict
-        The other flags the line gave, by parameter name (``output_dir``,
+        The other flags the line gave, by parameter name (``root``,
         ``upgrade``, ``force``, ``check_updates``, ``plan``, ``workers``,
         ``quiet``, ``json``, ``summary``): a text, a number or ``True``.
     """
@@ -194,7 +194,7 @@ def validate_command(
     command: str,
     options: Mapping[str, object],
     *,
-    output_dir: str | Path | None = None,
+    root: str | Path | None = None,
 ) -> None:
     """Run the checks of the library function of a data command.
 
@@ -207,7 +207,7 @@ def validate_command(
         A data command (``elevation download``).
     options : Mapping
         The task options in the JSON form.
-    output_dir : str or Path, optional
+    root : str or Path, optional
         The store; without it the current directory stands in (the checks do not
         open the store). A geometry file is read, as the function reads it.
 
@@ -218,7 +218,7 @@ def validate_command(
         command (``option`` names the option; ``allowed`` its values).
     """
     entry = task_command(command)
-    store = Path(".") if output_dir is None else Path(output_dir)
+    store = Path(".") if root is None else Path(root)
     entry.validate(store, convert_arguments(entry.options, options))
 
 
@@ -248,7 +248,7 @@ def format_command(
 
     The flags follow the order of the parameters of the command; ``--bbox-crs`` is
     left out when it is the default of the flag; ``run`` adds the other flags
-    (``output_dir`` as ``-o``): ``output_dir`` and ``plan`` are paths, ``workers``
+    (``root`` as ``-o``): ``root`` and ``plan`` are paths, ``workers``
     a whole number, ``upgrade``, ``force``, ``check_updates``, ``quiet``, ``json``
     and ``summary`` are ``True`` (or left out). ``parse_command`` reads the line
     back into the same command, options and run.
@@ -281,19 +281,17 @@ def format_command(
     return format_command_line(declaration, options, given_run)
 
 
-def _store(output_dir: str | Path) -> Path:
-    if output_dir is None or not str(output_dir):
-        raise ValidationError(
-            message("commands.output_dir_required"), option="output_dir"
-        )
-    return Path(output_dir)
+def _store(root: str | Path) -> Path:
+    if root is None or not str(root):
+        raise ValidationError(message("commands.root_required"), option="root")
+    return Path(root)
 
 
 def run_command(
     command: str,
     options: Mapping[str, object],
     *,
-    output_dir: str | Path,
+    root: str | Path,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     workers: int | None = None,
@@ -317,7 +315,7 @@ def run_command(
         A data command (``elevation download``).
     options : Mapping
         The task options in the JSON form.
-    output_dir : str or Path
+    root : str or Path
         The store.
     update : {"upgrade", "force"}, optional
         The update mode of the function (``None``: local versions are kept).
@@ -346,7 +344,7 @@ def run_command(
             message("commands.summary_only_for_hsg", summary_command=_SUMMARY_COMMAND),
             option="summary",
         )
-    store = _store(output_dir)
+    store = _store(root)
     entry.validate(store, arguments)
     report = entry.download(
         store,
@@ -366,7 +364,7 @@ def check_command(
     command: str,
     options: Mapping[str, object],
     *,
-    output_dir: str | Path,
+    root: str | Path,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> CommandResult[UpdatePlan]:
@@ -389,7 +387,7 @@ def check_command(
     """
     entry = task_command(command)
     arguments = convert_arguments(entry.options, options)
-    store = _store(output_dir)
+    store = _store(root)
     entry.validate(store, arguments)
     plan = entry.check(store, arguments, cache=cache, on_notice=on_notice)
     return wrap(command, plan, check=True)

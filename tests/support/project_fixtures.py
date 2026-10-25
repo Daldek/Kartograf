@@ -128,7 +128,7 @@ def new_project(root: Path, name: str = "projekt", store: str = "data") -> Path:
     """A project ``root/name`` with the store ``<store>`` relative to it (the
     manifest copied elsewhere points at the store next to the copy)."""
     directory = root / name
-    init_project(directory, output_dir=os.path.relpath(directory / store))
+    init_project(directory, root=os.path.relpath(directory / store))
     return directory
 
 

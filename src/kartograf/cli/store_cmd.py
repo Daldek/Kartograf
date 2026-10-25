@@ -37,10 +37,10 @@ _OVERVIEW_HEADER = (
 
 
 def _output(args: argparse.Namespace) -> str:
-    """Return the store directory of ``--output``; the library has no default for it."""
-    if not args.output:
-        raise ValidationError(message("cli.output_required"), option="output_dir")
-    output: str = args.output
+    """Return the store directory of ``--root``; the library has no default for it."""
+    if not args.root:
+        raise ValidationError(message("cli.root_required"), option="root")
+    output: str = args.root
     return output
 
 
@@ -51,9 +51,7 @@ def format_overview(overview: StoreOverview) -> str:
     segment no source produces is marked), or the note that the store is empty.
     """
     if not overview.segments:
-        return message(
-            "cli.store_empty", lang=language(), output_dir=overview.output_dir
-        )
+        return message("cli.store_empty", lang=language(), root=overview.root)
     header = tuple(localized(cell) for cell in _OVERVIEW_HEADER)
     rows = [
         (
@@ -76,7 +74,7 @@ def format_overview(overview: StoreOverview) -> str:
         message(
             "cli.store_segments_header",
             lang=language(),
-            output_dir=overview.output_dir,
+            root=overview.root,
             rows_count=len(rows),
         ),
         "",
@@ -127,7 +125,7 @@ def format_sidecar(document: StoreSidecar) -> str:
 
 
 def cmd_store_overview(args: argparse.Namespace) -> int:
-    """Print the segments of the store of ``--output`` (``--json``: the document)."""
+    """Print the segments of the store of ``--root`` (``--json``: the document)."""
     overview = describe_store(_output(args))
     if wants_json(args):
         return emit_result(command_id(args), overview)

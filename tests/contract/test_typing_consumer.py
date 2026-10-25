@@ -215,7 +215,7 @@ _CLEAN_CONSUMER = textwrap.dedent(
         call: CommandCall = kartograf.parse_command("nmt --sheet N-34-130-D-d-2-4")
         line: str = kartograf.format_command(call.command, call.options, run=call.run)
         result: DataReport = kartograf.download_data(
-            product="nmt", output_dir=root, sheet="N-34-130-D-d-2-4"
+            product="nmt", root=root, sheet="N-34-130-D-d-2-4"
         )
         print(ok, notices, listing, schema, line, result)
     '''

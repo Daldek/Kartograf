@@ -20,7 +20,7 @@ def test_project_nmt_100m_voivodeship_and_contours(tmp_path, monkeypatch):
     """``elevation download`` tasks: NMT 100 m of an area (the voivodeship
     file) and the contours of an SM5 sheet (``format``); both verified."""
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     add_project_task(
         project,
         name="nmt-100m",

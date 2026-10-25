@@ -102,7 +102,7 @@ class SourceInfo:
     product : str
         The value of ``product`` that selects the source.
     directory : str
-        The segment of its files below ``output_dir``; ``<uklad>`` and
+        The segment of its files below ``root``; ``<uklad>`` and
         ``<uklad-wys>`` stand for the horizontal and the vertical system that
         follow from the choice, a variant choice (scale, format, release)
         appends ``_<value>`` parts.

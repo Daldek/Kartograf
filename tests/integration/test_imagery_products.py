@@ -149,22 +149,18 @@ def test_intensity_campaigns_like_orto(tmp_path, images):
     in ``versions/``; a PL-2000 record of the same layer lands in its own
     segment."""
     out = tmp_path / "data"
-    newest = download_data(
-        product="intensity", sheet=INTENSITY_SHEET, output_dir=out, **ARGS
-    )
+    newest = download_data(product="intensity", sheet=INTENSITY_SHEET, root=out, **ARGS)
     older = download_data(
-        product="intensity", sheet=INTENSITY_SHEET, year=2023, output_dir=out, **ARGS
+        product="intensity", sheet=INTENSITY_SHEET, year=2023, root=out, **ARGS
     )
     both = download_data(
         product="intensity",
         sheet=INTENSITY_SHEET,
         all_campaigns=True,
-        output_dir=tmp_path / "all",
+        root=tmp_path / "all",
         **ARGS,
     )
-    zone7 = download_data(
-        product="intensity", sheet="7.125.11.17", output_dir=out, **ARGS
-    )
+    zone7 = download_data(product="intensity", sheet="7.125.11.17", root=out, **ARGS)
 
     assert newest.ok and older.ok and both.ok and zone7.ok
     (first,) = newest.files
@@ -210,7 +206,7 @@ def test_true_orto_sheets_and_size_notice(tmp_path, images):
         product="true-orto",
         bbox=area,
         country="pl",
-        output_dir=tmp_path / "data",
+        root=tmp_path / "data",
         on_notice=on_notice,
         **ARGS,
     )
@@ -225,7 +221,7 @@ def test_true_orto_sheets_and_size_notice(tmp_path, images):
     assert "296853152 B" in size and "true-orto PL" in size
 
     krakow = download_data(
-        product="true-orto", sheet="M-34-64-D-d-1-4", output_dir=tmp_path / "k", **ARGS
+        product="true-orto", sheet="M-34-64-D-d-1-4", root=tmp_path / "k", **ARGS
     )
     assert not krakow.ok
     assert [f.kind for f in krakow.failed] == ["no_coverage"]
@@ -244,9 +240,7 @@ def test_true_orto_cutout_native_grid(tmp_path, images):
         "cutout": True,
         "horizontal_crs": "EPSG:2180",
     }
-    report = download_data(
-        **cutout, resolution="0.05m", output_dir=tmp_path / "data", **ARGS
-    )
+    report = download_data(**cutout, resolution="0.05m", root=tmp_path / "data", **ARGS)
 
     assert report.ok
     (unit,) = report.files
@@ -264,10 +258,10 @@ def test_true_orto_cutout_native_grid(tmp_path, images):
 
     with pytest.raises(ValidationError, match="omit --coverage"):
         validate_data_request(
-            **cutout, coverage="true", resolution="0.05m", output_dir=tmp_path
+            **cutout, coverage="true", resolution="0.05m", root=tmp_path
         )
     with pytest.raises(ValidationError, match="0.05m, 0.1m, 0.25m, 0.5m, 1m"):
-        validate_data_request(**cutout, resolution="0.2m", output_dir=tmp_path)
+        validate_data_request(**cutout, resolution="0.2m", root=tmp_path)
 
 
 def test_true_orto_cutout_outside_cities_is_no_coverage(tmp_path, images):
@@ -282,7 +276,7 @@ def test_true_orto_cutout_outside_cities_is_no_coverage(tmp_path, images):
             product="true-orto",
             bbox=krakow,
             horizontal_crs="EPSG:2180",
-            output_dir=out,
+            root=out,
             resolution="0.05m",
             cache=False,
         )
@@ -295,7 +289,7 @@ def test_true_orto_cutout_outside_cities_is_no_coverage(tmp_path, images):
         cutout=True,
         horizontal_crs="EPSG:2180",
         resolution="0.05m",
-        output_dir=out,
+        root=out,
         **ARGS,
     )
     assert report.files == ()
@@ -308,14 +302,12 @@ def test_oblique_directions_are_files(tmp_path, images):
     segment; ``direction`` chooses some; a wrong code or another product is
     an error before any request."""
     out = tmp_path / "data"
-    every = download_data(
-        product="oblique-orto", sheet=OBLIQUE_SHEET, output_dir=out, **ARGS
-    )
+    every = download_data(product="oblique-orto", sheet=OBLIQUE_SHEET, root=out, **ARGS)
     two = download_data(
         product="oblique-orto",
         sheet=OBLIQUE_SHEET,
         direction=["e", "n"],
-        output_dir=tmp_path / "two",
+        root=tmp_path / "two",
         **ARGS,
     )
 
@@ -333,11 +325,11 @@ def test_oblique_directions_are_files(tmp_path, images):
 
     with pytest.raises(ValidationError, match="--direction 'x'"):
         validate_data_request(
-            product="oblique-orto", sheet=OBLIQUE_SHEET, direction="x", output_dir=out
+            product="oblique-orto", sheet=OBLIQUE_SHEET, direction="x", root=out
         )
     with pytest.raises(ValidationError, match="--direction dotyczy tylko"):
         validate_data_request(
-            product="orto", sheet=INTENSITY_SHEET, direction="n", output_dir=out
+            product="orto", sheet=INTENSITY_SHEET, direction="n", root=out
         )
 
 
@@ -346,12 +338,12 @@ def test_oblique_plan_upgrade_keeps_each_direction(tmp_path, images):
     executes each in its own manager - none of them becomes stale."""
     out = tmp_path / "data"
     plan = check_data(
-        product="oblique-orto", sheet=OBLIQUE_SHEET, output_dir=out, cache=False
+        product="oblique-orto", sheet=OBLIQUE_SHEET, root=out, cache=False
     )
     report = download_data(
         product="oblique-orto",
         sheet=OBLIQUE_SHEET,
-        output_dir=out,
+        root=out,
         update="upgrade",
         plan=plan,
         **ARGS,
@@ -378,10 +370,10 @@ def test_full_sheet_only_with_record_flag(tmp_path, product, sheet, allowed):
     orto records have none, oblique ones do."""
     request = {"product": product, "sheet": sheet, "full_sheet": True}
     if allowed:
-        validate_data_request(**request, output_dir=tmp_path)
+        validate_data_request(**request, root=tmp_path)
         return
     with pytest.raises(ValidationError, match="calyArkuszWypelnionyTrescia"):
-        validate_data_request(**request, output_dir=tmp_path)
+        validate_data_request(**request, root=tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -410,4 +402,4 @@ def test_full_sheet_only_with_record_flag(tmp_path, product, sheet, allowed):
 )
 def test_image_choices_fail_before_source(tmp_path, request_, fragment):
     with pytest.raises(ValidationError, match=fragment):
-        validate_data_request(**request_, output_dir=tmp_path)
+        validate_data_request(**request_, root=tmp_path)

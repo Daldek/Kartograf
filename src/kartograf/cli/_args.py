@@ -24,7 +24,7 @@ def library_arguments(args: argparse.Namespace) -> dict[str, Any]:
     ``--bbox`` becomes a ``BBox`` (with the CRS of ``--bbox-crs``), a path a
     ``Path``, ``--layers`` and ``--direction`` tuples, ``pl=..,cz=..`` a mapping; a
     flag the line did not give is left out, so the library applies its own default.
-    The store (``output_dir``), ``workers`` and the update mode are not data
+    The store (``root``), ``workers`` and the update mode are not data
     options: the handler passes them itself.
 
     Parameters

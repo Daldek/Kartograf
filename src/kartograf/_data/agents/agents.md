@@ -21,7 +21,7 @@ Python 3.12 or newer: `pip install "kartograf @ git+https://github.com/Daldek/Ka
 ## Interfaces
 
 - Python: <!-- kartograf:python_example --> (keyword arguments are the options). Also `kartograf.list_commands`, `kartograf.command_schema`, `kartograf.validate_command`, `kartograf.check_command` and `kartograf.run_command`. Results are documents with `to_dict()` and `to_json()`; errors raise `KartografError` subclasses (`code`, `exit_code`, `hint`, `details`).
-- CLI: `kartograf <group> <command> --option value --json`, e.g. <!-- kartograf:cli_example -->. A flag is `--` and the option name with `-` for `_`. `--json` prints the result envelope as one document on stdout; logs and progress go to stderr. `--output DIR` is the store of a data command.
+- CLI: `kartograf <group> <command> --option value --json`, e.g. <!-- kartograf:cli_example -->. A flag is `--` and the option name with `-` for `_`. `--json` prints the result envelope as one document on stdout; logs and progress go to stderr. `--root DIR` is the store of a data command.
 - MCP: `kartograf-mcp [--allow-writes] [--allow-dir DIR] [--tools FAMILIES]` (extra `mcp`). A tool is named like the `operation_id` (`kartograf_elevation_download`) and its arguments are the options. The server reads and plans by default: a data tool only plans (`check_updates` is true) until `--allow-writes` is given, and that needs `--allow-dir`. `--tools core` keeps the ten tools of the main tasks.
 - Settings: `kartograf config show` prints the effective settings (`root`, `data_dir`, `cache_dir`, `lang`, `debug`) and their sources.
 
@@ -63,7 +63,7 @@ CLI lines; in MCP call the tool of the `operation_id` with the same options as a
 ## Things not to do
 
 - Do not leave out `product`, `resolution` or `vertical_crs` hoping for a default: Kartograf asks, it does not guess.
-- Do not point `--output` at the repository or at `/tmp`, and do not delete versions by hand (a store is hard-linked): to refresh, run with `--upgrade` or `--force`.
+- Do not point `--root` at the repository or at `/tmp`, and do not delete versions by hand (a store is hard-linked): to refresh, run with `--upgrade` or `--force`.
 - Do not parse `message` or `hint`: decide by `code`, `details.option`, `details.reason` or the exit code.
 - Do not repeat a call unchanged after `validation_error`, and do not treat `partial` as a failure of the whole run.
 - Do not use it for hydrological computation or for measurement series (see the scope above).

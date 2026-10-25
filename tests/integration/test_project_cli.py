@@ -73,7 +73,7 @@ def test_data_parser_options_cover_manifest_options(command):
     """A chosen data flag never disappears when stored as a project task."""
     parser = _parser_for(command)
     run_flags = {
-        "output",
+        "root",
         "check_updates",
         "upgrade",
         "force",
@@ -225,7 +225,14 @@ def test_add_records_selected_options_for_every_data_command(
     project = tmp_path / "projekt"
     assert (
         main(
-            ["project", "init", "--project", str(project), "-o", str(project / "data")]
+            [
+                "project",
+                "init",
+                "--project",
+                str(project),
+                "--root",
+                str(project / "data"),
+            ]
         )
         == 0
     )
@@ -249,7 +256,7 @@ def test_cz_laz_task_pins_model_file_and_rejects_availability(
 
     monkeypatch.chdir(tmp_path)
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     assert (
         main(
             _add(
@@ -309,15 +316,15 @@ def test_cz_laz_task_pins_model_file_and_rejects_availability(
 
 
 @pytest.mark.parametrize(
-    "flag", ["--upgrade", "--force", "--check-updates", "--plan", "--output"]
+    "flag", ["--upgrade", "--force", "--check-updates", "--plan", "--root"]
 )
 def test_add_rejects_update_modes_and_foreign_output(tmp_path, capsys, flag):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     manifest = project / "kartograf-project.json"
     before = manifest.read_bytes()
     trailing = (
-        [flag, str(tmp_path / "obcy")] if flag in ("--plan", "--output") else [flag]
+        [flag, str(tmp_path / "obcy")] if flag in ("--plan", "--root") else [flag]
     )
     assert (
         main(_add(project, "teren", "elevation", "download", *SHEET_FLAGS, *trailing))
@@ -344,7 +351,7 @@ def test_add_rejects_run_options(tmp_path, capsys, command, flag):
     """Run and display options are not part of a task: an error, not a silently
     dropped value (parallel downloads: ``project download --workers``)."""
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     before = _manifest_bytes(project)
     assert main(_add(project, "teren", *command)) == 2
     error = capsys.readouterr().err
@@ -357,7 +364,7 @@ def test_add_rejects_run_options(tmp_path, capsys, command, flag):
 
 def test_project_download_rejects_workers_below_one(tmp_path, capsys):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     with pytest.raises(ValidationError, match="--workers musi byc >= 1, podano 0"):
         download_project(project, workers=0)
     assert main(["project", "download", "--project", str(project), "-w", "0"]) == 2
@@ -369,7 +376,7 @@ def test_project_download_rejects_workers_below_one(tmp_path, capsys):
 
 def test_project_download_has_no_store_plan_file_option(tmp_path, capsys):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     before = _manifest_bytes(project)
     with pytest.raises(SystemExit) as error:
         main(
@@ -390,7 +397,7 @@ def test_project_download_has_no_store_plan_file_option(tmp_path, capsys):
 
 def test_add_accepts_same_store_output_and_optional_separator(tmp_path):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     same_store = project / "data" / ".." / "data"
     assert (
         main(
@@ -401,7 +408,7 @@ def test_add_accepts_same_store_output_and_optional_separator(tmp_path):
                 "elevation",
                 "download",
                 *SHEET_FLAGS,
-                "-o",
+                "--root",
                 str(same_store),
             )
         )
@@ -416,7 +423,7 @@ def test_add_accepts_store_output_through_symlink(tmp_path):
     alias = tmp_path / "alias"
     alias.symlink_to(actual, target_is_directory=True)
     project = tmp_path / "projekt"
-    init_project(project, output_dir=alias)
+    init_project(project, root=alias)
     assert (
         main(
             _add(
@@ -425,7 +432,7 @@ def test_add_accepts_store_output_through_symlink(tmp_path):
                 "elevation",
                 "download",
                 *SHEET_FLAGS,
-                "-o",
+                "--root",
                 str(alias),
             )
         )
@@ -439,7 +446,7 @@ def test_add_accepts_store_output_through_symlink(tmp_path):
 
 def test_add_selection_error_matches_public_api_without_store_changes(tmp_path, capsys):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     manifest = _manifest_bytes(project)
     with pytest.raises(ValidationError) as api_error:
         add_project_task(
@@ -493,7 +500,7 @@ def test_add_selection_error_matches_public_api_without_store_changes(tmp_path, 
 )
 def test_add_rejects_commands_without_data(tmp_path, capsys, invalid):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     assert main(_add(project, "teren", *invalid)) == 2
     assert (
         "Error: do projektu mozna dodac komendy zapisujace dane:"
@@ -504,7 +511,7 @@ def test_add_rejects_commands_without_data(tmp_path, capsys, invalid):
 
 def test_add_rejects_a_group_without_its_command(tmp_path, capsys):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     assert main(_add(project, "teren", "cache")) == 2
     assert (
         "Error: cache: podaj komende grupy (komendy danych:" in capsys.readouterr().err
@@ -514,7 +521,7 @@ def test_add_rejects_a_group_without_its_command(tmp_path, capsys):
 
 def test_add_misplaced_project_flag_explains_position(tmp_path, capsys):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     assert (
         main(
             _add(
@@ -535,7 +542,7 @@ def test_add_misplaced_project_flag_explains_position(tmp_path, capsys):
 
 def test_nested_removed_command_and_help(tmp_path, capsys):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     assert main(_add(project, "teren", "download", *SHEET_FLAGS)) == 2
     assert "usunieta w 0.8.0" in capsys.readouterr().err
     for args, phrase in (
@@ -556,10 +563,9 @@ def test_project_cli_matches_api_for_download_status_verify_and_updates(
     monkeypatch.chdir(tmp_path)
     cli_dir, api_dir = tmp_path / "cli", tmp_path / "api"
     assert (
-        main(["project", "init", "--project", str(cli_dir), "--output", "cli/data"])
-        == 0
+        main(["project", "init", "--project", str(cli_dir), "--root", "cli/data"]) == 0
     )
-    init_project(api_dir, output_dir="api/data")
+    init_project(api_dir, root="api/data")
     capsys.readouterr()
 
     assert main(_add(cli_dir, "teren", "elevation", "download", *SHEET_FLAGS)) == 0
@@ -634,7 +640,7 @@ def test_project_cli_matches_api_for_download_status_verify_and_updates(
 
 def test_status_errors_and_remove_leave_store_versions(tmp_path, capsys):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     assert main(_add(project, "teren", "elevation", "download", *SHEET_FLAGS)) == 0
     assert f"pobierz: kartograf project download --project {project} teren" in (
         capsys.readouterr().out
@@ -667,7 +673,7 @@ def test_project_lines_name_unit_and_file(tmp_path, capsys):
     """Live test 0.8.0: ``orto_cz: CTES96: ok`` four times. One format of the
     project lines: ``task: unit (file): status`` - also for a fresh pin."""
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     assert main(_add(project, "teren", "elevation", "download", *SHEET_FLAGS)) == 0
     with pl_sheets():
         assert main(["project", "download", "--project", str(project)]) == 0
@@ -682,7 +688,7 @@ def test_project_lines_name_unit_and_file(tmp_path, capsys):
 
 def test_project_error_same_as_public_api(tmp_path, capsys):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     with pytest.raises(ValidationError) as api_error:
         download_project(project, tasks=["literowka"])
     assert main(["project", "download", "--project", str(project), "literowka"]) == 2
@@ -694,7 +700,7 @@ def test_project_error_same_as_public_api(tmp_path, capsys):
 
 def test_quiet_still_prints_project_warnings(tmp_path, capsys):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     options = AUTO_CUTOUT
     flags = [
         "--product",

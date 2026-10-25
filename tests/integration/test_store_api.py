@@ -614,7 +614,7 @@ def test_store_written_by_kartograf_is_read_back_exactly(tmp_path):
     assert [e for e in entries if e.kind == "problem"] == []
 
 
-def test_relative_output_dir_gives_link_version_path_equal_to_version_path(
+def test_relative_root_gives_link_version_path_equal_to_version_path(
     tmp_path, monkeypatch
 ):
     root = tmp_path / "data"
@@ -928,7 +928,7 @@ def test_scoped_unit_does_not_follow_hierarchy_symlink(tmp_path, monkeypatch):
 
     def confined(path):
         if Path(path) == outside:
-            raise AssertionError("scanned outside output_dir")
+            raise AssertionError("scanned outside root")
         return original(path)
 
     monkeypatch.setattr(os, "scandir", confined)

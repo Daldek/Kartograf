@@ -658,7 +658,7 @@ def _project() -> Project:
 
 _PROJECT_DOCUMENT = {
     "directory": "/home/ola/projekty/wisla",
-    "output_dir": "/srv/dane/kartograf",
+    "root": "/srv/dane/kartograf",
     "tasks": [
         {
             "name": "teren",
@@ -685,13 +685,13 @@ _PROJECT_DOCUMENT = {
 
 def test_project_state_document():
     """The pins of the manifest are relative to the store; the document has
-    absolute paths (``output_dir`` + the manifest value)."""
+    absolute paths (``root`` + the manifest value)."""
     project = _project()
 
     data = project.to_dict()
 
     assert data == {"schema": "kartograf-project-state/1", **_PROJECT_DOCUMENT}
-    assert list(data) == ["schema", "directory", "output_dir", "tasks"]
+    assert list(data) == ["schema", "directory", "root", "tasks"]
     assert list(data["tasks"][0]) == [  # type: ignore[index]
         "name",
         "command",
@@ -815,7 +815,7 @@ def test_task_options_keep_manifest_form(tmp_path, monkeypatch):
     work.mkdir()
     monkeypatch.chdir(work)
     _shapefile(work)
-    kartograf.init_project("../projekt", output_dir="../magazyn")
+    kartograf.init_project("../projekt", root="../magazyn")
     kartograf.add_project_task(
         "../projekt",
         name="teren",
@@ -843,5 +843,5 @@ def test_task_options_keep_manifest_form(tmp_path, monkeypatch):
     assert terrain["options"]["bbox_crs"] == "EPSG:2180"
     assert soils["options"] == {"geometry": "../praca/area.shp", "depth": "0-5cm"}
     assert data["directory"] == (tmp_path / "projekt").as_posix()
-    assert data["output_dir"] == (tmp_path / "magazyn").as_posix()
+    assert data["root"] == (tmp_path / "magazyn").as_posix()
     assert soils["files"] == [] and soils["pinned_at"] is None

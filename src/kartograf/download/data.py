@@ -374,7 +374,7 @@ def _check_error(run: _Run) -> DownloadError:
 
 def _task(**kwargs: Any) -> SimpleNamespace:
     task = SimpleNamespace(**kwargs)
-    task.output_dir = Path(task.output_dir) if task.output_dir is not None else None
+    task.root = Path(task.root) if task.root is not None else None
     task.geometry = Path(task.geometry) if task.geometry is not None else None
     # enumerated values in any case: the spelling of the registry (UX-11)
     task.country = canonical_country(task.country)
@@ -419,7 +419,7 @@ def _start(
 def download_data(
     *,
     product: str | None,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -456,7 +456,7 @@ def download_data(
 
     Parameter names and values are the ``elevation download`` / ``imagery download``
     flags in ``snake_case``. Every data choice is explicit (no defaults): ``product``,
-    ``output_dir``, ``vertical_crs``/``resolution`` (plain or per country,
+    ``root``, ``vertical_crs``/``resolution`` (plain or per country,
     ``{"pl": "1m", "cz": "2m"}``; PL values from the variant registry,
     ``kartograf.sources.variants``), ``country`` (``pl``/``cz``/``auto``,
     required with ``bbox``/``geometry``), ``sheet_system``/``scale`` for PL
@@ -521,7 +521,7 @@ def download_data(
 def check_data(
     *,
     product: str | None,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -578,7 +578,7 @@ def check_data(
 def validate_data_request(
     *,
     product: str | None,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -634,7 +634,7 @@ def validate_data_request(
 
 _SELECTION = (
     "product",
-    "output_dir",
+    "root",
     "sheet",
     "bbox",
     "geometry",
@@ -986,7 +986,7 @@ def _product_label(product: str, resolution: str | None, fmt: str | None = None)
 
 def _create_provider_and_storage(
     product: str,
-    output_dir: str | Path,
+    root: str | Path,
     vertical_crs: str,
     resolution: str | None,
     cache: MetadataCache | None = None,
@@ -1029,7 +1029,7 @@ def _create_provider_and_storage(
     else:
         raise ValidationError(f"Nieobslugiwany produkt arkuszy PL: {product}")
     storage = storage_for_provider(
-        output_dir, provider, resolution=resolution, vertical_crs=vertical_crs
+        root, provider, resolution=resolution, vertical_crs=vertical_crs
     )
     return provider, storage
 
@@ -1043,7 +1043,7 @@ def _manager(
 ) -> DownloadManager:
     provider, storage = _create_provider_and_storage(
         task.product,
-        task.output_dir,
+        task.root,
         task.vertical_crs,
         task.resolution,
         cache=metadata,
@@ -1051,7 +1051,7 @@ def _manager(
         direction=direction,
     )
     return DownloadManager(
-        output_dir=task.output_dir,
+        root=task.root,
         provider=provider,
         storage=storage,
         workers=run.workers,
@@ -1497,7 +1497,7 @@ def _download_pl_files(
     request = atom_area_request(
         variant.source,
         product=task.product,
-        output_dir=task.output_dir,
+        root=task.root,
         area=area,
         parent=parent_request,
         choice={"resolution": variant.label},
@@ -1865,7 +1865,7 @@ def _download_pl_cutout(
         return 0
     common = {
         "horizontal_crs": task.horizontal_crs,
-        "output_dir": task.output_dir,
+        "root": task.root,
         "cache": run.cache,
         "on_notice": run.sink.add,
     }
@@ -1950,7 +1950,7 @@ def _download_cz(
     if run.dry:
         return 0
     common = {
-        "output_dir": task.output_dir,
+        "root": task.root,
         "product": task.product,
         "vertical_crs": vertical_crs,
         "resolution": resolution,
@@ -2031,7 +2031,7 @@ def _download_cz_laz(
     selection = {
         "model": task.model,
         "vertical_crs": vertical_crs,
-        "output_dir": task.output_dir,
+        "root": task.root,
         "sheet": task.sheet if bbox is None else None,
         "bbox": bbox,
         "cache": run.cache,
@@ -2108,7 +2108,7 @@ def _download_cz_orto(
         what = "bbox" if task.geometry is None else f"geometry {task.geometry.name}"
         _emit_sheet_list(run, task, list(sheets), "SM5 (CUZK)", what)
     common = {
-        "output_dir": task.output_dir,
+        "root": task.root,
         "cache": run.cache,
         "on_notice": run.sink.add,
     }
@@ -2192,15 +2192,13 @@ def _download_cz_contours(
         try:
             if run.check:
                 run.plans.append(
-                    check_cz_contours_sheet(
-                        sheet, format=task.format, output_dir=task.output_dir
-                    )
+                    check_cz_contours_sheet(sheet, format=task.format, root=task.root)
                 )
                 continue
             result = download_cz_contours_sheet(
                 sheet,
                 format=task.format,
-                output_dir=task.output_dir,
+                root=task.root,
                 update=run.update,
                 plan=run.loaded,
                 parent_request=parent_request,
@@ -2243,7 +2241,7 @@ def _download_pl_laz(
     if run.dry:
         return 0
     selection = {
-        "output_dir": task.output_dir,
+        "root": task.root,
         "vertical_crs": country_value(task.vertical_crs, "PL"),
         "min_density": task.min_density,
         "all_campaigns": task.all_campaigns,

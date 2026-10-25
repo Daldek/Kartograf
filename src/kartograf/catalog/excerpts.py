@@ -108,7 +108,7 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
     "kartograf-project-state/1": {
         "schema": "kartograf-project-state/1",
         "directory": "/work/project",
-        "output_dir": _STORE,
+        "root": _STORE,
         "tasks": [
             {
                 "name": "teren",
@@ -119,13 +119,13 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
     },
     "kartograf-project-report/1": {
         "schema": "kartograf-project-report/1",
-        "project": {"directory": "/work/project", "output_dir": _STORE},
+        "project": {"directory": "/work/project", "root": _STORE},
         "tasks": [{"name": "teren", "ok": True}],
         "ok": True,
     },
     "kartograf-project-check/1": {
         "schema": "kartograf-project-check/1",
-        "project": {"directory": "/work/project", "output_dir": _STORE},
+        "project": {"directory": "/work/project", "root": _STORE},
         "files": [{"path": _PATH, "status": "ok"}],
         "not_downloaded": [],
         "ok": True,
@@ -147,7 +147,7 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
     },
     "kartograf-store-overview/1": {
         "schema": "kartograf-store-overview/1",
-        "output_dir": _STORE,
+        "root": _STORE,
         "segments": [
             {
                 "segment": "nmt/pl_1992_1m_evrf2007",
@@ -160,7 +160,7 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
     },
     "kartograf-store-entries/1": {
         "schema": "kartograf-store-entries/1",
-        "output_dir": _STORE,
+        "root": _STORE,
         "segment": "nmt/pl_1992_1m_evrf2007",
         "limit": 20,
         "truncated": False,

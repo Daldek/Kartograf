@@ -117,10 +117,10 @@ _PARAMS = (
         description_pl="Wycinek",
     ),
     Param(
-        "output_dir",
+        "root",
         "path",
         "Katalog magazynu (wymagany)",
-        flag="--output",
+        flag="--root",
         short="-o",
         dest="output",
         metavar="KATALOG",
@@ -381,8 +381,8 @@ def test_actions_follow_params():
     assert (product.default, product.required, product.type) == (None, False, None)
     assert product.help == "Produkt (wymagany): nmt, nmpt"
 
-    output = _action(leaf, "output")  # dest of --output is "output", not output_dir
-    assert output.option_strings == ["--output", "-o"]
+    output = _action(leaf, "output")  # dest of --root is "output", not root
+    assert output.option_strings == ["--root", "-o"]
     assert (output.metavar, output.default, output.choices) == ("KATALOG", None, None)
 
     workers = _action(leaf, "workers")
@@ -749,7 +749,7 @@ def test_example_command_lines_round_trip(command, index):
     assert words[:1] == ["kartograf"]
     assert parsed._command_id == command.id
     assert _options_of(command, parsed) == example.options
-    assert parsed.output == "./data"
+    assert parsed.root == "./data"
 
 
 def test_example_command_lines_of_every_command_parse():

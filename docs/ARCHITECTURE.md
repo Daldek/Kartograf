@@ -1522,17 +1522,17 @@ locally by the caller. Public records:
 
 | Record | Fields and semantics |
 |---|---|
-| `StoreEntry` | `kind`: `version`, `link` (standard path), `full_sheet`, `problem`; `segment` (`produkt/wariant`), `hierarchy` (the slot directory relative to the segment, and for a version and `full_sheet` - relative to `versions/` and `full_sheet/`; `""` for a segment problem), `name`, `path` (built from `output_dir` in the given form), `version_path` (the version pointed to by the link's `extra.link_target`, checked lexically: it lies in the slot of this link; for a version its own path; `None` = unknown), `label` and `sha8` (from the directory name `<label>_<sha8>`; for a link without a known version - from the sidecar), `sidecar` (`Sidecar` or `None`), `problem` (`missing_sidecar`, `invalid_sidecar`, `unknown_segment`, `legacy_campaigns`, `stale_incoming`) and `skipped` (`True` = a version from `skip_versions`, sidecar not read). |
+| `StoreEntry` | `kind`: `version`, `link` (standard path), `full_sheet`, `problem`; `segment` (`produkt/wariant`), `hierarchy` (the slot directory relative to the segment, and for a version and `full_sheet` - relative to `versions/` and `full_sheet/`; `""` for a segment problem), `name`, `path` (built from `root` in the given form), `version_path` (the version pointed to by the link's `extra.link_target`, checked lexically: it lies in the slot of this link; for a version its own path; `None` = unknown), `label` and `sha8` (from the directory name `<label>_<sha8>`; for a link without a known version - from the sidecar), `sidecar` (`Sidecar` or `None`), `problem` (`missing_sidecar`, `invalid_sidecar`, `unknown_segment`, `legacy_campaigns`, `stale_incoming`) and `skipped` (`True` = a version from `skip_versions`, sidecar not read). |
 | `Sidecar` | Typed fields from 3.2 (`schema`, raw `dataset`, `dataset_key` from the registry or `None`, `country`, `product`, `provider`, `horizontal_crs`, `vertical_crs`, `vertical_source`, `resolution`, `nodata`, `request`, `license`, `downloaded_at`, `kartograf_version`, `transform`, `extra`, `sha256`, `size_bytes`) and the computed fields `data_year`, `data_date`, `campaign`, `survey_work_id`, `edition`, `full_sheet`, `coverage`, `unit`, `raw`. A missing value or a value of an unexpected type is `None`, and the original JSON (`raw`) remains unchanged. |
 | `SegmentInfo` | `segment`, `product`, `country`, `dataset_key`, `name`, `known`. The name is human-readable: descriptor name + variant (CRS, vertical CRS, format, vintage, LoD, level); no match in the registry = `known=False`, never a presumed descriptor. |
 | `Footprint` | `native: BBox`, `wgs84: BBox` (EPSG:4326, longitude/latitude), `source`: `request`, `sheet`, `header`, `unit`. No verified footprint = `None` (including country-wide packages). |
 
-`list_segments(output_dir)` returns the sorted `<product>/<variant>`
+`list_segments(root)` returns the sorted `<product>/<variant>`
 of all real second-level directories (excluding symbolic links
 and names starting with `.`), including those unknown to the registry.
-A missing `output_dir` is an `OSError`, not an empty store (a detached share).
+A missing `root` is an `OSError`, not an empty store (a detached share).
 
-`iter_store(output_dir, *, segment=None, units=None, skip_versions=None,
+`iter_store(root, *, segment=None, units=None, skip_versions=None,
 partition=None)` is a generator; without `segment` it walks the segments
 from `list_segments` in turn; `partition` (requires `segment`, excludes
 `units`) is one part from `list_partitions` (below).
@@ -1559,7 +1559,7 @@ the same functions as writing (`SheetParser`, `path_parts`,
 `cuzk_map_path_parts`); the scan does not list other segment directories and does not
 report segment-level problems; it skips hidden version directories
 (`.<label>_<sha8>`) just like the full scan. `skip_versions` are version
-directories known to the caller, relative to `output_dir`, with `/` (e.g.
+directories known to the caller, relative to `root`, with `/` (e.g.
 `nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_3fa91c2e`):
 their files come back with `skipped=True` and `sidecar=None` without reading sidecars
 (versions are immutable). Set of directories: files from the version directory listing,
@@ -1586,7 +1586,7 @@ by the same rule as `download.versions.read_version` (`sha256`
 starts with the directory's `<sha8>`, `extra.version` has `label`
 and `label_source`).
 
-`list_partitions(output_dir, segment, *, target=32)` splits one segment
+`list_partitions(root, segment, *, target=32)` splits one segment
 into disjoint parts for parallel calls of `iter_store(..., segment=...,
 partition=...)`; the union of the parts is exactly `iter_store(..., segment=...)` -
 the same entries, none twice (property test on random stores).
@@ -1612,7 +1612,7 @@ Cost per entry (the scan never calls `link_target`):
 
 | Element | Disk/share operations |
 |---|---|
-| segments (`list_segments`) | 1 listing of `output_dir` + 1 listing per product directory |
+| segments (`list_segments`) | 1 listing of `root` + 1 listing per product directory |
 | directory (hierarchy, `full_sheet/`, `versions/`, version directory) | 1 listing (`scandir`; entry type from the listing - no file `stat` on ext4/XFS/NTFS/SMB) |
 | `link`, `full_sheet` | 1 sidecar read (open, read, close); no `stat`, data file not opened |
 | `version` | 1 sidecar read; version from `skip_versions`: 0 reads, only the listing of its directory |
@@ -1620,7 +1620,7 @@ Cost per entry (the scan never calls `link_target`):
 | `invalid_sidecar` | 1 read |
 | `unknown_segment`, `legacy_campaigns` | 0 (from the segment listing) |
 | `stale_incoming` | listing of `versions/.incoming` (only when it is in the listing) + `lstat` of the working directory tree |
-| `iter_store(segment=...)` | `stat` of `output_dir` + `lstat` of the product and segment directories |
+| `iter_store(segment=...)` | `stat` of `root` + `lstat` of the product and segment directories |
 | `list_partitions` | like `iter_store(segment=...)` + listing of the segment, `full_sheet/` and `versions/` + at most 3 listings (one in each tree) per directory checked during the split (on an SMB share approx. 2-5 ms per listing; `nmt/pl_1992_1m_evrf2007`: 11 listings) |
 | `partition` | like `iter_store(segment=...)` + `lstat` of the key components in each of the three trees + listings of the part's subtree only; `"."`: listing of the segment, `full_sheet/` and `versions/` |
 | `skip_versions` - mapping | known version directory: 0 listings and 0 reads (without mapping: 1 listing) |
@@ -1761,9 +1761,9 @@ creation.
 
 ### 3.5 Project manifest `kartograf-project/1`
 
-`kartograf project init --output KATALOG` creates in the project directory
+`kartograf project init --root KATALOG` creates in the project directory
 `kartograf-project.json` (UTF-8, JSON with 2-space indentation). The manifest
-holds `schema: "kartograf-project/1"`, `output_dir` (one versioned
+holds `schema: "kartograf-project/1"`, `root` (one versioned
 store) and `tasks` in the order of addition. A task has a unique `name`,
 `command` (e.g. `elevation download`), data-selection `options`, `pinned_at`,
 `kartograf_version` and `files`; for a pinned geometry also
@@ -1774,7 +1774,7 @@ version `version`, `label`, the full `sha256` and `size_bytes`. The manifest sel
 data versions; the `kartograf-meta/1` sidecar invariably describes the provenance
 of the file. The update report `kartograf-plan/1` is not part of the manifest.
 
-A relative `output_dir` and a relative `options.geometry` are written and
+A relative `root` and a relative `options.geometry` are written and
 resolved relative to the project directory, while absolute ones remain
 absolute. `path` and `version` are always relative to the store, with the
 separator `/`; `version` points to a file under `versions/`, never
@@ -1830,7 +1830,7 @@ schema, and that every `result_schema` of the catalog is in the registry.
 | `kartograf-sheets/1` | `SheetList` | `sheet_info` | `request, sheets, count` |
 | `kartograf-sources/1` | `SourceList` | `source_info` | `group, products, sources` |
 | `kartograf-layers/1` | `LayerList` | `source_info` | `group, product, source, layers, classes, years, properties, depths, statistics` |
-| `kartograf-project-state/1` | `Project` | `project.model` | `directory, output_dir, tasks` |
+| `kartograf-project-state/1` | `Project` | `project.model` | `directory, root, tasks` |
 | `kartograf-project-report/1` | `ProjectReport` | `project.model` | `project, tasks, notices, ok` |
 | `kartograf-project-check/1` | `ProjectCheck` | `project.model` | `project, files, not_downloaded, notices, ok` |
 | `kartograf-cache/1` | `CacheInfo` | `cache_info` | `action, path, exists, size_bytes, entries, cleared, removed_unreadable` |
@@ -1838,8 +1838,8 @@ schema, and that every `result_schema` of the catalog is in the registry.
 | `kartograf-command-list/1` | `CommandList` | `catalog.model` | `tool, version, groups, commands` |
 | `kartograf-commands/1` | `CommandCatalog` | `catalog.model` | `tool, version, commands` |
 | `kartograf-guide/1` | `AgentGuide` | `guide` | `format, text` |
-| `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `output_dir, segments` |
-| `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `output_dir, segment, units, limit, truncated, entries` |
+| `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `root, segments` |
+| `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `root, segment, units, limit, truncated, entries` |
 | `kartograf-store-sidecar/1` | `StoreSidecar` | `store_documents` | `path, sidecar` |
 | `kartograf-error/1` | `ErrorReport` | `error_report` | `code, title, message, hint, details, exit_code, command` |
 
@@ -2241,12 +2241,12 @@ existing version with the same sha256, `VersionedFile.same_as`),
 `lokalna wersja <label>`, and after the list (without `-q`) `Nowe: N, nowa
 etykieta: N, bez zmian: N, lokalne: N, bledy: N (<dir>)` (PL sheets
 and LAZ tiles; PL LAZ unit = file name, LAZ CZ = sheet code, cutout = path under
-`--output`). A file without a cheap signal: by default the suffix `(bez
+`--root`). A file without a cheap signal: by default the suffix `(bez
 sprawdzania; --check-updates)`, with `--upgrade` an `Info:` about `--force`;
 a failed signal check: `Warning:`. The `--check-updates` report is
 one line per item (`aktualne`, `nowsza: ...`, `do pobrania`, `nie da
 sie sprawdzic bez pobrania`, `nie udalo sie sprawdzic: ...`); land cover,
-soils and HSG mark items with the path under `--output` like the status line
+soils and HSG mark items with the path under `--root` like the status line
 (GPKG and raw ZIP `--keep-raw` of the same TERYT = two different lines), an unchecked item
 makes the plan `ok: false` (exit code 10 or 11); with `--plan` the CLI writes ONE plan of all
 tracks of the task (`--country auto`: PL and CZ, `UpdatePlan.merge`), and
@@ -2422,7 +2422,7 @@ mosaic sheets (the orthophoto has its own cutout track — end of the section).
 The mode is explicit: `--horizontal-crs` is required
 with `--cutout`, without `--cutout` it is an `Error:`, `--cutout` with `--sheet` too.
 Library: `download_pl_cutout(*, bbox, horizontal_crs,
-output_dir, vertical_crs, product="nmt"|"nmpt", update, plan,
+root, vertical_crs, product="nmt"|"nmpt", update, plan,
 parent_request, cache, on_notice)` -> `PlCutoutResult`;
 `check_pl_cutout(...)` with the same selection returns a plan without downloading.
 Preparation (validation without network) and execution are internal steps
@@ -2506,7 +2506,7 @@ files are produced with a shared `extra.parent_request`.
 EPSG:2180 --coverage standard|high --resolution 0.1m|0.25m|0.5m|1m` =
 `download_data(product="orto", cutout=True, horizontal_crs="EPSG:2180",
 coverage=..., resolution=...)` -> `download/orto_cutout.py::
-download_image_cutout(*, product, bbox, horizontal_crs, output_dir,
+download_image_cutout(*, product, bbox, horizontal_crs, root,
 resolution, coverage=None, update, plan, parent_request, cache, on_notice)` ->
 `ImageCutoutResult(file, stale, notices)` (ADR-044 D3: one pair for
 `product="orto"` and `"true-orto"`); `check_image_cutout(...)` with the
@@ -2625,7 +2625,7 @@ orto --country cz` (SM5 sheet code - the country also from the sheet code - or a
 via `cz_orto_sheet` (TM33 tile = error with an SM5 hint), an area ->
 SM5 sheets from the `KladyMapovychListu` index (`cz_orto_area_sheets`; bbox
 converted to EPSG:5514 with the pinned operation; `Notice` `sheet_list`),
-each sheet `download_cz_orto_sheet(*, sheet, output_dir, update, plan,
+each sheet `download_cz_orto_sheet(*, sheet, root, update, plan,
 parent_request, cache, on_notice, on_download)` -> `CzOrtoResult(files,
 stale, notices)`; `check_cz_orto_sheet` gives four plan items of the track
 `cz_orto` (unit = sheet code). The release comes from the ORTOFOTO ATOM feed
@@ -2687,7 +2687,7 @@ by <= 0.5 px (the file name and `request.bbox` carry the bbox from before the sn
 A cutout entirely of nodata gives `Warning:` and code 0, not apparent silence.
 
 The CZ bbox track is in the library (`download/cz_cutout.py`):
-`download_cz_cutout(*, bbox, output_dir, product, horizontal_crs,
+`download_cz_cutout(*, bbox, root, product, horizontal_crs,
 vertical_crs, resolution, update, plan, parent_request, cache, on_notice,
 on_download)` builds the provider (`create_cz_raster_provider(product,
 resolution, ...)`; route `route()` with operations before the network), normalises the
@@ -2710,7 +2710,7 @@ Result: hard link `data/<nmt|nmpt>/cz_<model>_<vcrs>/bbox/<coords>.tif`
 (e.g. `nmt/cz_dmr5g_bpv`, `nmpt/cz_dmp1g_bpv`) to the version
 in `versions/bbox/<YYYY-MM-DD>_<sha8>/`. CZ sheets (TM33, SM5) have
 a public API since 0.8.0 `download/cz_sheets.py` (`download_cz_sheet`/
-`check_cz_sheet(*, sheet, output_dir, product, vertical_crs,
+`check_cz_sheet(*, sheet, root, product, vertical_crs,
 resolution=None, ...)` -> `CzSheetResult`; ADR-037): the same sidecar content
 as previously in the CLI (`mapname`, `cz_share`, `capability`,
 `horizontal_crs`); openzu files (SM5, since plan B also the TM33 tile
@@ -2938,10 +2938,10 @@ and `min_density`, when given — E16).
 (E2E 2026-10-06: ~119 pts/m2 at a nominal 15).
 
 **LAZ CZ (plan B, `download/cz_laz.py`).** `download_cz_laz(*, model,
-vertical_crs, output_dir, sheet=None, bbox=None, update=None, plan=None,
+vertical_crs, root, sheet=None, bbox=None, update=None, plan=None,
 parent_request=None, workers=4, cache=True, on_notice=None,
 on_progress=None) -> CzLazResult(sheets, files, failed, stale, notices)`
-(`ok` = no `failed`) and `check_cz_laz(*, model, vertical_crs, output_dir,
+(`ok` = no `failed`) and `check_cz_laz(*, model, vertical_crs, root,
 sheet=None, bbox=None, cache=True, on_notice=None) -> UpdatePlan` are the command-level
 path; `download_data` calls it for a CZ sheet code and for the CZ part of an area.
 One call = one model (`dmr5g`, `dmr4g`, `dmp1g`, `dmpok`, the variant
@@ -2974,9 +2974,9 @@ path `cz_laz` (`unit` = sheet code). Sidecar: `dataset` `cz.cuzk.<model>_laz`,
 ### 4.8 Land cover and soils (BDOT10k, BDOO, CORINE, ZABAGED, Data50, Data250, SoilGrids)
 
 **Version store (ADR-036 D29-D33, ADR-044 D5-D6).** The public functions
-`download_landcover(product=..., output_dir=..., ...)` and
-`download_soil(output_dir=..., ...)` write exclusively to the store
-`output_dir` (= `--output`; without `output_path`, D32), in the segments of rule 8
+`download_landcover(product=..., root=..., ...)` and
+`download_soil(root=..., ...)` write exclusively to the store
+`root` (= `--root`; without `output_path`, D32), in the segments of rule 8
 of section 3.3. They return `LandCoverReport`/`SoilReport` with `UnitFile` in `files`,
 unit failures in `failed`, `stale`, `notices` and `ok`; with `keep_raw`
 the original BDOT10k archives are in `LandCoverReport.raw`. Internally they use
@@ -3036,7 +3036,7 @@ and a raster of only zeros (apart from `cfvo`) `extra.all_nodata` and a `Warning
 `all_nodata`; `ocs` exists only for `0-30cm` (`SoilGridsProvider.check_layer`),
 a window smaller than a pixel is extended to one pixel (250 m).
 
-**ZABAGED (CZ, ADR-042 D15, plan D).** `LandCoverManager(output_dir,
+**ZABAGED (CZ, ADR-042 D15, plan D).** `LandCoverManager(root,
 "zabaged")` has no provider class (`COLLECTION_SOURCES`): the options are checked by
 `_collection_request`, and the selection and download are done by the functions
 of `download/collections.py` (`landcover_request`, `run_request`,
@@ -3058,7 +3058,7 @@ per request: a download error goes to `LandCoverReport.failed` (`ok=False`).
 The internal `get_available_layers()` returns the 22 layer names of the area result,
 `get_supported_formats()` - `["GPKG"]`.
 
-**BDOO (PL, plan E4, ADR-043).** `LandCoverManager(output_dir, "bdoo")`
+**BDOO (PL, plan E4, ADR-043).** `LandCoverManager(root, "bdoo")`
 follows the same path as ZABAGED (`COLLECTION_SOURCES`, `landcover_request`
 with `teryt`, `year` and `layers`). GUGiK publishes BDOO only as a GML package
 of a voivodeship per vintage (`opendata/bdoo/<R>/PL.PZGiK.201.<woj>.zip`; 2015,
@@ -3098,7 +3098,7 @@ the content: `landcover/pl_bdot10k_<format>[_<layers>]/teryt/<TERYT>.<ext>`,
 `--bbox`/`--sheet`/`--geometry`.
 The task area goes to `extra.parent_request`: `{bbox, bbox_crs,
 countries: ["PL"]}` or `{sheet, countries: ["PL"]}`.
-`download_landcover(product="bdot10k", output_dir=..., teryt=|sheet=|bbox=|
+`download_landcover(product="bdot10k", root=..., teryt=|sheet=|bbox=|
 geometry=, layer=, update=, plan=, workers=, on_notice=, format=, layers=,
 keep_raw=)` for an area queries PRG (`Bdot10kProvider.teryts_for_area` ->
 `discover_teryts_for_bbox`, an area in any supported CRS) and
@@ -3147,7 +3147,7 @@ as its OWN version in `landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip`
 `layers`); the package is downloaded when ANY of the files (GPKG, ZIP)
 requires a download, both files go through `store_file` (the same content =
 `unchanged`): first the ZIP, then the GPKG with `extra.source_files = [{name:
-"package", file: <path of the ZIP version relative to --output>, sha256}]`.
+"package", file: <path of the ZIP version relative to --root>, sha256}]`.
 The package files are created in the `.incoming/` of their own segments; an error in downloading,
 unpacking or saving the archive leaves no version or working directory,
 previous versions and links remain. `extra.parent_request`
@@ -3156,7 +3156,7 @@ from the same package has the same sha256 (live 2026-10-12: `--force` = `bez
 zmian`).
 
 **Archive of BDOT10k annual editions (ADR-042 D10-D11, since 0.8.0).**
-`download_landcover(product="bdot10k", output_dir=..., year=R,
+`download_landcover(product="bdot10k", root=..., year=R,
 format="GML"|"SHP", teryt=|sheet=|bbox=|geometry=)`
 (CLI `landcover download --product bdot10k --year R --format GML|SHP`)
 downloads the annual editions 2014-2025 (state as of the beginning of the year) from the channel
@@ -3178,7 +3178,7 @@ a TERYT code change) = `NoCoverageError`. Identical annual editions of the same
 county and format take up space once (D7: `relabeled`, hardlink; live
 2026-10-15: SHP 2023 of county 1261 = 2022).
 
-`calculate_hsg(output_dir=..., sheet=|bbox=|geometry=, layer=, depth=,
+`calculate_hsg(root=..., sheet=|bbox=|geometry=, layer=, depth=,
 update=, plan=, on_notice=)` and `check_hsg(...)` (`hydrology/hsg.py`,
 ADR-044 D5; the statistic is always `mean`) compute soil groups from the
 SoilGrids versions `clay`/`sand`/`silt` in the same store (internal
@@ -3434,8 +3434,8 @@ or a CZ sheet code = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    (the first error), like a single-country task.
 
 **Download hint** (`_download_hint`): a tuple of commands to paste after
-`kartograf ` or after `kartograf project add NAME ` — without `--output`
-(the store comes from the user's `--output` or from the project, ADR-040).
+`kartograf ` or after `kartograf project add NAME ` — without `--root`
+(the store comes from the user's `--root` or from the project, ADR-040).
 The area as in the task (`--country pl --bbox ... [--bbox-crs]` or
 `--geometry FILE [--layer]` + `--sheet-system`; `--sheet` — the sheet code alone,
 when the combination is in its system (PL-2000: the sheet code and its descendants),
@@ -3859,7 +3859,7 @@ clean process).
 (`catalog/formatting.py`), `run_command`/`check_command` (conversion, validation, then the command
 function: `download_data`, `download_collection`, ... or `check_*`). `options` is the JSON form of
 project task options (ADR-040), `run` - the remaining flags of the line under the parameter
-names (`output_dir`, `upgrade`, `force`, `check_updates`, `plan`, `workers`,
+names (`root`, `upgrade`, `force`, `check_updates`, `plan`, `workers`,
 `quiet`, `json`, `summary`; there is no `update` key: `run_command` takes the mode as
 `update="upgrade"|"force"`, and `check_updates` is `check_command`, so the mapping is done by the
 caller). The functions without network (`parse_command`, `validate_command`,

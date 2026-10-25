@@ -27,7 +27,7 @@ Examples
 >>> spec = {s.name: s for s in tool_specs(allow_writes=True)}["kartograf_soil_hsg"]
 >>> spec.families, spec.annotations.read_only_hint
 (('data', 'core'), False)
->>> "output_dir" in spec.input_schema["required"]
+>>> "root" in spec.input_schema["required"]
 True
 """
 
@@ -126,7 +126,7 @@ class ToolSpec:
         of ``--allow-dir`` applies to every one.
     task_options : tuple of str
         The arguments that are options of a data task (``project_task``); the other
-        arguments of a data tool belong to its run (``output_dir``, ``update``,
+        arguments of a data tool belong to its run (``root``, ``update``,
         ``plan``, ``workers``, ``summary``).
     plan_only : bool
         The command writes and has a check, and the server does not write: every

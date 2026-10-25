@@ -65,7 +65,7 @@ def test_pl_sheet_report_files_and_ok(tmp_path):
     with _pl_sheets(FakeCampaignProvider(C14)):
         report = download_data(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet=G,
             resolution="1m",
             vertical_crs="EVRF2007",
@@ -92,7 +92,7 @@ def test_validation_errors_before_any_download(tmp_path, kwargs, text):
     fake = FakeCampaignProvider(C14)
     arguments = {
         "product": "nmt",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "sheet": G,
         "resolution": "1m",
         "vertical_crs": "EVRF2007",
@@ -108,7 +108,7 @@ def test_area_outside_countries_is_validation_error(tmp_path):
     with pytest.raises(ValidationError, match="nie przecina zasiegu"):
         download_data(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=BBox(2.0, 40.0, 2.1, 40.1, "EPSG:4326"),
             cache=False,
             **AUTO,
@@ -203,7 +203,7 @@ def test_invalid_choices_and_bboxes_fail_before_source(
 ):
     selection = {
         "product": "nmt",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "bbox": BBox(530000, 380000, 530100, 380100, "EPSG:2180"),
         "country": "pl",
         "resolution": "1m",
@@ -238,7 +238,7 @@ def test_pl2000_zone_bbox_selects_pl1992_sheets(tmp_path, sheet, zone_crs):
     ) as sheet_list:
         report = download_data(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=transform_bbox(inner, zone_crs),
             country="pl",
             resolution="1m",
@@ -264,7 +264,7 @@ def test_pl_cutout_input_error_propagates_instead_of_country_failure(
     ):
         operation(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=BBox(530000, 380000, 530100, 380100, "EPSG:2180"),
             country="pl",
             resolution="1m",
@@ -283,7 +283,7 @@ def test_laz_start_progress_uses_resolved_pl_vertical_crs(tmp_path):
     ):
         report = download_data(
             product="laz",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet=G,
             vertical_crs={"pl": "KRON86", "cz": "Bpv"},
             on_progress=events.append,
@@ -322,7 +322,7 @@ def test_partial_success_auto_ok_true_with_notice(tmp_path):
     with pl, cz:
         report = download_data(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=BORDER,
             cutout=True,
             horizontal_crs="EPSG:3045",
@@ -347,7 +347,7 @@ def test_notices_before_first_download(tmp_path):
     with pl, cz:
         report = download_data(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=BBox(455000, 773000, 459000, 784000, "EPSG:2180"),
             cutout=True,
             horizontal_crs="EPSG:2180",
@@ -365,7 +365,7 @@ def test_explicit_country_failure_ok_false(tmp_path):
     with patch(CZ_FACTORY, return_value=cz):
         report = download_data(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
             country="cz",
             resolution="2m",
@@ -386,7 +386,7 @@ def test_check_data_auto_one_merged_plan(tmp_path):
     with patch(CZ_FACTORY, return_value=_cz_provider_mock()):
         plan = check_data(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=BORDER,
             cutout=True,
             horizontal_crs="EPSG:3045",
@@ -401,7 +401,7 @@ def test_check_then_upgrade_with_plan_downloads_planned(tmp_path):
     fake = FakeCampaignProvider(C14)
     selection = {
         "product": "nmt",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "sheet": G,
         "resolution": "1m",
         "vertical_crs": "EVRF2007",
@@ -421,7 +421,7 @@ def test_check_then_upgrade_with_plan_downloads_planned(tmp_path):
 def test_per_country_wrong_type_fails_before_source(tmp_path, operation, flag, invalid):
     selection = {
         "product": "nmt",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "bbox": BBox(530000, 380000, 530100, 380100, "EPSG:2180"),
         "country": "pl",
         "resolution": "1m",
@@ -511,7 +511,7 @@ def test_all_public_bbox_tracks_reject_invalid_input_before_network(
         patch("socket.socket.connect", side_effect=AssertionError("network")),
         pytest.raises(ValidationError) as exc,
     ):
-        operation(bbox=bbox, output_dir=tmp_path, cache=False, **choices)
+        operation(bbox=bbox, root=tmp_path, cache=False, **choices)
     assert str(exc.value).startswith(f"Invalid bbox: {reason}")
 
 
@@ -525,7 +525,7 @@ def test_cz_cutout_unknown_horizontal_crs_is_validation_error(tmp_path, operatio
     ):
         operation(
             bbox=BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
-            output_dir=tmp_path,
+            root=tmp_path,
             product="nmt",
             horizontal_crs="EPSG:9999",
             vertical_crs="Bpv",
@@ -554,7 +554,7 @@ def test_pl_sheet_list_failure_contains_per_sheet_cause(tmp_path):
     ):
         report = download_data(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=BBox(530000, 380000, 530100, 380100, "EPSG:2180"),
             country="pl",
             resolution="1m",
@@ -578,7 +578,7 @@ def test_check_data_auto_partial_names_failed_country_without_download_claim(tmp
     with patch(CZ_FACTORY, side_effect=DownloadError("CUZK 503")):
         plan = check_data(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=BORDER,
             cutout=True,
             horizontal_crs="EPSG:3045",
@@ -625,8 +625,8 @@ def test_check_data_partial_coverage_is_a_plan_with_the_warning_of_the_download(
     the check of an area with holes is not a failed check (code 0), it warns
     exactly as the download of the same area does."""
     with _pl_sheets(c14_fake()), _area_sheets([G, NO_DATA]):
-        plan = check_data(output_dir=tmp_path, **_area())
-        report = download_data(output_dir=tmp_path, **_area())
+        plan = check_data(root=tmp_path, **_area())
+        report = download_data(root=tmp_path, **_area())
     assert plan.ok and [item.unit for item in plan.items] == [G]
     assert report.ok and report.failed == ()
     check = next(n for n in plan.notices if n.code == NO_COVERAGE_SOME)
@@ -642,9 +642,9 @@ def test_check_data_partial_coverage_is_a_plan_with_the_warning_of_the_download(
 def test_every_sheet_without_data_fails_the_check_like_the_download(tmp_path):
     sheets = [NO_DATA, "N-34-139-C-a-1-2"]
     with _pl_sheets(c14_fake()), _area_sheets(sheets):
-        report = download_data(output_dir=tmp_path, **_area())
+        report = download_data(root=tmp_path, **_area())
         with pytest.raises(NoCoverageError) as caught:
-            check_data(output_dir=tmp_path, **_area())
+            check_data(root=tmp_path, **_area())
     assert [(f.unit, f.kind) for f in report.failed] == [("PL", "no_coverage")]
     assert report.failed[0].error == str(caught.value)
 
@@ -653,9 +653,9 @@ def test_single_sheet_without_data_is_a_no_coverage_failure(tmp_path):
     """e2e-A P3-3 / e2e-B P3-1: ``failed[].kind`` of one ``--sheet`` without a
     record is ``no_coverage``, as for the same sheet in an area."""
     with _pl_sheets(c14_fake()):
-        report = download_data(output_dir=tmp_path, sheet=NO_DATA, **_NMT_1M)
+        report = download_data(root=tmp_path, sheet=NO_DATA, **_NMT_1M)
         with pytest.raises(NoCoverageError):
-            check_data(output_dir=tmp_path, sheet=NO_DATA, **_NMT_1M)
+            check_data(root=tmp_path, sheet=NO_DATA, **_NMT_1M)
     assert not report.ok
     assert [(f.unit, f.kind) for f in report.failed] == [(NO_DATA, "no_coverage")]
 
@@ -665,10 +665,10 @@ def test_year_conflict_is_year_out_of_range_in_the_download_and_the_check(tmp_pa
     names the conflicting sheets in ONE error, as the download does."""
     sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
     with _pl_sheets(c14_fake()), _area_sheets(sheets):
-        report = download_data(output_dir=tmp_path, min_year=2026, **_area())
+        report = download_data(root=tmp_path, min_year=2026, **_area())
         with pytest.raises(YearRangeError) as caught:
-            check_data(output_dir=tmp_path, min_year=2026, **_area())
-        single = download_data(output_dir=tmp_path, sheet=G, min_year=2026, **_NMT_1M)
+            check_data(root=tmp_path, min_year=2026, **_area())
+        single = download_data(root=tmp_path, sheet=G, min_year=2026, **_NMT_1M)
     assert [f.kind for f in report.failed] == ["year_out_of_range"]
     assert [f.kind for f in single.failed] == ["year_out_of_range"]
     assert set(caught.value.sheets) == {G, "N-34-139-C-a-3-3"}
@@ -681,6 +681,6 @@ def test_check_failed_stays_for_an_index_transport_failure(tmp_path):
     still a position that could not be checked."""
     fake = FakeCampaignProvider(C14, errors={G: DownloadError("zrodlo HTTP 503")})
     with _pl_sheets(fake):
-        plan = check_data(output_dir=tmp_path, sheet=G, **_NMT_1M)
+        plan = check_data(root=tmp_path, sheet=G, **_NMT_1M)
     assert not plan.ok
     assert [item.status for item in plan.items] == ["check_failed"]

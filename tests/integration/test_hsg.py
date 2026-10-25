@@ -310,7 +310,7 @@ class TestHSGDescriptions:
 class TestHSGCalculator:
     """Test HSGCalculator class."""
 
-    def test_calculator_requires_output_dir(self):
+    def test_calculator_requires_root(self):
         with pytest.raises(TypeError):
             HSGCalculator()  # type: ignore[call-arg]
 
@@ -342,7 +342,7 @@ class TestHSGCalculator:
             with pytest.raises(ValidationError) as caught:
                 HSGCalculator(tmp_path / f"hsg{extension}")
             assert str(caught.value) == (
-                "--output is a store directory (since 0.8.0); for a file outside the "
+                "--root is a store directory (since 0.8.0); for a file outside the "
                 "store use hsg_from_rasters"
             )
         assert list(tmp_path.iterdir()) == []
@@ -855,7 +855,7 @@ class TestHSGCalculatorCalculateFull:
         assert (stats["A"]["count"], stats["B"]["count"]) == (1, 11)
 
 
-class TestHSGOutputDirOnWrite:
+class TestHSGRootOnWrite:
     """The store root is not touched before an input exists."""
 
     def test_init_creates_nothing(self, tmp_path):
@@ -1137,11 +1137,9 @@ class TestCalculateHsgSummary:
 
     def test_calculate_hsg_summary_matches_hsg_statistics(self, tmp_path):
         with self._soilgrids(RasterSoilGrids()):
-            plain = calculate_hsg(
-                output_dir=tmp_path, bbox=BBOX, depth="0-5cm", cache=False
-            )
+            plain = calculate_hsg(root=tmp_path, bbox=BBOX, depth="0-5cm", cache=False)
             summed = calculate_hsg(
-                output_dir=tmp_path,
+                root=tmp_path,
                 bbox=BBOX,
                 depth="0-5cm",
                 summary=True,
@@ -1158,7 +1156,7 @@ class TestCalculateHsgSummary:
         failing = RasterSoilGrids(editions={"clay": DownloadError("brak odpowiedzi")})
         with self._soilgrids(failing):
             report = calculate_hsg(
-                output_dir=tmp_path,
+                root=tmp_path,
                 bbox=BBOX,
                 depth="0-5cm",
                 summary=True,

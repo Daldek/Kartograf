@@ -174,7 +174,7 @@ _ENVELOPE = BBox(770000, 509000, 772000, 511000, "EPSG:2180")
 def _plan_of_data(tmp_path, monkeypatch, on_notice):
     monkeypatch.setattr(collections, "_session", lambda: FakeGugik())
     return check_data(
-        output_dir=tmp_path, bbox=KRAKOW, country="pl", on_notice=on_notice, **NMT_100M
+        root=tmp_path, bbox=KRAKOW, country="pl", on_notice=on_notice, **NMT_100M
     )
 
 
@@ -184,7 +184,7 @@ def _plan_of_collection(tmp_path, monkeypatch, on_notice):
     monkeypatch.setattr(collections, "_session", lambda: session)
     return check_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         bbox=AREA,
         country="pl",
         lod=1,
@@ -199,7 +199,7 @@ def _plan_of_landcover(tmp_path, monkeypatch, on_notice):
     with download, teryts, patch_envelope():
         return check_landcover(
             product="bdot10k",
-            output_dir=tmp_path / "store",
+            root=tmp_path / "store",
             geometry=_geometry(tmp_path),
             cache=False,
             on_notice=on_notice,
@@ -210,7 +210,7 @@ def _plan_of_soil(tmp_path, monkeypatch, on_notice):
     soil = _providers(soilgrids=lambda: SoilGridsProvider(session=FakeSoilGrids()))
     with soil, patch_envelope():
         return check_soil(
-            output_dir=tmp_path / "store",
+            root=tmp_path / "store",
             geometry=_geometry(tmp_path),
             cache=False,
             on_notice=on_notice,
@@ -221,7 +221,7 @@ def _plan_of_soil(tmp_path, monkeypatch, on_notice):
 def _plan_of_hsg(tmp_path, monkeypatch, on_notice):
     with _providers(soilgrids=RasterSoilGrids), patch_envelope():
         return check_hsg(
-            output_dir=tmp_path / "store",
+            root=tmp_path / "store",
             geometry=_geometry(tmp_path),
             depth="0-5cm",
             cache=False,

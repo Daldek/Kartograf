@@ -30,7 +30,7 @@ NO_TAG = {"etag": None, "last_modified": None, "content_length": 3}
 def make_slot(root: Path) -> FileSlot:
     base = root / "nmt/cz_dmr4g_bpv/versions"
     return FileSlot(
-        output_dir=root,
+        root=root,
         std=root / "nmt/cz_dmr4g_bpv/CTES/CTES96.tif",
         versions_base=base,
         versions_root=base / "CTES",
@@ -268,7 +268,7 @@ def test_check_mode_names_the_plan_function_of_the_track(
 
     with pytest.raises(ValidationError, match=rf"uzyj {check}\(\)"):
         getattr(kartograf, function)(
-            output_dir=tmp_path, update="check", cache=False, **arguments
+            root=tmp_path, update="check", cache=False, **arguments
         )
     assert list(tmp_path.iterdir()) == []
 

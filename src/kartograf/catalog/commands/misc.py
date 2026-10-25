@@ -226,15 +226,15 @@ _FIND_SHEETS_PARAMS = (
     shared.JSON,
 )
 
-_OUTPUT_DIR = replace(
-    shared.OUTPUT_DIR,
+_ROOT = replace(
+    shared.ROOT,
     description="Store directory (required): the one that holds the product segments.",
     description_pl="Katalog magazynu (wymagany): katalog z segmentami produktow",
     section=None,
 )
 
 _STORE_ENTRIES_PARAMS = (
-    _OUTPUT_DIR,
+    _ROOT,
     Param(
         "segment",
         "str",
@@ -638,7 +638,7 @@ COMMANDS = (
         "query",
         "describe_store",
         "kartograf-store-overview/1",
-        (_OUTPUT_DIR, shared.JSON),
+        (_ROOT, shared.JSON),
         description=(
             "Read only, offline: the segments (product directories) of the "
             "store with product, country, `dataset` key, name and whether a"
@@ -771,7 +771,7 @@ GROUPS = (
         description_pl=(
             "Lokalny cache metadanych SQLite (odpowiedzi WMS, TERYT, indeks"
             " arkuszy CUZK) w pliku w biezacym katalogu; dane w magazynie "
-            "(--output) nie sa czescia cache"
+            "(--root) nie sa czescia cache"
         ),
     ),
     Group(

@@ -67,13 +67,13 @@ def test_example_for_falls_back_to_the_first_example():
 
     unused = example_for("elevation download", "min_density")
     api_only = example_for("elevation download", "update")
-    store = example_for("elevation download", "output_dir")
+    store = example_for("elevation download", "root")
 
     assert all("--min-density" not in line for line in lines)
     assert unused == ("--min-density", lines[0])
     # an argument only the API has: no flag, but the example is still shown
     assert api_only == (None, lines[0])
-    assert store == ("--output", lines[0]) and lines[0].endswith(" -o ./data")
+    assert store == ("--root", lines[0]) and lines[0].endswith(" --root ./data")
 
 
 def test_example_for_unknown_command_or_option():
@@ -335,7 +335,7 @@ def test_data_commands_are_the_twelve_in_COMMANDS_order():
     for command in commands:
         names = {p.name for p in command.params}
         # the options of a task and the flags of a run
-        assert {"output_dir", "update"} <= names
+        assert {"root", "update"} <= names
         assert {p.name for p in command.params if p.task} == set(
             COMMANDS[command.id].options
         )

@@ -14,7 +14,7 @@ the download without network (``project add``).
 ``LandCoverManager`` is the layer below them (outside the public API): it
 downloads BDOT10k, BDOO, CORINE, SoilGrids, ZABAGED, Data50 and Data250 into
 the ``data/`` layout of its output directory (the store root, as
-``--output``): every file is an immutable version with a hardlink at the
+``--root``): every file is an immutable version with a hardlink at the
 standard path. SoilGrids and CORINE (CLMS) versions are labelled by the
 source edition (signal ``metadata``), the CORINE WMS preview and BDOT10k by
 the download date (signal ``none``), the BDOT10k yearly archive (``year``)
@@ -561,7 +561,7 @@ class LandCoverManager:
     This is the layer below ``download_landcover``/``download_soil`` (not in the public
     API).
 
-    Every file lands in a segment of ``output_dir`` that carries its
+    Every file lands in a segment of ``root`` that carries its
     content parameters (spec 3.4): ``landcover/pl_bdot10k_gpkg[_<layers>]``,
     ``landcover/pl_bdot10k_shp``, ``landcover/pl_bdot10k_gpkg_zip``
     (``keep_raw``), ``landcover/pl_bdot10k_<gml|shp>_<year>`` (the yearly
@@ -582,8 +582,8 @@ class LandCoverManager:
 
     Parameters
     ----------
-    output_dir : str or Path
-        Store root (``--output``); created only when a file is written.
+    root : str or Path
+        Store root (``--root``); created only when a file is written.
     provider : LandCoverProvider or str
         Provider instance or name: "bdot10k" (Polish topographic vectors),
         "corine" (European land cover raster), "soilgrids" (soil rasters),
@@ -600,7 +600,7 @@ class LandCoverManager:
 
     def __init__(
         self,
-        output_dir: str | Path,
+        root: str | Path,
         provider: LandCoverProvider | str,
         cache: MetadataCache | bool = True,
     ):
@@ -609,7 +609,7 @@ class LandCoverManager:
 
         Parameters
         ----------
-        output_dir : str or Path
+        root : str or Path
             Store root. It is not created here: the directory appears only
             when a download writes its first file.
         provider : LandCoverProvider or str
@@ -622,7 +622,7 @@ class LandCoverManager:
             Cache for providers created by name (see the class docstring);
             opened per ``download``/``check`` call.
         """
-        self._output_dir = Path(output_dir)
+        self._root = Path(root)
         self._cache = cache
         self._provider: LandCoverProvider
         self._provider_name: str | None = None
@@ -659,9 +659,9 @@ class LandCoverManager:
         return provider
 
     @property
-    def output_dir(self) -> Path:
+    def root(self) -> Path:
         """Store root."""
-        return self._output_dir
+        return self._root
 
     @property
     def provider(self) -> LandCoverProvider:
@@ -922,7 +922,7 @@ class LandCoverManager:
                 )
                 archive = self._archive_jobs(teryts, options, parent=None)
                 plan = new_plan(
-                    self._output_dir, [self._inspect_archive(job) for job in archive]
+                    self._root, [self._inspect_archive(job) for job in archive]
                 )
                 return replace(plan, notices=sink.notices)
             if teryt is not None:
@@ -932,7 +932,7 @@ class LandCoverManager:
                 jobs = [j for t in teryts for j in self._jobs(teryt=t, kwargs=options)]
             else:
                 jobs, _ = self._area_jobs(bbox=bbox, sheet=sheet, kwargs=options)
-            plan = new_plan(self._output_dir, [self._inspect(job) for job in jobs])
+            plan = new_plan(self._root, [self._inspect(job) for job in jobs])
             return replace(plan, notices=sink.notices)
 
     def validate_request(
@@ -1044,7 +1044,7 @@ class LandCoverManager:
             )
         return landcover_request(
             self._collection,
-            output_dir=self._output_dir,
+            root=self._root,
             teryt=teryt,
             sheet=sheet,
             bbox=bbox,
@@ -1264,7 +1264,7 @@ class LandCoverManager:
         fmt, year = kwargs["format"], kwargs["year"]
         return [
             package_job(
-                self._output_dir,
+                self._root,
                 descriptor,
                 channel,
                 variant,
@@ -1515,7 +1515,7 @@ class LandCoverManager:
         self, file: VersionedFile, update: UpdateMode | None, sink: NoticeSink
     ) -> None:
         """Report signal failures and unchecked local versions of a store file."""
-        unit = file.path.relative_to(self._output_dir).as_posix()
+        unit = file.path.relative_to(self._root).as_posix()
         emit_file_notices(sink, unit, file, update)
 
     def _content_params(self, kwargs: dict[str, Any]) -> dict[str, object]:
@@ -1548,7 +1548,7 @@ class LandCoverManager:
         """Files of one selection (BDOT10k: by TERYT; ``keep_raw`` = 2 files)."""
         provider = self._provider
         key = self._descriptor_key()
-        out = self._output_dir
+        out = self._root
         tokens: tuple[str, ...]
         if isinstance(provider, Bdot10kProvider):
             assert teryt is not None
@@ -1705,7 +1705,7 @@ class LandCoverManager:
             raise ValidationError(
                 message("landcover.plan_requires_upgrade"), options=("plan", "update")
             )
-        require_store(plan, store_id(self._output_dir))
+        require_store(plan, store_id(self._root))
         todo, stale = select_planned(plan, inspect(), _TRACK)
         return {(i.segment, i.hierarchy, i.name) for i in todo}, tuple(stale)
 
@@ -1844,7 +1844,7 @@ class LandCoverManager:
                 ALL_NODATA,
                 message(
                     "landcover.raster_all_nodata",
-                    raster_path=file.path.relative_to(self._output_dir).as_posix(),
+                    raster_path=file.path.relative_to(self._root).as_posix(),
                 ),
             )
         return file
@@ -1949,9 +1949,7 @@ class LandCoverManager:
             main_extra["source_files"] = [
                 {
                     "name": "package",
-                    "file": raw_file.version_path.relative_to(
-                        self._output_dir
-                    ).as_posix(),
+                    "file": raw_file.version_path.relative_to(self._root).as_posix(),
                     "sha256": raw_file.sha256,
                 }
             ]
@@ -2001,11 +1999,7 @@ class LandCoverManager:
 
     def __repr__(self) -> str:
         """Return string representation."""
-        return (
-            f"LandCoverManager("
-            f"provider={self.provider_name!r}, "
-            f"output_dir={self._output_dir!r})"
-        )
+        return f"LandCoverManager(provider={self.provider_name!r}, root={self._root!r})"
 
 
 # =============================================================================
@@ -2035,31 +2029,31 @@ def _given(arguments: dict[str, Any], names: Sequence[str]) -> dict[str, Any]:
 
 
 def _landcover_manager(
-    product: str | None, output_dir: str | Path | None, cache: MetadataCache | bool
+    product: str | None, root: str | Path | None, cache: MetadataCache | bool
 ) -> LandCoverManager:
-    """Return the manager of ``product`` in the store ``output_dir``.
+    """Return the manager of ``product`` in the store ``root``.
 
     Both are checked first, without network.
     """
     chosen = require_landcover_product(product)
-    if output_dir is None:
-        raise ValidationError(output_required("landcover"), option="output_dir")
-    return LandCoverManager(output_dir, chosen, cache=cache)
+    if root is None:
+        raise ValidationError(output_required("landcover"), option="root")
+    return LandCoverManager(root, chosen, cache=cache)
 
 
 def _soil_manager(
-    output_dir: str | Path | None, cache: MetadataCache | bool
+    root: str | Path | None, cache: MetadataCache | bool
 ) -> LandCoverManager:
-    """Return the SoilGrids manager of the store ``output_dir`` (checked first)."""
-    if output_dir is None:
-        raise ValidationError(output_required("soil"), option="output_dir")
-    return LandCoverManager(output_dir, "soilgrids", cache=cache)
+    """Return the SoilGrids manager of the store ``root`` (checked first)."""
+    if root is None:
+        raise ValidationError(output_required("soil"), option="root")
+    return LandCoverManager(root, "soilgrids", cache=cache)
 
 
 def download_landcover(
     *,
     product: str | None,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     teryt: str | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
@@ -2080,7 +2074,7 @@ def download_landcover(
 ) -> LandCoverReport:
     """Download land cover data (``landcover download``) into the version store.
 
-    The store is ``output_dir``.
+    The store is ``root``.
 
     Parameter names and values are the flags of the command in
     ``snake_case``; every data choice is explicit. ``product``:
@@ -2146,16 +2140,16 @@ def download_landcover(
     Examples
     --------
     >>> report = download_landcover(
-    ...     product="bdot10k", output_dir="./data", teryt="1465"
+    ...     product="bdot10k", root="./data", teryt="1465"
     ... )
     >>> report.files[0].file.path  # data/landcover/pl_bdot10k_gpkg/teryt/1465.gpkg
     >>> area = download_landcover(
-    ...     product="bdot10k", output_dir="./data", layers=["PTWP", "SWRS"],
+    ...     product="bdot10k", root="./data", layers=["PTWP", "SWRS"],
     ...     bbox=BBox(450000, 550000, 460000, 560000, "EPSG:2180"), workers=4,
     ... )
     >>> [item.unit for item in area.files], area.failed, area.ok
     """
-    manager = _landcover_manager(product, output_dir, cache)
+    manager = _landcover_manager(product, root, cache)
     return manager.download(
         teryt=teryt,
         sheet=sheet,
@@ -2174,7 +2168,7 @@ def download_landcover(
 def check_landcover(
     *,
     product: str | None,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     teryt: str | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
@@ -2211,7 +2205,7 @@ def check_landcover(
     DownloadError
         The PRG powiat query of an area failed.
     """
-    manager = _landcover_manager(product, output_dir, cache)
+    manager = _landcover_manager(product, root, cache)
     return manager.check(
         teryt=teryt,
         sheet=sheet,
@@ -2226,7 +2220,7 @@ def check_landcover(
 def validate_landcover_request(
     *,
     product: str | None,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     teryt: str | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
@@ -2250,7 +2244,7 @@ def validate_landcover_request(
     ValidationError
         Invalid or missing choice.
     """
-    _landcover_manager(product, output_dir, False).validate_request(
+    _landcover_manager(product, root, False).validate_request(
         teryt=teryt,
         sheet=sheet,
         bbox=bbox,
@@ -2262,7 +2256,7 @@ def validate_landcover_request(
 
 def download_soil(
     *,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -2275,7 +2269,7 @@ def download_soil(
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> SoilReport:
-    """Download one SoilGrids layer of an area into the version store of ``output_dir``.
+    """Download one SoilGrids layer of an area into the version store of ``root``.
 
     This is ``soil download``.
 
@@ -2307,12 +2301,12 @@ def download_soil(
     Examples
     --------
     >>> report = download_soil(
-    ...     output_dir="./data", sheet="N-34-130-D",
+    ...     root="./data", sheet="N-34-130-D",
     ...     property="clay", depth="0-5cm", stat="mean",
     ... )
     >>> report.files[0].file.label  # the SoilGrids edition, e.g. 2.0
     """
-    report = _soil_manager(output_dir, cache).download(
+    report = _soil_manager(root, cache).download(
         sheet=sheet,
         bbox=bbox,
         geometry=geometry,
@@ -2333,7 +2327,7 @@ def download_soil(
 
 def check_soil(
     *,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -2354,7 +2348,7 @@ def check_soil(
     ValidationError
         Invalid or missing choice (as ``download_soil``).
     """
-    return _soil_manager(output_dir, cache).check(
+    return _soil_manager(root, cache).check(
         sheet=sheet,
         bbox=bbox,
         geometry=geometry,
@@ -2366,7 +2360,7 @@ def check_soil(
 
 def validate_soil_request(
     *,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -2385,7 +2379,7 @@ def validate_soil_request(
     ValidationError
         Invalid or missing choice.
     """
-    _soil_manager(output_dir, False).validate_request(
+    _soil_manager(root, False).validate_request(
         sheet=sheet,
         bbox=bbox,
         geometry=geometry,

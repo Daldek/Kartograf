@@ -146,7 +146,7 @@ def test_first_download_pins_every_file(tmp_path, frozen_clock, case):
     assert [pin.role for pin in task.files] == roles
     assert task.pinned_at == frozen_clock.isoformat(timespec="seconds")
     assert task.kartograf_version == build_version()
-    store = report.project.output_dir
+    store = report.project.root
     for pin in task.files:
         data = store / pin.version
         assert file_digest(data) == (pin.sha256, pin.size_bytes)
@@ -314,7 +314,7 @@ def test_second_project_newer_version_keeps_first_pins(tmp_path):
         json.dumps(
             {
                 "schema": "kartograf-project/1",
-                "output_dir": "../projekt/data",
+                "root": "../projekt/data",
                 "tasks": [],
             }
         ),
@@ -497,7 +497,7 @@ def test_upgrade_takes_newer_local_version_without_download(tmp_path):
     first = _pinned_pl(tmp_path, fake)
     second = copy_manifest(first, tmp_path / "drugi")
     doc = json.loads((second / MANIFEST_NAME).read_text(encoding="utf-8"))
-    doc["output_dir"] = "../projekt/data"  # the same store
+    doc["root"] = "../projekt/data"  # the same store
     (second / MANIFEST_NAME).write_text(json.dumps(doc), encoding="utf-8")
     fake.records = {"newest": [REC["84183"]]}
     with pl_sheets(fake):

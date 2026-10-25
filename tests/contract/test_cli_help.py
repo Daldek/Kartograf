@@ -69,12 +69,12 @@ def test_every_download_command_has_examples():
 def test_help_example_is_a_valid_task(example, tmp_path, capsys, monkeypatch):
     """A data example of ``--help`` passes the checks of ``project add``
     (all choices, no network): the store comes from the project, so
-    ``--output`` and the display flag ``--summary`` are left out."""
+    ``--root`` and the display flag ``--summary`` are left out."""
     monkeypatch.chdir(tmp_path)
-    assert main(["project", "init", "--output", "store"]) == 0
+    assert main(["project", "init", "--root", "store"]) == 0
     argv = shlex.split(example)[1:]
     argv = [a for a in argv if a != "--summary"]
-    at = argv.index("-o")
+    at = argv.index("--root")
     del argv[at : at + 2]
     assert main(["project", "add", "t", *argv]) == 0, capsys.readouterr().err
 
@@ -162,7 +162,7 @@ def test_country_offers_only_countries_of_the_group(group, product, country, cap
     ],
 )
 def test_output_help_and_error_name_the_store_directory(argv, directory, capsys):
-    """The ``--output`` help and the error of a missing ``--output`` name the
+    """The ``--root`` help and the error of a missing ``--root`` name the
     same directory of the store - the one of the group, no placeholder."""
     assert main(argv) == 2
     error = capsys.readouterr().err

@@ -61,7 +61,7 @@ Example usage::
     # notices, ok
     report = download_data(
         product="nmt",
-        output_dir="./data",
+        root="./data",
         sheet="N-34-130-D-d-2-4",
         resolution="1m",
         vertical_crs="EVRF2007",
@@ -89,7 +89,7 @@ Example usage::
     # LAZ tiles for an area: newest per area, sidecars, failures in result
     laz = download_laz_area(
         bbox=BBox(637400, 487000, 637450, 487050, "EPSG:2180"),
-        output_dir="./data",
+        root="./data",
         vertical_crs="EVRF2007",
     )
 
@@ -97,16 +97,16 @@ Example usage::
     result = download_pl_cutout(
         bbox=BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
         horizontal_crs="EPSG:2180",
-        output_dir="./data",
+        root="./data",
         vertical_crs="EVRF2007",
         product="nmt",
     )
 
     # Land cover and HSG in the same store (versions, report with the files)
     from kartograf import calculate_hsg, download_landcover
-    lc = download_landcover(product="bdot10k", output_dir="./data", teryt="1465")
+    lc = download_landcover(product="bdot10k", root="./data", teryt="1465")
     print(lc.files[0].file.path, lc.ok)  # data/landcover/pl_bdot10k_gpkg/...
-    hsg = calculate_hsg(output_dir="./data", sheet="N-34-130-D", depth="0-5cm")
+    hsg = calculate_hsg(root="./data", sheet="N-34-130-D", depth="0-5cm")
     print(hsg.files[0].file.path, hsg.files[0].file.label)  # SoilGrids edition
 """
 

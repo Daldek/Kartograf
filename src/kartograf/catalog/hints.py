@@ -94,7 +94,7 @@ def example_for(
         gives no flag and no example.
     option : str, optional
         The argument the error is about (``ValidationError.option``: the name of
-        the API argument, e.g. ``vertical_crs``, ``output_dir``).
+        the API argument, e.g. ``vertical_crs``, ``root``).
     given : mapping, optional
         The arguments of the failed call by their names (``product``,
         ``country``, ``bbox``, ...: what the CLI parsed or an MCP tool was

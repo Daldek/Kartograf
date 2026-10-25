@@ -230,7 +230,7 @@ def test_the_run_options_are_update_plan_workers_and_summary():
     assert PLANS["kartograf_project_download"].refused == {"update", "workers"}
     assert PLANS["kartograf_soil_hsg"].refused == {"update", "plan", "summary"}
     # a plan keeps the store and the task: what the check reads
-    assert {"output_dir", "product"} <= set(
+    assert {"root", "product"} <= set(
         PLANS["kartograf_elevation_download"].input_schema["properties"]
     )
     assert {"project_dir", "tasks"} <= set(
@@ -397,7 +397,7 @@ def test_every_argument_has_a_kind_and_the_data_tools_know_their_task_options():
         spec = WRITES[command.operation_id]
 
         assert set(spec.task_options) == set(COMMANDS[command.id].options)
-        assert "output_dir" in spec.input_schema["required"]
+        assert "root" in spec.input_schema["required"]
         assert not {"quiet", "json", "upgrade", "force"} & set(spec.kinds)
     assert all(
         not s.task_options
@@ -410,10 +410,10 @@ def test_every_path_has_a_role_and_nested_task_paths_are_known():
     roles = {role for spec in WRITES.values() for role in spec.paths.values()}
 
     assert roles == {"input", "output", "root"}
-    assert WRITES["kartograf_store_overview"].paths == {"output_dir": "root"}
+    assert WRITES["kartograf_store_overview"].paths == {"root": "root"}
     assert WRITES["kartograf_project_init"].paths == {
         "project_dir": "output",
-        "output_dir": "root",
+        "root": "root",
     }
     assert task_paths("elevation download") == {"geometry": "input"}
     with pytest.raises(KeyError):

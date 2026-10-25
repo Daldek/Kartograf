@@ -110,7 +110,7 @@ def test_a_status_without_the_units_it_needs_does_not_validate():
         MissingDependencyError("brak pakietu mcp", extra="mcp"),
         ForbiddenError(
             "sciezka poza katalogami",
-            option="output_dir",
+            option="root",
             path=Path("/poza"),
             allowed=["/dane"],
         ),

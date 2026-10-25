@@ -29,7 +29,7 @@ from tests.support.errors import error_document, without_error_document
 from tests.support.interrupt_fakes import PATIENCE_S
 
 SHEET = "N-34-130-D-d-2-4"
-OUTPUT_REQUIRED = "--output wymagane: katalog magazynu (pliki w <KATALOG>/nmt/...)"
+OUTPUT_REQUIRED = "--root wymagane: katalog magazynu (pliki w <KATALOG>/nmt/...)"
 # a complete PL elevation request but for the store (``-o``)
 ELEVATION = [
     "elevation",
@@ -72,7 +72,7 @@ def test_input_error_exits_2_in_text_mode(capsys):
 def test_source_failure_exits_5(capsys, tmp_path):
     failure = DownloadError("HTTP 503 dla https://example.org/zrodlo")
     with patch("kartograf.cli.download_cmd.download_data", side_effect=failure):
-        code, out, err = _run(capsys, [*ELEVATION, "-o", str(tmp_path)])
+        code, out, err = _run(capsys, [*ELEVATION, "--root", str(tmp_path)])
 
     assert code == 5
     assert without_error_document(err) == (
@@ -91,7 +91,7 @@ def test_ok_false_exits_11_and_prints_no_error_document(capsys, tmp_path):
         ok=False,
     )
     with patch("kartograf.cli.download_cmd.download_data", return_value=report):
-        code, out, err = _run(capsys, [*ELEVATION, "-o", str(tmp_path)])
+        code, out, err = _run(capsys, [*ELEVATION, "--root", str(tmp_path)])
 
     assert code == 11
     assert out == ""
@@ -156,7 +156,7 @@ def test_json_input_error_is_an_error_document(capsys):
     assert document["message"] == OUTPUT_REQUIRED
     assert document["exit_code"] == 2
     assert document["command"] == "elevation download"
-    assert document["details"] == {"reason": "invalid_input", "option": "output_dir"}
+    assert document["details"] == {"reason": "invalid_input", "option": "root"}
     # the hint is a command line of the catalog that works as it stands
     example = document["hint"].removeprefix("Example: kartograf ")
     assert example != document["hint"]
@@ -165,7 +165,7 @@ def test_json_input_error_is_an_error_document(capsys):
 
 def test_json_input_error_lists_allowed_values_and_an_example(capsys, tmp_path):
     argv = [x for x in ELEVATION if x not in ("--vertical-crs", "EVRF2007")]
-    code, out, err = _run(capsys, [*argv, "-o", str(tmp_path), "--json"])
+    code, out, err = _run(capsys, [*argv, "--root", str(tmp_path), "--json"])
 
     document = error_document(err)
     assert code == 2 and out == ""
@@ -186,7 +186,7 @@ def test_json_input_error_hint_example_is_of_the_product_and_country_of_the_line
     # E2E 0.8.0 D P3-7: the hint took the first example of the command
     argv = ["boundaries", "download", "--product", "admin", "--country", "auto"]
     argv += ["--level", "gmina", "--bbox", "18.6,49.7,18.7,49.8"]
-    argv += ["--bbox-crs", "EPSG:4326", "-o", str(tmp_path), "--json"]
+    argv += ["--bbox-crs", "EPSG:4326", "--root", str(tmp_path), "--json"]
 
     code, out, err = _run(capsys, argv)
 
@@ -361,7 +361,7 @@ def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):
     any work: ``test_plan_file_that_is_a_directory_is_one_error_line``.)"""
     plan_file = tmp_path / "plan.json"
     checked = new_plan(tmp_path, [])
-    argv = [*ELEVATION, "-o", str(tmp_path), "--check-updates", "--json"]
+    argv = [*ELEVATION, "--root", str(tmp_path), "--check-updates", "--json"]
     failure = IsADirectoryError(21, "Is a directory", str(plan_file))
     with (
         patch("kartograf.cli.download_cmd.check_data", return_value=checked),
@@ -504,10 +504,10 @@ def test_library_warnings_pass_with_debug_in_json_mode(capsys, tmp_path, monkeyp
     ("argv", "option"),
     [
         (["landcover", "download"], "product"),
-        (["landcover", "download", "--product", "corine"], "output_dir"),
+        (["landcover", "download", "--product", "corine"], "root"),
         (["landcover", "list-layers"], "product"),
-        (["soil", "download"], "output_dir"),
-        (["soil", "hsg"], "output_dir"),
+        (["soil", "download"], "root"),
+        (["soil", "hsg"], "root"),
         (["sheet", "parse", "NIE-GODLO"], "sheet"),
         (["sheet", "parse", "CTES96", "--hierarchy"], "hierarchy"),
         (["sheet", "parse", "N-34-130-D", "--descendants", "1:77"], "descendants"),
@@ -529,7 +529,7 @@ def test_input_errors_of_the_handlers_name_the_option(capsys, argv, option):
     ["unreadable", "foreign_schema", "directory_missing", "no_mode"],
 )
 def test_plan_file_errors_are_input_errors_of_the_plan(capsys, tmp_path, plan_error):
-    store = ["-o", str(tmp_path)]
+    store = ["--root", str(tmp_path)]
     plan_file = tmp_path / "plan.json"
     if plan_error == "foreign_schema":
         plan_file.write_text('{"schema": "kartograf-sheet/1"}', encoding="utf-8")

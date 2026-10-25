@@ -16,7 +16,7 @@ from collections.abc import Mapping, Sequence
 
 from kartograf.catalog.spec import Command, Example, Param
 
-# The store directory of an example line (a command with ``output_dir``).
+# The store directory of an example line (a command with ``root``).
 EXAMPLE_STORE = "./data"
 # Per-country values are written PL first, as the library names the countries.
 _COUNTRY_ORDER = ("pl", "cz")
@@ -45,7 +45,7 @@ def format_command_line(
     Returns
     -------
     str
-        ``kartograf elevation download --product nmt ... -o ./data``; a value is
+        ``kartograf elevation download --product nmt ... --root ./data``; a value is
         quoted for a shell (``shlex.quote``), ``--bbox-crs`` is left out when it
         is the default of the flag.
 
@@ -74,12 +74,12 @@ def format_command_line(
 def example_command_line(command: Command, example: Example) -> str:
     """Return the command line of a declared example.
 
-    A command with a store directory gets ``-o ./data`` unless the example names another
+    A command with a store root gets ``--root ./data`` unless the example names another
     one.
     """
     run = dict(example.run)
-    if any(param.name == "output_dir" for param in command.params):
-        run.setdefault("output_dir", EXAMPLE_STORE)
+    if any(param.name == "root" for param in command.params):
+        run.setdefault("root", EXAMPLE_STORE)
     return format_command_line(command, example.options, run)
 
 

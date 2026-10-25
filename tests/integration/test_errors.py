@@ -238,8 +238,8 @@ def test_usage_error_is_a_validation_error():
 def test_forbidden_error_document():
     outside = Path("/data/elsewhere").resolve()
     exc = ForbiddenError(
-        "output_dir lies outside the allowed directories",
-        option="output_dir",
+        "root lies outside the allowed directories",
+        option="root",
         path=outside,
         allowed=("/data/kartograf", "/data/other"),
         hint="Use a path inside an allowed directory.",
@@ -251,10 +251,10 @@ def test_forbidden_error_document():
         "schema": "kartograf-error/1",
         "code": "forbidden",
         "title": "Not allowed",
-        "message": "output_dir lies outside the allowed directories",
+        "message": "root lies outside the allowed directories",
         "hint": "Use a path inside an allowed directory.",
         "details": {
-            "option": "output_dir",
+            "option": "root",
             "path": outside.as_posix(),
             "allowed": ["/data/kartograf", "/data/other"],
         },
@@ -312,7 +312,7 @@ def test_error_report_document():
         "message": "--vertical-crs wymagane",
         "hint": "Allowed values of --vertical-crs: EVRF2007, KRON86. Example: "
         "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
-        "--resolution 1m --vertical-crs EVRF2007 -o ./data",
+        "--resolution 1m --vertical-crs EVRF2007 --root ./data",
         "details": {
             "reason": "invalid_input",
             "option": "vertical_crs",
@@ -440,11 +440,11 @@ def test_usage_error_command_and_hint_sources():
 
 def test_validation_hint_has_an_example_without_allowed_values():
     hint = error_report(
-        ValidationError("m", option="output_dir"), command="elevation download"
+        ValidationError("m", option="root"), command="elevation download"
     ).hint
 
     assert hint is not None and hint.startswith("Example: kartograf elevation ")
-    assert hint.endswith("-o ./data")
+    assert hint.endswith("--root ./data")
 
 
 def test_validation_hint_drops_the_example_that_would_not_fit():
@@ -480,7 +480,7 @@ def test_validation_hint_of_several_options_has_their_flags_and_an_example():
 
 def test_the_missing_area_of_a_command_line_has_a_hint_with_an_example(tmp_path):
     with pytest.raises(ValidationError) as caught:
-        validate_command("elevation download", {"product": "nmt"}, output_dir=tmp_path)
+        validate_command("elevation download", {"product": "nmt"}, root=tmp_path)
 
     assert caught.value.options == ("sheet", "bbox", "geometry")
     hint = error_report(caught.value, command="elevation download").hint
@@ -600,7 +600,7 @@ def _row(function, arguments, option, options, allowed, text):
 COLLECTION_OPTION_SCENARIOS = [
     _row(
         kartograf.download_collection,
-        {"product": None, "output_dir": _STORE, "teryt": "1261"},
+        {"product": None, "root": _STORE, "teryt": "1261"},
         "product",
         None,
         _COLLECTIONS.collection_products(),
@@ -608,7 +608,7 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "xyz", "output_dir": _STORE, "teryt": "1261"},
+        {"product": "xyz", "root": _STORE, "teryt": "1261"},
         "product",
         None,
         _COLLECTIONS.collection_products(),
@@ -632,15 +632,15 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "buildings", "output_dir": None, "teryt": "1261", "lod": 2},
-        "output_dir",
+        {"product": "buildings", "root": None, "teryt": "1261", "lod": 2},
+        "root",
         None,
         None,
-        "--output wymagane",
+        "--root wymagane",
     ),
     _row(
         kartograf.download_collection,
-        {"product": "buildings", "output_dir": _STORE, "lod": 1, "year": 2024},
+        {"product": "buildings", "root": _STORE, "lod": 1, "year": 2024},
         None,
         ("teryt", *_AREA_NAMES),
         None,
@@ -650,7 +650,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.check_collection,
         {
             "product": "buildings",
-            "output_dir": _STORE,
+            "root": _STORE,
             "teryt": "1261",
             "bbox": _AREA,
             "lod": 1,
@@ -663,7 +663,7 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "map", "output_dir": _STORE, "bbox": _AREA, "country": "xx"},
+        {"product": "map", "root": _STORE, "bbox": _AREA, "country": "xx"},
         "country",
         None,
         ("pl", "cz", "auto"),
@@ -671,7 +671,7 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "map", "output_dir": _STORE, "bbox": _AREA},
+        {"product": "map", "root": _STORE, "bbox": _AREA},
         "country",
         None,
         ("pl", "cz", "auto"),
@@ -681,7 +681,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "buildings",
-            "output_dir": _STORE,
+            "root": _STORE,
             "teryt": "1261",
             "lod": 2,
             "country": "cz",
@@ -693,7 +693,7 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "buildings", "output_dir": _STORE, "teryt": "126", "lod": 2},
+        {"product": "buildings", "root": _STORE, "teryt": "126", "lod": 2},
         "teryt",
         None,
         None,
@@ -701,7 +701,7 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "buildings", "output_dir": _STORE, "teryt": "9901", "lod": 2},
+        {"product": "buildings", "root": _STORE, "teryt": "9901", "lod": 2},
         "teryt",
         None,
         None,
@@ -709,7 +709,7 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "map", "output_dir": _STORE, "ku": "623164", "country": "pl"},
+        {"product": "map", "root": _STORE, "ku": "623164", "country": "pl"},
         None,
         ("ku", "country"),
         None,
@@ -717,7 +717,7 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "map", "output_dir": _STORE, "ku": "12", "country": "cz"},
+        {"product": "map", "root": _STORE, "ku": "12", "country": "cz"},
         "ku",
         None,
         None,
@@ -727,7 +727,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "admin",
-            "output_dir": _STORE,
+            "root": _STORE,
             "whole_country": True,
             "country": "auto",
         },
@@ -740,7 +740,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "prices",
-            "output_dir": _STORE,
+            "root": _STORE,
             "whole_country": True,
             "country": "cz",
         },
@@ -753,7 +753,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "geographic",
-            "output_dir": _STORE,
+            "root": _STORE,
             "whole_country": True,
             "country": "cz",
             "format": "XYZ",
@@ -767,7 +767,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "topographic",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "pl",
             "sheet": _SHEET,
             "format": "XYZ",
@@ -781,7 +781,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "map",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "pl",
             "bbox": _AREA,
             "format": "SHP",
@@ -795,7 +795,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "topographic",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "cz",
             "bbox": _AREA,
             "scale": "1:1",
@@ -809,7 +809,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "topographic",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "cz",
             "bbox": _AREA,
             "sheet_system": "1965",
@@ -823,7 +823,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "map",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "pl",
             "bbox": _AREA,
             "horizontal_crs": "EPSG:4326",
@@ -835,7 +835,7 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "buildings", "output_dir": _STORE, "teryt": "1261"},
+        {"product": "buildings", "root": _STORE, "teryt": "1261"},
         "lod",
         None,
         ("1", "2"),
@@ -845,7 +845,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "buildings",
-            "output_dir": _STORE,
+            "root": _STORE,
             "teryt": "1261",
             "lod": 2,
             "year": 2016,
@@ -859,7 +859,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "admin",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "pl",
             "bbox": _AREA,
             "level": "gmina",
@@ -874,7 +874,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "buildings",
-            "output_dir": _STORE,
+            "root": _STORE,
             "teryt": "1261",
             "lod": 2,
             "level": "gmina",
@@ -888,7 +888,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "map",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "pl",
             "bbox": _AREA,
             "level": "gmina",
@@ -902,7 +902,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "map",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "pl",
             "bbox": _AREA,
             "lod": 1,
@@ -914,7 +914,7 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "admin", "output_dir": _STORE, "country": "pl", "bbox": _AREA},
+        {"product": "admin", "root": _STORE, "country": "pl", "bbox": _AREA},
         "level",
         None,
         _COLLECTIONS.collection_levels("admin")["PL"],
@@ -924,7 +924,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "admin",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "pl",
             "bbox": _AREA,
             "level": "obec",
@@ -938,7 +938,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "control",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "pl",
             "bbox": _AREA,
             "network": "xyz",
@@ -950,7 +950,7 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "control", "output_dir": _STORE, "country": "pl", "bbox": _AREA},
+        {"product": "control", "root": _STORE, "country": "pl", "bbox": _AREA},
         "network",
         None,
         _COLLECTIONS.collection_choice_values("control", "network")["PL"],
@@ -960,7 +960,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "prices",
-            "output_dir": _STORE,
+            "root": _STORE,
             "whole_country": True,
             "country": "pl",
         },
@@ -973,7 +973,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "map",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": _SHEET,
             "country": "cz",
         },
@@ -986,7 +986,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "map",
-            "output_dir": _STORE,
+            "root": _STORE,
             "country": "pl",
             "bbox": kartograf.BBox(1, 1, 2, 2, "EPSG:2180"),
         },
@@ -999,7 +999,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "buildings",
-            "output_dir": _STORE,
+            "root": _STORE,
             "teryt": "1261",
             "lod": 2,
             "year": 2017,
@@ -1014,7 +1014,7 @@ COLLECTION_OPTION_SCENARIOS = [
         kartograf.download_collection,
         {
             "product": "buildings",
-            "output_dir": _STORE,
+            "root": _STORE,
             "teryt": "1261",
             "lod": 2,
             "year": 2017,
@@ -1030,7 +1030,7 @@ COLLECTION_OPTION_SCENARIOS = [
 LANDCOVER_OPTION_SCENARIOS = [
     _row(
         kartograf.download_landcover,
-        {"product": None, "output_dir": _STORE, "teryt": "1465"},
+        {"product": None, "root": _STORE, "teryt": "1465"},
         "product",
         None,
         ("bdot10k", "bdoo", "corine", "zabaged", "data50", "data250"),
@@ -1038,7 +1038,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "soilgrids", "output_dir": _STORE, "teryt": "1465"},
+        {"product": "soilgrids", "root": _STORE, "teryt": "1465"},
         "product",
         None,
         ("bdot10k", "bdoo", "corine", "zabaged", "data50", "data250"),
@@ -1046,15 +1046,15 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "bdot10k", "output_dir": None, "teryt": "1465"},
-        "output_dir",
+        {"product": "bdot10k", "root": None, "teryt": "1465"},
+        "root",
         None,
         None,
-        "--output wymagane",
+        "--root wymagane",
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "bdot10k", "output_dir": _STORE},
+        {"product": "bdot10k", "root": _STORE},
         None,
         ("teryt", *_AREA_NAMES),
         None,
@@ -1064,7 +1064,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         kartograf.check_landcover,
         {
             "product": "corine",
-            "output_dir": _STORE,
+            "root": _STORE,
             "year": 2018,
             "sheet": _SHEET,
             "bbox": _AREA,
@@ -1076,7 +1076,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "corine", "output_dir": _STORE, "year": 2018},
+        {"product": "corine", "root": _STORE, "year": 2018},
         None,
         _AREA_NAMES,
         None,
@@ -1084,7 +1084,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "corine", "output_dir": _STORE, "sheet": _SHEET},
+        {"product": "corine", "root": _STORE, "sheet": _SHEET},
         "year",
         None,
         ("2018", "2012", "2006", "2000", "1990"),
@@ -1092,7 +1092,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "corine", "output_dir": _STORE, "sheet": _SHEET, "year": 2019},
+        {"product": "corine", "root": _STORE, "sheet": _SHEET, "year": 2019},
         "year",
         None,
         ("2018", "2012", "2006", "2000", "1990"),
@@ -1102,7 +1102,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         kartograf.download_landcover,
         {
             "product": "corine",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": _SHEET,
             "year": 2018,
             "format": "SHP",
@@ -1114,7 +1114,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "bdot10k", "output_dir": _STORE, "teryt": "1465", "format": "GML"},
+        {"product": "bdot10k", "root": _STORE, "teryt": "1465", "format": "GML"},
         "format",
         None,
         ("GPKG", "SHP"),
@@ -1124,7 +1124,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         kartograf.download_landcover,
         {
             "product": "bdot10k",
-            "output_dir": _STORE,
+            "root": _STORE,
             "teryt": "1465",
             "format": "SHP",
             "layers": ["PTWP"],
@@ -1138,7 +1138,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         kartograf.download_landcover,
         {
             "product": "bdot10k",
-            "output_dir": _STORE,
+            "root": _STORE,
             "teryt": "1465",
             "year": 2020,
             "format": "GML",
@@ -1151,7 +1151,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "bdot10k", "output_dir": _STORE, "teryt": "1465", "year": 2020},
+        {"product": "bdot10k", "root": _STORE, "teryt": "1465", "year": 2020},
         "format",
         None,
         ("GML", "SHP"),
@@ -1159,7 +1159,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "bdot10k", "output_dir": _STORE, "teryt": "14"},
+        {"product": "bdot10k", "root": _STORE, "teryt": "14"},
         "teryt",
         None,
         None,
@@ -1167,7 +1167,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "corine", "output_dir": _STORE, "teryt": "1465", "year": 2018},
+        {"product": "corine", "root": _STORE, "teryt": "1465", "year": 2018},
         "teryt",
         None,
         None,
@@ -1177,7 +1177,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         kartograf.download_landcover,
         {
             "product": "corine",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": _SHEET,
             "year": 2018,
             "layers": ["PTWP"],
@@ -1191,7 +1191,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         kartograf.download_landcover,
         {
             "product": "zabaged",
-            "output_dir": _STORE,
+            "root": _STORE,
             "whole_country": True,
             "horizontal_crs": "EPSG:1",
         },
@@ -1204,7 +1204,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         kartograf.download_landcover,
         {
             "product": "bdot10k",
-            "output_dir": _STORE,
+            "root": _STORE,
             "teryt": "1465",
             "plan": object(),
         },
@@ -1216,20 +1216,20 @@ LANDCOVER_OPTION_SCENARIOS = [
     _row(
         kartograf.download_soil,
         {
-            "output_dir": None,
+            "root": None,
             "sheet": _SHEET,
             "property": "clay",
             "depth": "0-5cm",
             "stat": "mean",
         },
-        "output_dir",
+        "root",
         None,
         None,
-        "--output wymagane",
+        "--root wymagane",
     ),
     _row(
         kartograf.download_soil,
-        {"output_dir": _STORE, "sheet": _SHEET, "depth": "0-5cm", "stat": "mean"},
+        {"root": _STORE, "sheet": _SHEET, "depth": "0-5cm", "stat": "mean"},
         "property",
         None,
         (
@@ -1250,7 +1250,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     _row(
         kartograf.download_soil,
         {
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": _SHEET,
             "property": "clay",
             "depth": "1m",
@@ -1263,7 +1263,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_soil,
-        {"output_dir": _STORE, "sheet": _SHEET, "property": "clay", "depth": "0-5cm"},
+        {"root": _STORE, "sheet": _SHEET, "property": "clay", "depth": "0-5cm"},
         "stat",
         None,
         ("mean", "Q0.05", "Q0.5", "Q0.95", "uncertainty"),
@@ -1272,7 +1272,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     _row(
         kartograf.check_soil,
         {
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": _SHEET,
             "property": "x",
             "depth": "0-5cm",
@@ -1298,7 +1298,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     _row(
         kartograf.download_soil,
         {
-            "output_dir": _STORE,
+            "root": _STORE,
             "property": "clay",
             "depth": "0-5cm",
             "stat": "mean",
@@ -1310,23 +1310,23 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.calculate_hsg,
-        {"output_dir": None, "sheet": _SHEET, "depth": "0-5cm"},
-        "output_dir",
+        {"root": None, "sheet": _SHEET, "depth": "0-5cm"},
+        "root",
         None,
         None,
-        "--output required",
+        "--root required",
     ),
     _row(
         kartograf.calculate_hsg,
-        {"output_dir": Path("hsg.tif"), "sheet": _SHEET, "depth": "0-5cm"},
-        "output_dir",
+        {"root": Path("hsg.tif"), "sheet": _SHEET, "depth": "0-5cm"},
+        "root",
         None,
         None,
-        "--output is a store directory",
+        "--root is a store directory",
     ),
     _row(
         kartograf.calculate_hsg,
-        {"output_dir": _STORE, "sheet": _SHEET},
+        {"root": _STORE, "sheet": _SHEET},
         "depth",
         None,
         _DEPTHS,
@@ -1334,7 +1334,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.calculate_hsg,
-        {"output_dir": _STORE, "sheet": _SHEET, "depth": "1m"},
+        {"root": _STORE, "sheet": _SHEET, "depth": "1m"},
         "depth",
         None,
         _DEPTHS,
@@ -1342,7 +1342,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.check_hsg,
-        {"output_dir": _STORE, "depth": "0-5cm"},
+        {"root": _STORE, "depth": "0-5cm"},
         None,
         _AREA_NAMES,
         None,
@@ -1350,7 +1350,7 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.calculate_hsg,
-        {"output_dir": _STORE, "sheet": _SHEET, "depth": "0-5cm", "plan": object()},
+        {"root": _STORE, "sheet": _SHEET, "depth": "0-5cm", "plan": object()},
         None,
         ("plan", "update"),
         None,
@@ -1406,14 +1406,14 @@ _DATA_PRODUCTS = (
 )
 _NMT = {
     "product": "nmt",
-    "output_dir": _STORE,
+    "root": _STORE,
     "sheet": _PL_SHEET,
     "resolution": "1m",
     "vertical_crs": "EVRF2007",
 }
 _NMT_AREA = {
     "product": "nmt",
-    "output_dir": _STORE,
+    "root": _STORE,
     "bbox": _AREA,
     "country": "pl",
     "sheet_system": "1992",
@@ -1422,7 +1422,7 @@ _NMT_AREA = {
 }
 _ORTO_CUTOUT = {
     "product": "orto",
-    "output_dir": _STORE,
+    "root": _STORE,
     "bbox": _AREA,
     "country": "pl",
     "cutout": True,
@@ -1476,11 +1476,11 @@ OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_data,
-        {**_NMT, "output_dir": None},
-        "output_dir",
+        {**_NMT, "root": None},
+        "root",
         None,
         None,
-        "--output wymagane",
+        "--root wymagane",
     ),
     _row(
         kartograf.download_data,
@@ -1516,7 +1516,7 @@ OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_data,
-        {"product": "nmt", "output_dir": _STORE},
+        {"product": "nmt", "root": _STORE},
         None,
         _AREA_NAMES,
         None,
@@ -1786,7 +1786,7 @@ OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_data,
-        {"product": "orto", "output_dir": _STORE, "sheet": _PL_SHEET, "format": "ASC"},
+        {"product": "orto", "root": _STORE, "sheet": _PL_SHEET, "format": "ASC"},
         "format",
         None,
         None,
@@ -1802,7 +1802,7 @@ OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_data,
-        {"product": "contours", "output_dir": _STORE, "sheet": "CTES96"},
+        {"product": "contours", "root": _STORE, "sheet": "CTES96"},
         "format",
         None,
         contours_formats(),
@@ -1812,7 +1812,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "contours",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": "CTES96",
             "format": "SHP",
             "resolution": "5m",
@@ -1824,7 +1824,7 @@ OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_data,
-        {"product": "nmt", "output_dir": _STORE, "sheet": "CTES96"},
+        {"product": "nmt", "root": _STORE, "sheet": "CTES96"},
         "vertical_crs",
         None,
         ("Bpv", "EVRF2007"),
@@ -1832,7 +1832,7 @@ OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_data,
-        {"product": "nmt", "output_dir": _STORE, "sheet": "CTES96", "format": "ASC"},
+        {"product": "nmt", "root": _STORE, "sheet": "CTES96", "format": "ASC"},
         "format",
         None,
         None,
@@ -1842,7 +1842,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "nmt",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": "CTES96",
             "vertical_crs": "Bpv",
             "resolution": "7m",
@@ -1854,7 +1854,7 @@ OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_data,
-        {"product": "laz", "output_dir": _STORE, "sheet": "CTES96"},
+        {"product": "laz", "root": _STORE, "sheet": "CTES96"},
         "model",
         None,
         cz_models(),
@@ -1864,7 +1864,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "orto",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": "CTES96",
             "vertical_crs": "Bpv",
         },
@@ -1877,7 +1877,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "nmt",
-            "output_dir": _STORE,
+            "root": _STORE,
             "bbox": _AREA,
             "country": "cz",
             "vertical_crs": "Bpv",
@@ -1921,7 +1921,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "oblique-orto",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": "7.125.11.08",
             "direction": "x",
         },
@@ -1974,7 +1974,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "contours",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": _PL_SHEET,
             "format": "SHP",
         },
@@ -1987,7 +1987,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "laz",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": _PL_SHEET,
             "vertical_crs": "EVRF2007",
             "model": "dmr5g",
@@ -2025,7 +2025,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "nmt",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": "CTES96",
             "vertical_crs": "Bpv",
             "year": 2020,
@@ -2039,7 +2039,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "nmt",
-            "output_dir": _STORE,
+            "root": _STORE,
             "sheet": "CTES96",
             "vertical_crs": "Bpv",
             "all_campaigns": True,
@@ -2054,7 +2054,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "contours",
-            "output_dir": _STORE,
+            "root": _STORE,
             "bbox": _AREA,
             "country": "pl",
             "format": "SHP",
@@ -2068,7 +2068,7 @@ OPTION_SCENARIOS = [
         kartograf.download_data,
         {
             "product": "laz",
-            "output_dir": _STORE,
+            "root": _STORE,
             "bbox": kartograf.BBox(18.6300, 49.7450, 18.6303, 49.7452, "EPSG:4326"),
             "country": "auto",
             "vertical_crs": "EVRF2007",
@@ -2258,7 +2258,7 @@ def test_input_error_names_the_option(function, arguments, expected, text, tmp_p
 def test_malformed_sheet_is_a_parse_error_naming_the_sheet(function, tmp_path):
     """The sheet code is parsed by ``SheetParser`` (``ParseError``); the error
     of the caller's argument carries ``option="sheet"``."""
-    arguments = {**_NMT, "output_dir": tmp_path, "sheet": "XYZ"}
+    arguments = {**_NMT, "root": tmp_path, "sheet": "XYZ"}
 
     with pytest.raises(ParseError) as caught:
         function(**arguments)
@@ -2284,7 +2284,7 @@ def test_malformed_sheet_of_the_availability_report_is_a_parse_error(tmp_path):
 STORE_OPTION_SCENARIOS = [
     _row(
         kartograf.iter_store,
-        {"output_dir": _STORE, "segment": "zly"},
+        {"root": _STORE, "segment": "zly"},
         "segment",
         None,
         None,
@@ -2292,7 +2292,7 @@ STORE_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.iter_store,
-        {"output_dir": _STORE, "units": ["x"]},
+        {"root": _STORE, "units": ["x"]},
         "units",
         None,
         None,
@@ -2301,7 +2301,7 @@ STORE_OPTION_SCENARIOS = [
     _row(
         kartograf.iter_store,
         {
-            "output_dir": _STORE,
+            "root": _STORE,
             "segment": "nmt/pl_1992_1m_evrf2007",
             "units": ["versions"],
         },
@@ -2313,7 +2313,7 @@ STORE_OPTION_SCENARIOS = [
     _row(
         kartograf.iter_store,
         {
-            "output_dir": _STORE,
+            "root": _STORE,
             "segment": "nmt/pl_1992_1m_evrf2007",
             "units": "N-33-130-D-d-2-4",
         },
@@ -2325,7 +2325,7 @@ STORE_OPTION_SCENARIOS = [
     _row(
         kartograf.iter_store,
         {
-            "output_dir": _STORE,
+            "root": _STORE,
             "segment": "nmt/pl_1992_1m_evrf2007",
             "skip_versions": "nmt/x",
         },
@@ -2336,7 +2336,7 @@ STORE_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.iter_store,
-        {"output_dir": _STORE, "partition": "."},
+        {"root": _STORE, "partition": "."},
         "partition",
         None,
         None,
@@ -2345,7 +2345,7 @@ STORE_OPTION_SCENARIOS = [
     _row(
         kartograf.iter_store,
         {
-            "output_dir": _STORE,
+            "root": _STORE,
             "segment": "nmt/pl_1992_1m_evrf2007",
             "partition": "../x",
         },
@@ -2357,7 +2357,7 @@ STORE_OPTION_SCENARIOS = [
     _row(
         kartograf.iter_store,
         {
-            "output_dir": _STORE,
+            "root": _STORE,
             "segment": "nmt/pl_1992_1m_evrf2007",
             "units": ["N-34-130-D-d-2-4"],
             "partition": ".",
@@ -2369,7 +2369,7 @@ STORE_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.list_partitions,
-        {"output_dir": _STORE, "segment": "nmt/pl_1992_1m_evrf2007", "target": 0},
+        {"root": _STORE, "segment": "nmt/pl_1992_1m_evrf2007", "target": 0},
         "target",
         None,
         None,
@@ -2401,7 +2401,7 @@ def test_store_segment_that_is_a_symlink_names_the_segment(tmp_path):
 
 
 def test_project_task_name_and_command_errors_name_the_option(tmp_path):
-    project = kartograf.init_project(tmp_path / "p", output_dir=tmp_path / "p" / "data")
+    project = kartograf.init_project(tmp_path / "p", root=tmp_path / "p" / "data")
 
     with pytest.raises(ValidationError) as bad_name:
         kartograf.add_project_task(
@@ -2425,7 +2425,7 @@ def test_project_task_name_and_command_errors_name_the_option(tmp_path):
 
 
 def test_project_download_update_and_workers_name_the_option(tmp_path):
-    project = kartograf.init_project(tmp_path / "p", output_dir=tmp_path / "p" / "data")
+    project = kartograf.init_project(tmp_path / "p", root=tmp_path / "p" / "data")
 
     with pytest.raises(ValidationError) as bad_update:
         kartograf.download_project(project.directory, update="x")

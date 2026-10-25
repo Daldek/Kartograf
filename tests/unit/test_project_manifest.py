@@ -44,7 +44,7 @@ def _write_doc(project: Path, doc: dict) -> None:
 
 def test_read_golden_manifest(project):
     read, state = read_manifest(project)
-    assert read.directory == project and read.output_dir == Path("/srv/dane/kartograf")
+    assert read.directory == project and read.root == Path("/srv/dane/kartograf")
     teren, pokrycie = read.tasks
     assert (teren.name, teren.command) == ("teren", "elevation download")
     assert dict(teren.options) == {
@@ -296,7 +296,7 @@ def test_create_refuses_existing_and_project_dir_has_no_extra_files(tmp_path):
     created = (directory / MANIFEST_NAME).read_bytes()
     assert json.loads(created) == {
         "schema": "kartograf-project/1",
-        "output_dir": "data",
+        "root": "data",
         "tasks": [],
     }
     with pytest.raises(ValidationError):

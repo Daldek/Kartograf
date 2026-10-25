@@ -1,6 +1,6 @@
 {
   "schema": "kartograf-project/1",
-  "output_dir": "/srv/dane/kartograf",
+  "root": "/srv/dane/kartograf",
   "tasks": [
     {
       "name": "teren",

@@ -29,7 +29,7 @@ class TestFileStorageBasic:
     def test_init_custom_directory(self):
         """Test initialisation with a custom directory."""
         storage = FileStorage("/custom/path", resolution="1m", vertical_crs="EVRF2007")
-        assert str(storage.output_dir) == "/custom/path"
+        assert str(storage.root) == "/custom/path"
 
     def test_repr(self):
         """Test the string representation."""
@@ -979,7 +979,7 @@ class TestRegistryVariantStorage:
         with patch("kartograf.transport.http.make_gugik_session", return_value=session):
             report = download_data(
                 product="nmt",
-                output_dir=tmp_path,
+                root=tmp_path,
                 sheet=self.SHEET,
                 vertical_crs="EVRF2007",
                 resolution="0.5m",
@@ -1262,7 +1262,7 @@ def test_leading_zero_sheet_same_path_and_sidecar(tmp_path):
         return target
 
     provider.download.side_effect = fake_download
-    manager = DownloadManager(output_dir=tmp_path, provider=provider)
+    manager = DownloadManager(root=tmp_path, provider=provider)
     path = manager.download_sheet("M-33-036-A-a-1-1").succeeded[0]
     assert path.name == "M-33-36-A-a-1-1.asc"
     assert provider.download.call_args[0][0] == "M-33-36-A-a-1-1"

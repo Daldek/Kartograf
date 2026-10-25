@@ -168,13 +168,13 @@ def cz_contours_area_sheets(bbox: BBox) -> tuple[str, ...]:
     return tuple(info.sheet for info in infos)
 
 
-def _slot(source: SourceDescriptor, sheet: str, output_dir: str | Path) -> FileSlot:
+def _slot(source: SourceDescriptor, sheet: str, root: str | Path) -> FileSlot:
     """``contours/cz_zabaged_<format>/<SM5 hierarchy>/<sheet>.zip`` and its versions."""
     storage = FileStorage(
-        output_dir, resolution=None, vertical_crs=None, subdir=source.storage_subdir
+        root, resolution=None, vertical_crs=None, subdir=source.storage_subdir
     )
     return FileSlot(
-        Path(output_dir),
+        Path(root),
         storage.get_raw_path(sheet, f"{sheet}{source.default_extension}"),
         storage.get_raw_versions_base(sheet),
         storage.get_raw_versions_root(sheet),
@@ -365,7 +365,7 @@ def _run(
     source: SourceDescriptor,
     sheet: str,
     *,
-    output_dir: str | Path,
+    root: str | Path,
     update: UpdateMode | None,
     plan: UpdatePlan | None,
     parent_request: dict[str, Any] | None,
@@ -376,11 +376,11 @@ def _run(
     With a plan only its ``missing``/``newer`` position of this sheet is
     downloaded; a position whose source changed since the check is ``stale``.
     """
-    slot = _slot(source, sheet, output_dir)
+    slot = _slot(source, sheet, root)
     planned: dict[str, Any] | None = None
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
-        require_store(plan, store_id(output_dir))
+        require_store(plan, store_id(root))
         scoped = replace(
             plan,
             items=tuple(
@@ -415,9 +415,7 @@ def _run(
     return CzContoursResult(file, stale)
 
 
-def check_cz_contours_sheet(
-    sheet: str, *, format: str, output_dir: str | Path
-) -> UpdatePlan:
+def check_cz_contours_sheet(sheet: str, *, format: str, root: str | Path) -> UpdatePlan:
     """Build the update plan of ``download_cz_contours_sheet``.
 
     One position (track ``cz_sheet``), one ``HEAD`` of the ZIP, nothing downloaded.
@@ -429,15 +427,15 @@ def check_cz_contours_sheet(
     """
     sheet = cz_contours_sheet(sheet)
     source = contours_source(format)
-    item = _inspect(_session(), source, sheet, _slot(source, sheet, output_dir))
-    return new_plan(store_id(output_dir), (item,))
+    item = _inspect(_session(), source, sheet, _slot(source, sheet, root))
+    return new_plan(store_id(root), (item,))
 
 
 def download_cz_contours_sheet(
     sheet: str,
     *,
     format: str,
-    output_dir: str | Path,
+    root: str | Path,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     parent_request: dict[str, Any] | None = None,
@@ -483,7 +481,7 @@ def download_cz_contours_sheet(
             metadata,
             source,
             sheet,
-            output_dir=output_dir,
+            root=root,
             update=update,
             plan=plan,
             parent_request=parent_request,

@@ -412,12 +412,10 @@ _SOILGRIDS = "global.isric.soilgrids"
 # Sidecar ``product`` of the HSG raster: its command and store directory
 # (``soil hsg`` -> ``hsg/``; the inputs stay ``soil``).
 _HSG_PRODUCT = "hsg"
-# Where ``calculate_hsg`` writes (the ``--output`` help of ``soil hsg`` and
+# Where ``calculate_hsg`` writes (the ``--root`` help of ``soil hsg`` and
 # the error of a call without a store).
 HSG_OUTPUT_FILES = message("hydrology.hsg_output_files")
-_OUTPUT_REQUIRED = message(
-    "hydrology.output_required", hsg_output_files=HSG_OUTPUT_FILES
-)
+_OUTPUT_REQUIRED = message("hydrology.root_required", hsg_output_files=HSG_OUTPUT_FILES)
 
 
 @dataclass(frozen=True)
@@ -460,7 +458,7 @@ class HSGCalculator:
     store (the layer below ``calculate_hsg``/``check_hsg``; not in the
     public API).
 
-    The inputs are SoilGrids ``mean`` versions of ``output_dir``
+    The inputs are SoilGrids ``mean`` versions of ``root``
     (``soil/global_soilgrids_{clay,sand,silt}_<depth>_mean/``, labelled by
     the SoilGrids edition, D33); the HSG raster is a version of
     ``hsg/global_soilgrids_<depth>_mean/`` with the same selection
@@ -472,7 +470,7 @@ class HSGCalculator:
 
     def __init__(
         self,
-        output_dir: str | Path,
+        root: str | Path,
         provider: "SoilGridsProvider | None" = None,
         cache: "MetadataCache | bool" = True,
     ) -> None:
@@ -481,8 +479,8 @@ class HSGCalculator:
 
         Parameters
         ----------
-        output_dir : str or Path
-            Store root (``--output``); created only when a file is written.
+        root : str or Path
+            Store root (``--root``); created only when a file is written.
         provider : SoilGridsProvider, optional
             Provider of the inputs (keeps its own cache). Default: a
             SoilGrids provider using ``cache``.
@@ -490,11 +488,11 @@ class HSGCalculator:
             ``True`` = default metadata cache in the current directory, a
             ``MetadataCache`` = that cache, ``False`` = none (default provider).
         """
-        self._output_dir = Path(output_dir)
-        if self._output_dir.suffix.lower() in (".tif", ".tiff"):
+        self._root = Path(root)
+        if self._root.suffix.lower() in (".tif", ".tiff"):
             raise ValidationError(
-                message("hydrology.output_is_store_dir"),
-                option="output_dir",
+                message("hydrology.root_is_store_dir"),
+                option="root",
             )
         self._provider = provider
         self._cache = cache
@@ -634,15 +632,15 @@ class HSGCalculator:
         from kartograf.landcover.manager import LandCoverManager
 
         if self._provider is None:  # by name: the manager attaches the cache
-            return LandCoverManager(self._output_dir, "soilgrids", cache=self._cache)
-        return LandCoverManager(self._output_dir, self._provider)
+            return LandCoverManager(self._root, "soilgrids", cache=self._cache)
+        return LandCoverManager(self._root, self._provider)
 
     def _slot(self, selection: dict[str, Any], depth: str, stat: str) -> "FileSlot":
         from kartograf.download.storage import unit_slot
         from kartograf.landcover.store import hsg_segment
 
         return unit_slot(
-            self._output_dir,
+            self._root,
             hsg_segment(depth, stat),
             ".tif",
             bbox=selection.get("bbox_obj"),
@@ -656,7 +654,7 @@ class HSGCalculator:
 
         inputs = self._input_items(selection, depth, stat, sink)
         return new_plan(
-            self._output_dir, [*inputs, self._hsg_item(selection, depth, stat, inputs)]
+            self._root, [*inputs, self._hsg_item(selection, depth, stat, inputs)]
         )
 
     def _input_items(
@@ -750,7 +748,7 @@ class HSGCalculator:
                     message("hydrology.plan_requires_upgrade"),
                     options=("plan", "update"),
                 )
-            require_store(plan, store_id(self._output_dir))
+            require_store(plan, store_id(self._root))
             # The HSG position is checked BEFORE the inputs change.
             fresh = self._hsg_item(
                 selection,
@@ -869,7 +867,7 @@ class HSGCalculator:
             "source_files": [
                 {
                     "name": name,
-                    "file": f.version_path.relative_to(self._output_dir).as_posix(),
+                    "file": f.version_path.relative_to(self._root).as_posix(),
                     "sha256": f.sha256,
                     "label": f.label,
                 }
@@ -913,24 +911,24 @@ class HSGCalculator:
                 ALL_NODATA,
                 message(
                     "hydrology.hsg_all_nodata",
-                    relative_to=stored.path.relative_to(self._output_dir).as_posix(),
+                    relative_to=stored.path.relative_to(self._root).as_posix(),
                 ),
             )
         return stored
 
 
 def _calculator(
-    output_dir: str | Path | None, cache: "MetadataCache | bool"
+    root: str | Path | None, cache: "MetadataCache | bool"
 ) -> HSGCalculator:
-    """Return the calculator of the store ``output_dir`` (checked first)."""
-    if output_dir is None:
-        raise ValidationError(_OUTPUT_REQUIRED, option="output_dir")
-    return HSGCalculator(output_dir, cache=cache)
+    """Return the calculator of the store ``root`` (checked first)."""
+    if root is None:
+        raise ValidationError(_OUTPUT_REQUIRED, option="root")
+    return HSGCalculator(root, cache=cache)
 
 
 def calculate_hsg(
     *,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     sheet: str | None = None,
     bbox: "BBox | None" = None,
     geometry: str | Path | None = None,
@@ -945,7 +943,7 @@ def calculate_hsg(
     """Calculate Hydrologic Soil Groups of an area in the version store.
 
     Hydrologic Soil Groups of an area (``soil hsg``) in the version store
-    of ``output_dir``.
+    of ``root``.
 
     Parameter names and values are the flags of the command in
     ``snake_case``. One area: ``sheet`` (canonical code, sheet hierarchy),
@@ -985,13 +983,13 @@ def calculate_hsg(
     Examples
     --------
     >>> report = calculate_hsg(
-    ...     output_dir="./data", sheet="N-34-130-D", depth="0-5cm"
+    ...     root="./data", sheet="N-34-130-D", depth="0-5cm"
     ... )
     >>> hsg = report.files[0].file
     >>> hsg.path, hsg.status  # data/hsg/.../N-34-130-D.tif, "new"
     >>> hsg_statistics(hsg.path)["B"]["percent"]
     """
-    report = _calculator(output_dir, cache).calculate_hsg(
+    report = _calculator(root, cache).calculate_hsg(
         sheet=sheet,
         bbox=bbox,
         geometry=geometry,
@@ -1008,7 +1006,7 @@ def calculate_hsg(
 
 def check_hsg(
     *,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     sheet: str | None = None,
     bbox: "BBox | None" = None,
     geometry: str | Path | None = None,
@@ -1030,7 +1028,7 @@ def check_hsg(
     ValidationError
         Invalid or missing choice (as ``calculate_hsg``).
     """
-    return _calculator(output_dir, cache).check_hsg(
+    return _calculator(root, cache).check_hsg(
         sheet=sheet,
         bbox=bbox,
         geometry=geometry,
@@ -1042,7 +1040,7 @@ def check_hsg(
 
 def validate_hsg_request(
     *,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     sheet: str | None = None,
     bbox: "BBox | None" = None,
     geometry: str | Path | None = None,
@@ -1062,7 +1060,7 @@ def validate_hsg_request(
     ValidationError
         Invalid or missing choice.
     """
-    _calculator(output_dir, False).validate_request(
+    _calculator(root, False).validate_request(
         sheet=sheet, bbox=bbox, geometry=geometry, layer=layer, depth=depth
     )
 

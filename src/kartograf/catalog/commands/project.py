@@ -62,7 +62,7 @@ def _flat(params: tuple[Param, ...]) -> tuple[Param, ...]:
 _INIT_PARAMS = (
     _PROJECT_DIR_WRITTEN,
     replace(
-        shared.OUTPUT_DIR,
+        shared.ROOT,
         description="Store directory of the project (required): there is no default.",
         description_pl="Katalog magazynu projektu (wymagany; bez domyslnej sciezki)",
         section=None,
@@ -108,7 +108,7 @@ _ADD_PARAMS = (
         "options",
         (
             "Options of the task (required): an object with the options of "
-            'the data command without `output_dir`, for example {"product":'
+            'the data command without `root`, for example {"product":'
             ' "nmt", "sheet": "N-34-130-D-d-2-4"}; `commands schema` lists '
             "them."
         ),
@@ -116,7 +116,7 @@ _ADD_PARAMS = (
         required=True,
         description_pl=(
             "Opcje zadania (wymagane): obiekt z opcjami komendy danych bez "
-            'output_dir, np. {"product": "nmt", "sheet": '
+            'root, np. {"product": "nmt", "sheet": '
             '"N-34-130-D-d-2-4"}; opcje komendy podaje commands schema; '
             "w CLI to opcje po komendzie"
         ),
@@ -186,7 +186,7 @@ COMMANDS = (
         _INIT_PARAMS,
         description=(
             "Creates `kartograf-project.json` in `project_dir` and points "
-            "it at the store `output_dir`; missing directories are created."
+            "it at the store `root`; missing directories are created."
             " One project has one store; several projects may share it. Add"
             " tasks with `project add`."
         ),
@@ -201,12 +201,12 @@ COMMANDS = (
         summary_pl="Utworz manifest projektu i magazyn",
         description_pl=(
             "Utworz manifest projektu (kartograf-project.json w katalogu "
-            "--project) wskazujacy magazyn --output; tworzy katalogi, "
+            "--project) wskazujacy magazyn --root; tworzy katalogi, "
             "ktorych nie ma. Jeden projekt = jeden magazyn; wiele projektow"
             " moze dzielic magazyn."
         ),
-        rules=("Give `output_dir`: a project has no default store.",),
-        rules_pl=("Podaj `output_dir`: projekt nie ma domyslnego magazynu.",),
+        rules=("Give `root`: a project has no default store.",),
+        rules_pl=("Podaj `root`: projekt nie ma domyslnego magazynu.",),
         errors=(
             "validation_error",
             "io_error",
@@ -223,7 +223,7 @@ COMMANDS = (
         _ADD_PARAMS,
         description=(
             "Adds a named task: a data command with its options (without "
-            "`output_dir` and the update options). The choices are checked "
+            "`root` and the update options). The choices are checked "
             "offline and nothing is downloaded. Fetch the tasks with "
             "`project download`."
         ),
@@ -269,7 +269,7 @@ COMMANDS = (
         description_pl=(
             "Dodaj zadanie: NAZWA <grupa> <komenda> [opcje komendy]. "
             "--project podaj przed NAZWA; opcje po NAZWA naleza do komendy "
-            "danych (bez --output i trybow aktualizacji). Wybory sprawdzane"
+            "danych (bez --root i trybow aktualizacji). Wybory sprawdzane"
             " bez sieci, nic nie jest pobierane."
         ),
         rules=(

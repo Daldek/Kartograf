@@ -152,7 +152,7 @@ def write_cz_sidecar(
 def _cutout_slot(
     provider: CuzkRasterProvider,
     bbox: BBox,
-    output_dir: str | Path,
+    root: str | Path,
     image_crs: str | None,
 ) -> tuple[BBox, str, FileSlot]:
     """Normalize to the result CRS before choosing the stable bbox file name."""
@@ -163,7 +163,7 @@ def _cutout_slot(
         bbox = bbox_to_crs(bbox, image_sr)
     descriptor = get_source(cast(str, provider.descriptor_key))
     slot = bbox_slot(
-        output_dir,
+        root,
         descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
         bbox,
         ".tif",
@@ -187,25 +187,25 @@ def _check_cutout(
     provider: CuzkRasterProvider,
     bbox: BBox,
     *,
-    output_dir: str | Path,
+    root: str | Path,
     image_crs: str | None,
 ) -> UpdatePlan:
     """Plan of a CZ bbox version without raster access or network requests."""
-    _, _, slot = _cutout_slot(provider, bbox, output_dir, image_crs)
+    _, _, slot = _cutout_slot(provider, bbox, root, image_crs)
     item = inspect_version(
         slot,
         track="cz_cutout",
         unit=slot.std.stem,
         signal="none",
     )
-    return new_plan(store_id(output_dir), (item,))
+    return new_plan(store_id(root), (item,))
 
 
 def _run_cz_cutout(
     provider: CuzkRasterProvider,
     bbox: BBox,
     *,
-    output_dir: str | Path,
+    root: str | Path,
     image_crs: str | None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
@@ -221,10 +221,10 @@ def _run_cz_cutout(
     if plan is not None:
         if update != "upgrade":
             raise ValidationError("Plan wycinka CZ wymaga update='upgrade'")
-        require_store(plan, store_id(output_dir))
+        require_store(plan, store_id(root))
     # the route (pinned operations) before any request
     route = provider.route()
-    bbox, image_sr, slot = _cutout_slot(provider, bbox, output_dir, image_crs)
+    bbox, image_sr, slot = _cutout_slot(provider, bbox, root, image_crs)
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
         fresh = inspect_version(
@@ -318,7 +318,7 @@ def _cz_provider(
 def check_cz_cutout(
     *,
     bbox: BBox,
-    output_dir: str | Path,
+    root: str | Path,
     product: str,
     horizontal_crs: str,
     vertical_crs: str,
@@ -345,14 +345,14 @@ def check_cz_cutout(
         cache=None,
     )
     return _check_cutout(
-        provider, bbox, output_dir=output_dir, image_crs=_image_crs(horizontal_crs)
+        provider, bbox, root=root, image_crs=_image_crs(horizontal_crs)
     )
 
 
 def download_cz_cutout(
     *,
     bbox: BBox,
-    output_dir: str | Path,
+    root: str | Path,
     product: str,
     horizontal_crs: str,
     vertical_crs: str,
@@ -406,7 +406,7 @@ def download_cz_cutout(
         result = _run_cz_cutout(
             provider,
             bbox,
-            output_dir=output_dir,
+            root=root,
             image_crs=_image_crs(horizontal_crs),
             update=update,
             plan=plan,

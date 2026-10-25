@@ -175,7 +175,7 @@ class TestRunLazDownload:
             _selection(tile),
             provider=provider,
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             year=2024,
             min_density=12,
         )
@@ -231,7 +231,7 @@ class TestRunLazDownload:
             _selection(*tiles),
             provider=FakeProvider(),
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             parent_request=PARENT,
         )
         assert len(result.files) == 2
@@ -251,7 +251,7 @@ class TestRunLazDownload:
                 _selection(tile),
                 provider=FakeProvider(),
                 bbox=BBOX,
-                output_dir=tmp_path,
+                root=tmp_path,
             )
         assert not result.ok and not result.files
         assert "zepsuty deskryptor" in str(result.failed[0].error)
@@ -271,7 +271,7 @@ class TestRunLazDownload:
             _selection(_tile("N-33-131-B-a-1-1-4")),
             provider=provider,
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
         )
         assert _sidecar(result.files[0].version_path)["dataset"] == "pl.gugik.laz"
 
@@ -279,7 +279,7 @@ class TestRunLazDownload:
         tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 5)]
         provider = FakeProvider(failing={"1-1-2", "1-1-4"})
         result = _run_laz_download(
-            _selection(*tiles), provider=provider, bbox=BBOX, output_dir=tmp_path
+            _selection(*tiles), provider=provider, bbox=BBOX, root=tmp_path
         )
         assert len(result.files) == 2
         assert [f.tile.sheet for f in result.failed] == [
@@ -295,13 +295,13 @@ class TestRunLazDownload:
         tile = _tile("N-33-131-B-a-1-1-4")
         provider = FakeProvider()
         first = _run_laz_download(
-            _selection(tile), provider=provider, bbox=BBOX, output_dir=tmp_path
+            _selection(tile), provider=provider, bbox=BBOX, root=tmp_path
         )
         forced = _run_laz_download(
             _selection(tile),
             provider=provider,
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             update="force",
         )
         assert [file.status for file in (first.files[0], forced.files[0])] == [
@@ -316,7 +316,7 @@ class TestRunLazDownload:
         tile = _tile("N-33-131-B-a-1-1-4")
         provider = FakeProvider()
         original = _run_laz_download(
-            _selection(tile), provider=provider, bbox=BBOX, output_dir=tmp_path
+            _selection(tile), provider=provider, bbox=BBOX, root=tmp_path
         ).files[0]
 
         def revised(url, target):
@@ -329,7 +329,7 @@ class TestRunLazDownload:
             _selection(tile),
             provider=provider,
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             update="force",
         ).files[0]
         assert changed.status == "new"
@@ -348,13 +348,13 @@ class TestRunLazDownload:
         )
         provider = FakeProvider()
         previous = _run_laz_download(
-            _selection(first_tile), provider=provider, bbox=BBOX, output_dir=tmp_path
+            _selection(first_tile), provider=provider, bbox=BBOX, root=tmp_path
         ).files[0]
         current = _run_laz_download(
             _selection(first_tile, second_tile),
             provider=provider,
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
         )
         assert [file.status for file in current.files] == ["local", "new"]
         assert current.files[0].version_path == previous.version_path
@@ -366,11 +366,11 @@ class TestRunLazDownload:
         current, missing = (_tile(f"N-33-131-B-a-1-1-{i}") for i in (1, 2))
         provider = FakeProvider()
         _run_laz_download(
-            _selection(current), provider=provider, bbox=BBOX, output_dir=tmp_path
+            _selection(current), provider=provider, bbox=BBOX, root=tmp_path
         )
         provider.calls.clear()
         plan = _check_selection(
-            _selection(current, missing), provider=provider, output_dir=tmp_path
+            _selection(current, missing), provider=provider, root=tmp_path
         )
         assert plan.store == str(tmp_path.resolve())
         assert [(item.track, item.unit, item.status) for item in plan.items] == [
@@ -394,15 +394,13 @@ class TestRunLazDownload:
     def test_laz_upgrade_plan_stale_tile(self, tmp_path):
         tile = _tile("N-33-131-B-a-1-1-4")
         provider = FakeProvider()
-        plan = _check_selection(
-            _selection(tile), provider=provider, output_dir=tmp_path
-        )
+        plan = _check_selection(_selection(tile), provider=provider, root=tmp_path)
         changed = replace(tile, url=tile.url.replace("81121", "93455"))
         outcome = _run_laz_download(
             _selection(changed),
             provider=provider,
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             update="upgrade",
             plan=plan,
         )
@@ -414,7 +412,7 @@ class TestRunLazDownload:
             _selection(changed_record),
             provider=provider,
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             update="upgrade",
             plan=plan,
         )
@@ -423,7 +421,7 @@ class TestRunLazDownload:
             _selection(),
             provider=provider,
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             update="upgrade",
             plan=plan,
         )
@@ -434,7 +432,7 @@ class TestRunLazDownload:
         first, removed = (_tile(f"N-33-131-B-a-1-1-{i}") for i in (1, 2))
         provider = FakeProvider()
         checked = _check_selection(
-            _selection(first, removed), provider=provider, output_dir=tmp_path
+            _selection(first, removed), provider=provider, root=tmp_path
         )
         plan = UpdatePlan(
             store=checked.store,
@@ -446,7 +444,7 @@ class TestRunLazDownload:
             _selection(first, removed),
             provider=provider,
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             update="upgrade",
             plan=plan,
         )
@@ -472,7 +470,7 @@ class TestRunLazDownload:
         old_sidecar.write_text('{"schema":"kartograf-meta/1","extra":{}}')
         provider = FakeProvider()
         (file,) = _run_laz_download(
-            _selection(tile), provider=provider, bbox=BBOX, output_dir=tmp_path
+            _selection(tile), provider=provider, bbox=BBOX, root=tmp_path
         ).files
         assert provider.calls == [tile.url] and file.status == "new"
         assert file.path.read_bytes() == b"LASF"
@@ -487,7 +485,7 @@ class TestRunLazDownload:
                 _selection(tile),
                 provider=provider,
                 bbox=BBOX,
-                output_dir=tmp_path,
+                root=tmp_path,
                 update="check",
             )
         assert provider.calls == []
@@ -500,7 +498,7 @@ class TestRunLazDownload:
             _selection(kept, superseded=[old]),
             provider=FakeProvider(),
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
         )
         assert result.superseded == (old,)
         assert result.tiles == (kept,)
@@ -512,7 +510,7 @@ class TestRunLazDownload:
             _selection(*tiles),
             provider=FakeProvider(),  # type: ignore[arg-type]
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             workers=3,
             on_progress=lambda done, total: progress.append((done, total)),
         )
@@ -543,7 +541,7 @@ class TestRunLazDownload:
                 _selection(*tiles),
                 provider=Provider(),  # type: ignore[arg-type]
                 bbox=BBOX,
-                output_dir=tmp_path,
+                root=tmp_path,
                 workers=2,
                 on_progress=ctrl_c_when_a_tile_ended,
             )
@@ -558,7 +556,7 @@ class TestRunLazDownload:
             _selection(tile),
             provider=FakeProvider(vertical_crs="KRON86"),
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
         )
         (path,) = (file.path for file in result.files)
         assert "pl_2000_kron86" in path.parts
@@ -575,7 +573,7 @@ class TestDownloadLazArea:
         session = wfs_session()
         result = download_laz_area(
             bbox=W2_AREA,
-            output_dir=tmp_path,
+            root=tmp_path,
             provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
             parent_request=PARENT,
             vertical_crs="EVRF2007",
@@ -601,7 +599,7 @@ class TestDownloadLazArea:
         session = wfs_session()
         result = download_laz_area(
             bbox=W2_AREA,
-            output_dir=tmp_path,
+            root=tmp_path,
             year=2022,
             provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
             vertical_crs="EVRF2007",
@@ -614,7 +612,7 @@ class TestDownloadLazArea:
         with pytest.raises(YearRangeError) as caught:
             download_laz_area(
                 bbox=W2_AREA,
-                output_dir=tmp_path,
+                root=tmp_path,
                 year=2026,  # the layer exists, but no tiles here
                 provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
                 vertical_crs="EVRF2007",
@@ -628,7 +626,7 @@ class TestDownloadLazArea:
         with pytest.raises(ValidationError, match="check"):
             download_laz_area(
                 bbox=W2_AREA,
-                output_dir=tmp_path,
+                root=tmp_path,
                 vertical_crs="EVRF2007",
                 provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
                 update="check",
@@ -639,7 +637,7 @@ class TestDownloadLazArea:
         with pytest.raises(ValidationError, match="KRON86"):
             download_laz_area(
                 bbox=W2_AREA,
-                output_dir=tmp_path,
+                root=tmp_path,
                 vertical_crs="KRON86",
                 provider=GugikLazProvider(
                     session=wfs_session(), vertical_crs="EVRF2007"
@@ -662,7 +660,7 @@ class TestDownloadLazArea:
             float(f"{lat1:.6f}"),
             "EPSG:4326",
         )
-        args = {"output_dir": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
+        args = {"root": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
         from_wgs = check_laz_area(
             bbox=wgs,
             provider=GugikLazProvider(
@@ -722,7 +720,7 @@ class TestDownloadLazArea:
         ) as pinned:
             plan = check_laz_area(
                 bbox=krovak,
-                output_dir=tmp_path,
+                root=tmp_path,
                 vertical_crs="EVRF2007",
                 cache=False,
                 provider=GugikLazProvider(
@@ -739,7 +737,7 @@ class TestDownloadLazArea:
 
         from kartograf.core.sheet_parser import SheetParser
 
-        args = {"output_dir": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
+        args = {"root": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
         with patch(
             "kartograf.transport.http.make_gugik_session",
             side_effect=lambda: wfs_session("sheet4"),
@@ -758,13 +756,13 @@ class TestDownloadLazArea:
             check_laz_area(
                 bbox=W2_AREA,
                 sheet="N-34-130-D-d-2-4",
-                output_dir=tmp_path,
+                root=tmp_path,
                 vertical_crs="EVRF2007",
             )
 
     def test_check_laz_area_same_args(self, tmp_path):
         args = {
-            "output_dir": tmp_path,
+            "root": tmp_path,
             "vertical_crs": "EVRF2007",
             "min_density": 4,
             "cache": False,
@@ -783,7 +781,7 @@ class TestDownloadLazArea:
         assert after.items[0].status == "current"
 
     def test_download_laz_area_plan_stale(self, tmp_path):
-        args = {"output_dir": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
+        args = {"root": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
         plan = check_laz_area(
             bbox=W2_AREA,
             provider=GugikLazProvider(session=wfs_session(), vertical_crs="EVRF2007"),
@@ -805,7 +803,7 @@ class TestDownloadLazArea:
         seen: list[Notice] = []
         result = download_laz_area(
             bbox=W2_AREA,
-            output_dir=tmp_path,
+            root=tmp_path,
             vertical_crs="EVRF2007",
             cache=False,
             on_notice=seen.append,
@@ -830,7 +828,7 @@ class TestDownloadLazArea:
         with pytest.raises(NoCoverageError) as caught:
             download_laz_area(
                 bbox=W2_AREA,
-                output_dir=tmp_path,
+                root=tmp_path,
                 vertical_crs="EVRF2007",
                 cache=False,
                 provider=provider,
@@ -850,7 +848,7 @@ class TestDownloadLazArea:
         with pytest.raises(NoCoverageError) as caught:
             download_laz_area(
                 bbox=W2_AREA,
-                output_dir=tmp_path,
+                root=tmp_path,
                 vertical_crs="EVRF2007",
                 min_density=12,
                 cache=False,
@@ -867,7 +865,7 @@ class TestDownloadLazArea:
         with pytest.raises(NoCoverageError) as caught:
             download_laz_area(
                 bbox=W2_AREA,
-                output_dir=tmp_path,
+                root=tmp_path,
                 vertical_crs="EVRF2007",
                 min_density=12,
                 cache=False,
@@ -881,7 +879,7 @@ class TestDownloadLazArea:
         provider.select_tiles = MagicMock(return_value=_selection(*tiles))
         result = download_laz_area(
             bbox=W2_AREA,
-            output_dir=tmp_path,
+            root=tmp_path,
             vertical_crs="EVRF2007",
             workers=4,
             cache=False,
@@ -909,7 +907,7 @@ def _cli(tmp_path, *args, area: str = "w2"):
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -918,7 +916,7 @@ def _cli(tmp_path, *args, area: str = "w2"):
                 *args,
                 "--product",
                 "laz",
-                "-o",
+                "--root",
                 str(tmp_path),
                 "-q",
             ]
@@ -1084,7 +1082,7 @@ class TestTilesInTheStoreApi:
             _selection(*tiles),
             provider=HeaderProvider(tiles),
             bbox=self.AREA,
-            output_dir=tmp_path,
+            root=tmp_path,
         )
         links = [e for e in iter_store(tmp_path, segment=segment) if e.kind == "link"]
         assert len(links) == 2

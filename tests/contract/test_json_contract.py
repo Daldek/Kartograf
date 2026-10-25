@@ -637,7 +637,7 @@ CONTRACT: dict[str, list[str]] = {
         "notices",
         "ok",
     ],
-    "kartograf-project-state/1": ["schema", "directory", "output_dir", "tasks"],
+    "kartograf-project-state/1": ["schema", "directory", "root", "tasks"],
     "kartograf-project-report/1": ["schema", "project", "tasks", "notices", "ok"],
     "kartograf-project-check/1": [
         "schema",
@@ -679,10 +679,10 @@ CONTRACT: dict[str, list[str]] = {
         "credentials",
         "store",
     ],
-    "kartograf-store-overview/1": ["schema", "output_dir", "segments"],
+    "kartograf-store-overview/1": ["schema", "root", "segments"],
     "kartograf-store-entries/1": [
         "schema",
-        "output_dir",
+        "root",
         "segment",
         "units",
         "limit",
@@ -1020,7 +1020,7 @@ def test_nested_documents_have_no_schema_key():
     ``schema`` (it is only the first key of the top level)."""
     data = _project_report().to_dict()
 
-    assert list(data["project"]) == ["directory", "output_dir", "tasks"]  # type: ignore[call-overload]
+    assert list(data["project"]) == ["directory", "root", "tasks"]  # type: ignore[call-overload]
 
 
 def _document_classes() -> list[type[Document]]:

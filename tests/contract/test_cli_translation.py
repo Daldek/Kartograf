@@ -62,7 +62,7 @@ def test_flags_map_to_download_data_kwargs(tmp_path):
         "--workers",
         "3",
         "--force",
-        "-o",
+        "--root",
         str(tmp_path),
     ]
     with patch(_DOWNLOAD, return_value=_report()) as download:
@@ -78,7 +78,7 @@ def test_flags_map_to_download_data_kwargs(tmp_path):
     )
     assert (kwargs["min_year"], kwargs["all_campaigns"]) == (2019, True)
     assert (kwargs["workers"], kwargs["update"]) == (3, "force")
-    assert kwargs["output_dir"] == str(tmp_path)
+    assert kwargs["root"] == str(tmp_path)
     with patch(_DOWNLOAD, return_value=_report()) as download:
         main(
             [
@@ -95,7 +95,7 @@ def test_flags_map_to_download_data_kwargs(tmp_path):
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:2180",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -117,7 +117,7 @@ def test_malformed_per_country_value_is_one_error_line(tmp_path, capsys):
                 "N-34-139-C-a-3-1",
                 "--resolution",
                 "pl=1m,de=2m",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -130,7 +130,7 @@ def test_malformed_per_country_value_is_one_error_line(tmp_path, capsys):
 def test_imagery_new_flags_translation(tmp_path):
     """The orthophotomap cutout flags and ``--country cz`` reach
     ``download_data`` unchanged; flags not given stay unset."""
-    argv = ["imagery", "download", "--product", "orto", "-o", str(tmp_path)]
+    argv = ["imagery", "download", "--product", "orto", "--root", str(tmp_path)]
     with patch(_DOWNLOAD, return_value=_report()) as download:
         rc = main(
             [
@@ -192,7 +192,7 @@ def test_level_per_country_syntax(tmp_path, capsys):
         "18.5,49.6,18.8,49.9",
         "--bbox-crs",
         "EPSG:4326",
-        "-o",
+        "--root",
         str(tmp_path),
     ]
     report = CollectionReport((), (), (), (), True)
@@ -225,7 +225,7 @@ def test_check_updates_calls_check_data_and_writes_plan(tmp_path, capsys):
                 "--check-updates",
                 "--plan",
                 str(plan_file),
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -247,7 +247,7 @@ def test_report_ok_false_exit_1(tmp_path, capsys):
                 "nmt",
                 "--sheet",
                 "X",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -274,7 +274,7 @@ def test_notices_printed_once_on_stderr_in_order(tmp_path, capsys):
                 "--sheet",
                 "X",
                 "-q",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -289,7 +289,7 @@ def test_validation_error_single_error_line(tmp_path, capsys):
     with patch(_DOWNLOAD, side_effect=ValidationError("--vertical-crs wymagane: x")):
         rc = main(
             ["elevation", "download", "--product", "nmt", "--sheet", "X"]
-            + ["-o", str(tmp_path)]
+            + ["--root", str(tmp_path)]
         )
     assert rc == 2
     assert without_error_document(capsys.readouterr().err).splitlines() == [
@@ -306,7 +306,7 @@ def test_laz_preamble_only_after_validation_with_pl_crs(tmp_path, capsys, check)
         "laz",
         "--sheet",
         "N-34-139-C-a-3-1",
-        "-o",
+        "--root",
         str(tmp_path),
     ]
     if check:
@@ -407,11 +407,11 @@ def test_cli_imports_no_data_logic():
     assert offenders == []
 
 
-@pytest.mark.parametrize("flag", ["--product", "--output", "--vertical-crs"])
+@pytest.mark.parametrize("flag", ["--product", "--root", "--vertical-crs"])
 def test_missing_choice_is_error_before_network(flag, tmp_path, capsys):
     argv = {
         "--product": ["--product", "nmt"],
-        "--output": ["-o", str(tmp_path)],
+        "--root": ["--root", str(tmp_path)],
         "--vertical-crs": ["--vertical-crs", "EVRF2007"],
     }
     args = [

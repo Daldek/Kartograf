@@ -38,7 +38,7 @@ Example::
 
     result = download_image_cutout(
         product="orto", bbox=BBox(566000, 243000, 566200, 243200, "EPSG:2180"),
-        horizontal_crs="EPSG:2180", output_dir="./data",
+        horizontal_crs="EPSG:2180", root="./data",
         coverage="standard", resolution="0.25m",
     )
     print(result.file.path)
@@ -226,7 +226,7 @@ def _prepare(
     *,
     key: str,
     horizontal_crs: str,
-    output_dir: str | Path,
+    root: str | Path,
     coverage: str | None,
     resolution: str,
 ) -> _OrtoCutout:
@@ -269,7 +269,7 @@ def _prepare(
         grid=grid,
         width=width,
         height=height,
-        slot=bbox_slot(output_dir, segment, grid, ".tif"),
+        slot=bbox_slot(root, segment, grid, ".tif"),
     )
 
 
@@ -467,7 +467,7 @@ def _run(
     signal = cutout.channel.update_signal
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
-        require_store(plan, store_id(slot.output_dir))
+        require_store(plan, store_id(slot.root))
         current = inspect_version(slot, track=_TRACK, unit=slot.std.stem, signal=signal)
         todo, excluded = select_planned(plan, [current], _TRACK)
         stale = tuple(excluded)
@@ -554,7 +554,7 @@ def check_image_cutout(
     product: str,
     bbox: BBox,
     horizontal_crs: str,
-    output_dir: str | Path,
+    root: str | Path,
     resolution: str,
     coverage: str | None = None,
     cache: MetadataCache | bool = True,
@@ -576,7 +576,7 @@ def check_image_cutout(
         bbox,
         key=_cutout_key(product),
         horizontal_crs=horizontal_crs,
-        output_dir=output_dir,
+        root=root,
         coverage=coverage,
         resolution=resolution,
     )
@@ -584,7 +584,7 @@ def check_image_cutout(
     item = inspect_version(
         slot, track=_TRACK, unit=slot.std.stem, signal=cutout.channel.update_signal
     )
-    return new_plan(store_id(slot.output_dir), (item,))
+    return new_plan(store_id(slot.root), (item,))
 
 
 def download_image_cutout(
@@ -592,7 +592,7 @@ def download_image_cutout(
     product: str,
     bbox: BBox,
     horizontal_crs: str,
-    output_dir: str | Path,
+    root: str | Path,
     resolution: str,
     coverage: str | None = None,
     update: UpdateMode | None = None,
@@ -648,7 +648,7 @@ def download_image_cutout(
         bbox,
         key=_cutout_key(product),
         horizontal_crs=horizontal_crs,
-        output_dir=output_dir,
+        root=root,
         coverage=coverage,
         resolution=resolution,
     )

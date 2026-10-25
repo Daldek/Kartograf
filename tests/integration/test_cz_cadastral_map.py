@@ -69,7 +69,7 @@ def test_cz_cadastral_map_ku_package_in_each_format(tmp_path, router, fmt):
     url = serve_package(router, key, FILES[key]["members"])
 
     report = download_collection(
-        product="map", ku="623164", format=fmt, output_dir=tmp_path, cache=False
+        product="map", ku="623164", format=fmt, root=tmp_path, cache=False
     )
 
     assert report.ok, report.failed
@@ -92,14 +92,14 @@ def test_cz_cadastral_map_selection_checked_before_any_request(tmp_path):
     with pytest.raises(
         ValidationError, match="^--format required: SHP, DXF, DGN, VFK$"
     ):
-        validate_collection_request(product="map", ku="623164", output_dir=tmp_path)
+        validate_collection_request(product="map", ku="623164", root=tmp_path)
     with pytest.raises(ValidationError, match="--ku to kod katastralniho uzemi"):
         validate_collection_request(
-            product="map", ku="623164", country="pl", format="SHP", output_dir=tmp_path
+            product="map", ku="623164", country="pl", format="SHP", root=tmp_path
         )
     with pytest.raises(ValidationError, match="6 cyfr, np. 623164"):
         validate_collection_request(
-            product="map", ku="62316", format="SHP", output_dir=tmp_path
+            product="map", ku="62316", format="SHP", root=tmp_path
         )
     with pytest.raises(ValidationError) as national:
         validate_collection_request(
@@ -107,7 +107,7 @@ def test_cz_cadastral_map_selection_checked_before_any_request(tmp_path):
             country="cz",
             whole_country=True,
             format="SHP",
-            output_dir=tmp_path,
+            root=tmp_path,
         )
     assert str(national.value) == (
         "--whole-country: map (CZ) nie ma pliku krajowego; dostepne: --ku <6 cyfr> "
@@ -129,7 +129,7 @@ def test_cz_cadastral_map_area_ku_discovery_and_etag(tmp_path, router):
         "country": "cz",
         "bbox": AREA,
         "format": "SHP",
-        "output_dir": tmp_path,
+        "root": tmp_path,
     }
 
     first = download_collection(**request, cache=False)
@@ -183,7 +183,7 @@ def test_cz_cadastral_map_missing_ku_fails_alone(tmp_path, router):
         country="cz",
         bbox=AREA,
         format="SHP",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
 

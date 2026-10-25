@@ -323,7 +323,7 @@ class TestSoilGridsManager:
         """Test manager with soilgrids provider."""
         from kartograf.landcover.manager import LandCoverManager
 
-        manager = LandCoverManager(output_dir="data", provider="soilgrids")
+        manager = LandCoverManager(root="data", provider="soilgrids")
         assert manager.provider_name == "SoilGrids"
 
     def test_manager_available_providers(self):

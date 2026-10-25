@@ -838,7 +838,7 @@ class TestOrtoVariantStorage:
             ]
         )
         provider = GugikOrtoProvider(session=session, color=color)
-        return DownloadManager(output_dir=tmp_path, provider=provider), session
+        return DownloadManager(root=tmp_path, provider=provider), session
 
     def test_cir_next_to_existing_rgb_is_downloaded_to_own_segment(self, tmp_path):
         """A CIR request with RGB present downloads CIR, not silently RGB."""
@@ -876,7 +876,7 @@ class TestOrtoVariantStorage:
         from kartograf.download.manager import DownloadManager
 
         manager = DownloadManager(
-            output_dir=tmp_path, provider=GugikOrtoProvider(color=color)
+            root=tmp_path, provider=GugikOrtoProvider(color=color)
         )
 
         path = manager.storage.get_path(SHEET, ".tif")
@@ -905,7 +905,7 @@ class TestForceRefreshesRecordCache:
                     SHEET,
                     "--product",
                     "orto",
-                    "-o",
+                    "--root",
                     str(tmp_path / "out"),
                 ]
                 + list(extra)

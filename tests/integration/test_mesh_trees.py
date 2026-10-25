@@ -116,7 +116,7 @@ def _mesh(tmp_path, **choice):
         "product": "mesh",
         "country": "pl",
         "bbox": MESH_AREA,
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "cache": False,
         **choice,
     }
@@ -313,7 +313,7 @@ def test_trees_size_notice_and_stream(tmp_path, router):
     report = download_collection(
         product="trees",
         teryt="3063",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
         on_notice=lambda n: seen.append((n.code, router.gets(entry["url"]))),
     )
@@ -335,7 +335,7 @@ def test_trees_size_notice_and_stream(tmp_path, router):
             download_collection(
                 product="trees",
                 teryt="3063",
-                output_dir=tmp_path,
+                root=tmp_path,
                 cache=False,
                 **choice,
             )
@@ -348,7 +348,7 @@ def test_trees_package_without_gml_is_not_data(tmp_path, router):
     body = zip_bytes(["3063_opis.txt"])
     router.add(entry["url"], lambda: _zip_answer(body))
     report = download_collection(
-        product="trees", teryt="3063", output_dir=tmp_path, cache=False
+        product="trees", teryt="3063", root=tmp_path, cache=False
     )
     (failure,) = report.failed
     assert (failure.unit, failure.kind) == ("3063", "download")
@@ -368,7 +368,7 @@ def test_trees_unit_failure_isolated(tmp_path, router):
     router.heads[_key(found["url"])] = found["headers"]
     router.add(missing["url"], lambda: Response(404, missing["headers"], b"<html/>"))
     report = download_collection(
-        product="trees", country="pl", bbox=TREES_AREA, output_dir=tmp_path, cache=False
+        product="trees", country="pl", bbox=TREES_AREA, root=tmp_path, cache=False
     )
     assert not report.ok
     assert [item.unit for item in report.files] == ["0202"]
@@ -386,7 +386,7 @@ def test_trees_powiat_choice_has_no_volume_limit(tmp_path, router):
     router.add(entry["url"], lambda: _zip_answer(body))
     router.heads[_key(entry["url"])] = entry["headers"]
     report = download_collection(
-        product="trees", teryt="0208", output_dir=tmp_path, cache=False
+        product="trees", teryt="0208", root=tmp_path, cache=False
     )
     assert report.ok, report.failed
     (size,) = [n.message for n in report.notices if n.code == DOWNLOAD_SIZE]

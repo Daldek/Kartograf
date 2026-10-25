@@ -374,7 +374,7 @@ class TestPl2000SheetPublishedIn2180:
             return_value=session,
         ):
             manager = DownloadManager(
-                output_dir=tmp_path,
+                root=tmp_path,
                 provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
             )
             path = manager.download_sheet(self.SHEET).succeeded[0]
@@ -437,7 +437,7 @@ class TestPlCutoutDescriptor:
         ):
             report = download_data(
                 product=product,
-                output_dir=tmp_path,
+                root=tmp_path,
                 bbox=BBox(*self.BBOX, "EPSG:2180"),
                 country="pl",
                 vertical_crs="EVRF2007",

@@ -17,7 +17,7 @@ from tests.integration.test_manager_campaigns import C14, REC, FakeCampaignProvi
 from tests.support.errors import without_error_document
 
 G = "N-34-139-C-a-3-1"
-# Subject of the status and plan lines: the path below --output (one format).
+# Subject of the status and plan lines: the path below --root (one format).
 G_PATH = f"nmt/pl_1992_1m_evrf2007/N-34/139/C/a/3/1/{G}.asc"
 
 
@@ -36,7 +36,7 @@ def _run(fake, out, *argv):
                 "1m",
                 "--vertical-crs",
                 "EVRF2007",
-                "-o",
+                "--root",
                 str(out),
                 *argv,
             ]
@@ -112,7 +112,7 @@ def test_check_updates_index_failure_names_no_download(tmp_path, capsys):
         patch("kartograf.transport.http.time.sleep"),
     ):
         grid = ["--resolution", "1m", "--vertical-crs", "EVRF2007"]
-        argv = ["--sheet", G, "-o", str(tmp_path), "--check-updates"]
+        argv = ["--sheet", G, "--root", str(tmp_path), "--check-updates"]
         rc = main(["elevation", "download", "--product", "nmt", *grid, *argv])
     assert rc == 11
     line = next(
@@ -246,7 +246,9 @@ class LazCliProvider(FakeProvider):
 
 
 def _download(out, *argv):
-    return main(["elevation", "download", "--product", "nmt", "-o", str(out), *argv])
+    return main(
+        ["elevation", "download", "--product", "nmt", "--root", str(out), *argv]
+    )
 
 
 def _no_pl_wcs():

@@ -321,15 +321,15 @@ def test_project_pins_the_newest_versions_and_is_accepted_by_the_project_api(
 ):
     directory = build_project(tmp_path / "projekt", store)
     project = open_project(directory)
-    assert os.path.samefile(project.output_dir, store.root)
+    assert os.path.samefile(project.root, store.root)
     assert [t.name for t in project.tasks] == ["nmt-pl", "nmt-cz"]
     pl_task, cz_task = project.tasks
     pl, cz = store.file(PL_SEGMENT), store.file(CZ_SEGMENT)
     for task, file in ((pl_task, pl), (cz_task, cz)):
         (pin,) = task.files
         newest = file.versions[-1]
-        assert project.output_dir / pin.version == newest.path
-        assert project.output_dir / pin.path == file.path
+        assert project.root / pin.version == newest.path
+        assert project.root / pin.path == file.path
         assert (pin.label, pin.sha256, pin.size_bytes) == (
             newest.label,
             newest.sha256,
@@ -340,7 +340,7 @@ def test_project_pins_the_newest_versions_and_is_accepted_by_the_project_api(
     assert pl_task.options["sheet"] == PL_SHEET
     manifest = json.loads((directory / "kartograf-project.json").read_text())
     assert manifest["schema"] == "kartograf-project/1"
-    assert manifest["output_dir"] == "../data"
+    assert manifest["root"] == "../data"
     for check in (get_project_status(directory), verify_project(directory)):
         assert check.ok and check.not_downloaded == ()
         assert [f.status for f in check.files] == ["ok", "ok"]

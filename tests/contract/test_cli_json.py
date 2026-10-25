@@ -192,7 +192,7 @@ def test_json_pl_sheet(tmp_path):
     with _pl_store(FakeCampaignProvider(C14)):
         run = run_both(
             [*ELEVATION, "--json"],
-            lambda out: download_data(output_dir=out, **NMT_SHEET),
+            lambda out: download_data(root=out, **NMT_SHEET),
             tmp_path,
         )
 
@@ -221,7 +221,7 @@ def test_json_pl_area(tmp_path):
             ],
             lambda out: download_data(
                 product="nmt",
-                output_dir=out,
+                root=out,
                 bbox=bbox,
                 country="pl",
                 sheet_system="1992",
@@ -254,7 +254,7 @@ def test_json_collection(tmp_path, monkeypatch):
             "--json",
         ],
         lambda out: download_collection(
-            product="buildings", output_dir=out, teryt="1261", lod=1, year=2024
+            product="buildings", root=out, teryt="1261", lod=1, year=2024
         ),
         tmp_path,
     )
@@ -277,9 +277,7 @@ def test_json_landcover(tmp_path):
                 "1465",
                 "--json",
             ],
-            lambda out: download_landcover(
-                product="bdot10k", output_dir=out, teryt="1465"
-            ),
+            lambda out: download_landcover(product="bdot10k", root=out, teryt="1465"),
             tmp_path,
         )
 
@@ -292,7 +290,7 @@ def test_json_soil(tmp_path):
     with _providers(soilgrids=lambda: SoilGridsProvider(session=FakeSoilGrids())):
         run = run_both(
             ["soil", "download", "--bbox", BBOX_ARG, *CLAY_ARGS, "--json"],
-            lambda out: download_soil(output_dir=out, bbox=BBOX, **CLAY),
+            lambda out: download_soil(root=out, bbox=BBOX, **CLAY),
             tmp_path,
         )
 
@@ -317,9 +315,7 @@ def test_json_hsg_with_summary(tmp_path):
                 "--summary",
                 "--json",
             ],
-            lambda out: calculate_hsg(
-                output_dir=out, depth="0-5cm", bbox=BBOX, summary=True
-            ),
+            lambda out: calculate_hsg(root=out, depth="0-5cm", bbox=BBOX, summary=True),
             tmp_path,
         )
 
@@ -338,7 +334,7 @@ def test_json_check_updates_plan(tmp_path):
     with _pl_store(FakeCampaignProvider(C14)):
         run = run_both(
             [*ELEVATION, "--check-updates", "--plan", str(plan_file), "--json"],
-            lambda out: check_data(output_dir=out, **NMT_SHEET),
+            lambda out: check_data(root=out, **NMT_SHEET),
             tmp_path,
         )
 
@@ -356,13 +352,13 @@ def test_json_plan_file_feeds_the_upgrade(tmp_path):
     with _pl_store(FakeCampaignProvider(C14)):
         checked = run_both(
             [*ELEVATION, "--check-updates", "--plan", str(plan_file), "--json"],
-            lambda out: check_data(output_dir=out, **NMT_SHEET),
+            lambda out: check_data(root=out, **NMT_SHEET),
             tmp_path,
         )
         upgraded = run_both(
             [*ELEVATION, "--upgrade", "--plan", str(plan_file), "--json"],
             lambda out: download_data(
-                output_dir=out,
+                root=out,
                 update="upgrade",
                 plan=checked.api_result,  # type: ignore[arg-type]
                 **NMT_SHEET,
@@ -415,7 +411,7 @@ def test_json_laz_superseded_tile_without_geometry(tmp_path):
             ],
             lambda out: download_data(
                 product="laz",
-                output_dir=out,
+                root=out,
                 sheet=LAZ_SHEET,
                 vertical_crs="EVRF2007",
             ),
@@ -451,9 +447,7 @@ def test_json_mode_has_no_progress_and_no_notice_lines(tmp_path):
                 *PL_SHEET_ARGS,
                 "--json",
             ],
-            lambda out: download_data(
-                product="nmt", output_dir=out, sheet=parent, **PL_KW
-            ),
+            lambda out: download_data(product="nmt", root=out, sheet=parent, **PL_KW),
             tmp_path,
         )
 
@@ -473,7 +467,7 @@ FAILED = DataReport(
 
 def _with_report(report: DataReport, capsys, tmp_path, *flags: str):
     with patch("kartograf.cli.download_cmd.download_data", return_value=report):
-        code = main([*ELEVATION, "-o", str(tmp_path), *flags])
+        code = main([*ELEVATION, "--root", str(tmp_path), *flags])
     captured = capsys.readouterr()
     return code, captured.out, captured.err
 
@@ -602,9 +596,9 @@ def _offline_lines(project: Path, base: Path) -> dict[str, list[str]]:
             *("sheet", "find", "--bbox", "565000,242000,566000,243000"),
             *("--scale", "1:10000", "--sheet-system", "1992"),
         ],
-        "store overview": ["store", "overview", "--output", str(store)],
+        "store overview": ["store", "overview", "--root", str(store)],
         "store entries": [
-            *("store", "entries", "--output", str(store)),
+            *("store", "entries", "--root", str(store)),
             *("--segment", PL_SEGMENT, "--limit", "3"),
         ],
         "store sidecar": [
@@ -620,7 +614,7 @@ def _offline_lines(project: Path, base: Path) -> dict[str, list[str]]:
         "config show": ["config", "show"],
         "project init": [
             *("project", "init", "--project", str(base / "nowy")),
-            *("--output", str(base / "nowy" / "dane")),
+            *("--root", str(base / "nowy" / "dane")),
         ],
         "project add": ["project", "add", "--project", here, "drugi", *ELEVATION],
         "project remove": ["project", "remove", "--project", here, "teren"],
@@ -830,9 +824,9 @@ def test_json_project_commands_print_the_documents_of_the_api(
         assert code == envelope.exit_code
 
     same(
-        init_project(api_dir, output_dir="api/data"),
+        init_project(api_dir, root="api/data"),
         "project init",
-        *("project", "init", *where, "--output", "cli/data", "--json"),
+        *("project", "init", *where, "--root", "cli/data", "--json"),
     )
     same(
         add_project_task(

@@ -6,7 +6,7 @@ no network and no second catalogue; with ``--json`` the CLI prints that
 document (``kartograf-sources/1``). CHOICE is the options that choose a source in
 ``<group> download`` written as flags (``--product nmt --country pl --resolution
 1m --vertical-crs EVRF2007|KRON86``), DIRECTORY the segment of the files below
-``--output``, KEY the ``dataset`` field of their sidecar.
+``--root``, KEY the ``dataset`` field of their sidecar.
 """
 
 import argparse

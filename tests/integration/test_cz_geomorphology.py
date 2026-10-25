@@ -108,7 +108,7 @@ def test_geomorphology_levels_are_the_feature_layers_of_the_service():
 def test_geomorphology_level_required(tmp_path):
     with pytest.raises(ValidationError, match=f"--level wymagane .*: {LEVELS}$"):
         validate_collection_request(
-            product="geomorphology", country="cz", bbox=TESIN, output_dir=tmp_path
+            product="geomorphology", country="cz", bbox=TESIN, root=tmp_path
         )
     with pytest.raises(ValidationError, match=f"--level gmina: .*dostepne: {LEVELS}"):
         validate_collection_request(
@@ -116,7 +116,7 @@ def test_geomorphology_level_required(tmp_path):
             country="cz",
             bbox=TESIN,
             level="gmina",
-            output_dir=tmp_path,
+            root=tmp_path,
         )
     with pytest.raises(ValidationError, match="tylko dla CZ"):
         validate_collection_request(
@@ -124,7 +124,7 @@ def test_geomorphology_level_required(tmp_path):
             country="pl",
             bbox=BBox(566000, 243000, 567000, 244000, "EPSG:2180"),
             level="celek",
-            output_dir=tmp_path,
+            root=tmp_path,
         )
 
 
@@ -138,7 +138,7 @@ def test_geomorphology_celek_asks_only_layer_39(tmp_path, service):
         country="cz",
         bbox=TESIN,
         level="celek",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
 

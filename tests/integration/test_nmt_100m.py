@@ -132,7 +132,7 @@ def test_area_selects_voivodeships(tmp_path, gugik, area, units):
     its PRG powiats): Krakow lies in 12 only, the Jaworzno border and the
     sheet M-34-63-B-b reach 12 and 24; the plan reads no file."""
     notices = []
-    plan = check_data(output_dir=tmp_path, on_notice=notices.append, **CHOICE, **area)
+    plan = check_data(root=tmp_path, on_notice=notices.append, **CHOICE, **area)
 
     assert [item.unit for item in plan.items] == units
     assert {item.status for item in plan.items} == {"missing"}
@@ -151,7 +151,7 @@ def test_zip_kept_with_txt(tmp_path, gugik, frozen_clock):
     and the size of the feed, and the area of the request."""
     notices = []
     report = download_data(
-        output_dir=tmp_path,
+        root=tmp_path,
         bbox=KRAKOW,
         country="pl",
         on_notice=notices.append,
@@ -190,7 +190,7 @@ def test_zip_kept_with_txt(tmp_path, gugik, frozen_clock):
 def test_edition_label_from_entry(tmp_path, gugik, frozen_clock):
     """The version label is the ``updated`` of the file entry of the dataset
     feed; a second run and ``check_data`` read only the feeds."""
-    first = download_data(output_dir=tmp_path, bbox=KRAKOW, country="pl", **CHOICE)
+    first = download_data(root=tmp_path, bbox=KRAKOW, country="pl", **CHOICE)
     (unit_file,) = first.files
     assert (unit_file.file.status, unit_file.file.label) == ("new", "2019-05-14")
     assert (
@@ -198,9 +198,9 @@ def test_edition_label_from_entry(tmp_path, gugik, frozen_clock):
         == "edition"
     )
 
-    again = download_data(output_dir=tmp_path, bbox=KRAKOW, country="pl", **CHOICE)
+    again = download_data(root=tmp_path, bbox=KRAKOW, country="pl", **CHOICE)
     assert [f.file.status for f in again.files] == ["local"]
-    (item,) = check_data(output_dir=tmp_path, bbox=KRAKOW, country="pl", **CHOICE).items
+    (item,) = check_data(root=tmp_path, bbox=KRAKOW, country="pl", **CHOICE).items
     assert (item.status, item.local_label, item.available_label) == (
         "current",
         "2019-05-14",
@@ -215,7 +215,7 @@ def test_https_for_gugik_atom(tmp_path, gugik, frozen_clock):
     a channel without it follows the links as published."""
     assert RECORDED["feed_href"].startswith("http://")
     assert RECORDED["url"] == "https://" + RECORDED["feed_href"].removeprefix("http://")
-    download_data(output_dir=tmp_path, bbox=KRAKOW, country="pl", **CHOICE)
+    download_data(root=tmp_path, bbox=KRAKOW, country="pl", **CHOICE)
     atom = [url for url in gugik.calls if url != PRG_WFS_ENDPOINT]
     assert atom == [SERVICE, DATASET.format(woj="12"), FILES["12"]]
 
@@ -245,7 +245,7 @@ def test_https_for_gugik_atom(tmp_path, gugik, frozen_clock):
 def test_100m_rejects_sheet_flags(tmp_path, gugik, flags, flag):
     choice = {"bbox": KRAKOW, "country": "pl", **flags}
     with pytest.raises(ValidationError) as error:
-        download_data(output_dir=tmp_path, **CHOICE, **choice)
+        download_data(root=tmp_path, **CHOICE, **choice)
     assert str(error.value).startswith(f"{flag} nie dotyczy --resolution 100m")
     assert str(error.value).endswith(
         "NMT 100 m to pliki wojewodztw z ATOM - bez arkuszy, lotow i wycinka"
@@ -259,18 +259,14 @@ def test_100m_has_no_height_system(tmp_path, gugik):
     another archive format is not the 100 m variant."""
     with pytest.raises(ValidationError, match="vertical CRS unknown"):
         download_data(
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=KRAKOW,
             country="pl",
             vertical_crs="EVRF2007",
             **CHOICE,
         )
     with pytest.raises(ValidationError, match="has no resolution 100m for NMT TBD"):
-        download_data(
-            output_dir=tmp_path, bbox=KRAKOW, country="pl", format="TBD", **CHOICE
-        )
+        download_data(root=tmp_path, bbox=KRAKOW, country="pl", format="TBD", **CHOICE)
     assert gugik.calls == []
-    plan = check_data(
-        output_dir=tmp_path, bbox=KRAKOW, country="pl", format="XYZ", **CHOICE
-    )
+    plan = check_data(root=tmp_path, bbox=KRAKOW, country="pl", format="XYZ", **CHOICE)
     assert [item.unit for item in plan.items] == ["12"]

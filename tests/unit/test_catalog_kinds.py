@@ -193,7 +193,7 @@ def test_options_round_trip(tmp_path):
             {"product": "bdot10k", "teryt": "1465", "vertical_crs": "EVRF2007"},
         ),
         (SOIL, {"sheet": HSG_SHEET, "timeout": 30}),
-        (ELEVATION, {**PL_SHEET, "output_dir": "data"}),
+        (ELEVATION, {**PL_SHEET, "root": "data"}),
         (ELEVATION, {**PL_SHEET, "update": "upgrade"}),
         (ELEVATION, {**PL_SHEET, "workers": 2}),
         (ELEVATION, {**PL_SHEET, "bbox_crs": "EPSG:2180"}),

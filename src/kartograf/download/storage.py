@@ -46,7 +46,7 @@ class FileStorage:
 
     Attributes
     ----------
-    output_dir : Path
+    root : Path
         Base directory for storing downloaded files
     resolution : str
         Resolution dimension of the segment template (a label of the variant
@@ -69,7 +69,7 @@ class FileStorage:
 
     def __init__(
         self,
-        output_dir: str | Path,
+        root: str | Path,
         *,
         resolution: str | None,
         vertical_crs: str | None,
@@ -84,7 +84,7 @@ class FileStorage:
 
         Parameters
         ----------
-        output_dir : str or Path
+        root : str or Path
             Base directory for storing downloaded files.
             Will be created if it doesn't exist.
         resolution : str or None
@@ -138,7 +138,7 @@ class FileStorage:
         self._source_key: str | None = None
         if subdir is None:
             self._source_key = self._registered_source(product, resolution, format)
-        self._output_dir = Path(output_dir)
+        self._root = Path(root)
         self._vertical_crs = vertical_crs
 
     @staticmethod
@@ -172,9 +172,9 @@ class FileStorage:
         return sources[0].key if len(sources) == 1 else None
 
     @property
-    def output_dir(self) -> Path:
+    def root(self) -> Path:
         """Return the base output directory."""
-        return self._output_dir
+        return self._root
 
     @property
     def resolution(self) -> str:
@@ -277,7 +277,7 @@ class FileStorage:
         ``normalized`` is the canonical sheet code (``SheetParser(...).sheet``,
         A7: ``'M-33-036-...'`` and ``'M-33-36-...'`` map to one path).
         """
-        dir_path = self._output_dir / self._resolved_subdir(normalized)
+        dir_path = self._root / self._resolved_subdir(normalized)
         for part in (*subtree, *self._get_directory_parts(normalized)):
             dir_path = dir_path / part
         return dir_path / f"{normalized}{self._suffix}{ext}"
@@ -289,7 +289,7 @@ class FileStorage:
         versions, D19).
         """
         normalized = SheetParser(sheet).sheet
-        return self._output_dir / self._resolved_subdir(normalized) / VERSIONS_DIR
+        return self._root / self._resolved_subdir(normalized) / VERSIONS_DIR
 
     def get_versions_root(self, sheet: str) -> Path:
         """Return the versions root of a sheet.
@@ -354,7 +354,7 @@ class FileStorage:
         Returns
         -------
         Path
-            ``output_dir / <subdir> / <hierarchy from identifier> / filename``
+            ``root / <subdir> / <hierarchy from identifier> / filename``
 
         Raises
         ------
@@ -379,7 +379,7 @@ class FileStorage:
                 f"Nieznany uklad '{system}' (oczekiwano '1992' albo '2000')"
             )
         dir_parts = self._get_directory_parts(identifier)
-        dir_path = self._output_dir / self._resolved_subdir(identifier, system)
+        dir_path = self._root / self._resolved_subdir(identifier, system)
         for part in dir_parts:
             dir_path = dir_path / part
         return dir_path / filename
@@ -398,7 +398,7 @@ class FileStorage:
                 f"Nieznany uklad '{system}' (oczekiwano '1992' albo '2000')"
             )
         segment = self._resolved_subdir(identifier, system)
-        return self._output_dir / segment / VERSIONS_DIR
+        return self._root / segment / VERSIONS_DIR
 
     def get_raw_versions_root(
         self, identifier: str, *, system: str | None = None
@@ -613,7 +613,7 @@ class FileStorage:
             names = [template.replace("{system}", u) for u in ("1992", "2000")]
         else:
             names = [template]
-        return [self._output_dir / self._ensure_resolved(name) for name in names]
+        return [self._root / self._ensure_resolved(name) for name in names]
 
     def get_size(self, sheet: str, ext: str) -> int | None:
         """
@@ -639,19 +639,10 @@ class FileStorage:
     def __repr__(self) -> str:
         """Return string representation."""
         if self._subdir_override:
-            return (
-                f"FileStorage(output_dir='{self._output_dir}', "
-                f"subdir='{self._subdir_override}')"
-            )
+            return f"FileStorage(root='{self._root}', subdir='{self._subdir_override}')"
         if self._product:
-            return (
-                f"FileStorage(output_dir='{self._output_dir}', "
-                f"product='{self._product}')"
-            )
-        return (
-            f"FileStorage(output_dir='{self._output_dir}', "
-            f"resolution='{self._resolution}')"
-        )
+            return f"FileStorage(root='{self._root}', product='{self._product}')"
+        return f"FileStorage(root='{self._root}', resolution='{self._resolution}')"
 
 
 def prune_empty_dirs(start: Path, stop: Path) -> None:
@@ -674,7 +665,7 @@ def prune_empty_dirs(start: Path, stop: Path) -> None:
 
 
 def storage_for_provider(
-    output_dir: str | Path,
+    root: str | Path,
     provider: object,
     *,
     resolution: str | None,
@@ -710,7 +701,7 @@ def storage_for_provider(
     variant = getattr(provider, "storage_variant", None)
     suffix = getattr(provider, "storage_suffix", None)
     return FileStorage(
-        output_dir,
+        root,
         resolution=resolution,
         subdir=subdir,
         vertical_crs=vertical_crs,
@@ -719,9 +710,7 @@ def storage_for_provider(
     )
 
 
-def bbox_cutout_path(
-    output_dir: str | Path, subdir: str, bbox: BBox, extension: str
-) -> Path:
+def bbox_cutout_path(root: str | Path, subdir: str, bbox: BBox, extension: str) -> Path:
     """
     Path of a bbox cutout: ``<output>/<segment>/bbox/<coords><ext>`` (ADR-026).
 
@@ -732,21 +721,19 @@ def bbox_cutout_path(
     coords = "_".join(
         format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
     )
-    return Path(output_dir) / subdir / "bbox" / f"{coords}{extension}"
+    return Path(root) / subdir / "bbox" / f"{coords}{extension}"
 
 
-def bbox_slot(
-    output_dir: str | Path, subdir: str, bbox: BBox, extension: str
-) -> FileSlot:
+def bbox_slot(root: str | Path, subdir: str, bbox: BBox, extension: str) -> FileSlot:
     """Version slot of a bbox cutout (D15).
 
     Link path ``<output>/<segment>/bbox/<coords><ext>`` (``bbox_cutout_path``,
     no date), versions in ``<output>/<segment>/versions/bbox/<label>_<sha8>/``.
     """
-    base = Path(output_dir) / subdir / VERSIONS_DIR
+    base = Path(root) / subdir / VERSIONS_DIR
     return FileSlot(
-        output_dir=Path(output_dir),
-        std=bbox_cutout_path(output_dir, subdir, bbox, extension),
+        root=Path(root),
+        std=bbox_cutout_path(root, subdir, bbox, extension),
         versions_base=base,
         versions_root=base / "bbox",
         ext=extension,
@@ -805,7 +792,7 @@ def content_segment(descriptor_key: str, tokens: Sequence[str]) -> str:
 
 
 def unit_slot(
-    output_dir: str | Path,
+    root: str | Path,
     segment: str,
     ext: str,
     *,
@@ -855,12 +842,12 @@ def unit_slot(
             "Podaj dokladnie jeden wybor: teryt, bbox, sheet, country, ku, tile "
             "albo mapnom (zone tylko z tile)"
         )
-    output_dir = Path(output_dir)
+    root = Path(root)
     related = tuple(Path(r) for r in related_roots)
     if bbox is not None:
-        slot = bbox_slot(output_dir, segment, bbox, ext)
+        slot = bbox_slot(root, segment, bbox, ext)
         return FileSlot(
-            output_dir=slot.output_dir,
+            root=slot.root,
             std=slot.std,
             versions_base=slot.versions_base,
             versions_root=slot.versions_root,
@@ -895,10 +882,10 @@ def unit_slot(
         assert sheet is not None
         name = SheetParser(sheet).sheet
         parts = parser_registry.path_parts(name)
-    base = output_dir / segment / VERSIONS_DIR
+    base = root / segment / VERSIONS_DIR
     return FileSlot(
-        output_dir=output_dir,
-        std=output_dir.joinpath(segment, *parts, f"{name}{ext}"),
+        root=root,
+        std=root.joinpath(segment, *parts, f"{name}{ext}"),
         versions_base=base,
         versions_root=base.joinpath(*parts),
         ext=ext,

@@ -27,7 +27,7 @@ def test_project_downloads_and_verifies_world_names_and_ztm_sheet(
     tmp_path, monkeypatch
 ):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     add_project_task(
         project,
         name="nazwy-swiata",

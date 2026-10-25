@@ -81,9 +81,7 @@ class TestParallelDownloadHierarchy:
 
     def test_parallel_download_hierarchy_success(self, tmp_path, mock_provider):
         """Test parallel download with max_workers=2 produces same results."""
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, workers=2
-        )
+        manager = DownloadManager(root=tmp_path, provider=mock_provider, workers=2)
 
         # Download 1:25k -> 1:10k (4 sheets)
         result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
@@ -92,9 +90,7 @@ class TestParallelDownloadHierarchy:
 
     def test_parallel_download_hierarchy_large(self, tmp_path, mock_provider):
         """Test parallel download with 16 sheets and 4 workers."""
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, workers=4
-        )
+        manager = DownloadManager(root=tmp_path, provider=mock_provider, workers=4)
 
         # Download 1:50k -> 1:10k (16 sheets)
         result = manager.download_hierarchy("N-34-130-D-d", "1:10000")
@@ -103,9 +99,7 @@ class TestParallelDownloadHierarchy:
 
     def test_sequential_when_workers_1(self, tmp_path, mock_provider):
         """Test that max_workers=1 uses sequential path."""
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, workers=1
-        )
+        manager = DownloadManager(root=tmp_path, provider=mock_provider, workers=1)
 
         progress_calls = []
 
@@ -127,9 +121,7 @@ class TestParallelDownloadHierarchy:
 
     def test_parallel_uses_instance_default(self, tmp_path, mock_provider):
         """The manager's worker setting applies to a hierarchy call."""
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, workers=3
-        )
+        manager = DownloadManager(root=tmp_path, provider=mock_provider, workers=3)
         result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
         assert len(result.succeeded) == 4
 
@@ -153,7 +145,7 @@ class TestParallelDownloadHierarchy:
 
         provider.download = mock_download
 
-        manager = DownloadManager(output_dir=tmp_path, provider=provider, workers=2)
+        manager = DownloadManager(root=tmp_path, provider=provider, workers=2)
 
         progress_calls = []
 
@@ -185,9 +177,7 @@ class TestParallelDownloadHierarchy:
             return path
 
         mock_provider.download = download
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, workers=2
-        )
+        manager = DownloadManager(root=tmp_path, provider=mock_provider, workers=2)
 
         def ctrl_c_when_a_sheet_ended(progress):
             if progress.status == "completed":
@@ -205,9 +195,7 @@ class TestParallelDownloadHierarchy:
 
     def test_parallel_download_skip_existing(self, tmp_path, mock_provider):
         """Test that parallel download skips existing files correctly."""
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, workers=2
-        )
+        manager = DownloadManager(root=tmp_path, provider=mock_provider, workers=2)
 
         # Pre-download some sheets (local versions)
         manager.download_sheets(["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"])
@@ -231,9 +219,7 @@ class TestParallelDownloadHierarchy:
         self, tmp_path, mock_provider
     ):
         """Test that progress callback is called for every sheet."""
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, workers=2
-        )
+        manager = DownloadManager(root=tmp_path, provider=mock_provider, workers=2)
 
         progress_calls = []
 
@@ -275,7 +261,7 @@ class TestDownloadHierarchyResult:
         return provider
 
     def test_no_last_result_attribute(self, tmp_path, flaky_provider):
-        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+        manager = DownloadManager(root=tmp_path, provider=flaky_provider)
         assert not hasattr(manager, "last_result")
         result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
         assert result.failed == ["N-34-130-D-d-2-1"]
@@ -286,7 +272,7 @@ class TestDownloadHierarchyResult:
         self, tmp_path, flaky_provider, workers
     ):
         manager = DownloadManager(
-            output_dir=tmp_path, provider=flaky_provider, workers=workers
+            root=tmp_path, provider=flaky_provider, workers=workers
         )
         existing_sheet = "N-34-130-D-d-2-2"
         manager.download_sheet(existing_sheet)
@@ -319,9 +305,7 @@ class TestDownloadHierarchyResult:
             return path
 
         provider.download = mock_download
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=provider, workers=workers
-        )
+        manager = DownloadManager(root=tmp_path, provider=provider, workers=workers)
         manager.download_sheets(["N-34-130-D-d-2-2"])  # a local version
 
         events = []
@@ -363,7 +347,7 @@ class TestDownloadHierarchyResult:
             return path
 
         provider.download = mock_download
-        manager = DownloadManager(output_dir=tmp_path, provider=provider, workers=4)
+        manager = DownloadManager(root=tmp_path, provider=provider, workers=4)
         result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
         assert result.failed == ["N-34-130-D-d-2-1"]
         assert len(result.succeeded) == 3
@@ -392,7 +376,7 @@ class TestProviderThreadSafety:
 
         provider.download = mock_download
 
-        manager = DownloadManager(output_dir=tmp_path, provider=provider, workers=4)
+        manager = DownloadManager(root=tmp_path, provider=provider, workers=4)
 
         # Download 1:50k -> 1:10k (16 sheets) with 4 workers
         result = manager.download_hierarchy("N-34-130-D-d", "1:10000")
@@ -636,7 +620,7 @@ class TestCLIWorkersFlag:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -649,7 +633,7 @@ class TestCLIWorkersFlag:
                     "--workers",
                     "8",
                     "-q",
-                    "--output",
+                    "--root",
                     str(tmp_path),
                 ]
             )
@@ -663,7 +647,7 @@ class TestDownloadManagerRepr:
 
     def test_repr_includes_workers(self, tmp_path):
         manager = DownloadManager(
-            output_dir=tmp_path,
+            root=tmp_path,
             provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
             workers=4,
         )
@@ -697,9 +681,7 @@ class TestParallelDownloadRaceConditions:
         work_dir = tmp_path / f"run_{run}"
         work_dir.mkdir()
 
-        manager = DownloadManager(
-            output_dir=work_dir, provider=mock_provider, workers=4
-        )
+        manager = DownloadManager(root=work_dir, provider=mock_provider, workers=4)
 
         result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
         assert len(result.succeeded) == 4
@@ -720,9 +702,7 @@ class TestParallelDownloadRaceConditions:
         work_dir = tmp_path / f"progress_run_{run}"
         work_dir.mkdir()
 
-        manager = DownloadManager(
-            output_dir=work_dir, provider=mock_provider, workers=4
-        )
+        manager = DownloadManager(root=work_dir, provider=mock_provider, workers=4)
 
         progress_calls = []
         lock = threading.Lock()

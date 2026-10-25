@@ -35,7 +35,7 @@ _PARAMS = (
     Param("layers", "str_list", task=True),
     Param("year", "int", task=True),
     Param("cutout", "flag", task=True),
-    Param("output_dir", "path", flag="--output", short="-o", dest="output"),
+    Param("root", "path", flag="--root", short="-o", dest="output"),
     Param("workers", "int", short="-w"),
     Param("quiet", "flag", argument=None, short="-q"),
 )
@@ -104,7 +104,7 @@ def test_run_options_append_output_as_short_flag():
     line = format_command_line(
         _ELEVATION,
         {"product": "nmt", "year": 2020},
-        run={"output_dir": "./data", "workers": 2, "quiet": True},
+        run={"root": "./data", "workers": 2, "quiet": True},
     )
 
     assert line == (
@@ -192,7 +192,7 @@ def test_an_api_only_parameter_has_no_command_line_form():
 
 def test_example_command_line_adds_the_store_directory():
     example = Example({"product": "nmt", "year": 2020}, run={"quiet": True})
-    stored = Example({"product": "nmt"}, run={"output_dir": "~/dane"})
+    stored = Example({"product": "nmt"}, run={"root": "~/dane"})
     without_store = _declared(Param("product", "str"), id="elevation list-sources")
 
     assert example_command_line(_ELEVATION, example) == (

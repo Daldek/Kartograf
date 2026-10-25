@@ -382,7 +382,7 @@ _DOWNLOAD_PARAMS = (
             "pelny = w granicach Polski; nie dziala z --cutout"
         ),
     ),
-    shared.output_dir(_output_files),
+    shared.root(_output_files),
     *shared.update_params(
         check=(
             "Signal: the GUGiK index for PL sheets, the release in the CUZK"

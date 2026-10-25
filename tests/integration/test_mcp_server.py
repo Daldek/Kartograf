@@ -523,12 +523,12 @@ def test_data_tool_result_equals_the_envelope_of_the_library_document(tmp_path):
     with pl_sheets():
         direct = wrap(
             "elevation download",
-            download_data(**PL_SHEET, output_dir=tmp_path / "lib", cache=False),
+            download_data(**PL_SHEET, root=tmp_path / "lib", cache=False),
         )
     with pl_sheets():
         result = call(
             "kartograf_elevation_download",
-            {**PL_SHEET, "output_dir": str(tmp_path / "mcp")},
+            {**PL_SHEET, "root": str(tmp_path / "mcp")},
             **writing(tmp_path),
         )
 
@@ -554,10 +554,10 @@ def test_data_tool_result_equals_the_envelope_of_the_library_document(tmp_path):
 def test_ok_false_is_a_result_with_the_status_of_its_units(tmp_path):
     failing = FakeCampaignProvider(C14, fail_urls={C14["newest"][0].url})
     with pl_sheets(failing):
-        report = download_data(**PL_SHEET, output_dir=tmp_path / "lib", cache=False)
+        report = download_data(**PL_SHEET, root=tmp_path / "lib", cache=False)
         result = call(
             "kartograf_elevation_download",
-            {**PL_SHEET, "output_dir": str(tmp_path / "mcp")},
+            {**PL_SHEET, "root": str(tmp_path / "mcp")},
             **writing(tmp_path),
         )
 
@@ -585,15 +585,15 @@ def test_check_updates_equals_check_command(mode, tmp_path):
     with pl_sheets(fake):
         for store in ("lib", "mcp"):
             run_command(
-                "elevation download", PL_SHEET, output_dir=tmp_path / store, cache=False
+                "elevation download", PL_SHEET, root=tmp_path / store, cache=False
             )
     fake.records = {"newest": [REC["84183"]]}
-    arguments = {**PL_SHEET, "output_dir": str(tmp_path / "mcp")}
+    arguments = {**PL_SHEET, "root": str(tmp_path / "mcp")}
     if mode == "writes":
         arguments["check_updates"] = True
     with pl_sheets(fake):
         direct = check_command(
-            "elevation download", PL_SHEET, output_dir=tmp_path / "lib", cache=False
+            "elevation download", PL_SHEET, root=tmp_path / "lib", cache=False
         )
         result = call(
             "kartograf_elevation_download",
@@ -622,32 +622,32 @@ def test_a_plan_document_and_update_upgrade_reach_the_library(tmp_path):
     with pl_sheets(fake):
         for store in ("lib", "mcp"):
             run_command(
-                "elevation download", PL_SHEET, output_dir=tmp_path / store, cache=False
+                "elevation download", PL_SHEET, root=tmp_path / store, cache=False
             )
     fake.records = {"newest": [REC["84183"]]}
     server = writing(tmp_path)
     with pl_sheets(fake):
         library_plan = check_command(
-            "elevation download", PL_SHEET, output_dir=tmp_path / "lib", cache=False
+            "elevation download", PL_SHEET, root=tmp_path / "lib", cache=False
         )
         direct = run_command(
             "elevation download",
             PL_SHEET,
-            output_dir=tmp_path / "lib",
+            root=tmp_path / "lib",
             update="upgrade",
             plan=library_plan.result,
             cache=False,
         )
         checked = call(
             "kartograf_elevation_download",
-            {**PL_SHEET, "output_dir": str(tmp_path / "mcp"), "check_updates": True},
+            {**PL_SHEET, "root": str(tmp_path / "mcp"), "check_updates": True},
             **server,
         )
         upgraded = call(
             "kartograf_elevation_download",
             {
                 **PL_SHEET,
-                "output_dir": str(tmp_path / "mcp"),
+                "root": str(tmp_path / "mcp"),
                 "update": "upgrade",
                 "plan": checked.structured_content["result"],
             },
@@ -667,17 +667,15 @@ def test_a_plan_document_and_update_upgrade_reach_the_library(tmp_path):
 def test_summary_is_an_argument_of_the_run_not_of_the_task(tmp_path):
     hsg = {"sheet": HSG_SHEET, "depth": "0-5cm"}
     with landcover_sources(soilgrids=RasterSoilGrids):
-        direct = calculate_hsg(
-            output_dir=tmp_path / "lib", cache=False, summary=True, **hsg
-        )
+        direct = calculate_hsg(root=tmp_path / "lib", cache=False, summary=True, **hsg)
         with_summary = call(
             "kartograf_soil_hsg",
-            {**hsg, "output_dir": str(tmp_path / "a"), "summary": True},
+            {**hsg, "root": str(tmp_path / "a"), "summary": True},
             **writing(tmp_path),
         )
         without = call(
             "kartograf_soil_hsg",
-            {**hsg, "output_dir": str(tmp_path / "b")},
+            {**hsg, "root": str(tmp_path / "b")},
             **writing(tmp_path),
         )
 
@@ -696,8 +694,8 @@ def test_summary_is_an_argument_of_the_run_not_of_the_task(tmp_path):
 @needs_mcp
 def test_check_updates_refuses_the_options_of_a_run(tmp_path):
     here = str(tmp_path)
-    selection = {**PL_SHEET, "output_dir": here, "check_updates": True}
-    hsg = {"depth": "0-5cm", "sheet": HSG_SHEET, "output_dir": here}
+    selection = {**PL_SHEET, "root": here, "check_updates": True}
+    hsg = {"depth": "0-5cm", "sheet": HSG_SHEET, "root": here}
     project = {"project_dir": here, "check_updates": True}
     cases = [
         ("kartograf_elevation_download", selection | {"update": "force"}, "update"),
@@ -725,12 +723,12 @@ def test_check_updates_refuses_the_options_of_a_run(tmp_path):
 @needs_mcp
 def test_check_updates_input_errors(tmp_path):
     here = str(tmp_path)
-    selection = {**PL_SHEET, "output_dir": here, "check_updates": True}
+    selection = {**PL_SHEET, "root": here, "check_updates": True}
     cases = [
-        ({k: v for k, v in selection.items() if k != "output_dir"}, "output_dir"),
-        (selection | {"output_dir": "rel"}, "output_dir"),
+        ({k: v for k, v in selection.items() if k != "root"}, "root"),
+        (selection | {"root": "rel"}, "root"),
         (selection | {"check_updates": "yes"}, "check_updates"),
-        ({"output_dir": here, "check_updates": True}, "product"),
+        ({"root": here, "check_updates": True}, "product"),
     ]
 
     for arguments, option in cases:
@@ -745,7 +743,7 @@ def test_check_updates_input_errors(tmp_path):
     report = error_of(
         call(
             "kartograf_elevation_download",
-            {"product": "nmt", "output_dir": here, "check_updates": True},
+            {"product": "nmt", "root": here, "check_updates": True},
             **writing(tmp_path),
         )
     )
@@ -760,37 +758,37 @@ def test_check_updates_input_errors(tmp_path):
     [
         (
             "kartograf_elevation_download",
-            {"product": "nmt", "output_dir": "rel/dir"},
-            "output_dir",
+            {"product": "nmt", "root": "rel/dir"},
+            "root",
             "elevation download",
         ),
         (
             "kartograf_elevation_download",
-            {"product": "nmt", "output_dir": "ABS", "nope": 1},
+            {"product": "nmt", "root": "ABS", "nope": 1},
             "nope",
             "elevation download",
         ),
         (
             "kartograf_elevation_download",
-            {"product": "xx", "output_dir": "ABS"},
+            {"product": "xx", "root": "ABS"},
             "product",
             "elevation download",
         ),
         (
             "kartograf_elevation_download",
-            {"product": "nmt", "bbox": [1, 2, 3, 4], "output_dir": "ABS"},
+            {"product": "nmt", "bbox": [1, 2, 3, 4], "root": "ABS"},
             "bbox_crs",
             "elevation download",
         ),
         (
             "kartograf_elevation_download",
-            {"output_dir": "ABS"},
+            {"root": "ABS"},
             "product",
             "elevation download",
         ),
         (
             "kartograf_elevation_download",
-            {"product": "nmt", "output_dir": "ABS", "workers": 0},
+            {"product": "nmt", "root": "ABS", "workers": 0},
             "workers",
             "elevation download",
         ),
@@ -798,7 +796,7 @@ def test_check_updates_input_errors(tmp_path):
             "kartograf_elevation_download",
             {
                 "product": "nmt",
-                "output_dir": "ABS",
+                "root": "ABS",
                 "bbox": [1, 2, 3],
                 "bbox_crs": "EPSG:2180",
             },
@@ -807,19 +805,19 @@ def test_check_updates_input_errors(tmp_path):
         ),
         (
             "kartograf_elevation_download",
-            {"product": "nmt", "output_dir": "ABS", "resolution": 5},
+            {"product": "nmt", "root": "ABS", "resolution": 5},
             "resolution",
             "elevation download",
         ),
         (
             "kartograf_elevation_download",
-            {"product": "nmt", "output_dir": "ABS", "vertical_crs": 5},
+            {"product": "nmt", "root": "ABS", "vertical_crs": 5},
             "vertical_crs",
             "elevation download",
         ),
         (
             "kartograf_elevation_download",
-            {"product": "nmt", "output_dir": "ABS", "plan": {"schema": "other/1"}},
+            {"product": "nmt", "root": "ABS", "plan": {"schema": "other/1"}},
             "plan",
             "elevation download",
         ),
@@ -838,8 +836,8 @@ def test_check_updates_input_errors(tmp_path):
         ),
         (
             "kartograf_store_overview",
-            {"output_dir": "relative"},
-            "output_dir",
+            {"root": "relative"},
+            "root",
             "store overview",
         ),
         ("kartograf_store_sidecar", {"path": "x.meta.json"}, "path", "store sidecar"),
@@ -878,7 +876,7 @@ def test_every_data_tool_runs_its_own_command(tmp_path, spec):
     """Without an area the library refuses every data command: the answer names
     the command the tool stands for, for a run, for ``check_updates`` and for a
     server that only plans."""
-    arguments = {"output_dir": str(tmp_path)}
+    arguments = {"root": str(tmp_path)}
     properties = spec.input_schema["properties"]
     if "product" in properties:
         arguments["product"] = properties["product"]["enum"][0]
@@ -910,30 +908,30 @@ def test_a_bad_sheet_code_is_invalid_sheet_code():
 
 @needs_mcp
 def test_input_error_hints_name_the_fix(tmp_path):
-    relative = error_of(call("kartograf_store_overview", {"output_dir": "relative"}))
+    relative = error_of(call("kartograf_store_overview", {"root": "relative"}))
     bad_enum = error_of(
         call(
             "kartograf_elevation_download",
-            {"product": "xx", "output_dir": str(tmp_path)},
+            {"product": "xx", "root": str(tmp_path)},
         )
     )
     unknown = error_of(
         call(
             "kartograf_elevation_download",
-            {"product": "nmt", "output_dir": str(tmp_path), "nope": 1},
+            {"product": "nmt", "root": str(tmp_path), "nope": 1},
         )
     )
     companion = error_of(
         call(
             "kartograf_elevation_download",
-            {"product": "nmt", "output_dir": str(tmp_path), "bbox": [1, 2, 3, 4]},
+            {"product": "nmt", "root": str(tmp_path), "bbox": [1, 2, 3, 4]},
         )
     )
 
     assert "Give an absolute path" in relative["hint"]
     assert bad_enum["details"]["allowed"] == ["nmt", "nmpt", "laz", "contours"]
     assert "nmpt" in bad_enum["hint"]
-    assert "product" in unknown["hint"] and "output_dir" in unknown["hint"]
+    assert "product" in unknown["hint"] and "root" in unknown["hint"]
     assert companion["details"]["options"] == ["bbox", "bbox_crs"]
     assert "--bbox-crs" in companion["hint"]
 
@@ -950,7 +948,7 @@ def test_input_error_hint_example_is_of_the_product_and_country_of_the_call(tmp_
                 "level": "gmina",
                 "bbox": [18.6, 49.7, 18.7, 49.8],
                 "bbox_crs": "EPSG:4326",
-                "output_dir": str(tmp_path),
+                "root": str(tmp_path),
             },
             **writing(tmp_path),
         )
@@ -965,7 +963,7 @@ def test_oserror_is_io_error(tmp_path):
     missing = tmp_path / "missing"
 
     report = error_of(
-        call("kartograf_store_overview", {"output_dir": str(missing)}), code="io_error"
+        call("kartograf_store_overview", {"root": str(missing)}), code="io_error"
     )
 
     assert report["exit_code"] == 9 and report["command"] == "store overview"
@@ -979,7 +977,7 @@ def test_foreign_exception_is_internal_error(tmp_path, monkeypatch, caplog):
 
     monkeypatch.setattr(kartograf, "describe_store", broken)
 
-    result = call("kartograf_store_overview", {"output_dir": str(tmp_path)})
+    result = call("kartograf_store_overview", {"root": str(tmp_path)})
 
     report = error_of(result, code="internal_error")
     assert report["message"] == "KeyError: 'boom'" and report["exit_code"] == 1
@@ -1016,7 +1014,7 @@ def test_a_tool_that_writes_and_is_not_offered_answers_forbidden(tmp_path):
     server that does not write they are not listed and a call is ``forbidden``,
     not an unknown tool (a client with a cached list may still call them)."""
     calls = [
-        ("kartograf_project_init", {"project_dir": "p", "output_dir": "s"}),
+        ("kartograf_project_init", {"project_dir": "p", "root": "s"}),
         ("kartograf_project_add", {}),
         ("kartograf_project_remove", {"project_dir": str(tmp_path)}),
     ]
@@ -1046,7 +1044,7 @@ def test_a_tool_that_writes_and_is_not_offered_answers_forbidden(tmp_path):
     # the server that writes lists and runs them
     done = call(
         "kartograf_project_init",
-        {"project_dir": str(tmp_path / "p"), "output_dir": str(tmp_path / "s")},
+        {"project_dir": str(tmp_path / "p"), "root": str(tmp_path / "s")},
         **writing(tmp_path),
     )
     assert done.is_error is False
@@ -1069,11 +1067,11 @@ def test_a_server_that_does_not_write_refuses_a_run_with_forbidden(
     tmp_path, tool, option, value
 ):
     base = {
-        "kartograf_elevation_download": {**PL_SHEET, "output_dir": str(tmp_path)},
+        "kartograf_elevation_download": {**PL_SHEET, "root": str(tmp_path)},
         "kartograf_soil_hsg": {
             "depth": "0-5cm",
             "sheet": HSG_SHEET,
-            "output_dir": str(tmp_path),
+            "root": str(tmp_path),
         },
         "kartograf_project_download": {"project_dir": str(tmp_path)},
     }[tool]
@@ -1094,7 +1092,7 @@ def test_a_server_that_does_not_write_plans_what_a_run_would_do(tmp_path):
     with landcover_sources(soilgrids=RasterSoilGrids):
         result = call(
             "kartograf_soil_hsg",
-            {"sheet": HSG_SHEET, "depth": "0-5cm", "output_dir": str(tmp_path)},
+            {"sheet": HSG_SHEET, "depth": "0-5cm", "root": str(tmp_path)},
         )
 
     assert result.is_error is False
@@ -1133,7 +1131,7 @@ def test_progress_is_strictly_increasing(tmp_path):
     1, 2, 3, ... with the text of the event; the total stays unknown."""
     calls = []
 
-    def download(command, options, *, output_dir, on_progress, **kwargs):
+    def download(command, options, *, root, on_progress, **kwargs):
         calls.append(command)
 
         def work(worker):
@@ -1153,7 +1151,7 @@ def test_progress_is_strictly_increasing(tmp_path):
     with patch("kartograf.mcp_server.run_command", download):
         result = call(
             "kartograf_elevation_download",
-            {**PL_SHEET, "output_dir": str(tmp_path)},
+            {**PL_SHEET, "root": str(tmp_path)},
             progress=on_progress,
             **writing(tmp_path),
         )
@@ -1175,7 +1173,7 @@ def test_a_tool_without_progress_sends_none(tmp_path):
         received.append(progress)
 
     result = call(
-        "kartograf_store_overview", {"output_dir": str(tmp_path)}, progress=on_progress
+        "kartograf_store_overview", {"root": str(tmp_path)}, progress=on_progress
     )
 
     assert result.is_error is False and received == []
@@ -1189,7 +1187,7 @@ def test_allow_dir_rejects_paths_outside_after_resolve(tmp_path):
     (allowed / "link").symlink_to(outside, target_is_directory=True)
 
     inside = call(
-        "kartograf_store_overview", {"output_dir": str(allowed)}, allow_dirs=[allowed]
+        "kartograf_store_overview", {"root": str(allowed)}, allow_dirs=[allowed]
     )
     assert inside.is_error is False
 
@@ -1197,23 +1195,23 @@ def test_allow_dir_rejects_paths_outside_after_resolve(tmp_path):
         report = error_of(
             call(
                 "kartograf_store_overview",
-                {"output_dir": str(path)},
+                {"root": str(path)},
                 allow_dirs=[allowed],
             ),
             code="forbidden",
         )
         assert report["exit_code"] == 12
-        assert report["details"]["option"] == "output_dir"
+        assert report["details"]["option"] == "root"
         assert report["details"]["path"] == str(outside.resolve())
         assert report["details"]["allowed"] == [str(allowed.resolve())]
         assert str(allowed) in report["hint"]
     # the same rule for a plan, which has the paths of a run
     planned = call(
         "kartograf_elevation_download",
-        {**PL_SHEET, "output_dir": str(outside)},
+        {**PL_SHEET, "root": str(outside)},
         allow_dirs=[allowed],
     )
-    assert error_of(planned, code="forbidden")["details"]["option"] == "output_dir"
+    assert error_of(planned, code="forbidden")["details"]["option"] == "root"
     # and for the paths nested in a call
     task = call(
         "kartograf_project_add",
@@ -1237,7 +1235,7 @@ def test_allow_dir_rejects_paths_outside_after_resolve(tmp_path):
 
 @needs_mcp
 def test_a_server_without_allow_dir_reads_any_absolute_path(tmp_path):
-    result = call("kartograf_store_overview", {"output_dir": str(tmp_path)})
+    result = call("kartograf_store_overview", {"root": str(tmp_path)})
 
     assert result.is_error is False
 
@@ -1268,7 +1266,7 @@ def test_at_most_four_calls_run_at_once(tmp_path):
     state = {"active": 0, "peak": 0}
     gate = threading.Condition()
 
-    def download(command, options, *, output_dir, **kwargs):
+    def download(command, options, *, root, **kwargs):
         with gate:
             state["active"] += 1
             state["peak"] = max(state["peak"], state["active"])
@@ -1283,7 +1281,7 @@ def test_at_most_four_calls_run_at_once(tmp_path):
         results = []
 
         async def one(number):
-            arguments = {**PL_SHEET, "output_dir": str(tmp_path / str(number))}
+            arguments = {**PL_SHEET, "root": str(tmp_path / str(number))}
             results.append(
                 await client.call_tool("kartograf_elevation_download", arguments)
             )
@@ -1305,13 +1303,13 @@ def test_library_does_not_write_to_stdout_during_calls(tmp_path, capfd):
     with pl_sheets():
         call(
             "kartograf_elevation_download",
-            {**PL_SHEET, "output_dir": str(tmp_path / "a")},
+            {**PL_SHEET, "root": str(tmp_path / "a")},
             **writing(tmp_path),
         )
     call("kartograf_sheet_parse", {"sheet": SHEET})
     call("kartograf_commands_list", {})
-    call("kartograf_store_overview", {"output_dir": str(tmp_path / "missing")})
-    call("kartograf_elevation_download", {"product": "xx", "output_dir": str(tmp_path)})
+    call("kartograf_store_overview", {"root": str(tmp_path / "missing")})
+    call("kartograf_elevation_download", {"product": "xx", "root": str(tmp_path)})
 
     out, _err = capfd.readouterr()
 
@@ -1419,7 +1417,7 @@ def test_project_and_store_tools_work_on_real_files(tmp_path):
     def go(tool, arguments):
         return call(tool, arguments, **server)
 
-    init = go("kartograf_project_init", {**here, "output_dir": str(store)})
+    init = go("kartograf_project_init", {**here, "root": str(store)})
     added = go(
         "kartograf_project_add",
         {**here, "name": "area", "command": "elevation download", "options": PL_SHEET},
@@ -1450,11 +1448,11 @@ def test_project_and_store_tools_work_on_real_files(tmp_path):
     assert (after.is_error, verified.is_error) == (False, False)
     assert verified.structured_content["result"]["ok"] is True
 
-    overview = go("kartograf_store_overview", {"output_dir": str(store)})
+    overview = go("kartograf_store_overview", {"root": str(store)})
     segment = overview.structured_content["result"]["segments"][0]["segment"]
     entries = go(
         "kartograf_store_entries",
-        {"output_dir": str(store), "segment": segment, "limit": 5},
+        {"root": str(store), "segment": segment, "limit": 5},
     )
     path = entries.structured_content["result"]["entries"][0]["path"]
     sidecar = go("kartograf_store_sidecar", {"path": path})
@@ -1479,7 +1477,7 @@ def test_project_and_store_tools_work_on_real_files(tmp_path):
     # the store tools take a list of units too, and a limit of one entry truncates
     one = go(
         "kartograf_store_entries",
-        {"output_dir": str(store), "segment": segment, "units": [], "limit": 1},
+        {"root": str(store), "segment": segment, "units": [], "limit": 1},
     )
     assert one.is_error is False
 
@@ -1493,13 +1491,13 @@ def test_a_cancelled_call_is_abandoned_not_stopped(tmp_path):
 
     release, finished = threading.Event(), threading.Event()
 
-    def download(command, options, *, output_dir, **kwargs):
+    def download(command, options, *, root, **kwargs):
         release.wait(30)
         finished.set()
         return EMPTY_RESULT
 
     async def scenario(client):
-        arguments = {**PL_SHEET, "output_dir": str(tmp_path)}
+        arguments = {**PL_SHEET, "root": str(tmp_path)}
         try:
             await client.call_tool(
                 "kartograf_elevation_download", arguments, read_timeout_seconds=0.5
@@ -1547,7 +1545,7 @@ def call_on(server, tool, arguments):
 def _cache_probe(seen):
     """A ``run_command`` that writes a record to the cache it is given."""
 
-    def download(command, options, *, output_dir, cache, **kwargs):
+    def download(command, options, *, root, cache, **kwargs):
         seen.append(cache)
         if cache is not False:
             cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"no_coverage": True})
@@ -1576,7 +1574,7 @@ def test_default_cache_is_created_at_first_use_in_the_cache_dir(tmp_path, monkey
         result = call_on(
             server,
             "kartograf_elevation_download",
-            {**PL_SHEET, "output_dir": str(tmp_path / "s")},
+            {**PL_SHEET, "root": str(tmp_path / "s")},
         )
 
     assert result.is_error is False
@@ -1596,7 +1594,7 @@ def test_cache_file_flag(tmp_path, monkeypatch):
         call_on(
             server,
             "kartograf_elevation_download",
-            {**PL_SHEET, "output_dir": str(tmp_path / "s")},
+            {**PL_SHEET, "root": str(tmp_path / "s")},
         )
 
     assert seen[0].db_path == database and database.is_file()
@@ -1620,7 +1618,7 @@ def test_a_cache_directory_that_cannot_be_made_does_not_stop_the_server(
         result = call_on(
             server,
             "kartograf_elevation_download",
-            {**PL_SHEET, "output_dir": str(tmp_path / "s")},
+            {**PL_SHEET, "root": str(tmp_path / "s")},
         )
 
     assert result.is_error is False
@@ -1637,7 +1635,7 @@ def test_no_cache_flag(tmp_path, monkeypatch):
         call_on(
             server,
             "kartograf_elevation_download",
-            {**PL_SHEET, "output_dir": str(tmp_path / "s")},
+            {**PL_SHEET, "root": str(tmp_path / "s")},
         )
 
     assert seen == [False]
@@ -1654,9 +1652,7 @@ def test_allow_dir_flag_is_repeatable(tmp_path, monkeypatch):
     )
 
     for directory, refused in ((one, False), (two, False), (other, True)):
-        result = call_on(
-            server, "kartograf_store_overview", {"output_dir": str(directory)}
-        )
+        result = call_on(server, "kartograf_store_overview", {"root": str(directory)})
         assert result.is_error is refused
 
 
@@ -1736,7 +1732,7 @@ def test_the_gate_of_agi_5_13_over_stdio(tmp_path):
             read = await client.call_tool("kartograf_sheet_parse", {"sheet": SHEET})
             invalid = await client.call_tool(
                 "kartograf_elevation_download",
-                {"product": "xx", "output_dir": str(tmp_path)},
+                {"product": "xx", "root": str(tmp_path)},
             )
         return listed, again, cold_start, instructions, page, largest, read, invalid
 
@@ -1792,9 +1788,7 @@ def test_stdio_server_lists_tools_and_parses_a_sheet(tmp_path):
         async with Client(stdio_parameters(tmp_path)) as client:
             tools = (await client.list_tools()).tools
             parsed = await client.call_tool("kartograf_sheet_parse", {"sheet": SHEET})
-            failed = await client.call_tool(
-                "kartograf_store_overview", {"output_dir": "rel"}
-            )
+            failed = await client.call_tool("kartograf_store_overview", {"root": "rel"})
             return tools, parsed, failed
 
     tools, parsed, failed = anyio.run(scenario)
@@ -1824,13 +1818,13 @@ def test_stdio_server_with_writes_downloads_inside_its_directory(tmp_path):
         async with Client(stdio_parameters(tmp_path, *writes_in(inside))) as client:
             tools = (await client.list_tools()).tools
             refused = await client.call_tool(
-                "kartograf_store_overview", {"output_dir": str(outside)}
+                "kartograf_store_overview", {"root": str(outside)}
             )
             created = await client.call_tool(
                 "kartograf_project_init",
                 {
                     "project_dir": str(inside / "p"),
-                    "output_dir": str(inside / "s"),
+                    "root": str(inside / "s"),
                 },
             )
             return tools, refused, created

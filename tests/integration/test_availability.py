@@ -355,7 +355,7 @@ def test_year_bounds_select_layers():
 def test_input_errors_same_as_download_data(tmp_path, kwargs):
     common = {"product": "nmt", "country": "pl", **kwargs}
     with pytest.raises(ValidationError) as api:
-        download_data(output_dir=tmp_path, vertical_crs="EVRF2007", **common)
+        download_data(root=tmp_path, vertical_crs="EVRF2007", **common)
     with pytest.raises(ValidationError) as report:
         check_availability(**common)
 
@@ -412,7 +412,7 @@ def test_hint_without_output_and_full_sheet():
         h for r in (krakow, pomorze) for c in r.combinations for h in c.download_hint
     ]
     assert all(h.startswith("elevation download --product nmt ") for h in hints)
-    assert not any({"--output", "-o"} & set(shlex.split(h)) for h in hints)
+    assert not any({"--root"} & set(shlex.split(h)) for h in hints)
     assert _combo(krakow, 2025, "PL-1992", "1m").download_hint == (
         "elevation download --product nmt --country pl --bbox "
         "565000,242000,569000,246000 --sheet-system 1992 --resolution 1m "
@@ -444,8 +444,8 @@ class _Validated(Exception):
 
 def _arguments(hint: str, output) -> dict:
     """The library arguments of a hint command, as ``kartograf`` reads its flags."""
-    args = create_parser().parse_args([*shlex.split(hint), "-o", str(output)])
-    return {**library_arguments(args), "output_dir": args.output}
+    args = create_parser().parse_args([*shlex.split(hint), "--root", str(output)])
+    return {**library_arguments(args), "root": args.root}
 
 
 def _validated(hint: str, output) -> None:
@@ -495,7 +495,7 @@ def test_hint_accepted_by_project_add(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     hints = _hints()
     for number, hint in enumerate(hints):
         add = ["project", "add", "--project", str(project), f"zadanie{number}"]
@@ -1065,7 +1065,7 @@ def test_cz_availability_never_gets_files():
 
 def test_cz_hints(tmp_path):
     """Rasters: one command per sheet with a file; LAZ: one command of the
-    area of the request (``--country cz``, ``--model``); no ``--output``."""
+    area of the request (``--country cz``, ``--model``); no ``--root``."""
     nmt, _ = _cz("nmt")
     nmpt, _ = _cz("nmpt")
     laz, _ = _cz("laz")
@@ -1098,7 +1098,7 @@ def test_cz_hints(tmp_path):
         for model in LAZ_MODELS
         for vertical_crs in ("Bpv", "EVRF2007")
     ]
-    assert not any({"--output", "-o"} & set(shlex.split(h)) for h in _cz_hints())
+    assert not any({"--root"} & set(shlex.split(h)) for h in _cz_hints())
     # every command passes the checks of download_data before the network
     for hint in _cz_hints():
         validate_data_request(**_arguments(hint, tmp_path))
@@ -1112,7 +1112,7 @@ def test_cz_hints_accepted_by_project_add(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     hints = _cz_hints()
     for number, hint in enumerate(hints):
         add = ["project", "add", "--project", str(project), f"cz{number}"]

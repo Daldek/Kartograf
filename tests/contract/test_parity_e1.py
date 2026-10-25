@@ -44,7 +44,7 @@ def test_nmt_100m_voivodeship(tmp_path, monkeypatch):
             "-q",
         ],
         lambda out: download_data(
-            product="nmt", resolution="100m", country="pl", bbox=KRAKOW, output_dir=out
+            product="nmt", resolution="100m", country="pl", bbox=KRAKOW, root=out
         ),
         tmp_path,
     )
@@ -69,7 +69,7 @@ def test_contours_sheet(tmp_path, monkeypatch):
             "-q",
         ],
         lambda out: download_data(
-            product="contours", format="DGN", sheet="CTES96", output_dir=out
+            product="contours", format="DGN", sheet="CTES96", root=out
         ),
         tmp_path,
     )
@@ -81,12 +81,12 @@ def test_oblique_direction_and_check_lines(tmp_path):
     """``imagery download --product oblique-orto --direction n`` =
     ``download_data(direction="n")``: one file of the sheet; the check and
     the download of all four directions print one line per file, both named
-    by the path below ``--output`` (one format of the status lines)."""
+    by the path below ``--root`` (one format of the status lines)."""
     argv = ["imagery", "download", "--product", "oblique-orto", "--sheet"]
     run = run_both(
         [*argv, OBLIQUE_SHEET, "--direction", "n", "-q"],
         lambda out: download_data(
-            product="oblique-orto", sheet=OBLIQUE_SHEET, direction="n", output_dir=out
+            product="oblique-orto", sheet=OBLIQUE_SHEET, direction="n", root=out
         ),
         tmp_path,
     )
@@ -95,9 +95,7 @@ def test_oblique_direction_and_check_lines(tmp_path):
 
     checked = run_both(
         [*argv, OBLIQUE_SHEET, "--check-updates"],
-        lambda out: check_data(
-            product="oblique-orto", sheet=OBLIQUE_SHEET, output_dir=out
-        ),
+        lambda out: check_data(product="oblique-orto", sheet=OBLIQUE_SHEET, root=out),
         tmp_path,
     )
     lines = checked.cli_stdout.splitlines()
@@ -118,7 +116,7 @@ def test_oblique_direction_and_check_lines(tmp_path):
     every = run_both(
         [*argv, OBLIQUE_SHEET],
         lambda out: download_data(
-            product="oblique-orto", sheet=OBLIQUE_SHEET, output_dir=out
+            product="oblique-orto", sheet=OBLIQUE_SHEET, root=out
         ),
         tmp_path,
     )

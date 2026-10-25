@@ -252,8 +252,8 @@ def test_the_lines_of_the_flows_and_the_block_are_json_and_absolute():
     for line in lines:
         words = shlex.split(line)
         assert "--json" in words, line
-        if "--output" in words:
-            assert Path(words[words.index("--output") + 1]).is_absolute(), line
+        if "--root" in words:
+            assert Path(words[words.index("--root") + 1]).is_absolute(), line
         check_command_line(line)
 
 

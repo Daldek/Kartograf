@@ -353,7 +353,7 @@ def test_national_file_http_signal(tmp_path, monkeypatch, name, product, stored,
         "product": product,
         "country": "cz",
         "whole_country": True,
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "cache": False,
     }
     seen: list[tuple[str, int]] = []
@@ -407,7 +407,7 @@ def test_hynet_links_and_nodes_and_misleading_next(tmp_path, monkeypatch, frozen
     monkeypatch.setattr(col, "_session", lambda: fake)
 
     report = download_collection(
-        product="network", country="cz", bbox=AREA, output_dir=tmp_path, cache=False
+        product="network", country="cz", bbox=AREA, root=tmp_path, cache=False
     )
 
     assert report.ok, report.failed
@@ -468,7 +468,7 @@ def test_wfs_type_without_objects_is_empty_layer(tmp_path, monkeypatch, frozen_c
     monkeypatch.setattr(col, "_session", lambda: FakeCuzk())
 
     report = download_collection(
-        product="network", country="cz", bbox=AREA, output_dir=tmp_path, cache=False
+        product="network", country="cz", bbox=AREA, root=tmp_path, cache=False
     )
 
     path = report.files[0].file.path
@@ -484,10 +484,10 @@ def test_hynet_whole_country_is_epsg_3045(tmp_path):
             country="cz",
             whole_country=True,
             horizontal_crs="EPSG:5514",
-            output_dir=tmp_path,
+            root=tmp_path,
         )
     request = validate_collection_request(
-        product="network", country="cz", whole_country=True, output_dir=tmp_path
+        product="network", country="cz", whole_country=True, root=tmp_path
     )
     (part,) = request.parts
     assert part.segment == "hydro/cz_hynet_gpkg"
@@ -504,7 +504,7 @@ def test_ruian_obec_by_kod(tmp_path, monkeypatch, frozen_clock):
         country="cz",
         level="obec",
         bbox=area,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
 
@@ -530,7 +530,7 @@ def test_auto_level_per_country(tmp_path):
             country="auto",
             level="gmina",
             bbox=border,
-            output_dir=tmp_path,
+            root=tmp_path,
             cache=False,
         )
     plan = check_collection(
@@ -538,7 +538,7 @@ def test_auto_level_per_country(tmp_path):
         country="auto",
         level={"pl": "gmina", "cz": "obec"},
         bbox=border,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert sorted(item.segment for item in plan.items) == [

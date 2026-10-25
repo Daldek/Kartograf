@@ -105,19 +105,17 @@ def cz_sheet_variant(
     )
 
 
-def _sheet_slot(
-    provider: CuzkRasterProvider, sheet: str, output_dir: str | Path
-) -> FileSlot:
+def _sheet_slot(provider: CuzkRasterProvider, sheet: str, root: str | Path) -> FileSlot:
     sheet = sheet.strip()
     descriptor = get_source(cast(str, provider.descriptor_key))
     storage = storage_for_provider(
-        output_dir,
+        root,
         provider,
         resolution=provider.resolution,
         vertical_crs=provider.vertical_crs,
     )
     return FileSlot(
-        Path(output_dir),
+        Path(root),
         storage.get_raw_path(sheet, f"{sheet}{descriptor.default_extension}"),
         storage.get_raw_versions_base(sheet),
         storage.get_raw_versions_root(sheet),
@@ -126,19 +124,19 @@ def _sheet_slot(
 
 
 def _check_sheet(
-    provider: CuzkRasterProvider, sheet: str, *, output_dir: str | Path
+    provider: CuzkRasterProvider, sheet: str, *, root: str | Path
 ) -> UpdatePlan:
     """Inspect one CZ sheet without transferring raster bytes."""
     sheet = sheet.strip()
     route = provider.route(sheet)
     item = inspect_version(
-        _sheet_slot(provider, sheet, output_dir),
+        _sheet_slot(provider, sheet, root),
         track="cz_sheet",
         unit=sheet,
         signal=route.channel.update_signal,
         probe=(lambda: provider.file_signal(sheet)) if route.files else None,
     )
-    return new_plan(store_id(output_dir), (item,))
+    return new_plan(store_id(root), (item,))
 
 
 def _local_result(slot: FileSlot, stale: tuple[PlanItem, ...]) -> CzSheetResult:
@@ -158,7 +156,7 @@ def _run_cz_sheet(
     provider: CuzkRasterProvider,
     sheet: str,
     *,
-    output_dir: str | Path,
+    root: str | Path,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     on_download: Callable[[], None] | None = None,
@@ -176,11 +174,11 @@ def _run_cz_sheet(
     sheet = sheet.strip()
     # the route (variant, channel, pinned operations) before any request
     route = provider.route(sheet)
-    slot = _sheet_slot(provider, sheet, output_dir)
+    slot = _sheet_slot(provider, sheet, root)
     probe = (lambda: provider.file_signal(sheet)) if route.files else None
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
-        require_store(plan, store_id(output_dir))
+        require_store(plan, store_id(root))
         scoped = replace(
             plan,
             items=tuple(
@@ -189,7 +187,7 @@ def _run_cz_sheet(
         )
         if not any(item.status in TODO_STATUSES for item in scoped.items):
             return _local_result(slot, ())
-        fresh = _check_sheet(provider, sheet, output_dir=output_dir).items
+        fresh = _check_sheet(provider, sheet, root=root).items
         if fresh[0].status == "check_failed":
             raise DownloadError(
                 f"Nie udalo sie sprawdzic arkusza CZ {sheet}: {fresh[0].error}"
@@ -320,7 +318,7 @@ def _sheet_provider(
 def check_cz_sheet(
     *,
     sheet: str,
-    output_dir: str | Path,
+    root: str | Path,
     product: str,
     vertical_crs: str,
     resolution: str | None = None,
@@ -343,13 +341,13 @@ def check_cz_sheet(
             resolution=resolution,
             cache=metadata,
         )
-        return _check_sheet(provider, sheet, output_dir=output_dir)
+        return _check_sheet(provider, sheet, root=root)
 
 
 def download_cz_sheet(
     *,
     sheet: str,
-    output_dir: str | Path,
+    root: str | Path,
     product: str,
     vertical_crs: str,
     resolution: str | None = None,
@@ -404,7 +402,7 @@ def download_cz_sheet(
         result = _run_cz_sheet(
             provider,
             sheet,
-            output_dir=output_dir,
+            root=root,
             update=update,
             plan=plan,
             on_download=on_download,

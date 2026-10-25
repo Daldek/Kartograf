@@ -20,8 +20,8 @@ Python 3.12 or newer: `pip install "kartograf @ git+https://github.com/Daldek/Ka
 
 ## Interfaces
 
-- Python: `kartograf.download_data(product="nmt", sheet="N-34-130-D-d-2-4", resolution="1m", vertical_crs="EVRF2007", output_dir="/data/kartograf")` (keyword arguments are the options). Also `kartograf.list_commands`, `kartograf.command_schema`, `kartograf.validate_command`, `kartograf.check_command` and `kartograf.run_command`. Results are documents with `to_dict()` and `to_json()`; errors raise `KartografError` subclasses (`code`, `exit_code`, `hint`, `details`).
-- CLI: `kartograf <group> <command> --option value --json`, e.g. `kartograf sheet parse N-34-130-D-d-2-4 --json`. A flag is `--` and the option name with `-` for `_`. `--json` prints the result envelope as one document on stdout; logs and progress go to stderr. `--output DIR` is the store of a data command.
+- Python: `kartograf.download_data(product="nmt", sheet="N-34-130-D-d-2-4", resolution="1m", vertical_crs="EVRF2007", root="/data/kartograf")` (keyword arguments are the options). Also `kartograf.list_commands`, `kartograf.command_schema`, `kartograf.validate_command`, `kartograf.check_command` and `kartograf.run_command`. Results are documents with `to_dict()` and `to_json()`; errors raise `KartografError` subclasses (`code`, `exit_code`, `hint`, `details`).
+- CLI: `kartograf <group> <command> --option value --json`, e.g. `kartograf sheet parse N-34-130-D-d-2-4 --json`. A flag is `--` and the option name with `-` for `_`. `--json` prints the result envelope as one document on stdout; logs and progress go to stderr. `--root DIR` is the store of a data command.
 - MCP: `kartograf-mcp [--allow-writes] [--allow-dir DIR] [--tools FAMILIES]` (extra `mcp`). A tool is named like the `operation_id` (`kartograf_elevation_download`) and its arguments are the options. The server reads and plans by default: a data tool only plans (`check_updates` is true) until `--allow-writes` is given, and that needs `--allow-dir`. `--tools core` keeps the ten tools of the main tasks.
 - Settings: `kartograf config show` prints the effective settings (`root`, `data_dir`, `cache_dir`, `lang`, `debug`) and their sources.
 
@@ -33,7 +33,7 @@ Rules:
 
 1. **Discover, do not guess:** `kartograf commands list` lists the commands and `kartograf commands schema` (option `command`) gives the options of one, with allowed values and their meanings, rules, examples and errors; in MCP use `kartograf_commands_list` and `kartograf_commands_schema`.
 2. **Select the data explicitly:** `product`, `resolution`, `vertical_crs` and the area: `sheet`, `bbox` with `bbox_crs`, or `geometry`, exactly one; `country` goes with a bbox or a geometry. Nothing is guessed: a missing argument is an error with a hint.
-3. **Absolute paths, outside the repository and /tmp:** `output_dir` (CLI `--output`) is the store; a version is never overwritten, so a rerun is safe.
+3. **Absolute paths, outside the repository and /tmp:** `root` (CLI `--root`) is the store; a version is never overwritten, so a rerun is safe.
 4. **Check, then run:** `--check-updates` (MCP: `check_updates`) plans without fetching; `--upgrade` fetches newer content, `--force` fetches again, and `--plan` runs a saved plan.
 5. **Decide by codes:** `status` of the envelope (`ok`, `partial`, `failed`), `code`, `details.option` and `details.reason`, or the exit code; `partial` and `failed` (exit 10 and 11) are results: read `items` and retry only the failed units.
 6. **Read `notices`:** non-fatal warnings (a skipped sheet, a mixed campaign); pass them on with the result.
@@ -127,29 +127,29 @@ A sheet code (PL-1992 or PL-2000, CZ SM5, TM33 or ZTM) is the shortest way to na
 
 1. `kartograf sheet parse N-34-130-D-d-2-4 --json` - properties of the sheet, no network.
 2. `kartograf elevation availability --product nmt --sheet N-34-130-D-d-2-4 --json` - what the area has (years, grids, vertical CRSs); nothing is fetched.
-3. `kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --output /data/kartograf --check-updates --json` - the plan (`kartograf-plan/1`): what a run would fetch; nothing is written.
-4. `kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --output /data/kartograf --json` - the run: `kartograf-download/1`, `files[].path` of the versions written below the store.
+3. `kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --root /data/kartograf --check-updates --json` - the plan (`kartograf-plan/1`): what a run would fetch; nothing is written.
+4. `kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --root /data/kartograf --json` - the run: `kartograf-download/1`, `files[].path` of the versions written below the store.
 
 ### 2. An area given as a bounding box, and the point cloud
 
 A bbox needs its CRS (`--bbox-crs`, default EPSG:2180) and a country; an area gets one request per sheet.
 
-1. `kartograf elevation download --product nmt --country pl --bbox 565000,242000,569000,246000 --sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --output /data/kartograf --json` - the elevation model of the sheets that cover the area.
-2. `kartograf elevation download --product laz --country pl --bbox 530000,382000,533000,386000 --vertical-crs KRON86 --output /data/kartograf --json` - LAZ point clouds of the area.
+1. `kartograf elevation download --product nmt --country pl --bbox 565000,242000,569000,246000 --sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --root /data/kartograf --json` - the elevation model of the sheets that cover the area.
+2. `kartograf elevation download --product laz --country pl --bbox 530000,382000,533000,386000 --vertical-crs KRON86 --root /data/kartograf --json` - LAZ point clouds of the area.
 
 ### 3. Land cover, soils and hydrologic soil groups (HSG)
 
 Sources and layers (offline): `kartograf landcover list-layers --product bdot10k`, `kartograf soil list-sources`.
 
-1. `kartograf landcover download --product bdot10k --teryt 1465 --output /data/kartograf --json` - BDOT10k of a county (TERYT code).
-2. `kartograf soil download --property clay --depth 0-5cm --stat mean --bbox 626000,480000,628000,482000 --output /data/kartograf --json` - a SoilGrids layer for an area.
-3. `kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 --output /data/kartograf --summary --json` - the HSG raster from the texture layers, with the share of each group in `result.summary`.
+1. `kartograf landcover download --product bdot10k --teryt 1465 --root /data/kartograf --json` - BDOT10k of a county (TERYT code).
+2. `kartograf soil download --property clay --depth 0-5cm --stat mean --bbox 626000,480000,628000,482000 --root /data/kartograf --json` - a SoilGrids layer for an area.
+3. `kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 --root /data/kartograf --summary --json` - the HSG raster from the texture layers, with the share of each group in `result.summary`.
 
 ### 4. A project: tasks with pinned versions
 
 Run the lines in the directory of the project; `--json` goes before the name of the task.
 
-1. `kartograf project init --output /data/kartograf --json` - the project and its store.
+1. `kartograf project init --root /data/kartograf --json` - the project and its store.
 2. `kartograf project add --json area elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007` - a task: a data command with its options.
 3. `kartograf project download --json` - fetch and pin the versions.
 4. `kartograf project status --json` - is everything there? `status` reads sizes, `verify` the checksums.
@@ -157,7 +157,7 @@ Run the lines in the directory of the project; `--json` goes before the name of 
 ## Things not to do
 
 - Do not leave out `product`, `resolution` or `vertical_crs` hoping for a default: Kartograf asks, it does not guess.
-- Do not point `--output` at the repository or at `/tmp`, and do not delete versions by hand (a store is hard-linked): to refresh, run with `--upgrade` or `--force`.
+- Do not point `--root` at the repository or at `/tmp`, and do not delete versions by hand (a store is hard-linked): to refresh, run with `--upgrade` or `--force`.
 - Do not parse `message` or `hint`: decide by `code`, `details.option`, `details.reason` or the exit code.
 - Do not repeat a call unchanged after `validation_error`, and do not treat `partial` as a failure of the whole run.
 - Do not use it for hydrological computation or for measurement series (see the scope above).

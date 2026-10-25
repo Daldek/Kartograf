@@ -97,7 +97,7 @@ def serve(router: Router, sheets: list[str], size: int) -> None:
 
 def _download(tmp_path, **choice):
     return download_collection(
-        product="e5volume", country="pl", output_dir=tmp_path, cache=False, **choice
+        product="e5volume", country="pl", root=tmp_path, cache=False, **choice
     )
 
 
@@ -191,7 +191,7 @@ def test_plan_of_fewer_positions_is_within_the_limit(tmp_path, router):
     (8 GB) is executed with ``upgrade`` - only its positions count."""
     serve(router, _sheets(SIX), 2 * GB)
     plan = check_collection(
-        product="e5volume", country="pl", bbox=SIX, output_dir=tmp_path, cache=False
+        product="e5volume", country="pl", bbox=SIX, root=tmp_path, cache=False
     )
     assert [item.status for item in plan.items] == ["missing"] * 6
     kept = dataclasses.replace(plan, items=plan.items[:4])

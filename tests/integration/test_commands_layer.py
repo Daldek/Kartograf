@@ -39,7 +39,7 @@ from tests.support.project_fixtures import (
 
 LINE = (
     "elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m "
-    "--vertical-crs EVRF2007 -o ./data"
+    "--vertical-crs EVRF2007 --root ./data"
 )
 NMT = "elevation download --product nmt"
 
@@ -53,7 +53,7 @@ def test_parse_command_returns_only_given_options():
             "resolution": "1m",
             "vertical_crs": "EVRF2007",
         },
-        {"output_dir": "./data"},
+        {"root": "./data"},
     )
 
     assert parse_command(LINE) == expected
@@ -248,7 +248,7 @@ def test_validate_command_is_offline_and_names_the_option(tmp_path, monkeypatch)
     monkeypatch.setattr(socket, "create_connection", refuse)
     store = tmp_path / "not-created"
 
-    assert validate_command("elevation download", PL_SHEET, output_dir=store) is None
+    assert validate_command("elevation download", PL_SHEET, root=store) is None
     assert validate_command("elevation download", PL_SHEET) is None
     assert not store.exists()
     without_vertical_crs = {k: v for k, v in PL_SHEET.items() if k != "vertical_crs"}
@@ -257,13 +257,13 @@ def test_validate_command_is_offline_and_names_the_option(tmp_path, monkeypatch)
     with pytest.raises(ValidationError) as no_area:
         validate_command("elevation download", {"product": "nmt"})
     with pytest.raises(ValidationError) as unknown:
-        validate_command("elevation download", {**PL_SHEET, "output_dir": "data"})
+        validate_command("elevation download", {**PL_SHEET, "root": "data"})
     with pytest.raises(ValidationError) as wrong_form:
         validate_command("elevation download", {**PL_SHEET, "year": "2024"})
 
     assert missing.value.option == "vertical_crs"
     assert no_area.value.options == ("sheet", "bbox", "geometry")
-    assert (unknown.value.option, wrong_form.value.option) == ("output_dir", "year")
+    assert (unknown.value.option, wrong_form.value.option) == ("root", "year")
 
 
 @pytest.mark.parametrize(
@@ -271,8 +271,8 @@ def test_validate_command_is_offline_and_names_the_option(tmp_path, monkeypatch)
     [
         lambda name: validate_command(name, {}),
         lambda name: format_command(name, {}),
-        lambda name: run_command(name, {}, output_dir="."),
-        lambda name: check_command(name, {}, output_dir="."),
+        lambda name: run_command(name, {}, root="."),
+        lambda name: check_command(name, {}, root="."),
     ],
     ids=["validate", "format", "run", "check"],
 )
@@ -320,9 +320,9 @@ def test_format_command_rejects_options_that_do_not_belong():
             "option upgrade: expected true, got 'tak'",
         ),
         (
-            {"output_dir": 5},
-            "output_dir",
-            "option output_dir: expected non-empty path (string), got 5",
+            {"root": 5},
+            "root",
+            "option root: expected non-empty path (string), got 5",
         ),
         (
             {"plan": {"items": []}},
@@ -357,7 +357,7 @@ def test_format_command_writes_the_flags_of_a_valid_run():
         "elevation download",
         {"product": "nmt", "sheet": G},
         run={
-            "output_dir": Path("data"),
+            "root": Path("data"),
             "plan": "plan.json",
             "workers": 4,
             "upgrade": True,
@@ -368,7 +368,7 @@ def test_format_command_writes_the_flags_of_a_valid_run():
 
     call = parse_command(line[len("kartograf ") :])
     assert call.run == {
-        "output_dir": "data",
+        "root": "data",
         "plan": "plan.json",
         "workers": 4,
         "upgrade": True,
@@ -397,7 +397,7 @@ def test_format_parse_round_trip_for_every_catalog_example(
     command, example, example_line
 ):
     options: dict[str, Any] = encode(example.options)  # type: ignore[assignment]
-    run = {"output_dir": "./data"}
+    run = {"root": "./data"}
 
     line = format_command(command, options, run=run)
     call = parse_command(line[len("kartograf ") :])
@@ -416,10 +416,10 @@ def _normal(document, store: Path) -> str:
 def test_run_command_equals_download_data(tmp_path):
     with pl_sheets():
         called = run_command(
-            "elevation download", PL_SHEET, output_dir=tmp_path / "a", cache=False
+            "elevation download", PL_SHEET, root=tmp_path / "a", cache=False
         )
     with pl_sheets():
-        direct = download_data(**PL_SHEET, output_dir=tmp_path / "b", cache=False)
+        direct = download_data(**PL_SHEET, root=tmp_path / "b", cache=False)
 
     assert [f.file.status for f in called.result.files] == ["new"]  # type: ignore[attr-defined]
     assert (called.command, called.check, called.status) == (
@@ -436,14 +436,12 @@ def test_run_command_equals_download_data(tmp_path):
 def test_check_command_equals_check_data(tmp_path):
     fake = FakeCampaignProvider({"newest": [REC["83233"]]})
     with pl_sheets(fake):
-        run_command("elevation download", PL_SHEET, output_dir=tmp_path, cache=False)
+        run_command("elevation download", PL_SHEET, root=tmp_path, cache=False)
     fake.records = {"newest": [REC["84183"]]}
     with pl_sheets(fake):
-        plan = check_command(
-            "elevation download", PL_SHEET, output_dir=tmp_path, cache=False
-        )
+        plan = check_command("elevation download", PL_SHEET, root=tmp_path, cache=False)
     with pl_sheets(fake):
-        direct = check_data(**PL_SHEET, output_dir=tmp_path, cache=False)
+        direct = check_data(**PL_SHEET, root=tmp_path, cache=False)
 
     assert isinstance(plan.result, UpdatePlan)
     assert (plan.command, plan.check, plan.status) == ("elevation download", True, "ok")
@@ -455,20 +453,16 @@ def test_check_command_equals_check_data(tmp_path):
 def test_run_command_passes_update_and_plan_to_the_function(tmp_path):
     fake = FakeCampaignProvider({"newest": [REC["83233"]]})
     with pl_sheets(fake):
-        run_command("elevation download", PL_SHEET, output_dir=tmp_path, cache=False)
+        run_command("elevation download", PL_SHEET, root=tmp_path, cache=False)
     fake.records = {"newest": [REC["84183"]]}
     with pl_sheets(fake):
-        plan = check_command(
-            "elevation download", PL_SHEET, output_dir=tmp_path, cache=False
-        )
+        plan = check_command("elevation download", PL_SHEET, root=tmp_path, cache=False)
     with pl_sheets(fake):
-        kept = run_command(
-            "elevation download", PL_SHEET, output_dir=tmp_path, cache=False
-        )
+        kept = run_command("elevation download", PL_SHEET, root=tmp_path, cache=False)
         upgraded = run_command(
             "elevation download",
             PL_SHEET,
-            output_dir=tmp_path,
+            root=tmp_path,
             update="upgrade",
             plan=plan.result,
             cache=False,
@@ -481,7 +475,7 @@ def test_run_command_passes_update_and_plan_to_the_function(tmp_path):
         run_command(
             "elevation download",
             PL_SHEET,
-            output_dir=tmp_path,
+            root=tmp_path,
             plan=plan.result,
             cache=False,
         )
@@ -492,15 +486,13 @@ def test_run_command_summary_is_for_soil_hsg_only(tmp_path):
     hsg = {"sheet": HSG_SHEET, "depth": "0-5cm"}
     with landcover_sources(soilgrids=RasterSoilGrids):
         with_summary = run_command(
-            "soil hsg", hsg, output_dir=tmp_path / "a", summary=True, cache=False
+            "soil hsg", hsg, root=tmp_path / "a", summary=True, cache=False
         )
-        without = run_command("soil hsg", hsg, output_dir=tmp_path / "b", cache=False)
+        without = run_command("soil hsg", hsg, root=tmp_path / "b", cache=False)
     with landcover_sources(soilgrids=RasterSoilGrids):
-        direct = calculate_hsg(
-            output_dir=tmp_path / "c", cache=False, summary=True, **hsg
-        )
+        direct = calculate_hsg(root=tmp_path / "c", cache=False, summary=True, **hsg)
     with pytest.raises(ValidationError) as caught:
-        run_command("elevation download", PL_SHEET, output_dir=tmp_path, summary=True)
+        run_command("elevation download", PL_SHEET, root=tmp_path, summary=True)
 
     assert without.result.summary is None  # type: ignore[attr-defined]
     assert with_summary.result.summary == direct.summary  # type: ignore[attr-defined]
@@ -512,5 +504,5 @@ def test_run_command_summary_is_for_soil_hsg_only(tmp_path):
 def test_run_and_check_need_the_store(tmp_path):
     for call in (run_command, check_command):
         with pytest.raises(ValidationError) as caught:
-            call("elevation download", PL_SHEET, output_dir="")
-        assert caught.value.option == "output_dir"
+            call("elevation download", PL_SHEET, root="")
+        assert caught.value.option == "root"

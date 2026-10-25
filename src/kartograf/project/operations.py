@@ -76,10 +76,10 @@ def _saved_path(path: str | Path, project_dir: Path) -> str:
 
 
 def _require_store(project: Project) -> None:
-    if not project.output_dir.is_dir():
+    if not project.root.is_dir():
         raise ValidationError(
-            f"magazyn projektu nie istnieje: {project.output_dir}; podlacz udzial "
-            f"albo popraw output_dir w {MANIFEST_NAME}"
+            f"magazyn projektu nie istnieje: {project.root}; podlacz udzial "
+            f"albo popraw root w {MANIFEST_NAME}"
         )
 
 
@@ -120,29 +120,29 @@ def _select(
     return tuple(selected)
 
 
-def init_project(project_dir: str | Path, *, output_dir: str | Path | None) -> Project:
-    """Create a project: ``kartograf-project.json`` with the store ``output_dir``.
+def init_project(project_dir: str | Path, *, root: str | Path | None) -> Project:
+    """Create a project: ``kartograf-project.json`` with the store ``root``.
 
     The project directory and the store directory are created when missing.
-    ``output_dir`` given relatively (to the current directory) is written
+    ``root`` given relatively (to the current directory) is written
     relative to the project directory, an absolute one as it is (spec 3.2).
 
     Raises
     ------
     ValidationError
         The manifest exists already (nothing is changed), no or an empty
-        ``output_dir`` or a store that cannot be created.
+        ``root`` or a store that cannot be created.
     """
     directory = absolute(project_dir)
     target = directory / MANIFEST_NAME
     if target.exists():
         raise ValidationError(f"projekt juz istnieje: {target}")
-    if output_dir is None or not str(output_dir):
+    if root is None or not str(root):
         raise ValidationError(
-            "--output wymagane: katalog magazynu projektu (np. data albo wspolny "
+            "--root wymagane: katalog magazynu projektu (np. data albo wspolny "
             "magazyn zespolu)"
         )
-    saved = _saved_path(output_dir, directory)
+    saved = _saved_path(root, directory)
     store = resolve_path(saved, directory)
     try:
         store.mkdir(parents=True, exist_ok=True)
@@ -173,7 +173,7 @@ def add_project_task(
     """Add a task: a data command with its ``options``.
 
     The command is e.g. ``"elevation download"``; ``options`` are the library arguments
-    of that command without ``output_dir`` (``BBox``, ``Path``, per-country mappings,
+    of that command without ``root`` (``BBox``, ``Path``, per-country mappings,
     sequences).
 
     The choice is checked without network by the checks the command's
@@ -206,7 +206,7 @@ def add_project_task(
     if "geometry" in data:
         data["geometry"] = _saved_path(str(data["geometry"]), project.directory)
     entry.validate(
-        project.output_dir,
+        project.root,
         options_from_json(entry.options, data, base_dir=project.directory),
     )
     task = ProjectTask(name, command, data, None, None, None, ())
@@ -467,7 +467,7 @@ def _download_task(
 ) -> TaskResult:
     """One task of ``download_project``."""
     command = task_command(task.command)
-    store = project.output_dir
+    store = project.root
     options = options_from_json(
         command.options, task.options, base_dir=project.directory
     )
@@ -543,7 +543,7 @@ def _download_task(
         *(_Problem(text, "data_error", "not_pinnable") for text in pin_errors),
         *(
             _Problem(text, "io_error", "repin_failed")
-            for text in _repin_repaired(project.output_dir, repaired, pins)
+            for text in _repin_repaired(project.root, repaired, pins)
         ),
     ]
     if not files.complete or problems or not pins:
@@ -630,7 +630,7 @@ def _set_aside_corrupt(project: Project, task: ProjectTask) -> tuple[PinnedFile,
         if _store_check(project, task, pin, verify=True).status == "corrupt"
     )
     for pin in corrupt:
-        _set_aside(project.output_dir, pin)
+        _set_aside(project.root, pin)
     return corrupt
 
 
@@ -735,7 +735,7 @@ def _restore(
         same = next((new for new in candidates if new.sha256 == pin.sha256), None)
         if same is not None:
             try:
-                _repin_version(project.output_dir, pin, same)
+                _repin_version(project.root, pin, same)
             except (OSError, ValueError, KeyError, TypeError) as e:
                 problems.append(
                     _Problem(
@@ -838,7 +838,7 @@ def _store_check(
     project: Project, task: ProjectTask, pin: PinnedFile, *, verify: bool
 ) -> FileCheck:
     """Inspect a pinned version. Status only stats; verify hashes its data."""
-    state = pin_state(project.output_dir, pin)
+    state = pin_state(project.root, pin)
     if state == "missing":
         return _file_check(
             task,
@@ -853,17 +853,17 @@ def _store_check(
         )
     if not verify:
         return _file_check(task, pin, "ok")
-    data = project.output_dir / pin.version
+    data = project.root / pin.version
     sidecar = data.with_name(data.name + ".meta.json")
     try:
-        root = project.output_dir.resolve(strict=True)
+        root = project.root.resolve(strict=True)
         # A valid manifest path is lexical; a symlink in any of its parents
         # must still not lead outside the store, even for a correct digest.
         if not data.resolve(strict=True).is_relative_to(root) or not sidecar.resolve(
             strict=True
         ).is_relative_to(root):
             raise ValueError("sciezka przypietej wersji wykracza poza magazyn")
-        standard = project.output_dir / pin.path
+        standard = project.root / pin.path
         if (standard.exists() or standard.is_symlink()) and not standard.resolve(
             strict=False
         ).is_relative_to(root):
@@ -1019,7 +1019,7 @@ def _checked_item(
             item.available_label,
             "nowy plik w wyniku zadania",
         )
-    if pin_state(project.output_dir, pin) != "ok":
+    if pin_state(project.root, pin) != "ok":
         return _file_check(task, pin, "missing", detail=_missing_detail(project, task))
     if item.status == "check_failed":
         return _file_check(
@@ -1088,7 +1088,7 @@ def check_project(
             )
         try:
             plan = command.check(
-                project.output_dir,
+                project.root,
                 options,
                 cache=cache,
                 on_notice=_prefixed(sink, task.name),
@@ -1105,7 +1105,7 @@ def check_project(
             for index, item in enumerate(plan.items)
         )
         for pin in unpaired:
-            if pin_state(project.output_dir, pin) != "ok":
+            if pin_state(project.root, pin) != "ok":
                 checked.append(
                     _file_check(
                         task, pin, "missing", detail=_missing_detail(project, task)

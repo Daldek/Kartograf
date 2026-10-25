@@ -199,15 +199,15 @@ def _notice(raw: Mapping[str, object]) -> Notice:
     return Notice(level, str(raw["code"]), str(raw["message"]))
 
 
-def store_id(output_dir: str | Path) -> str:
+def store_id(root: str | Path) -> str:
     """Identity of a store in a plan: the resolved output directory."""
-    return str(Path(output_dir).resolve())
+    return str(Path(root).resolve())
 
 
-def new_plan(output_dir: str | Path, items: Iterable[PlanItem]) -> UpdatePlan:
-    """Return the plan of the store ``output_dir`` checked now."""
+def new_plan(root: str | Path, items: Iterable[PlanItem]) -> UpdatePlan:
+    """Return the plan of the store ``root`` checked now."""
     return UpdatePlan(
-        store=store_id(output_dir),
+        store=store_id(root),
         checked_at=_clock.now().isoformat(timespec="seconds"),
         kartograf_version=build_version(),
         items=tuple(items),

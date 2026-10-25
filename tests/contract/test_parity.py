@@ -100,7 +100,7 @@ def test_pl_sheet(tmp_path):
             ],
             lambda out: download_data(
                 product="nmt",
-                output_dir=out,
+                root=out,
                 sheet=G,
                 resolution="1m",
                 vertical_crs="EVRF2007",
@@ -163,7 +163,7 @@ def test_pl_sheet_0_5m(tmp_path):
             ],
             lambda out: download_data(
                 product="nmt",
-                output_dir=out,
+                root=out,
                 sheet=sheet,
                 resolution="0.5m",
                 vertical_crs="EVRF2007",
@@ -185,7 +185,7 @@ def test_orto_sheet_through_imagery(tmp_path):
     ):
         run = run_both(
             ["imagery", "download", "--product", "orto", "--sheet", G, "-q"],
-            lambda out: download_data(product="orto", output_dir=out, sheet=G),
+            lambda out: download_data(product="orto", root=out, sheet=G),
             tmp_path,
         )
     _same(run, run.api_result, statuses=["new"])
@@ -211,7 +211,7 @@ def test_cz_sheet(tmp_path, sheet, resolution):
             ],
             lambda out: download_data(
                 product="nmt",
-                output_dir=out,
+                root=out,
                 sheet=sheet,
                 resolution=resolution,
                 vertical_crs="Bpv",
@@ -247,7 +247,7 @@ def test_cz_cutout(tmp_path):
             ],
             lambda out: download_data(
                 product="nmt",
-                output_dir=out,
+                root=out,
                 bbox=bbox,
                 country="cz",
                 resolution="2m",
@@ -292,7 +292,7 @@ def test_cz_nmpt_sm5(tmp_path):
             ],
             lambda out: download_data(
                 product="nmpt",
-                output_dir=out,
+                root=out,
                 sheet="CTES96",
                 resolution="0.5m",
                 vertical_crs="Bpv",
@@ -334,7 +334,7 @@ def test_cz_dmp1g_cutout(tmp_path):
             ],
             lambda out: download_data(
                 product="nmpt",
-                output_dir=out,
+                root=out,
                 bbox=bbox,
                 country="cz",
                 resolution="2m",
@@ -385,7 +385,7 @@ def test_cz_laz_area(tmp_path):
             ],
             lambda out: download_data(
                 product="laz",
-                output_dir=out,
+                root=out,
                 bbox=bbox,
                 country="cz",
                 model="dmr4g",
@@ -446,7 +446,7 @@ def test_auto_laz_split(tmp_path):
             ],
             lambda out: download_data(
                 product="laz",
-                output_dir=out,
+                root=out,
                 bbox=bbox,
                 country="auto",
                 model="dmr4g",
@@ -501,7 +501,7 @@ def test_auto_laz_year_narrows_to_pl(tmp_path):
             ],
             lambda out: download_data(
                 product="laz",
-                output_dir=out,
+                root=out,
                 bbox=bbox,
                 country="auto",
                 vertical_crs="EVRF2007",
@@ -553,7 +553,7 @@ def test_auto_partial_success(tmp_path):
             ],
             lambda out: download_data(
                 product="nmt",
-                output_dir=out,
+                root=out,
                 bbox=BBox(18.60, 49.73, 18.66, 49.76, "EPSG:4326"),
                 country="auto",
                 resolution={"pl": "1m", "cz": "2m"},
@@ -589,7 +589,7 @@ def test_laz_sheet(tmp_path):
             ],
             lambda out: download_data(
                 product="laz",
-                output_dir=out,
+                root=out,
                 sheet="N-34-130-D-d-2-4",
                 vertical_crs="EVRF2007",
             ),
@@ -626,7 +626,7 @@ def test_check_plan_upgrade(tmp_path):
                 "--plan",
                 str(plan_file),
             ],
-            lambda out: check_data(output_dir=out, **selection),
+            lambda out: check_data(root=out, **selection),
             tmp_path,
         )
         from kartograf.download.plan import UpdatePlan
@@ -647,7 +647,7 @@ def test_check_plan_upgrade(tmp_path):
                 "-q",
             ],
             lambda out: download_data(
-                output_dir=out, update="upgrade", plan=api_plan, **selection
+                root=out, update="upgrade", plan=api_plan, **selection
             ),
             tmp_path,
         )
@@ -681,7 +681,7 @@ def test_check_plan_upgrade(tmp_path):
 def test_input_errors_same_type_and_text(tmp_path, argv, kwargs):
     run = run_both(
         ["elevation", "download", "--product", "nmt", *argv],
-        lambda out: download_data(product="nmt", output_dir=out, **kwargs),
+        lambda out: download_data(product="nmt", root=out, **kwargs),
         tmp_path,
     )
     assert run.cli_code == 2
@@ -730,7 +730,7 @@ def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
     if check:
         argv.append("--check-updates")
     operation = check_data if check else download_data
-    run = run_both(argv, lambda out: operation(output_dir=out, **options), tmp_path)
+    run = run_both(argv, lambda out: operation(root=out, **options), tmp_path)
     assert run.cli_code == 2
     assert type(run.api_error) is ValidationError
     assert run.cli_text == f"Error: {run.api_error.localized('pl')}\n"
@@ -765,7 +765,7 @@ def _pl(tmp_path, fake, cli: list[str], **api):
     with _pl_store(fake):
         return run_both(
             ["elevation", "download", "--product", "nmt", *cli, "-q"],
-            lambda out: download_data(product="nmt", output_dir=out, **api),
+            lambda out: download_data(product="nmt", root=out, **api),
             tmp_path,
         )
 
@@ -909,7 +909,7 @@ def test_pl_cutout(tmp_path):
             + ["--cutout", "--horizontal-crs", "EPSG:2180", *PL_SHEET_ARGS, "-q"],
             lambda out: download_data(
                 product="nmt",
-                output_dir=out,
+                root=out,
                 bbox=BBOX,
                 country="pl",
                 cutout=True,
@@ -938,7 +938,7 @@ def test_cz_sm5_sheet(tmp_path):
             ["elevation", "download", "--product", "nmt", "--sheet", "CTES96"]
             + ["--vertical-crs", "Bpv", "-q"],
             lambda out: download_data(
-                product="nmt", output_dir=out, sheet="CTES96", vertical_crs="Bpv"
+                product="nmt", root=out, sheet="CTES96", vertical_crs="Bpv"
             ),
             tmp_path,
         )
@@ -953,7 +953,7 @@ def test_cz_orto_sheet(tmp_path, monkeypatch):
     monkeypatch.setattr(cz_orto, "_session", lambda: fake)
     run = run_both(
         [*CZ_ORTO_ARGS, "-q"],
-        lambda out: download_data(output_dir=out, **CZ_ORTO),
+        lambda out: download_data(root=out, **CZ_ORTO),
         tmp_path,
     )
     _same(run, run.api_result, statuses=["new"] * 4)
@@ -985,7 +985,7 @@ def test_orto_cutout(tmp_path):
             ],
             lambda out: download_data(
                 product="orto",
-                output_dir=out,
+                root=out,
                 country="pl",
                 bbox=KRAKOW,
                 cutout=True,
@@ -1005,7 +1005,7 @@ def test_cz_orto_check_plan_upgrade(tmp_path, monkeypatch):
     monkeypatch.setattr(cz_orto, "_session", lambda: fake)
     first = run_both(
         [*CZ_ORTO_ARGS, "-q"],
-        lambda out: download_data(output_dir=out, **CZ_ORTO),
+        lambda out: download_data(root=out, **CZ_ORTO),
         tmp_path,
     )
     _same(first, first.api_result, statuses=["new"] * 4)
@@ -1014,7 +1014,7 @@ def test_cz_orto_check_plan_upgrade(tmp_path, monkeypatch):
     plan_file = tmp_path / "plan.json"
     checked = run_both(
         [*CZ_ORTO_ARGS, "--check-updates", "--plan", str(plan_file)],
-        lambda out: check_data(output_dir=out, **CZ_ORTO),
+        lambda out: check_data(root=out, **CZ_ORTO),
         tmp_path,
     )
     assert checked.cli_code == 0
@@ -1024,9 +1024,7 @@ def test_cz_orto_check_plan_upgrade(tmp_path, monkeypatch):
     assert [(i.track, i.status) for i in api_plan.items] == [("cz_orto", "newer")] * 4
     upgraded = run_both(
         [*CZ_ORTO_ARGS, "--upgrade", "--plan", str(plan_file), "-q"],
-        lambda out: download_data(
-            output_dir=out, update="upgrade", plan=api_plan, **CZ_ORTO
-        ),
+        lambda out: download_data(root=out, update="upgrade", plan=api_plan, **CZ_ORTO),
         tmp_path,
     )
     _same(upgraded, upgraded.api_result, statuses=["relabeled"] * 3 + ["new"])
@@ -1053,7 +1051,7 @@ def test_auto_narrowed_to_pl(tmp_path):
             + ["--cutout", "--horizontal-crs", "EPSG:2180", *PL_SHEET_ARGS, "-q"],
             lambda out: download_data(
                 product="nmt",
-                output_dir=out,
+                root=out,
                 bbox=bbox,
                 country="auto",
                 cutout=True,
@@ -1086,7 +1084,7 @@ def test_laz_bbox_4326_min_density(tmp_path):
             + ["--vertical-crs", "EVRF2007", "--min-density", "4", "-q"],
             lambda out: download_data(
                 product="laz",
-                output_dir=out,
+                root=out,
                 bbox=bbox,
                 country="pl",
                 vertical_crs="EVRF2007",
@@ -1107,9 +1105,7 @@ def test_upgrade_with_stale_plan(tmp_path):
         checked = run_both(
             ["elevation", "download", "--product", "nmt", *sheet, "--check-updates"]
             + ["--plan", str(plan_file)],
-            lambda out: check_data(
-                product="nmt", output_dir=out, sheet=G, **PL_SHEET_KW
-            ),
+            lambda out: check_data(product="nmt", root=out, sheet=G, **PL_SHEET_KW),
             tmp_path,
         )
         fake.records = C14
@@ -1118,7 +1114,7 @@ def test_upgrade_with_stale_plan(tmp_path):
             + ["--plan", str(plan_file), "-q"],
             lambda out: download_data(
                 product="nmt",
-                output_dir=out,
+                root=out,
                 sheet=G,
                 update="upgrade",
                 plan=checked.api_result,

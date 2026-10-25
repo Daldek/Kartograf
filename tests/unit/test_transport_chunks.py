@@ -145,7 +145,7 @@ class TestPlanChunks:
 
 
 class TestFetchChunks:
-    def test_fetch_chunks_single_writes_output_directly(self, tmp_path):
+    def test_fetch_chunks_single_writes_rootectly(self, tmp_path):
         bbox = BBox(0, 0, 8, 6, "EPSG:2180")
         calls: list[Path] = []
         out = tmp_path / "one.tif"

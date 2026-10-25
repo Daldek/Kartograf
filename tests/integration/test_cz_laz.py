@@ -54,7 +54,7 @@ def test_laz_file_bytes_equal_zip_member(tmp_path):
         result = download_cz_laz(
             model="dmr4g",
             vertical_crs="Bpv",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet="CTES96",
             cache=False,
         )
@@ -81,7 +81,7 @@ def test_laz_tm33_evrf2007(tmp_path):
         result = download_cz_laz(
             model="dmr4g",
             vertical_crs="EVRF2007",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet="760_5518",
             cache=False,
         )
@@ -108,7 +108,7 @@ def test_laz_wrong_pair_rejected(vertical_crs, sheet, tmp_path):
             call(
                 model="dmr4g",
                 vertical_crs=vertical_crs,
-                output_dir=tmp_path,
+                root=tmp_path,
                 sheet=sheet,
                 cache=False,
             )
@@ -124,9 +124,7 @@ def test_exactly_one_selection(selection, tmp_path):
         recorded(CuzkSession()) as session,
         pytest.raises(ValidationError, match="dokladnie jedno"),
     ):
-        download_cz_laz(
-            model="dmr4g", vertical_crs="Bpv", output_dir=tmp_path, **selection
-        )
+        download_cz_laz(model="dmr4g", vertical_crs="Bpv", root=tmp_path, **selection)
     assert session.calls == []
 
 
@@ -146,7 +144,7 @@ def test_laz_404_is_sheet_failure(tmp_path):
         result = download_cz_laz(
             model="dmr4g",
             vertical_crs="Bpv",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=area,
             parent_request=parent,
             workers=2,
@@ -193,7 +191,7 @@ def test_laz_ctrl_c_stops_the_running_sheet_and_commits_nothing_after_it(tmp_pat
         download_cz_laz(
             model="dmr4g",
             vertical_crs="Bpv",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=area,
             workers=2,
             cache=False,
@@ -213,7 +211,7 @@ def test_laz_area_without_sheets_is_no_coverage(tmp_path):
         download_cz_laz(
             model="dmp1g",
             vertical_crs="EVRF2007",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=CIESZYN,
             cache=False,
         )
@@ -224,7 +222,7 @@ def test_cz_laz_check_and_upgrade_plan(tmp_path):
     common = {
         "model": "dmr4g",
         "vertical_crs": "Bpv",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "sheet": "CTES96",
         "cache": False,
     }

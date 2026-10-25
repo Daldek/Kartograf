@@ -64,7 +64,7 @@ def _meta(path: Path) -> dict:
 def _lod1(tmp_path, **kwargs):
     return download_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         teryt="1261",
         lod=1,
         year=2024,
@@ -88,44 +88,42 @@ def _lod1(tmp_path, **kwargs):
 def test_exactly_one_selection(tmp_path, session, selection):
     with pytest.raises(ValidationError):
         download_collection(
-            product="buildings", output_dir=tmp_path, lod=1, year=2024, **selection
+            product="buildings", root=tmp_path, lod=1, year=2024, **selection
         )
     assert session.calls == []
 
 
 def test_product_and_output_are_required(tmp_path, session):
     with pytest.raises(ValidationError) as missing:
-        download_collection(product=None, output_dir=tmp_path, teryt="1261")
+        download_collection(product=None, root=tmp_path, teryt="1261")
     assert "admin" in str(missing.value) and "buildings" in str(missing.value)
     with pytest.raises(ValidationError):
-        download_collection(product="landcover", output_dir=tmp_path, teryt="1261")
+        download_collection(product="landcover", root=tmp_path, teryt="1261")
     with pytest.raises(ValidationError):
-        download_collection(product="buildings", output_dir=None, teryt="1261", lod=2)
+        download_collection(product="buildings", root=None, teryt="1261", lod=2)
     assert session.calls == []
 
 
 def test_variant_required_when_many(tmp_path, session):
     with pytest.raises(ValidationError) as error:
-        download_collection(
-            product="buildings", output_dir=tmp_path, teryt="1261", lod=1
-        )
+        download_collection(product="buildings", root=tmp_path, teryt="1261", lod=1)
     assert "2019, 2021, 2022, 2024" in str(error.value)
     with pytest.raises(ValidationError) as no_lod:
-        download_collection(product="buildings", output_dir=tmp_path, teryt="1261")
+        download_collection(product="buildings", root=tmp_path, teryt="1261")
     assert "--lod" in str(no_lod.value)
     assert session.calls == []
 
 
 def test_single_variant_needs_no_flag(tmp_path, session):
     request = validate_collection_request(
-        product="buildings", output_dir=tmp_path, teryt="1261", lod=2
+        product="buildings", root=tmp_path, teryt="1261", lod=2
     )
     (part,) = request.parts
     assert part.variant is not None and part.variant.edition == "2017"
     assert part.segment == "models3d/pl_buildings_lod2_2017"
     with pytest.raises(ValidationError) as error:
         validate_collection_request(
-            product="buildings", output_dir=tmp_path, teryt="1261", lod=2, year=2016
+            product="buildings", root=tmp_path, teryt="1261", lod=2, year=2016
         )
     assert "2017" in str(error.value)
     assert session.calls == []
@@ -145,14 +143,14 @@ def test_single_variant_needs_no_flag(tmp_path, session):
 def test_teryt_length_matches_unit(tmp_path, session, product, teryt, extra):
     with pytest.raises(ValidationError):
         validate_collection_request(
-            product=product, output_dir=tmp_path, teryt=teryt, **extra
+            product=product, root=tmp_path, teryt=teryt, **extra
         )
     assert session.calls == []
 
 
 def test_teryt_hint_names_available_selections(tmp_path):
     with pytest.raises(ValidationError) as error:
-        validate_collection_request(product="admin", output_dir=tmp_path, teryt="1261")
+        validate_collection_request(product="admin", root=tmp_path, teryt="1261")
     assert "--teryt <2 cyfry>" in str(error.value)
     assert "--whole-country" in str(error.value)
 
@@ -162,13 +160,13 @@ def test_selection_hint_names_what_an_area_downloads(tmp_path):
     the hint never offers the same flags with two meanings (live 2026-10-15:
     ``cadastre download --teryt 12`` listed both)."""
     with pytest.raises(ValidationError) as egib:
-        validate_collection_request(product="map", output_dir=tmp_path, teryt="12")
+        validate_collection_request(product="map", root=tmp_path, teryt="12")
     assert "--bbox/--sheet/--geometry (obiekty obszaru)" in str(egib.value)
     assert "paczki powiatow obszaru" not in str(egib.value)
     with pytest.raises(ValidationError) as buildings:
         validate_collection_request(
             product="buildings",
-            output_dir=tmp_path,
+            root=tmp_path,
             country="pl",
             whole_country=True,
             lod=2,
@@ -180,20 +178,20 @@ def test_selection_hint_names_what_an_area_downloads(tmp_path):
 def test_choices_of_other_products_rejected(tmp_path):
     with pytest.raises(ValidationError):
         validate_collection_request(
-            product="admin", output_dir=tmp_path, teryt="12", year=2024
+            product="admin", root=tmp_path, teryt="12", year=2024
         )
     with pytest.raises(ValidationError):
         validate_collection_request(
-            product="admin", output_dir=tmp_path, teryt="12", level="gmina"
+            product="admin", root=tmp_path, teryt="12", level="gmina"
         )
     with pytest.raises(ValidationError):
         validate_collection_request(
-            product="map", output_dir=tmp_path, country="pl", bbox=AREA, level="gmina"
+            product="map", root=tmp_path, country="pl", bbox=AREA, level="gmina"
         )
     with pytest.raises(ValidationError):
         validate_collection_request(
             product="buildings",
-            output_dir=tmp_path,
+            root=tmp_path,
             whole_country=True,
             country="pl",
             lod=1,
@@ -204,16 +202,16 @@ def test_choices_of_other_products_rejected(tmp_path):
 def test_level_required_and_checked_for_area(tmp_path):
     with pytest.raises(ValidationError) as missing:
         validate_collection_request(
-            product="admin", output_dir=tmp_path, country="pl", bbox=AREA
+            product="admin", root=tmp_path, country="pl", bbox=AREA
         )
     assert "gmina" in str(missing.value)
     with pytest.raises(ValidationError):
         validate_collection_request(
-            product="admin", output_dir=tmp_path, country="pl", bbox=AREA, level="obec"
+            product="admin", root=tmp_path, country="pl", bbox=AREA, level="obec"
         )
     request = validate_collection_request(
         product="admin",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         bbox=AREA,
         level={"pl": "gmina"},
@@ -230,7 +228,7 @@ def test_level_required_and_checked_for_area(tmp_path):
 def test_area_in_other_crs_is_native_with_parent(tmp_path):
     wgs = BBox(19.90, 50.05, 19.92, 50.06, "EPSG:4326")
     request = validate_collection_request(
-        product="map", output_dir=tmp_path, country="pl", bbox=wgs
+        product="map", root=tmp_path, country="pl", bbox=wgs
     )
     (part,) = request.parts
     assert part.area is not None and part.area.crs == "EPSG:2180"
@@ -244,24 +242,24 @@ def test_area_in_other_crs_is_native_with_parent(tmp_path):
 
 def test_country_rules(tmp_path):
     with pytest.raises(ValidationError):  # area without --country
-        validate_collection_request(product="map", output_dir=tmp_path, bbox=AREA)
+        validate_collection_request(product="map", root=tmp_path, bbox=AREA)
     with pytest.raises(ValidationError):  # whole country needs pl/cz, not auto
         validate_collection_request(
-            product="admin", output_dir=tmp_path, whole_country=True, country="auto"
+            product="admin", root=tmp_path, whole_country=True, country="auto"
         )
     with pytest.raises(ValidationError, match="tylko dla PL"):  # RCN: PL only
         validate_collection_request(
-            product="prices", output_dir=tmp_path, whole_country=True, country="cz"
+            product="prices", root=tmp_path, whole_country=True, country="cz"
         )
     with pytest.raises(ValidationError):  # sheet of another country than --country
         validate_collection_request(
-            product="map", output_dir=tmp_path, sheet="N-34-130-D", country="cz"
+            product="map", root=tmp_path, sheet="N-34-130-D", country="cz"
         )
 
 
 def test_sheet_area_has_sheet_parent(tmp_path):
     request = validate_collection_request(
-        product="admin", output_dir=tmp_path, sheet="M-34-064-D", level="powiat"
+        product="admin", root=tmp_path, sheet="M-34-064-D", level="powiat"
     )
     (part,) = request.parts
     assert part.parent == {"sheet": "M-34-64-D", "countries": ["PL"]}
@@ -271,7 +269,7 @@ def test_sheet_area_has_sheet_parent(tmp_path):
 def test_horizontal_crs_only_the_published_one(tmp_path):
     validate_collection_request(
         product="admin",
-        output_dir=tmp_path,
+        root=tmp_path,
         whole_country=True,
         country="pl",
         horizontal_crs="EPSG:2180",
@@ -279,7 +277,7 @@ def test_horizontal_crs_only_the_published_one(tmp_path):
     with pytest.raises(ValidationError):
         validate_collection_request(
             product="admin",
-            output_dir=tmp_path,
+            root=tmp_path,
             whole_country=True,
             country="pl",
             horizontal_crs="EPSG:2177",
@@ -321,7 +319,7 @@ def test_area_without_feature_channel_uses_powiats(tmp_path, session, frozen_clo
     notices = []
     report = download_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         bbox=AREA,
         lod=1,
@@ -354,7 +352,7 @@ def test_area_progress_per_unit_as_sheet_list(tmp_path, session, frozen_clock):
     )
     choice = {
         "product": "buildings",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "country": "pl",
         "bbox": AREA,
         "lod": 1,
@@ -393,7 +391,7 @@ def test_auto_narrows_to_countries_with_the_product(tmp_path, session, frozen_cl
     )
     report = download_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="auto",
         bbox=AREA,
         lod=1,
@@ -416,7 +414,7 @@ def test_unit_failure_isolated(tmp_path, session, frozen_clock):
     )
     report = download_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         bbox=AREA,
         lod=2,
@@ -439,7 +437,7 @@ def test_area_without_powiats_is_no_coverage(tmp_path, session):
     with pytest.raises(NoCoverageError):
         download_collection(
             product="buildings",
-            output_dir=tmp_path,
+            root=tmp_path,
             country="pl",
             # Baltic Sea inside the PL envelope (a bbox outside it fails before PRG)
             bbox=BBox(450000, 780000, 451000, 781000, "EPSG:2180"),
@@ -460,7 +458,7 @@ def test_whole_country_requires_flag_and_reports_size(tmp_path, session, frozen_
 
     report = download_collection(
         product="admin",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         whole_country=True,
         cache=False,
@@ -482,7 +480,7 @@ def test_voivodeship_package(tmp_path, session, frozen_clock):
     url, response = package_route("prg_woj_12")
     session.routes[url] = response
     report = download_collection(
-        product="admin", output_dir=tmp_path, teryt="12", cache=False
+        product="admin", root=tmp_path, teryt="12", cache=False
     )
     (unit_file,) = report.files
     assert unit_file.file.path == tmp_path / "boundaries/pl_prg_gml/teryt/12.zip"
@@ -493,7 +491,7 @@ def test_egib_export_unpacked(tmp_path, session, frozen_clock):
     url, response = package_route("egib_1261", content=b"SQLite format 3\x00")
     session.routes[url] = response
     report = download_collection(
-        product="map", output_dir=tmp_path, teryt="1261", cache=False
+        product="map", root=tmp_path, teryt="1261", cache=False
     )
     (unit_file,) = report.files
     path = unit_file.file.path
@@ -552,7 +550,7 @@ def test_editions_relabeled_across_slots(tmp_path, session, frozen_clock):
     session.routes.update([_zip_route(lod1_2021), _zip_route(lod1_2022)])
     older = download_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         teryt="1261",
         lod=1,
         year=2021,
@@ -560,7 +558,7 @@ def test_editions_relabeled_across_slots(tmp_path, session, frozen_clock):
     )
     newer = download_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         teryt="1261",
         lod=1,
         year=2022,
@@ -576,7 +574,7 @@ def test_editions_relabeled_across_slots(tmp_path, session, frozen_clock):
 def test_check_collection_never_downloads(tmp_path, session, frozen_clock):
     plan = check_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         teryt="1261",
         lod=1,
         year=2024,
@@ -595,7 +593,7 @@ def test_check_collection_never_downloads(tmp_path, session, frozen_clock):
     calls = len(session.calls)
     (again,) = check_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         teryt="1261",
         lod=1,
         year=2024,
@@ -612,7 +610,7 @@ def test_upgrade_with_plan_executes_planned_and_reports_stale(
     session.routes.update([_zip_route(url)])
     plan = check_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         teryt="1261",
         lod=1,
         year=2024,
@@ -623,7 +621,7 @@ def test_upgrade_with_plan_executes_planned_and_reports_stale(
 
     other = check_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         teryt="1261",
         lod=1,
         year=2022,
@@ -638,16 +636,16 @@ def test_upgrade_with_plan_executes_planned_and_reports_stale(
 
 def test_plan_needs_upgrade_and_same_store(tmp_path, session):
     plan = check_collection(
-        product="buildings", output_dir=tmp_path, teryt="1261", lod=2, cache=False
+        product="buildings", root=tmp_path, teryt="1261", lod=2, cache=False
     )
     with pytest.raises(ValidationError):
         download_collection(
-            product="buildings", output_dir=tmp_path, teryt="1261", lod=2, plan=plan
+            product="buildings", root=tmp_path, teryt="1261", lod=2, plan=plan
         )
     with pytest.raises(ValidationError):
         download_collection(
             product="buildings",
-            output_dir=tmp_path / "inny",
+            root=tmp_path / "inny",
             teryt="1261",
             lod=2,
             update="upgrade",
@@ -665,7 +663,7 @@ def test_workers_download_units_in_parallel(tmp_path, session, frozen_clock):
     )
     report = download_collection(
         product="buildings",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         bbox=AREA,
         lod=1,

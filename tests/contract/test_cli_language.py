@@ -35,15 +35,15 @@ def test_help_of_every_command_is_ascii():
 _CLI_ERRORS = [
     (["elevation", "download", "--sheet", "X"], "wymagane"),
     (
-        ["elevation", "download", "--product", "nmt", "--bbox", "1,2,3", "-o", "o"],
+        ["elevation", "download", "--product", "nmt", "--bbox", "1,2,3", "--root", "o"],
         "Nieprawidlowy",
     ),
-    (["elevation", "download", "--product", "nmt", "-o", "o"], "Podaj"),
-    (["landcover", "download", "-o", "o", "--teryt", "1465"], "wymagane"),
+    (["elevation", "download", "--product", "nmt", "--root", "o"], "Podaj"),
+    (["landcover", "download", "--root", "o", "--teryt", "1465"], "wymagane"),
     (["landcover", "list-layers"], "wymagane"),
-    (["imagery", "download", "--sheet", "X", "-o", "o"], "wymagane"),
+    (["imagery", "download", "--sheet", "X", "--root", "o"], "wymagane"),
     (["soil", "download", "--sheet", "N-34-130-D"], "wymagane"),
-    (["soil", "hsg", "-o", "o"], "Podaj"),
+    (["soil", "hsg", "--root", "o"], "Podaj"),
     (["sheet", "parse", "Q-99"], "Nieprawidlowe"),
 ]
 
@@ -57,10 +57,10 @@ def test_cli_error_paths_are_ascii_polish(argv, word, tmp_path, monkeypatch, cap
 
 
 def _library_errors():
-    yield lambda: download_data(product="nmt", output_dir="o", sheet="X")
-    yield lambda: download_data(product=None, output_dir="o", sheet="N-34-130-D")
+    yield lambda: download_data(product="nmt", root="o", sheet="X")
+    yield lambda: download_data(product=None, root="o", sheet="N-34-130-D")
     yield lambda: download_soil(
-        output_dir="o",
+        root="o",
         bbox=BBox(0, 0, 1, 1, "EPSG:2180"),
         property="x",
         depth="0-5cm",
