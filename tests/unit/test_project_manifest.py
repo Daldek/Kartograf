@@ -184,14 +184,14 @@ def test_read_error_names_the_place(project):
     with pytest.raises(ValidationError) as caught:
         read_manifest(project)
     assert str(caught.value) == (
-        "kartograf-project.json: zadanie teren: nieznany klucz 'optons'"
+        "kartograf-project.json: task teren: unknown key 'optons'"
     )
 
 
 def test_missing_manifest_names_the_directory(tmp_path):
     with pytest.raises(ValidationError) as caught:
         read_manifest(tmp_path)
-    assert str(caught.value).startswith(f"brak projektu w {tmp_path} ")
+    assert str(caught.value).startswith(f"no project in {tmp_path} ")
 
 
 def test_bom_of_an_editor_is_accepted_and_not_written_back(project):

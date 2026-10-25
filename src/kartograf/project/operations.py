@@ -31,6 +31,7 @@ from kartograf.download.plan import PlanItem
 from kartograf.download.versions import read_version
 from kartograf.exceptions import ConflictError, KartografError, ValidationError
 from kartograf.marker import store_refusal
+from kartograf.messages import message, reason
 from kartograf.notices import PROJECT_GEOMETRY_CHANGED, Notice, NoticeSink
 from kartograf.output import guard_store
 from kartograf.project.commands import TaskFiles, project_command, task_command
@@ -81,16 +82,16 @@ def _saved_path(path: str | Path, project_dir: Path) -> str:
 def _require_store(project: Project) -> None:
     if not project.root.is_dir():
         raise ValidationError(
-            f"magazyn projektu nie istnieje: {project.root}; podlacz udzial "
-            f"albo popraw root w {MANIFEST_NAME}"
+            message(
+                "project.project_store_missing",
+                root=project.root,
+                manifest_name=MANIFEST_NAME,
+            )
         )
 
 
 def _concurrent(name: str) -> str:
-    return (
-        f"{name}: zadanie zmienione w tym czasie przez inny proces; nic nie "
-        "zapisano - ponow polecenie"
-    )
+    return message("project.task_changed_concurrently", name=name)
 
 
 def _select(
@@ -113,10 +114,13 @@ def _select(
         task = by_name.get(name)
         if task is None:
             known = ", ".join(by_name) or (
-                f"brak ({project_command(project.directory, 'add', 'NAZWA ...')})"
+                message(
+                    "project.no_tasks_known",
+                    add_command=project_command(project.directory, "add"),
+                )
             )
             raise ValidationError(
-                f"nieznane zadanie {name!r}; zadania projektu: {known}", option=option
+                message("project.unknown_task", name=name, known=known), option=option
             )
         if task not in selected:
             selected.append(task)
@@ -141,13 +145,15 @@ def init_project(project_dir: str | Path, *, root: str | Path | None = None) -> 
     directory = absolute(project_dir)
     target = directory / MANIFEST_NAME
     if target.exists():
-        raise ValidationError(f"projekt juz istnieje: {target}")
+        raise ValidationError(message("project.project_already_exists", target=target))
     saved = _saved_path(resolve_root(root), directory)
     store = resolve_path(saved, directory)
     try:
         store.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        raise ValidationError(f"nie mozna utworzyc magazynu {store}: {e}") from e
+        raise ValidationError(
+            message("project.store_create_failed", store=store, error=reason(e))
+        ) from e
     create_manifest(directory, saved)
     return open_project(directory)
 
@@ -192,12 +198,15 @@ def add_project_task(
     _require_store(project)
     if not isinstance(name, str) or TASK_NAME.fullmatch(name) is None:
         raise ValidationError(
-            f"nieprawidlowa nazwa zadania {name!r} ({TASK_NAME_RULE})", option="name"
+            message(
+                "project.invalid_task_name", name=name, task_name_rule=TASK_NAME_RULE
+            ),
+            option="name",
         )
-    taken = (
-        f"zadanie {name} juz istnieje; usun je "
-        f"({project_command(project.directory, 'remove', name)}) albo wybierz "
-        "inna nazwe"
+    taken = message(
+        "project.task_already_exists",
+        name=name,
+        project_command=project_command(project.directory, "remove", name),
     )
     if name in state:
         raise ValidationError(taken, option="name")
@@ -247,14 +256,17 @@ class _NotPinnable(Exception):
 def _error_text(error: Exception) -> str:
     """Return the text of a library error with the remedy of a ``TransformError``."""
     remedy = getattr(error, "remedy", None)
-    return f"{error}" + (f" Remedium: {remedy}" if remedy else "")
+    if not remedy:
+        return reason(error)
+    return message("download.error_remedy", text=reason(error), remedy=remedy)
 
 
 def _prefixed(sink: NoticeSink, task: str) -> Callable[[Notice], None]:
     """Notices of the library call of a task: same code, ``<task>: `` text."""
 
     def forward(notice: Notice) -> None:
-        sink.add(Notice(notice.level, notice.code, f"{task}: {notice.message}"))
+        text = message("project.task_notice", task=task, text=notice.message)
+        sink.add(Notice(notice.level, notice.code, text))
 
     return forward
 
@@ -307,7 +319,12 @@ def _pin(store: Path, role: PinRole, unit: str, file: VersionedFile) -> PinnedFi
         version = file.version_path.relative_to(store).as_posix()
     except ValueError:
         raise _NotPinnable(
-            f"{unit}: plik poza magazynem {store}: {file.version_path}"
+            message(
+                "project.file_outside_store",
+                unit=unit,
+                store=store,
+                version_path=file.version_path,
+            )
         ) from None
     local = read_version(file.version_path.parent, file.version_path.name)
     size = local.meta.get("size_bytes") if local is not None else None
@@ -319,13 +336,12 @@ def _pin(store: Path, role: PinRole, unit: str, file: VersionedFile) -> PinnedFi
         or size < 0
     ):
         raise _NotPinnable(
-            f"{unit}: wersja {version} bez czytelnego sidecara (sha256, "
-            "size_bytes) - nie moze byc przypieta"
+            message("project.version_not_pinnable", unit=unit, version=version)
         )
     pin = PinnedFile(role, unit, path, version, file.label, file.sha256, size)
     problem = pin_problem(pin)
     if problem is not None:
-        raise _NotPinnable(f"{unit}: {problem}")
+        raise _NotPinnable(message("project.unit_problem", unit=unit, problem=problem))
     return pin
 
 
@@ -341,7 +357,7 @@ def _pins(store: Path, files: TaskFiles) -> tuple[list[PinnedFile], list[str]]:
         try:
             pin = _pin(store, role, unit, file)
         except _NotPinnable as e:
-            errors.append(str(e))
+            errors.append(reason(e))
             continue
         if pin.version not in seen:
             seen.add(pin.version)
@@ -380,7 +396,7 @@ def _commit(
             project.directory, {task.name: (before, task_to_json(task))}
         )
     except ValidationError as e:
-        return _Problem(str(e), e.code, e.reason)
+        return _Problem(reason(e), e.code, e.reason)
     if conflicts:
         return _Problem(_concurrent(task.name), "conflict", "concurrent_change")
     return None
@@ -434,8 +450,7 @@ def download_project(
     """
     if update not in _UPDATE_MODES:
         raise ValidationError(
-            f"Nieznany tryb update={update!r} (dozwolone: None, 'upgrade', "
-            "'force'); sprawdzenie bez pobierania: check_project",
+            message("project.unknown_update_mode", update=update),
             option="update",
             allowed=("upgrade", "force"),
         )
@@ -508,9 +523,11 @@ def _download_task(
             task,
             [
                 _Problem(
-                    f"plik geometrii {task.options['geometry']} zmienil sie od "
-                    "przypiecia; przywroc go albo przyjmij nowy obszar: "
-                    f"{_upgrade_hint(project, task.name)}",
+                    message(
+                        "project.geometry_file_changed",
+                        options_geometry=task.options["geometry"],
+                        upgrade_hint=_upgrade_hint(project, task.name),
+                    ),
                     "conflict",
                     "geometry_changed",
                 )
@@ -521,7 +538,7 @@ def _download_task(
         try:
             repaired = _set_aside_corrupt(project, task)
         except (OSError, ValueError) as e:
-            return _failed(task, [_Problem(str(e), "io_error")])
+            return _failed(task, [_Problem(reason(e), "io_error")])
     try:
         result = command.download(
             store,
@@ -557,7 +574,7 @@ def _download_task(
             problems
             or [
                 _Problem(
-                    "zadanie nie dalo pelnego wyniku - nic nie przypieto",
+                    message("project.task_incomplete_no_pin"),
                     "internal_error",
                     "incomplete_result",
                 )
@@ -602,17 +619,18 @@ def _repair_advice(project: Project, task: str) -> str:
 
     They are the copy of the store or ``--force`` (``_set_aside_corrupt``).
     """
-    return (
-        "przywroc katalog wersji z kopii magazynu albo uruchom "
-        f"{project_command(project.directory, 'download', '--force', task)} "
-        "(odklada uszkodzona wersje i pobiera ja ponownie)"
+    return message(
+        "project.repair_advice",
+        project_command=project_command(project.directory, "download", "--force", task),
     )
 
 
 def _corrupt_text(project: Project, task: str, pin: PinnedFile) -> str:
-    return (
-        f"{pin.unit}: przypieta wersja {pin.version} ma inny rozmiar niz "
-        f"przypiety - {_repair_advice(project, task)}"
+    return message(
+        "project.pinned_size_mismatch",
+        unit=pin.unit,
+        version=pin.version,
+        repair_advice=_repair_advice(project, task),
     )
 
 
@@ -659,8 +677,9 @@ def _set_aside(store: Path, pin: PinnedFile) -> None:
     expected = store.resolve(strict=True) / PurePosixPath(pin.version).parent
     if directory.resolve(strict=True) != expected:
         raise ValueError(
-            f"{pin.unit}: sciezka przypietej wersji {pin.version} wykracza poza "
-            "magazyn (dowiazanie symboliczne) - nie odkladam jej"
+            message(
+                "project.pin_path_outside_store", unit=pin.unit, version=pin.version
+            )
         )
     stamp = _clock.now().strftime("%Y%m%dT%H%M%S")
     for attempt in range(1000):
@@ -672,7 +691,7 @@ def _set_aside(store: Path, pin: PinnedFile) -> None:
             continue
         break
     else:
-        raise OSError(f"{directory}: brak wolnej nazwy katalogu na uszkodzona wersje")
+        raise OSError(message("project.no_free_aside_name", directory=directory))
     moved: list[tuple[Path, Path]] = []
     try:
         for source in (data, data.with_name(f"{data.name}.meta.json")):
@@ -696,7 +715,7 @@ def _repin_repaired(
     (``_repin_version``). Other bytes (the source changed) are no repair: ``--force``
     re-pins them.
     """
-    problems = []
+    problems: list[str] = []
     for pin in repaired:
         same = next(
             (new for new in pins if new.path == pin.path and new.sha256 == pin.sha256),
@@ -708,8 +727,12 @@ def _repin_repaired(
             _repin_version(store, pin, same)
         except (OSError, ValueError, KeyError, TypeError) as e:
             problems.append(
-                f"{pin.unit}: nie udalo sie odtworzyc przypietej wersji "
-                f"{pin.version}: {e}"
+                message(
+                    "project.repin_failed",
+                    unit=pin.unit,
+                    version=pin.version,
+                    error=reason(e),
+                )
             )
     return problems
 
@@ -744,8 +767,12 @@ def _restore(
             except (OSError, ValueError, KeyError, TypeError) as e:
                 problems.append(
                     _Problem(
-                        f"{pin.unit}: nie udalo sie odtworzyc przypietej wersji "
-                        f"{pin.version}: {e}",
+                        message(
+                            "project.repin_failed",
+                            unit=pin.unit,
+                            version=pin.version,
+                            error=reason(e),
+                        ),
                         "io_error",
                         "repin_failed",
                     )
@@ -755,10 +782,13 @@ def _restore(
         elif candidates:
             problems.append(
                 _Problem(
-                    f"{pin.unit}: zrodlo ma inna tresc niz przypieta (przypieta "
-                    f"{pin.label}, pobrana {candidates[0].label}); przypiecie bez "
-                    "zmian - przywroc magazyn z kopii albo przyjmij nowa wersje: "
-                    f"{_upgrade_hint(project, task.name)}",
+                    message(
+                        "project.restore_source_conflict",
+                        unit=pin.unit,
+                        label=pin.label,
+                        candidates_label=candidates[0].label,
+                        upgrade_hint=_upgrade_hint(project, task.name),
+                    ),
                     "conflict",
                     "pin_mismatch",
                 )
@@ -766,10 +796,12 @@ def _restore(
         else:
             problems.append(
                 _Problem(
-                    f"{pin.unit}: przypietego pliku {pin.path} nie ma w wyniku "
-                    "zadania; przypiecie bez zmian - przywroc magazyn z kopii albo "
-                    "przyjmij nowy wynik: "
-                    f"{_upgrade_hint(project, task.name)}",
+                    message(
+                        "project.restore_pinned_file_missing",
+                        unit=pin.unit,
+                        path=pin.path,
+                        upgrade_hint=_upgrade_hint(project, task.name),
+                    ),
                     "conflict",
                     "pin_mismatch",
                 )
@@ -813,14 +845,18 @@ def _repin_version(store: Path, pin: PinnedFile, found: PinnedFile) -> None:
         source.with_name(f"{source.name}.meta.json").read_text(encoding="utf-8")
     )
     if meta["sha256"] != pin.sha256:
-        raise ValueError(f"sidecar {found.version} ma inne sha256 niz przypiete")
+        raise ValueError(
+            message("project.sidecar_sha256_mismatch", version=found.version)
+        )
     meta["extra"]["version"]["label"] = pin.label
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         os.link(source, target)
     except FileExistsError:
         if file_digest(target) != (pin.sha256, pin.size_bytes):
-            raise ValueError(f"{pin.version} ma inne bajty niz przypiete") from None
+            raise ValueError(
+                message("project.version_bytes_mismatch", version=pin.version)
+            ) from None
     # FileExistsError: another restore of the same pin published it first
     with contextlib.suppress(FileExistsError):
         write_sidecar(target, meta, exclusive=True)
@@ -849,8 +885,12 @@ def _store_check(
             task,
             pin,
             "missing",
-            detail="brak przypietej wersji; przywroc kopie magazynu albo "
-            f"uruchom {project_command(project.directory, 'download', task.name)}",
+            detail=message(
+                "project.pinned_version_missing",
+                project_command=project_command(
+                    project.directory, "download", task.name
+                ),
+            ),
         )
     if state == "corrupt":
         return _file_check(
@@ -867,20 +907,18 @@ def _store_check(
         if not data.resolve(strict=True).is_relative_to(root) or not sidecar.resolve(
             strict=True
         ).is_relative_to(root):
-            raise ValueError("sciezka przypietej wersji wykracza poza magazyn")
+            raise ValueError(message("project.pinned_path_escapes"))
         standard = project.root / pin.path
         if (standard.exists() or standard.is_symlink()) and not standard.resolve(
             strict=False
         ).is_relative_to(root):
-            raise ValueError("sciezka standardowa wykracza poza magazyn")
+            raise ValueError(message("project.standard_path_escapes"))
         problem = pin_problem(pin)
         if problem is not None:
             raise ValueError(problem)
         local = read_version(data.parent, data.name)
         if local is None:
-            raise ValueError(
-                "sidecar wersji jest nieczytelny lub niezgodny z nazwa wersji"
-            )
+            raise ValueError(message("project.sidecar_unreadable"))
         meta = local.meta
         if (
             meta.get("sha256") != pin.sha256
@@ -888,15 +926,19 @@ def _store_check(
             or meta["size_bytes"] != pin.size_bytes
             or meta.get("extra", {}).get("version", {}).get("label") != pin.label
         ):
-            raise ValueError("sidecar wersji nie zgadza sie z przypieciem")
+            raise ValueError(message("project.sidecar_pin_mismatch"))
         if file_digest(data) != (pin.sha256, pin.size_bytes):
-            raise ValueError("suma SHA-256 danych jest inna niz przypieta")
+            raise ValueError(message("project.data_sha256_mismatch"))
     except (OSError, ValueError, AttributeError, TypeError) as error:
         return _file_check(
             task,
             pin,
             "corrupt",
-            detail=f"{error}; {_repair_advice(project, task.name)}",
+            detail=message(
+                "project.corrupt_detail",
+                error=reason(error),
+                repair_advice=_repair_advice(project, task.name),
+            ),
         )
     return _file_check(task, pin, "ok")
 
@@ -994,9 +1036,9 @@ def _matched(
 
 
 def _missing_detail(project: Project, task: ProjectTask) -> str:
-    return (
-        "brak przypietego pliku w magazynie; przywroc kopie albo uruchom "
-        f"{project_command(project.directory, 'download', task.name)}"
+    return message(
+        "project.pinned_file_missing",
+        project_command=project_command(project.directory, "download", task.name),
     )
 
 
@@ -1022,7 +1064,7 @@ def _checked_item(
             "added",
             None,
             item.available_label,
-            "nowy plik w wyniku zadania",
+            message("cli.status_added"),
         )
     if pin_state(project.root, pin) != "ok":
         return _file_check(task, pin, "missing", detail=_missing_detail(project, task))
@@ -1044,15 +1086,17 @@ def _checked_item(
             pin,
             "unverifiable",
             available=item.available_label,
-            detail="nie da sie sprawdzic bez pobrania (--force)",
+            detail=message("cli.status_unverifiable"),
         )
     return _file_check(
         task,
         pin,
         "newer",
         available=item.available_label if item.status == "newer" else item.local_label,
-        detail="nowsza wersja w magazynie albo u zrodla; uruchom "
-        f"{_upgrade_hint(project, task.name)}",
+        detail=message(
+            "project.newer_version_available",
+            upgrade_hint=_upgrade_hint(project, task.name),
+        ),
     )
 
 
@@ -1103,8 +1147,7 @@ def check_project(
             sink.emit(
                 "warning",
                 PROJECT_GEOMETRY_CHANGED,
-                f"{task.name}: plik geometrii zmienil sie od przypiecia; "
-                "plan aktualizacji dotyczy obecnej geometrii",
+                message("project.geometry_changed_since_pin", name=task.name),
             )
         try:
             plan = command.check(
@@ -1134,7 +1177,10 @@ def check_project(
             else:
                 checked.append(
                     _file_check(
-                        task, pin, "removed", detail="plik poza wynikiem zadania"
+                        task,
+                        pin,
+                        "removed",
+                        detail=message("project.file_not_in_result"),
                     )
                 )
     files = tuple(checked)

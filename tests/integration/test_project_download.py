@@ -389,7 +389,9 @@ def test_restore_conflict_keeps_pin(tmp_path):
         report = download_project(colleague)
     (result,) = report.tasks
     assert result.outcome == "failed" and not report.ok
-    assert result.errors[0].startswith(f"{G}: zrodlo ma inna tresc niz przypieta")
+    assert result.errors[0].startswith(
+        f"{G}: source content differs from the pinned one"
+    )
     assert _manifest_bytes(colleague) == before
     (pin,) = report.project.tasks[0].files
     stored = [
@@ -449,7 +451,9 @@ def test_restore_needs_same_geometry(tmp_path):
         report = download_project(colleague)
     (result,) = report.tasks
     assert result.outcome == "failed" and packages.calls == []
-    assert result.errors[0].startswith("plik geometrii area.shp zmienil sie")
+    assert result.errors[0].startswith(
+        "geometry file area.shp has changed since pinning"
+    )
 
 
 # --- upgrade / force ---------------------------------------------------------------
@@ -636,7 +640,7 @@ def test_force_never_moves_a_version_that_lies_outside_the_store(tmp_path):
     with pl_sheets():
         report = download_project(project, update="force")
     (result,) = report.tasks
-    assert result.outcome == "failed" and "wykracza poza magazyn" in result.errors[0]
+    assert result.outcome == "failed" and "goes outside the store" in result.errors[0]
     assert (outside / version.parent.name / version.name).read_bytes() == bad
     assert not list(outside.glob(".*corrupt*"))
 

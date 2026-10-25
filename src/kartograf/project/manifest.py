@@ -31,6 +31,7 @@ from typing import Any, NoReturn
 from kartograf import _clock
 from kartograf.catalog.kinds import check_options_json
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message, reason
 from kartograf.project.commands import COMMANDS, data_commands_text
 from kartograf.project.model import PinnedFile, Project, ProjectTask
 
@@ -42,9 +43,7 @@ LOCK_TIMEOUT_S = 5.0
 LOCK_RETRY_S = 0.1
 
 TASK_NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
-TASK_NAME_RULE = (
-    "male litery, cyfry, '-' i '_', na poczatku litera albo cyfra, do 64 znakow"
-)
+TASK_NAME_RULE = message("project.task_name_rule")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _TOP_KEYS = ("schema", "root", "tasks")
 _TASK_KEYS = ("name", "command", "options", "pinned_at", "kartograf_version", "files")
@@ -58,11 +57,20 @@ class _Invalid(Exception):
     """A manifest error at ``where`` (raised as ``ValidationError``)."""
 
     def __init__(self, where: str, problem: str) -> None:
-        super().__init__(f"{where}: {problem}" if where else problem)
+        super().__init__(
+            message("project.place_problem", where=where, problem=problem)
+            if where
+            else problem
+        )
 
 
 def _fail(where: str, problem: str) -> NoReturn:
     raise _Invalid(where, problem)
+
+
+def _within(where: str, path: str) -> str:
+    """Return ``path`` (``.role``, ``: files[0]``) inside the place ``where``."""
+    return message("project.within", where=where, path=path)
 
 
 def manifest_path(project_dir: str | Path) -> Path:
@@ -107,13 +115,13 @@ def _unique_keys(pairs: list[tuple[str, object]]) -> dict[str, Any]:
     data: dict[str, Any] = {}
     for key, value in pairs:
         if key in data:
-            raise ValueError(f"powtorzony klucz {key!r}")
+            raise ValueError(message("project.duplicate_json_key", key_value=key))
         data[key] = value
     return data
 
 
 def _no_constant(name: str) -> NoReturn:
-    raise ValueError(f"niedozwolona wartosc {name}")
+    raise ValueError(message("project.disallowed_json_constant", name=name))
 
 
 def _load(directory: Path) -> dict[str, Any]:
@@ -125,24 +133,44 @@ def _load(directory: Path) -> dict[str, Any]:
     path = directory / MANIFEST_NAME
     if directory.is_file():
         raise ValidationError(
-            f"{directory} to plik, a --project wymaga katalogu projektu (z "
-            f"{MANIFEST_NAME}), np. --project {directory.parent}"
+            message(
+                "project.project_is_file",
+                directory=directory,
+                manifest_name=MANIFEST_NAME,
+                parent=directory.parent,
+            )
         )
     try:
         text = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         raise ValidationError(
-            f"brak projektu w {directory} ({MANIFEST_NAME}); utworz: kartograf "
-            "project init --root KATALOG albo wskaz --project KATALOG"
+            message(
+                "project.project_not_found",
+                directory=directory,
+                manifest_name=MANIFEST_NAME,
+            )
         ) from None
     except (OSError, UnicodeDecodeError) as e:
-        raise ValidationError(f"{MANIFEST_NAME}: nie mozna odczytac {path}: {e}") from e
+        raise ValidationError(
+            message(
+                "project.manifest_read_failed",
+                manifest_name=MANIFEST_NAME,
+                path=path,
+                error=reason(e),
+            )
+        ) from e
     try:
         doc = json.loads(
             text, object_pairs_hook=_unique_keys, parse_constant=_no_constant
         )
     except ValueError as e:
-        raise ValidationError(f"{MANIFEST_NAME}: nieprawidlowy JSON: {e}") from e
+        raise ValidationError(
+            message(
+                "project.manifest_invalid_json",
+                manifest_name=MANIFEST_NAME,
+                error=reason(e),
+            )
+        ) from e
     validate_manifest(doc)
     result: dict[str, Any] = doc
     return result
@@ -159,7 +187,13 @@ def validate_manifest(doc: object) -> None:
     try:
         _validate(doc)
     except _Invalid as e:
-        raise ValidationError(f"{MANIFEST_NAME}: {e}") from None
+        raise ValidationError(
+            message(
+                "project.manifest_problem",
+                manifest_name=MANIFEST_NAME,
+                problem=reason(e),
+            )
+        ) from None
 
 
 def _keys(
@@ -170,29 +204,32 @@ def _keys(
 ) -> None:
     for key in obj:
         if key not in required and key not in optional:
-            _fail(where, f"nieznany klucz {key!r}")
+            _fail(where, message("project.unknown_key", key_value=key))
     for key in required:
         if key not in obj:
-            _fail(where, f"brak klucza {key!r}")
+            _fail(where, message("project.missing_key", key_value=key))
 
 
 def _validate(doc: object) -> None:
     if not isinstance(doc, dict):
-        _fail("", "oczekiwano obiektu JSON")
+        _fail("", message("project.expected_json_object"))
     if "schema" not in doc:
-        _fail("", "brak klucza 'schema'")
+        _fail("", message("project.missing_schema_key"))
     if doc["schema"] != PROJECT_SCHEMA:
         _fail(
             "",
-            f"nieznany schemat {doc['schema']!r} (ten Kartograf zna "
-            f"{PROJECT_SCHEMA}); zaktualizuj Kartografa",
+            message(
+                "project.unknown_schema",
+                doc_schema=doc["schema"],
+                project_schema=PROJECT_SCHEMA,
+            ),
         )
     _keys(doc, _TOP_KEYS, (), "")
     if not isinstance(doc["root"], str) or not doc["root"]:
-        _fail("root", "oczekiwano niepustej sciezki magazynu")
+        _fail("root", message("project.expected_store_path"))
     tasks = doc["tasks"]
     if not isinstance(tasks, list):
-        _fail("tasks", "oczekiwano listy zadan")
+        _fail("tasks", message("project.expected_task_list"))
     names: set[str] = set()
     for index, task in enumerate(tasks):
         _validate_task(task, index, names)
@@ -200,24 +237,34 @@ def _validate(doc: object) -> None:
 
 def _validate_task(task: object, index: int, names: set[str]) -> None:
     if not isinstance(task, dict):
-        _fail(f"tasks[{index}]", "oczekiwano obiektu zadania")
+        _fail(f"tasks[{index}]", message("project.expected_task_object"))
     name = task.get("name")
     valid_name = isinstance(name, str) and TASK_NAME.fullmatch(name) is not None
-    where = f"zadanie {name}" if valid_name else f"tasks[{index}]"
+    where = (
+        message("project.task_location", name=name) if valid_name else f"tasks[{index}]"
+    )
     _keys(task, _TASK_KEYS, ("geometry_sha256",), where)
     if not valid_name:
-        _fail(where, f"nieprawidlowa nazwa zadania {name!r} ({TASK_NAME_RULE})")
+        _fail(
+            where,
+            message(
+                "project.invalid_task_name", name=name, task_name_rule=TASK_NAME_RULE
+            ),
+        )
     assert isinstance(name, str)
     if name in names:
-        _fail(where, "nazwa zadania powtorzona")
+        _fail(where, message("project.duplicate_task_name"))
     names.add(name)
     raw_command = task["command"]
     command = COMMANDS.get(raw_command) if isinstance(raw_command, str) else None
     if command is None:
         _fail(
             where,
-            f"nieznana komenda {raw_command!r} (komendy danych: "
-            f"{data_commands_text()})",
+            message(
+                "project.unknown_command",
+                raw_command=raw_command,
+                data_commands_text=data_commands_text(),
+            ),
         )
     error = check_options_json(command.options, task["options"], command=command.name)
     if error is not None:
@@ -230,27 +277,25 @@ def _validate_task(task: object, index: int, names: set[str]) -> None:
         try:
             datetime.fromisoformat(pinned_at)
         except ValueError:
-            _fail(where, f"pinned_at: oczekiwano chwili ISO 8601, podano {pinned_at!r}")
+            _fail(where, message("project.pinned_at_not_iso", pinned_at=pinned_at))
     else:
         _fail(
             where,
-            "pinned_at i kartograf_version: oba null (zadanie niepobrane) albo "
-            "oba napisy (zadanie przypiete)",
+            message("project.pin_fields_mismatch"),
         )
     files = task["files"]
     if not isinstance(files, list):
-        _fail(where, "files: oczekiwano listy przypietych plikow")
+        _fail(where, message("project.files_not_list"))
     if pinned != bool(files):
         _fail(
             where,
-            "files: zadanie przypiete ma co najmniej jeden plik, a niepobrane "
-            "(pinned_at null) - pusta liste",
+            message("project.files_pin_mismatch"),
         )
     geometry = "geometry" in task["options"] and pinned
     if ("geometry_sha256" in task) != geometry:
         _fail(
             where,
-            "geometry_sha256: dokladnie w zadaniu przypietym z options.geometry",
+            message("project.geometry_sha256_scope"),
         )
     if geometry:
         digests = task["geometry_sha256"]
@@ -261,61 +306,71 @@ def _validate_task(task: object, index: int, names: set[str]) -> None:
                 isinstance(v, str) and _SHA256.fullmatch(v) for v in digests.values()
             )
         ):
-            _fail(where, "geometry_sha256: oczekiwano obiektu {nazwa pliku: sha256}")
+            _fail(where, message("project.geometry_sha256_not_object"))
     versions: set[str] = set()
     for position, entry in enumerate(files):
-        _validate_file(entry, f"{where}: files[{position}]")
+        _validate_file(entry, _within(where, f": files[{position}]"))
         if entry["version"] in versions:
-            _fail(f"{where}: files[{position}].version", "wersja przypieta dwa razy")
+            _fail(
+                _within(where, f": files[{position}].version"),
+                message("project.version_pinned_twice"),
+            )
         versions.add(entry["version"])
 
 
 def _store_path_problem(text: object) -> str | None:
     """Problem of a store-relative path of a pin (``None`` = valid)."""
     if not isinstance(text, str) or not text:
-        return "oczekiwano niepustej sciezki wzglednej do magazynu"
+        return message("project.path_not_relative_nonempty")
     if "\\" in text or text.startswith("/") or re.match(r"[A-Za-z]:", text):
-        return "sciezka musi byc wzgledna do magazynu, z separatorem /"
+        return message("project.path_must_be_relative")
     if any(part in ("", ".", "..") for part in text.split("/")):
-        return "sciezka nie moze miec segmentow '.', '..' ani pustych"
+        return message("project.path_bad_segments")
     return None
 
 
 def _validate_file(entry: object, where: str) -> None:
     if not isinstance(entry, dict):
-        _fail(where, "oczekiwano obiektu przypietego pliku")
+        _fail(where, message("project.file_not_object"))
     _keys(entry, _FILE_KEYS, (), where)
     if entry["role"] not in _ROLES:
-        _fail(f"{where}.role", f"oczekiwano jednej z: {', '.join(_ROLES)}")
+        _fail(
+            _within(where, ".role"),
+            message("project.role_not_allowed", roles=", ".join(_ROLES)),
+        )
     if not isinstance(entry["unit"], str):
-        _fail(f"{where}.unit", "oczekiwano napisu")
+        _fail(_within(where, ".unit"), message("project.expected_string"))
     for key in ("path", "version"):
         problem = _store_path_problem(entry[key])
         if problem is not None:
-            _fail(f"{where}.{key}", problem)
+            _fail(_within(where, f".{key}"), problem)
     if _VERSIONS in entry["path"].split("/"):
-        _fail(f"{where}.path", "sciezka standardowa nie moze lezec w versions/")
+        _fail(_within(where, ".path"), message("project.standard_path_in_versions"))
     parts = entry["version"].split("/")
     if _VERSIONS not in parts or _INCOMING in parts:
         _fail(
-            f"{where}.version",
-            "sciezka wersji musi lezec w versions/ magazynu (bez .incoming)",
+            _within(where, ".version"),
+            message("project.version_path_outside_versions"),
         )
     if not isinstance(entry["label"], str) or not entry["label"]:
-        _fail(f"{where}.label", "oczekiwano niepustej etykiety wersji")
+        _fail(_within(where, ".label"), message("project.version_label_empty"))
     if not isinstance(entry["sha256"], str) or not _SHA256.fullmatch(entry["sha256"]):
-        _fail(f"{where}.sha256", "oczekiwano 64 malych znakow hex")
+        _fail(_within(where, ".sha256"), message("project.sha256_not_hex"))
     size = entry["size_bytes"]
     if not isinstance(size, int) or isinstance(size, bool) or size < 0:
-        _fail(f"{where}.size_bytes", "oczekiwano liczby calkowitej >= 0")
+        _fail(
+            _within(where, ".size_bytes"), message("project.expected_non_negative_int")
+        )
 
 
 def pin_problem(pin: PinnedFile) -> str | None:
     """Why ``pin`` cannot be written in a manifest (``None`` = it can)."""
     try:
-        _validate_file({key: getattr(pin, key) for key in _FILE_KEYS}, "plik")
+        _validate_file(
+            {key: getattr(pin, key) for key in _FILE_KEYS}, message("cli.source_file")
+        )
     except _Invalid as e:
-        return str(e)
+        return reason(e)
     return None
 
 
@@ -372,8 +427,10 @@ def _owner_text(lock: Path) -> str:
     try:
         host, pid, since = (lock / "owner").read_text(encoding="utf-8").split()
     except (OSError, ValueError):
-        return f"{LOCK_NAME}: wlasciciel nieznany"
-    return f"{LOCK_NAME}: host {host}, pid {pid}, od {since}"
+        return message("project.lock_owner_unknown", lock_name=LOCK_NAME)
+    return message(
+        "project.lock_owner", lock_name=LOCK_NAME, host=host, pid=pid, since=since
+    )
 
 
 @contextmanager
@@ -388,13 +445,17 @@ def _locked(directory: Path) -> Iterator[None]:
         except FileExistsError:
             if time.monotonic() >= deadline:
                 raise ValidationError(
-                    f"projekt zablokowany przez inny proces ({_owner_text(lock)}); "
-                    "jesli zaden kartograf nie pracuje na tym projekcie, usun "
-                    f"katalog {lock}"
+                    message(
+                        "project.project_locked",
+                        owner_text=_owner_text(lock),
+                        lock=lock,
+                    )
                 ) from None
             time.sleep(LOCK_RETRY_S)
         except OSError as e:
-            raise ValidationError(f"nie mozna zablokowac projektu ({lock}): {e}") from e
+            raise ValidationError(
+                message("project.project_lock_failed", lock=lock, error=reason(e))
+            ) from e
     try:
         since = _clock.now().isoformat(timespec="seconds")
         try:
@@ -402,7 +463,9 @@ def _locked(directory: Path) -> Iterator[None]:
                 f"{_host()} {os.getpid()} {since}\n", encoding="utf-8"
             )
         except OSError as e:
-            raise ValidationError(f"nie mozna zablokowac projektu ({lock}): {e}") from e
+            raise ValidationError(
+                message("project.project_lock_failed", lock=lock, error=reason(e))
+            ) from e
         yield
     finally:
         with suppress(OSError):
@@ -423,7 +486,14 @@ def _sync_directory(directory: Path) -> None:
         os.fsync(fd)
     except OSError as e:
         if e.errno not in (errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EBADF):
-            raise ValidationError(f"{MANIFEST_NAME}: zapis {directory}: {e}") from e
+            raise ValidationError(
+                message(
+                    "project.manifest_dir_sync_failed",
+                    manifest_name=MANIFEST_NAME,
+                    directory=directory,
+                    error=reason(e),
+                )
+            ) from e
     finally:
         os.close(fd)
 
@@ -443,7 +513,12 @@ def _write(directory: Path, doc: dict[str, Any]) -> None:
         with suppress(OSError):
             temporary.unlink()
         raise ValidationError(
-            f"{MANIFEST_NAME}: nie mozna zapisac {target}: {e}"
+            message(
+                "project.manifest_write_failed",
+                manifest_name=MANIFEST_NAME,
+                target=target,
+                error=reason(e),
+            )
         ) from e
     except BaseException:
         with suppress(OSError):
@@ -474,7 +549,9 @@ def create_manifest(project_dir: str | Path, root: str) -> None:
     with _locked(directory):
         target = directory / MANIFEST_NAME
         if target.exists():
-            raise ValidationError(f"projekt juz istnieje: {target}")
+            raise ValidationError(
+                message("project.project_already_exists", target=target)
+            )
         _write(directory, {"schema": PROJECT_SCHEMA, "root": root, "tasks": []})
 
 
