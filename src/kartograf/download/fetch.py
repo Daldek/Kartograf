@@ -26,6 +26,7 @@ from kartograf.download.plan import ItemStatus, PlanItem, Track
 from kartograf.download.versions import (
     ContentDigest,
     LocalVersion,
+    VersionCommit,
     VersionRef,
     commit_version,
     http_signal_of,
@@ -154,17 +155,58 @@ class VersionedFile:
     erratum 3, ``--check``/``--upgrade`` compare it), ``"none"`` (no
     cheap or comparable signal) or ``"check_failed: <error>"``. ``same_as``: for
     ``relabeled``, the label of the newest existing version with identical
-    content; otherwise ``None``.
+    content; otherwise ``None``. ``size_bytes``: the size of the file in bytes
+    (``files[].size_bytes`` of the report, DEV-19.19).
     """
 
     path: Path
     status: FileStatus
     label: str
     sha256: str
+    size_bytes: int
     version_path: Path
     newer: str | None = None
     unverified: str | None = None
     same_as: str | None = None
+
+
+def local_file(
+    path: Path,
+    version: LocalVersion,
+    *,
+    status: FileStatus = "local",
+    version_path: Path | None = None,
+    newer: str | None = None,
+    unverified: str | None = None,
+) -> VersionedFile:
+    """Return the outcome that uses an existing version without a download.
+
+    ``path`` is the standard path of the file; ``version_path`` is the file of
+    ``version`` unless the caller names another one.
+    """
+    return VersionedFile(
+        path,
+        status,
+        version.label,
+        version.sha256,
+        version.size_bytes,
+        version.path if version_path is None else version_path,
+        newer=newer,
+        unverified=unverified,
+    )
+
+
+def committed_file(path: Path, commit: VersionCommit) -> VersionedFile:
+    """Return the outcome of a file that ``commit_version`` published."""
+    return VersionedFile(
+        path,
+        commit.status,
+        commit.label,
+        commit.sha256,
+        commit.size_bytes,
+        commit.path,
+        same_as=commit.same_as,
+    )
 
 
 def link_version(std: Path, version: LocalVersion, *, refresh: bool) -> None:
@@ -336,15 +378,7 @@ def use_local(
     if not keep:
         return None
     link_version(slot.std, local, refresh=False)
-    return VersionedFile(
-        slot.std,
-        "local",
-        local.label,
-        local.sha256,
-        local.path,
-        newer=newer,
-        unverified=unverified,
-    )
+    return local_file(slot.std, local, newer=newer, unverified=unverified)
 
 
 def emit_file_notices(
@@ -433,14 +467,7 @@ def store_file(
     if committed is None:
         raise DownloadError(f"{commit.path}: wersja bez czytelnego sidecara")
     link_version(slot.std, committed, refresh=commit.status != "unchanged")
-    return VersionedFile(
-        slot.std,
-        commit.status,
-        commit.label,
-        commit.sha256,
-        commit.path,
-        same_as=commit.same_as,
-    )
+    return committed_file(slot.std, commit)
 
 
 def memoized_edition(edition: EditionLookup) -> EditionLookup:

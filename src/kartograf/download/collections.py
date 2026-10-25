@@ -85,6 +85,7 @@ from kartograf.download.data import (
     FailureKind,
     UnitFailure,
     UnitFile,
+    WriteTarget,
 )
 from kartograf.download.fetch import (
     FileSlot,
@@ -94,6 +95,7 @@ from kartograf.download.fetch import (
     fetch_version,
     inspect_version,
     link_version,
+    local_file,
     local_version,
     refreshes_cache,
     validate_update,
@@ -528,7 +530,7 @@ class CollectionRequest:
 
 
 @dataclass(frozen=True)
-class CollectionReport(Document):
+class CollectionReport(WriteTarget, Document):
     """Outcome of ``download_collection`` (``kartograf-download/1``).
 
     ``files``: one ``UnitFile`` per file (``unit`` = TERYT, bbox
@@ -542,7 +544,8 @@ class CollectionReport(Document):
     SCHEMA = DOWNLOAD_SCHEMA
     JSON_KEYS = DOWNLOAD_KEYS
     JSON_FILL = {
-        key: DOWNLOAD_FILL[key] for key in ("raw", "inputs", "superseded", "summary")
+        key: DOWNLOAD_FILL[key]
+        for key in ("raw", "inputs", "skipped", "superseded", "summary")
     }
 
     files: tuple[UnitFile, ...]
@@ -550,6 +553,8 @@ class CollectionReport(Document):
     stale: tuple[PlanItem, ...]
     notices: tuple[Notice, ...]
     ok: bool
+    root: Path | None = None
+    output_dir: Path | None = None
 
 
 def _str(value: object) -> str | None:
@@ -2685,9 +2690,7 @@ def _local_only(slot: FileSlot, unverified: str | None = None) -> VersionedFile 
     if local is None:
         return None
     link_version(slot.std, local, refresh=False)
-    return VersionedFile(
-        slot.std, "local", local.label, local.sha256, local.path, unverified=unverified
-    )
+    return local_file(slot.std, local, unverified=unverified)
 
 
 @dataclass
@@ -3190,6 +3193,7 @@ def download_collection(
         stale=stale,
         notices=sink.notices,
         ok=ok,
+        root=request.root,
     )
 
 

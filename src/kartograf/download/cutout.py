@@ -47,6 +47,7 @@ from kartograf.download.fetch import (
     fetch_version,
     inspect_version,
     link_version,
+    local_file,
     local_version,
     refreshes_cache,
     validate_update,
@@ -522,7 +523,7 @@ def _run_pl_wcs_cutout(
                 return _cutout_result(None, stale=stale)
             link_version(slot.std, local, refresh=False)
             return _cutout_result(
-                VersionedFile(slot.std, "local", local.label, local.sha256, local.path),
+                local_file(slot.std, local),
                 stale=stale,
             )
 

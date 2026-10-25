@@ -142,11 +142,12 @@ from kartograf.notices import (
     NoticeSink,
     count_text,
 )
+from kartograf.output import Mode
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
 from kartograf.providers.pl.gugik_orto import image_directions, image_source
-from kartograf.serialization import Document
+from kartograf.serialization import Document, EncodeContext
 from kartograf.sources.registry import horizontal_crs_for_sheet, sources_for
 from kartograf.sources.variants import cz_model_text, cz_models, cz_sheet_system
 
@@ -162,10 +163,14 @@ MAX_HINT_LINES = 5
 # key gives the value of ``DOWNLOAD_FILL`` (consumers read one shape).
 DOWNLOAD_SCHEMA = "kartograf-download/1"
 DOWNLOAD_KEYS = (
+    "mode",
+    "root",
+    "output_dir",
     "files",
     "raw",
     "inputs",
     "failed",
+    "skipped",
     "stale",
     "superseded",
     "summary",
@@ -175,9 +180,16 @@ DOWNLOAD_KEYS = (
 DOWNLOAD_FILL: Mapping[str, object] = {
     "raw": (),
     "inputs": (),
+    "skipped": (),
     "superseded": (),
     "summary": None,
 }
+# The ``status`` of a file in a report (DEV-19.19): ``unchanged`` stands for the store
+# words ``local`` (the local version was used, no transfer) and ``reused`` (a derived
+# file whose inputs match a version); ``VersionedFile.status`` keeps both words for
+# the flow of the tracks.
+_DOCUMENT_STATUS: Mapping[str, str] = {"local": "unchanged", "reused": "unchanged"}
+_PLAIN_STATUSES = ("written", "replaced")
 
 
 @dataclass(frozen=True)
@@ -193,6 +205,61 @@ class UnitFile:
     unit: str
     country: str
     file: VersionedFile
+
+    def __json__(self, ctx: EncodeContext) -> dict[str, object]:
+        """Return the entry of ``files[]`` (DEV-19.19, ADR-054 decision 10).
+
+        ``unit`` and ``country`` of the request, then ``path``, ``size_bytes``,
+        ``sha256`` and ``status`` of the file; a file of the store also has
+        ``label`` and ``version_path`` (``path`` is its standard path), and
+        ``newer``, ``unverified`` and ``same_as`` when the track found them.
+        """
+        file = self.file
+        entry: dict[str, object] = {
+            "unit": self.unit,
+            "country": self.country,
+            "path": file.path,
+            "size_bytes": file.size_bytes,
+            "sha256": file.sha256,
+            "status": _DOCUMENT_STATUS.get(file.status, file.status),
+        }
+        if file.status not in _PLAIN_STATUSES:
+            entry["label"] = file.label
+            entry["version_path"] = file.version_path
+        for key in ("newer", "unverified", "same_as"):
+            if (value := getattr(file, key)) is not None:
+                entry[key] = value
+        return entry
+
+
+@dataclass(frozen=True)
+class SkippedUnit:
+    """A unit the request leaves out on purpose (DEV-19.4, ``skipped[]``).
+
+    ``id`` names the unit as ``items[]`` of the result does, ``reason`` is
+    ``skipped_incomplete`` (a PL sheet of a plain write that has no full flight in
+    the range) and ``message`` says why, with the hint.
+    """
+
+    id: str
+    reason: str
+    message: str
+
+
+class WriteTarget:
+    """What a download report says of where it wrote (``kartograf-download/1``).
+
+    ``output_dir`` is the directory of the plain files and ``root`` the store: one
+    of them is set (``None`` for a report built by hand). ``mode`` follows from
+    ``output_dir``.
+    """
+
+    output_dir: Path | None
+
+    @property
+    def mode(self) -> Mode:
+        """Return ``plain`` for a write into a directory, else ``store``."""
+        return "plain" if self.output_dir is not None else "store"
 
 
 # The registry code (and ``details.reason``) a failed unit of each ``kind`` stands
@@ -234,7 +301,7 @@ class UnitFailure:
 
 
 @dataclass(frozen=True)
-class DataReport(Document):
+class DataReport(WriteTarget, Document):
     """Outcome of ``download_data`` (spec 4.1; ``kartograf-download/1``).
 
     ``ok`` is the exit rule of the CLI (former ``_finish_pl_sheets`` and
@@ -252,6 +319,9 @@ class DataReport(Document):
     superseded: tuple[SupersededLazTile, ...]
     notices: tuple[Notice, ...]
     ok: bool
+    root: Path | None = None
+    output_dir: Path | None = None
+    skipped: tuple[SkippedUnit, ...] = ()
 
 
 @dataclass
@@ -272,11 +342,14 @@ class _Run:
     on_progress: Callable[[DownloadProgress], None] | None
     files: list[UnitFile] = field(default_factory=list)
     failed: list[UnitFailure] = field(default_factory=list)
+    skipped: list[SkippedUnit] = field(default_factory=list)
     stale: list[PlanItem] = field(default_factory=list)
     superseded: list[SupersededLazTile] = field(default_factory=list)
     plans: list[UpdatePlan] = field(default_factory=list)
     causes: dict[UnitFailure, DownloadError] = field(default_factory=dict)
     dry: bool = False
+    root: Path | None = None
+    output_dir: Path | None = None
 
     def add(
         self,
@@ -414,7 +487,9 @@ def _start(
         workers=workers,
         on_progress=on_progress,
     )
-    return run, _execute(_task(**kwargs), run)
+    task = _task(**kwargs)
+    run.root = task.root
+    return run, _execute(task, run)
 
 
 def download_data(
@@ -516,6 +591,9 @@ def download_data(
         superseded=tuple(run.superseded),
         notices=run.sink.notices,
         ok=rc == 0,
+        root=run.root,
+        output_dir=run.output_dir,
+        skipped=tuple(run.skipped),
     )
 
 

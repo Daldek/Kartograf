@@ -3,7 +3,7 @@
 import json
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
@@ -467,6 +467,7 @@ def _spec_file() -> VersionedFile:
         status="new",
         label="2022-05-10_83233",
         sha256=_SPEC_SHA256,
+        size_bytes=48,
         version_path=store / "versions/N-34/130/D/d/2/4" / version / name,
     )
 
@@ -486,31 +487,32 @@ def test_download_report_equals_the_spec_example():
         superseded=(),
         notices=(sheet_list,),
         ok=True,
+        root=Path("/data/kartograf"),
     )
 
     assert report.to_dict() == {
         "schema": "kartograf-download/1",
+        "mode": "store",
+        "root": "/data/kartograf",
+        "output_dir": None,
         "files": [
             {
                 "unit": "N-34-130-D-d-2-4",
                 "country": "PL",
-                "file": {
-                    "path": "/data/kartograf/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/"
-                    "N-34-130-D-d-2-4.asc",
-                    "status": "new",
-                    "label": "2022-05-10_83233",
-                    "sha256": _SPEC_SHA256,
-                    "version_path": "/data/kartograf/nmt/pl_1992_1m_evrf2007/versions/"
-                    "N-34/130/D/d/2/4/2022-05-10_83233_10be475e/N-34-130-D-d-2-4.asc",
-                    "newer": None,
-                    "unverified": None,
-                    "same_as": None,
-                },
+                "path": "/data/kartograf/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/"
+                "N-34-130-D-d-2-4.asc",
+                "size_bytes": 48,
+                "sha256": _SPEC_SHA256,
+                "status": "new",
+                "label": "2022-05-10_83233",
+                "version_path": "/data/kartograf/nmt/pl_1992_1m_evrf2007/versions/"
+                "N-34/130/D/d/2/4/2022-05-10_83233_10be475e/N-34-130-D-d-2-4.asc",
             }
         ],
         "raw": [],
         "inputs": [],
         "failed": [],
+        "skipped": [],
         "stale": [],
         "superseded": [],
         "summary": None,
@@ -602,16 +604,58 @@ def test_unit_failure_and_unit_file_keys():
         "error": "HTTP 500",
         "kind": "download",
     }
-    assert list(encode(unit_file)) == ["unit", "country", "file"]
+    assert list(encode(unit_file)) == [
+        "unit",
+        "country",
+        "path",
+        "size_bytes",
+        "sha256",
+        "status",
+        "label",
+        "version_path",
+    ]
     assert list(encode(unit_file.file)) == [  # type: ignore[call-overload]
         "path",
         "status",
         "label",
         "sha256",
+        "size_bytes",
         "version_path",
         "newer",
         "unverified",
         "same_as",
+    ]
+
+
+def test_a_file_of_a_report_has_the_status_of_the_document_and_only_the_keys_it_has():
+    spec = _spec_file()
+    local = replace(spec, status="local", newer="2025-04-02_99887")
+    reused = replace(spec, status="reused")
+    relabeled = replace(spec, status="relabeled", same_as="2022-05-10")
+    plain = replace(spec, status="written")  # type: ignore[arg-type]
+
+    entries = [
+        encode(UnitFile("1465", "PL", file))
+        for file in (local, reused, relabeled, plain)
+    ]
+
+    assert [entry["status"] for entry in entries] == [  # type: ignore[index]
+        "unchanged",
+        "unchanged",
+        "relabeled",
+        "written",
+    ]
+    assert entries[0]["newer"] == "2025-04-02_99887"  # type: ignore[index]
+    assert entries[2]["same_as"] == "2022-05-10"  # type: ignore[index]
+    assert "same_as" not in entries[0] and "newer" not in entries[1]  # type: ignore[operator]
+    # a plain file has no version: the four keys of DEV-19.19 with the unit
+    assert list(entries[3]) == [  # type: ignore[call-overload]
+        "unit",
+        "country",
+        "path",
+        "size_bytes",
+        "sha256",
+        "status",
     ]
 
 

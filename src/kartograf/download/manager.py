@@ -39,7 +39,9 @@ from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
     VersionedFile,
+    committed_file,
     fetch_version,
+    local_file,
     validate_update,
 )
 from kartograf.download.links import ensure_link, linked_version, update_sidecar_extra
@@ -857,16 +859,7 @@ class DownloadManager:
             status="local",
             version=version.label,
             unverified=str(error),
-            files=(
-                VersionedFile(
-                    std,
-                    "local",
-                    version.label,
-                    version.sha256,
-                    version.path,
-                    unverified=f"check_failed: {error}",
-                ),
-            ),
+            files=(local_file(std, version, unverified=f"check_failed: {error}"),),
             full_link=full if linked_version(full) is not None else None,
         )
 
@@ -1655,12 +1648,9 @@ class DownloadManager:
                     newer = pick.ref.dirname
                 reused.append(pick.local.path)
                 files.append(
-                    VersionedFile(
+                    local_file(
                         std,
-                        "local",
-                        pick.local.label,
-                        pick.local.sha256,
-                        pick.local.path,
+                        pick.local,
                         newer=pick.ref.dirname if pick.newer else None,
                     )
                 )
@@ -1682,16 +1672,7 @@ class DownloadManager:
                 errors.append((pick.ref.dirname, e))
                 continue
             commits.append(commit)
-            files.append(
-                VersionedFile(
-                    std,
-                    commit.status,
-                    commit.label,
-                    commit.sha256,
-                    commit.path,
-                    same_as=commit.same_as,
-                )
-            )
+            files.append(committed_file(std, commit))
             downloaded.append(commit.path)
             local.append((pick.ref, commit.path))
         refreshed = {c.path for c in commits if c.status != "unchanged"}
@@ -1855,12 +1836,10 @@ class DownloadManager:
             version=version.label,
             unverified=str(error),
             files=(
-                VersionedFile(
+                local_file(
                     std,
-                    "local",
-                    version.label,
-                    version.sha256,
-                    target,
+                    version,
+                    version_path=target,
                     unverified=f"check_failed: {error}",
                 ),
             ),

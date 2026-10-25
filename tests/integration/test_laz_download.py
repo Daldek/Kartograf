@@ -373,7 +373,7 @@ class TestRunLazDownload:
         plan = _check_selection(
             _selection(current, missing), provider=provider, root=tmp_path
         )
-        assert plan.store == str(tmp_path.resolve())
+        assert plan.root == str(tmp_path.resolve())
         assert [(item.track, item.unit, item.status) for item in plan.items] == [
             ("laz_tile", current.sheet, "current"),
             ("laz_tile", missing.sheet, "missing"),
@@ -436,7 +436,7 @@ class TestRunLazDownload:
             _selection(first, removed), provider=provider, root=tmp_path
         )
         plan = UpdatePlan(
-            store=checked.store,
+            root=checked.root,
             checked_at=checked.checked_at,
             kartograf_version=checked.kartograf_version,
             items=checked.items[:1],

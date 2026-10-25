@@ -34,6 +34,7 @@ from kartograf.download.fetch import (
     fetch_version,
     inspect_version,
     link_version,
+    local_file,
     local_version,
     refreshes_cache,
     validate_update,
@@ -147,7 +148,7 @@ def _local_result(slot: FileSlot, stale: tuple[PlanItem, ...]) -> CzSheetResult:
         return CzSheetResult(None, False, stale)
     link_version(slot.std, local, refresh=False)
     return CzSheetResult(
-        VersionedFile(slot.std, "local", local.label, local.sha256, local.path),
+        local_file(slot.std, local),
         local.meta.get("extra", {}).get("all_nodata", False) is True,
         stale,
     )

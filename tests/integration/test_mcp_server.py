@@ -545,8 +545,8 @@ def test_data_tool_result_equals_the_envelope_of_the_library_document(tmp_path):
         direct.to_json(indent=None).replace(str(tmp_path / "lib"), "<store>")
     )
     (item,) = document["files"]
-    assert Path(item["file"]["path"]).is_file()  # the version is in the store
-    assert Path(item["file"]["path"]).is_relative_to(tmp_path / "mcp")
+    assert Path(item["path"]).is_file()  # the version is in the store
+    assert Path(item["path"]).is_relative_to(tmp_path / "mcp")
 
 
 @needs_mcp
@@ -656,8 +656,8 @@ def test_a_plan_document_and_update_upgrade_reach_the_library(tmp_path):
 
     assert upgraded.is_error is False
     (new,) = upgraded.structured_content["result"]["files"]
-    assert new["file"]["status"] == "new"
-    assert new["file"]["label"].startswith("2025-10-21_84183")
+    assert new["status"] == "new"
+    assert new["label"].startswith("2025-10-21_84183")
     assert normal(upgraded.structured_content, tmp_path / "mcp") == normal(
         direct.to_dict(), tmp_path / "lib"
     )

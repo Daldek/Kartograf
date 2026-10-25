@@ -29,16 +29,17 @@ _SIDECAR: Mapping[str, object] = {
 EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
     "kartograf-download/1": {
         "schema": "kartograf-download/1",
+        "mode": "store",
+        "root": _STORE,
         "files": [
             {
                 "unit": "N-34-130-D-d-2-4",
                 "country": "PL",
-                "file": {
-                    "path": _PATH,
-                    "status": "new",
-                    "label": "2022-05-10_83233",
-                    "sha256": _SHA,
-                },
+                "path": _PATH,
+                "size_bytes": 4096,
+                "sha256": _SHA,
+                "status": "new",
+                "label": "2022-05-10_83233",
             }
         ],
         "failed": [],
@@ -46,7 +47,8 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
     },
     "kartograf-plan/1": {
         "schema": "kartograf-plan/1",
-        "store": _STORE,
+        "mode": "store",
+        "root": _STORE,
         "items": [
             {
                 "unit": "N-34-130-D-d-2-4",

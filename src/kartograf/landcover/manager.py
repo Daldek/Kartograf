@@ -71,6 +71,7 @@ from kartograf.download.data import (
     FailureKind,
     UnitFailure,
     UnitFile,
+    WriteTarget,
 )
 from kartograf.download.fetch import (
     EditionLookup,
@@ -81,6 +82,7 @@ from kartograf.download.fetch import (
     emit_file_notices,
     inspect_version,
     link_version,
+    local_file,
     local_version,
     memoized_edition,
     new_staging,
@@ -354,7 +356,7 @@ def _read_geotiff_nodata(path: Path) -> float | None:
 
 
 @dataclass(frozen=True)
-class LandCoverReport(Document):
+class LandCoverReport(WriteTarget, Document):
     """Outcome of ``download_landcover`` (``landcover download``).
 
     Document ``kartograf-download/1``.
@@ -372,7 +374,10 @@ class LandCoverReport(Document):
 
     SCHEMA = DOWNLOAD_SCHEMA
     JSON_KEYS = DOWNLOAD_KEYS
-    JSON_FILL = {key: DOWNLOAD_FILL[key] for key in ("inputs", "superseded", "summary")}
+    JSON_FILL = {
+        key: DOWNLOAD_FILL[key]
+        for key in ("inputs", "skipped", "superseded", "summary")
+    }
 
     files: tuple[UnitFile, ...]
     raw: tuple[UnitFile, ...]
@@ -380,10 +385,12 @@ class LandCoverReport(Document):
     stale: tuple[PlanItem, ...]
     notices: tuple[Notice, ...]
     ok: bool
+    root: Path | None = None
+    output_dir: Path | None = None
 
 
 @dataclass(frozen=True)
-class SoilReport(Document):
+class SoilReport(WriteTarget, Document):
     """Outcome of ``download_soil`` (``soil download``; ``kartograf-download/1``).
 
     ``files``: the SoilGrids raster of the area (one ``UnitFile``, ``unit`` =
@@ -395,7 +402,8 @@ class SoilReport(Document):
     SCHEMA = DOWNLOAD_SCHEMA
     JSON_KEYS = DOWNLOAD_KEYS
     JSON_FILL = {
-        key: DOWNLOAD_FILL[key] for key in ("raw", "inputs", "superseded", "summary")
+        key: DOWNLOAD_FILL[key]
+        for key in ("raw", "inputs", "skipped", "superseded", "summary")
     }
 
     files: tuple[UnitFile, ...]
@@ -403,6 +411,8 @@ class SoilReport(Document):
     stale: tuple[PlanItem, ...]
     notices: tuple[Notice, ...]
     ok: bool
+    root: Path | None = None
+    output_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -434,6 +444,7 @@ def _landcover_report(
     failed: Sequence[UnitFailure],
     stale: Sequence[PlanItem],
     sink: NoticeSink,
+    root: Path,
 ) -> LandCoverReport:
     """Build the report of one request: ``ok`` = no failure and no stale position."""
     return LandCoverReport(
@@ -443,6 +454,7 @@ def _landcover_report(
         stale=tuple(stale),
         notices=sink.notices,
         ok=not failed and not stale,
+        root=root,
     )
 
 
@@ -812,7 +824,9 @@ class LandCoverManager:
                 track=_TRACK,
                 on_progress=on_progress,
             )
-            return _landcover_report(unit_files, (), unit_failures, stale, sink)
+            return _landcover_report(
+                unit_files, (), unit_failures, stale, sink, self._root
+            )
         teryt, sheet, bbox = self._validated(
             teryt, sheet, bbox, geometry, layer, options, sink
         )
@@ -878,7 +892,7 @@ class LandCoverManager:
                 if file is not None:
                     self._emit_file_notices(file, update, sink)
                     found.append(UnitFile(outcome.unit, country, file))
-        return _landcover_report(files, raw, failed, stale, sink)
+        return _landcover_report(files, raw, failed, stale, sink, self._root)
 
     def check(
         self,
@@ -1721,7 +1735,7 @@ class LandCoverManager:
         if local is None:
             return None
         link_version(slot.std, local, refresh=False)
-        return VersionedFile(slot.std, "local", local.label, local.sha256, local.path)
+        return local_file(slot.std, local)
 
     def _run(
         self,
@@ -2320,6 +2334,7 @@ def download_soil(
         stale=report.stale,
         notices=report.notices,
         ok=report.ok,
+        root=report.root,
     )
 
 

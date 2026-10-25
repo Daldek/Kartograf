@@ -45,6 +45,7 @@ from kartograf.messages import message
 __all__ = [
     "STAGING",
     "FileResult",
+    "Mode",
     "PlanEntry",
     "Staging",
     "Target",
@@ -59,6 +60,7 @@ STAGING: Final = ".kartograf-incoming"
 _STALE_SECONDS: Final = 24 * 60 * 60
 _CHUNK: Final = 1 << 20
 
+Mode = Literal["plain", "store"]
 Action = Literal["write", "replace", "conflict"]
 Reason = Literal["duplicate_output_name", "output_exists", "output_in_store"]
 _REASONS: Final[tuple[Reason, ...]] = (
@@ -128,7 +130,7 @@ class Target:
         absolute).
     """
 
-    mode: Literal["plain", "store"]
+    mode: Mode
     path: Path
 
 

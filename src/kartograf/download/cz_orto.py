@@ -43,6 +43,7 @@ from kartograf.download.fetch import (
     discard_staging,
     inspect_version,
     link_version,
+    local_file,
     local_version,
     new_staging,
     refreshes_cache,
@@ -262,7 +263,7 @@ def _local_file(slot: FileSlot) -> VersionedFile | None:
     if local is None:
         return None
     link_version(slot.std, local, refresh=False)
-    return VersionedFile(slot.std, "local", local.label, local.sha256, local.path)
+    return local_file(slot.std, local)
 
 
 def _sheet_extra(
