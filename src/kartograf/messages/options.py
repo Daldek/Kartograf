@@ -115,6 +115,7 @@ MESSAGES = {
         " (PL+CZ task: per-country values, e.g. {flag} pl=...,cz=...)",
         " (zadanie PL+CZ: wartosci per kraj, np. {flag} pl=...,cz=...)",
     ),
+    "error_with_suffix": Text("{error}{suffix}", "{error}{suffix}"),
     "file_variant_reason": Text(
         "{shown} consists of voivodeship files from ATOM - no sheets, flights or "
         "cutout",
@@ -183,10 +184,10 @@ MESSAGES = {
     "verb_plural": Text("do not apply", "nie dotycza"),
     "verb_singular": Text("does not apply", "nie dotyczy"),
     "laz_crs_flags": Text(
-        "{shown} {verb} to LAZ PL - the CRS of each tile comes from GUGiK WFS; omit "
-        "{shown}",
-        "{shown} {verb} LAZ PL - uklad kazdego kafla pochodzi z WFS GUGiK; pomin "
-        "{shown}",
+        "{flags:join( and )} {verb} to LAZ PL - the CRS of each tile comes from GUGiK "
+        "WFS; omit {flags:join( and )}",
+        "{flags:join( i )} {verb} LAZ PL - uklad kazdego kafla pochodzi z WFS GUGiK; "
+        "pomin {flags:join( i )}",
     ),
     "cutout_sheet_system_2000": Text(
         "--cutout does not work with --sheet-system 2000 - a multi-zone bbox would "

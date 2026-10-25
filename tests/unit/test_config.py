@@ -343,9 +343,9 @@ def test_every_command_but_config_show_stops_on_an_unusable_file(
     assert main(["cache", "path"]) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err.startswith("Error: The settings file ")
+    assert captured.err.startswith("Error: Nie mozna uzyc pliku ustawien ")
     assert main(["config", "show"]) == 0
-    assert "blad: the file is not valid TOML" in capsys.readouterr().out
+    assert "blad: plik nie jest poprawnym TOML" in capsys.readouterr().out
 
 
 def test_a_language_other_than_pl_or_en_is_not_valid(monkeypatch, capsys):

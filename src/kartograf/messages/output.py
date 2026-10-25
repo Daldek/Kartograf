@@ -21,6 +21,13 @@ MESSAGES = {
         "output_dir jest pusty: podaj katalog zwyklych plikow albo pomin go, aby "
         "uzyc domyslnego magazynu",
     ),
+    # ``download.manager``: a manager writes plain files or a storage layout.
+    "output_dir_excludes_storage": Text(
+        "output_dir and storage exclude each other: the files of a plain write have "
+        "no storage layout",
+        "output_dir i storage wykluczaja sie: pliki zwyklego zapisu nie maja ukladu "
+        "magazynu",
+    ),
     # ``output``: the preflight of a plain write (every offending path in the details).
     "duplicate_output_name": Text(
         "{count} output paths of this request share a name (the first: {first})",

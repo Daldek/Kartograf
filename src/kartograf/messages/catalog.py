@@ -400,4 +400,16 @@ MESSAGES = {
         "List of commands: kartograf commands list",
         "Lista komend: kartograf commands list",
     ),
+    # ``catalog.tools``: the tool families of the MCP server.
+    "unknown_tool_family": Text(
+        "unknown tool family: {shown}", "nieznana rodzina narzedzi: {shown}"
+    ),
+    "no_tool_family": Text("none given", "nie podano zadnej"),
+    "tool_families_hint": Text(
+        "Tool families: {families}.", "Rodziny narzedzi: {families}."
+    ),
+    # ``guide``: the guides for agents.
+    "unknown_guide_format": Text(
+        "unknown guide format {format!r}", "nieznany rodzaj przewodnika {format!r}"
+    ),
 }

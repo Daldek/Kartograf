@@ -10,8 +10,8 @@ MESSAGES = {
         "{name} musi byc liczba calkowita 1900..2100, otrzymano {year!r}",
     ),
     "min_year_exceeds_max": Text(
-        "min_year ({min_year}) must not be greater than max_year ({max_year})",
-        "min_year ({min_year}) nie moze byc wiekszy niz max_year ({max_year})",
+        "{min_name} ({min_year}) must not be greater than {max_name} ({max_year})",
+        "{min_name} ({min_year}) nie moze byc wiekszy niz {max_name} ({max_year})",
     ),
     "year_label_single": Text("from year {min_year}", "z roku {min_year}"),
     "year_label_range": Text(

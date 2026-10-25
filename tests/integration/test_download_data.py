@@ -84,7 +84,7 @@ def test_pl_sheet_report_files_and_ok(tmp_path):
     [
         ({"product": None}, "--product required"),
         ({"vertical_crs": None}, "--vertical-crs required for --product nmt"),
-        ({"year": 2020, "min_year": 2019}, "--year wyklucza sie"),
+        ({"year": 2020, "min_year": 2019}, "--year excludes --min-year"),
         ({"min_density": 4}, "--min-density works only with --product laz"),
     ],
 )

@@ -10225,7 +10225,7 @@ class TestCampaignOptions:
         )
         assert rc == 2
         err = capsys.readouterr().err
-        assert "Error: --min-year must be" in err and "1800" in err
+        assert "Error: --min-year musi byc" in err and "1800" in err
         assert " min_year" not in err
 
     @patch("kartograf.download.data.DownloadManager")

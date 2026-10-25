@@ -650,8 +650,7 @@ class DownloadManager:
         self._record_vertical_crs = vertical_crs
         if output_dir is not None and storage is not None:
             raise ValidationError(
-                "output_dir and storage exclude each other: the files of a plain "
-                "write have no storage layout",
+                message("output.output_dir_excludes_storage"),
                 options=("output_dir", "storage"),
             )
         if output_dir is not None and all_campaigns:

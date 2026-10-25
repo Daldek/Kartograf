@@ -204,6 +204,14 @@ MESSAGES = {
     ),
     "fact_effects": Text("effects: {effects}", "skutki: {effects}"),
     "fact_project_task": Text("project data command", "komenda danych projektu"),
+    "inject_needs_block": Text(
+        "--inject puts the block into a file: it needs the format agents-md-block",
+        "--inject wstawia blok do pliku: wymaga --format agents-md-block",
+    ),
+    "inject_needs_block_hint": Text(
+        "Run: kartograf commands guide --format agents-md-block --inject AGENTS.md",
+        "Uruchom: kartograf commands guide --format agents-md-block --inject AGENTS.md",
+    ),
     # ``cli.config_cmd``.
     "source_default": Text("default", "domyslnie"),
     "source_env": Text("variable", "zmienna"),
