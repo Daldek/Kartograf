@@ -9,12 +9,17 @@ import kartograf
 from kartograf import _version
 from kartograf._version import build_version
 
-PKG_DIR = Path(kartograf.__file__).resolve().parent
-TOPLEVEL = str(PKG_DIR.parent.parent)  # the repository root; the package is in src/
+# The repository is found from this file, not through the package: with a wheel
+# installed (REL-2.5) kartograf.__file__ lies in site-packages.
+REPO = Path(__file__).resolve().parents[2]
+PKG_DIR = REPO / "src" / "kartograf"
+TOPLEVEL = str(REPO)
 
 
 @pytest.fixture(autouse=True)
-def _reset_cache():
+def _reset_cache(monkeypatch):
+    # build_version looks for the package of the repository it runs in
+    monkeypatch.setattr(kartograf, "__file__", str(PKG_DIR / "__init__.py"))
     build_version.cache_clear()
     yield
     build_version.cache_clear()
