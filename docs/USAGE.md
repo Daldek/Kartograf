@@ -1862,7 +1862,9 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
   (replace, only with `--force`) or `konflikt: ...` (conflict); `--lang en` prints `to write`,
   `to replace (--force)` and `conflict: ...`. `--check --force` is a valid pair.
   A plain plan fetches no data and asks no freshness signal; with `--root` the `--force` of a
-  plan has no effect.
+  plan has no effect. A file whose source cannot be asked (an unreachable sheet index) is
+  `nie udalo sie sprawdzic: ...` (`could not check: ...`), status `check_failed` with no action,
+  as in the store: the plan is not `ok` and exits 11 (10 beside files that are fine), as the run.
 - *Options that need a store.* `--upgrade`, `--plan` and `--all-campaigns` with `--output-dir`
   are `validation_error` (`store_only_option`) and name `--root`; `--full-sheet` is an `info`
   notice (it has no effect). The year options filter the flights as in the store.

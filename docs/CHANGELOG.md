@@ -2151,6 +2151,16 @@ from the key `root`, and the MCP tool names.
 
 ### Fixed
 
+- A plain plan (`--check` with `--output-dir`, `check_*(output_dir=)`, MCP `check`) keeps a
+  position whose source could not be checked as `check_failed`, as the store does (DEV-19.10,
+  ADR-054 decision 6 erratum). `plain_items` judged it as a target: the status `missing`, the
+  action `write`, the error left only in `error`, so with the sheet index unreachable the plan
+  was `ok` and exited 0, while the plan of the store and the plain run exited 11 (found by the
+  final integration run of the data output; Hydraulik's `terrain --check` relied on it). The
+  position now keeps its status and error and has no `action`, `path` or `reason`; the plan is
+  not `ok` (exit 11, or 10 beside positions that are fine), its unit in `items[]` is `failed`
+  with `source_unavailable` and the reason `check_failed`, and the CLI line is `nie udalo sie
+  sprawdzic: ...` (`could not check: ...`). The other positions are judged as before.
 - `kartograf-mcp` writes nothing but protocol messages to stdout, also when the client leaves
   (the stdio transport of MCP). While the server serves, the SDK points file descriptor 1 at
   stderr, so a `print` of the library goes there; but a client starts the server without
