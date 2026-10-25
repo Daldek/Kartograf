@@ -422,8 +422,12 @@ kartograf/
 │   ├── bbox.py             # BBox, validate_bbox, transform_bbox (dense envelope: _DENSIFY
 │   │                       # points per edge, transformer cache, operation pinned
 │   │                       # via duck typing `transformer=`), is_czech_crs
-│   ├── sheet_parser.py     # SheetParser (PL-1992), find_sheets_for_bbox (BBox from core/bbox.py)
-│   ├── parser_2000.py      # Parser2000 (PL-2000), find_sheets_2000_for_bbox
+│   ├── sheet_parser.py     # SheetParser (PL-1992), find_sheets_for_bbox (BBox from core/bbox.py),
+│   │                       # find_sheet_outlines -> SheetOutline (sheet, PL-2000 zone, WGS84 outline)
+│   ├── parser_2000.py      # Parser2000 (PL-2000), find_sheets_2000_for_bbox,
+│   │                       # find_sheet_outlines_2000 (sheets only inside their zone area)
+│   ├── pl2000_zones.py     # PL-2000 zone areas (ADR-055): nominal strips + the § 22 powiat
+│   │                       # exceptions of _data/pl2000_zones.json.gz (scripts/build_pl2000_zones.py)
 │   ├── parser_tm33.py      # ParserTM33 — computable grid of CZ 2x2 km tiles (EPSG:3045)
 │   ├── parser_registry.py  # Registry of sheet systems (SYSTEMS: pl2000, cz_tm33, cz_sm5,
 │   │                       # pl1992), detect_system/path_parts with strip(), CZ patterns
@@ -2396,6 +2400,14 @@ the work a `Notice` `GEOMETRY_LAYER_DEFAULT` with its name, the remaining layers
 and the hint `--layer NAZWA` (CLI: `Info:`, also with `-q`). It also applies to
 `download_landcover`, `download_soil` and `calculate_hsg`; SHP
 and a single-layer GPKG give no message.
+
+With `--sheet-system 2000` a zone is an area, not a longitude range (ADR-055): its nominal
+strip with the powiat exceptions of § 22 (`core/pl2000_zones.py`, data
+`_data/pl2000_zones.json.gz`), and a sheet of zone N is listed only when its part inside the area
+of zone N meets the bbox; a bbox across a zone boundary gets each zone's sheets on its own side,
+each sheet once. `find_sheet_outlines` gives the same sheets with their zone and the outline a
+map draws (the part of a cut sheet inside its zone); the computation runs in WGS84, where the
+zone areas meet exactly, so the outlines of two zones never overlap.
 
 The sidecar of a downloaded sheet gets `extra.parent_request` and `extra.source`
 (URL, layer, date, resolution). Reusing a version does not

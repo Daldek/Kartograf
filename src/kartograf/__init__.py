@@ -129,7 +129,12 @@ from kartograf.core.bbox import BBox, transform_bbox
 from kartograf.core.geometry import find_sheets_for_geometry, get_overall_bbox
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
 from kartograf.core.parser_tm33 import ParserTM33
-from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox
+from kartograf.core.sheet_parser import (
+    SheetOutline,
+    SheetParser,
+    find_sheet_outlines,
+    find_sheets_for_bbox,
+)
 from kartograf.download.area import parent_request_for
 from kartograf.download.availability import (
     AvailabilityArea,
@@ -319,6 +324,8 @@ __all__ = [
     "find_sheets_for_bbox",
     "find_sheets_2000_for_bbox",
     "find_sheets_for_geometry",
+    "find_sheet_outlines",
+    "SheetOutline",
     "get_overall_bbox",
     "transform_bbox",
     "parent_request_for",

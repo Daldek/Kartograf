@@ -8,6 +8,7 @@ coordinate system, and sheet components.
 
 import math
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from kartograf.core import parser_registry
@@ -1038,6 +1039,30 @@ PL_BBOX_CRS = (
 )
 
 
+@dataclass(frozen=True)
+class SheetOutline:
+    """
+    A sheet of a sheet-grid search with the outline a map draws.
+
+    Attributes
+    ----------
+    sheet : str
+        Sheet code (godło).
+    zone : int | None
+        PL-2000 zone of the sheet (5-8, the first part of its code); ``None``
+        for PL-1992.
+    outline : dict[str, Any]
+        GeoJSON ``Polygon`` or ``MultiPolygon`` in EPSG:4326. PL-1992: the
+        sheet. PL-2000: the four corners of the sheet or, for a sheet that a
+        zone boundary cuts, its part inside its zone (ADR-055). The whole
+        sheet stays ``SheetParser(sheet).get_bbox()``.
+    """
+
+    sheet: str
+    zone: int | None
+    outline: dict[str, Any]
+
+
 def find_sheets_for_bbox(
     bbox: BBox,
     target_scale: str,
@@ -1071,7 +1096,9 @@ def find_sheets_for_bbox(
         PL-2000: "1:10000", "1:5000", "1:2000", "1:1000" or "1:500".
     system : str
         "1992" selects the PL-1992 sheet hierarchy; "2000" selects the
-        PL-2000 zonal grid.
+        PL-2000 zonal grid: the sheets of each zone only where they meet the
+        area of their zone - its strip with the powiat exceptions of § 22 of
+        the regulation (``find_sheets_2000_for_bbox``, ADR-055).
 
     Returns
     -------
@@ -1156,6 +1183,63 @@ def find_sheets_for_bbox(
         current_scale_idx += 1
 
     return sorted(current_sheets)
+
+
+def find_sheet_outlines(
+    bbox: BBox,
+    target_scale: str,
+    sheet_system: str,
+) -> list[SheetOutline]:
+    """
+    Find the sheets of a bbox with their zone and the outline a map draws.
+
+    The sheets and their order are those of ``find_sheets_for_bbox``; each
+    comes with its PL-2000 zone and its outline in EPSG:4326. A PL-2000
+    sheet that a zone boundary cuts is drawn as its part inside its zone, so
+    the sheets of two zones never overlap on a map (ADR-055).
+
+    Parameters
+    ----------
+    bbox : BBox
+        Bounding box, as for ``find_sheets_for_bbox``.
+    target_scale : str
+        Scale of the sheets, as for ``find_sheets_for_bbox``.
+    sheet_system : str
+        "1992" or "2000".
+
+    Returns
+    -------
+    list[SheetOutline]
+        Sorted by sheet code.
+
+    Raises
+    ------
+    ValidationError
+        As ``find_sheets_for_bbox``.
+    """
+    if sheet_system == "2000":
+        validate_bbox(bbox)
+        from kartograf.core.parser_2000 import find_sheet_outlines_2000
+
+        return find_sheet_outlines_2000(bbox, target_scale)
+    outlines = []
+    for sheet in find_sheets_for_bbox(bbox, target_scale, sheet_system):
+        box = SheetParser(sheet).get_bbox("EPSG:4326")
+        ring = [
+            [float(box.min_x), float(box.min_y)],
+            [float(box.max_x), float(box.min_y)],
+            [float(box.max_x), float(box.max_y)],
+            [float(box.min_x), float(box.max_y)],
+            [float(box.min_x), float(box.min_y)],
+        ]
+        outlines.append(
+            SheetOutline(
+                sheet=sheet,
+                zone=None,
+                outline={"type": "Polygon", "coordinates": [ring]},
+            )
+        )
+    return outlines
 
 
 def _find_1m_sheets(wgs_bbox: BBox) -> list[str]:

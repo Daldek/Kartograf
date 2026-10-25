@@ -7,12 +7,20 @@ PL-2000 uses dot-separated numeric format: zone.row.column[.subdivisions]
 (e.g., 6.179.12, 6.179.12.20).
 """
 
+import json
 import math
 import re
+from typing import Any
 
-from kartograf.core.bbox import BBox, transform_bbox, validate_bbox
+import numpy as np
+import shapely
+
+from kartograf.core import pl2000_zones
+from kartograf.core.bbox import BBox, _transformer, transform_bbox, validate_bbox
 from kartograf.core.sheet_parser import (
     _DEGENERATE_EPS_DEG,
+    _EDGE_TOL,
+    SheetOutline,
     _axis_overlaps,
     _expand_degenerate,
 )
@@ -588,13 +596,17 @@ class Parser2000:
 # Standalone functions: bbox -> sheet code lookup (PL-2000)
 # =========================================================================
 
-# Longitude ranges for PL-2000 zones
-_ZONE_LON_RANGES = {
-    5: (13.5, 16.5),
-    6: (16.5, 19.5),
-    7: (19.5, 22.5),
-    8: (22.5, 25.5),
-}
+# metres: a sheet edge drawn in WGS84 is split into equal parts of at most this
+# length. A straight edge of a zone grid is a curve in longitude and latitude
+# (1.6 m off the chord of an 8 km edge); 1 km keeps it within 3 cm. Neighbour
+# sheets share their split points, so the drawn sheets of a zone leave no gap.
+_EDGE_STEP_M = 1000.0
+# A sheet counts when its part inside its zone and the bbox is larger than this
+# share of its part inside the bbox: a positive area without the numerical
+# slivers of a zone boundary.
+_MIN_SHARE = 1e-9
+# degrees (~1 km) around the sheets when the zone area is cut out
+_ZONE_MARGIN_DEG = 0.01
 
 
 # metres (~1 mm) - PL-2000 zones are metric, not degrees
@@ -627,32 +639,6 @@ def _bboxes_intersect_2000(a: BBox, b: BBox) -> bool:
     )
 
 
-def _determine_zones_for_bbox(bbox_wgs84: BBox) -> list[int]:
-    """
-    Determine the PL-2000 zones intersected by a bbox in WGS84.
-
-    Parameters
-    ----------
-    bbox_wgs84 : BBox
-        Bbox in EPSG:4326 (min_x=west_lon, max_x=east_lon)
-
-    Returns
-    -------
-    list[int]
-        List of zone numbers (5-8) sorted ascending
-    """
-    west_lon = bbox_wgs84.min_x
-    east_lon = bbox_wgs84.max_x
-
-    zones = []
-    for zone_num, (zone_west, zone_east) in _ZONE_LON_RANGES.items():
-        # A zone intersects the bbox if the longitude ranges overlap
-        if west_lon < zone_east and east_lon > zone_west:
-            zones.append(zone_num)
-
-    return sorted(zones)
-
-
 def find_sheets_2000_for_bbox(
     bbox: BBox,
     target_scale: str,
@@ -660,6 +646,16 @@ def find_sheets_2000_for_bbox(
 ) -> list[str]:
     """
     Find the PL-2000 sheet codes covering the given bounding box.
+
+    A sheet belongs to the grid of its zone, and a zone is an area, not a
+    longitude range (ADR-055): its nominal 3-degree strip with the powiat
+    exceptions of § 22 of the regulation on the national spatial reference
+    system (Dz.U. 2012 poz. 1247: a powiat that the meridian 16.5, 19.5 or
+    22.5 E cuts belongs to the zone of its larger part;
+    ``kartograf.core.pl2000_zones``). A sheet of zone N is returned when its
+    part inside the area of zone N meets the bbox with a positive area, so a
+    bbox across a zone boundary yields the sheets of each zone on its own
+    side of the boundary, never the sheets of one zone over another zone.
 
     Parameters
     ----------
@@ -671,7 +667,7 @@ def find_sheets_2000_for_bbox(
         "1:2000", "1:1000" or "1:500" selects successively finer sheets.
     zone : int | None
         If given, restricts the search to this zone (5-8).
-        If None, the zone is detected automatically from the bbox.
+        If None, every zone whose area meets the bbox.
 
     Returns
     -------
@@ -679,7 +675,8 @@ def find_sheets_2000_for_bbox(
         Sorted list of PL-2000 sheet codes covering the bbox.
         Edge convention as in PL-1992: only a positive intersection area
         counts (touching at an edge is not enough), and a degenerate bbox
-        (a point) yields exactly one sheet - the one east/north of the grid line.
+        (a point) yields exactly one sheet - the one east/north of the grid
+        line, in the zone east/north of a zone boundary.
 
     Raises
     ------
@@ -687,6 +684,61 @@ def find_sheets_2000_for_bbox(
         If target_scale is invalid, the CRS is unsupported, or the bbox is
         inverted (min > max) or has a NaN/inf value
     """
+    return [sheet for sheet, _zone, _outline in _find_2000(bbox, target_scale, zone)]
+
+
+def find_sheet_outlines_2000(
+    bbox: BBox,
+    target_scale: str,
+    zone: int | None = None,
+) -> list[SheetOutline]:
+    """
+    Find the PL-2000 sheets of a bbox with their zone and WGS84 outline.
+
+    The sheets and their order are those of ``find_sheets_2000_for_bbox``.
+    The outline of a sheet is its rectangle in EPSG:4326, edges split into
+    parts of at most 1 km; a sheet that a zone boundary cuts is drawn as its
+    part inside its zone, so the outlines of two zones never overlap and
+    together cover the bbox. A download still takes the whole sheet
+    (``Parser2000(sheet).get_bbox()``).
+
+    Parameters
+    ----------
+    bbox : BBox
+        Bounding box in any supported CRS
+        (EPSG:2176-2179, EPSG:2180, EPSG:4326)
+    target_scale : str
+        "1:10000", "1:5000", "1:2000", "1:1000" or "1:500".
+    zone : int | None
+        If given, restricts the search to this zone (5-8).
+
+    Returns
+    -------
+    list[SheetOutline]
+        Sorted by sheet code; ``zone`` is the first part of the code.
+
+    Raises
+    ------
+    ValidationError
+        As ``find_sheets_2000_for_bbox``.
+    """
+    return [
+        SheetOutline(sheet=sheet, zone=found_zone, outline=outline)
+        for sheet, found_zone, outline in _find_2000(
+            bbox, target_scale, zone, outline=True
+        )
+        if outline is not None
+    ]
+
+
+def _find_2000(
+    bbox: BBox,
+    target_scale: str,
+    zone: int | None,
+    *,
+    outline: bool = False,
+) -> list[tuple[str, int, dict[str, Any] | None]]:
+    """Sheets of the zones that meet a bbox: ``(sheet, zone, outline)``."""
     if target_scale not in SCALE_HIERARCHY_2000:
         raise ValidationError(
             message(
@@ -697,29 +749,18 @@ def find_sheets_2000_for_bbox(
         )
 
     validate_bbox(bbox)
-
-    # Step 1: Transform to WGS84 for zone detection
     bbox_wgs84 = transform_bbox(bbox, "EPSG:4326")
 
-    # Step 2: Determine the zones. Detection compares longitude ranges with
-    # strict inequalities, so a point on a zone-boundary meridian
-    # (16.5/19.5/22.5E) would fall into no zone without the expansion
-    # (review 0.7.0, round 1). The expansion is used ONLY for detection - we
-    # keep transforming the exact bbox to the zone CRS, so that the metric
-    # eps decides the sheet.
-    detect_bbox = _expand_degenerate(bbox_wgs84, _DEGENERATE_EPS_DEG)
-    zones = [zone] if zone is not None else _determine_zones_for_bbox(detect_bbox)
+    # The zones whose area meets the bbox. A point or a hairline is widened
+    # on its max side for this only (review 0.7.0, round 1); the exact bbox
+    # goes on to the zone CRS, so that the metric eps decides the sheet.
+    detect = _expand_degenerate(bbox_wgs84, _DEGENERATE_EPS_DEG)
+    window = (detect.min_x, detect.min_y, detect.max_x, detect.max_y)
+    zones = [zone] if zone is not None else pl2000_zones.zones_in(window)
 
-    if not zones:
-        return []
-
-    # Step 3: For each zone find the 1:10k sheets
-    all_sheets: set[str] = set()
-
+    found: dict[int, tuple[list[tuple[str, dict[str, Any] | None]], float]] = {}
     for z in zones:
         zone_crs = ZONE_EPSG[z]
-
-        # Transform the bbox to the zone CRS
         if bbox.crs == zone_crs:
             zone_bbox = bbox
         else:
@@ -728,48 +769,67 @@ def find_sheets_2000_for_bbox(
             # edge and lost a whole row of sheets (parser assessment
             # 2026-10-07, K3)
             zone_bbox = transform_bbox(bbox_wgs84, zone_crs)
-
         # Point/hairline: expand by eps on the MAX side (exactly one sheet)
         zone_bbox = _expand_degenerate(zone_bbox, _DEGENERATE_EPS_M)
+        candidates = _grid_candidates(z, zone_bbox, target_scale)
+        if candidates:
+            kept, share = _in_zone(z, zone_bbox, candidates, outline)
+            if kept:
+                found[z] = (kept, share)
 
-        # Compute the row/col range for 1:10k
-        min_row = math.floor((zone_bbox.min_y - 4_920_000) / 5000) - 1
-        max_row = math.floor((zone_bbox.max_y - 4_920_000) / 5000) + 1
-        min_col = math.floor((zone_bbox.min_x - z * 1_000_000 - 332_000) / 8000) - 1
-        max_col = math.floor((zone_bbox.max_x - z * 1_000_000 - 332_000) / 8000) + 1
+    point = (
+        bbox_wgs84.max_x - bbox_wgs84.min_x <= 2 * _EDGE_TOL
+        and bbox_wgs84.max_y - bbox_wgs84.min_y <= 2 * _EDGE_TOL
+    )
+    if point and len(found) > 1:
+        # A point on a zone boundary: the zone with the larger share of the
+        # eps square east/north of it (east on a meridian outside Poland).
+        best = max(found, key=lambda z: (found[z][1], z))
+        found = {best: found[best]}
 
-        # Clamp to sane values (pas >= 0, slup >= 0)
-        min_row = max(0, min_row)
-        min_col = max(0, min_col)
+    result = [
+        (sheet, z, sheet_outline)
+        for z, (kept, _share) in found.items()
+        for sheet, sheet_outline in kept
+    ]
+    return sorted(result, key=lambda item: item[0])
 
-        # Step 4: Check the intersection for every candidate
-        for row in range(min_row, max_row + 1):
-            for col in range(min_col, max_col + 1):
-                sheet_10k = f"{z}.{row}.{col}"
 
-                # Try to create a Parser2000 - skip if the sheet code is invalid
-                try:
-                    p = Parser2000(sheet_10k)
-                except (ParseError, ValidationError):
-                    continue
+def _grid_candidates(zone: int, zone_bbox: BBox, target_scale: str) -> list[Parser2000]:
+    """Sheets of a zone grid whose rectangle meets the bbox (in the zone CRS)."""
+    # Compute the row/col range for 1:10k
+    min_row = math.floor((zone_bbox.min_y - 4_920_000) / 5000) - 1
+    max_row = math.floor((zone_bbox.max_y - 4_920_000) / 5000) + 1
+    min_col = math.floor((zone_bbox.min_x - zone * 1_000_000 - 332_000) / 8000) - 1
+    max_col = math.floor((zone_bbox.max_x - zone * 1_000_000 - 332_000) / 8000) + 1
 
-                sheet_bbox = p.get_bbox()
+    # Clamp to sane values (pas >= 0, slup >= 0)
+    min_row = max(0, min_row)
+    min_col = max(0, min_col)
 
-                if _bboxes_intersect_2000(zone_bbox, sheet_bbox):
-                    if target_scale == "1:10000":
-                        all_sheets.add(sheet_10k)
-                    else:
-                        # Drill down to target_scale
-                        _drill_down(p, zone_bbox, target_scale, all_sheets)
+    found: dict[str, Parser2000] = {}
+    for row in range(min_row, max_row + 1):
+        for col in range(min_col, max_col + 1):
+            # Try to create a Parser2000 - skip if the sheet code is invalid
+            try:
+                p = Parser2000(f"{zone}.{row}.{col}")
+            except (ParseError, ValidationError):
+                continue
 
-    return sorted(all_sheets)
+            if _bboxes_intersect_2000(zone_bbox, p.get_bbox()):
+                if target_scale == "1:10000":
+                    found[p.sheet] = p
+                else:
+                    # Drill down to target_scale
+                    _drill_down(p, zone_bbox, target_scale, found)
+    return list(found.values())
 
 
 def _drill_down(
     parent: Parser2000,
     zone_bbox: BBox,
     target_scale: str,
-    result: set[str],
+    result: dict[str, Parser2000],
 ) -> None:
     """
     Recursively drill down the hierarchy, checking the intersection with the bbox.
@@ -782,8 +842,8 @@ def _drill_down(
         Bbox in the native CRS of the zone
     target_scale : str
         Target scale
-    result : set[str]
-        Result set of sheet codes (modified in place)
+    result : dict[str, Parser2000]
+        Sheets found at the target scale by sheet code (modified in place)
     """
     # Special case: from 1:10000 to 1:5000 - the 5k branch
     if parent.scale == "1:10000" and target_scale == "1:5000":
@@ -798,6 +858,148 @@ def _drill_down(
             continue
 
         if child.scale == target_scale:
-            result.add(child.sheet)
+            result[child.sheet] = child
         else:
             _drill_down(child, zone_bbox, target_scale, result)
+
+
+def _in_zone(
+    zone: int,
+    zone_bbox: BBox,
+    candidates: list[Parser2000],
+    outline: bool,
+) -> tuple[list[tuple[str, dict[str, Any] | None]], float]:
+    """
+    Keep the candidates whose part inside the zone area meets the bbox.
+
+    The test runs in WGS84, where the zone area is defined: the bbox (its
+    envelope in the zone CRS, as for the candidates) and each sheet become
+    polygons with edges densified to ``_EDGE_STEP_M``.
+
+    Returns
+    -------
+    tuple
+        The kept ``(sheet, outline)`` pairs (``outline`` only when asked for)
+        and the share of the bbox inside the zone.
+    """
+    zone_crs = ZONE_EPSG[zone]
+    boxes = np.array(
+        [
+            [b.min_x, b.min_y, b.max_x, b.max_y]
+            for b in (c.get_bbox() for c in candidates)
+        ]
+    )
+    around = transform_bbox(
+        BBox(
+            min(float(boxes[:, 0].min()), zone_bbox.min_x),
+            min(float(boxes[:, 1].min()), zone_bbox.min_y),
+            max(float(boxes[:, 2].max()), zone_bbox.max_x),
+            max(float(boxes[:, 3].max()), zone_bbox.max_y),
+            zone_crs,
+        ),
+        "EPSG:4326",
+    )
+    area = pl2000_zones.zone_area(
+        zone,
+        (
+            around.min_x - _ZONE_MARGIN_DEG,
+            around.min_y - _ZONE_MARGIN_DEG,
+            around.max_x + _ZONE_MARGIN_DEG,
+            around.max_y + _ZONE_MARGIN_DEG,
+        ),
+    )
+    view = _wgs84_rectangles(
+        zone_crs,
+        np.array(
+            [[zone_bbox.min_x, zone_bbox.min_y, zone_bbox.max_x, zone_bbox.max_y]]
+        ),
+    )[0]
+    view_area = float(shapely.area(view))
+    if area.is_empty or view_area <= 0.0:
+        return [], 0.0
+
+    sheets = None
+    if shapely.covers(area, view):
+        keep = np.ones(len(candidates), dtype=bool)
+        share = 1.0
+    else:
+        part = shapely.intersection(area, view)
+        share = float(shapely.area(part)) / view_area
+        sheets = _wgs84_rectangles(zone_crs, boxes)
+        inside = shapely.area(shapely.intersection(sheets, part))
+        base = shapely.area(shapely.intersection(sheets, view))
+        keep = inside > _MIN_SHARE * base
+
+    kept = [c for c, k in zip(candidates, keep, strict=True) if k]
+    if not outline:
+        return [(c.sheet, None) for c in kept], share
+    if sheets is None:
+        sheets = _wgs84_rectangles(zone_crs, boxes)
+    outlines = _outlines(zone_crs, boxes[keep], sheets[keep], area)
+    return [(c.sheet, o) for c, o in zip(kept, outlines, strict=True)], share
+
+
+def _wgs84_rectangles(
+    crs: str, boxes: np.ndarray, step: float = _EDGE_STEP_M
+) -> np.ndarray:
+    """
+    Polygons in EPSG:4326 of rectangles of a zone CRS.
+
+    ``boxes`` is an ``(n, 4)`` array ``(min_x, min_y, max_x, max_y)``; every
+    edge is split into equal parts of at most ``step`` metres, at points
+    computed from the corners alone, so neighbour sheets share them exactly.
+    Rings start at the south-west corner and run counter-clockwise, like a
+    GeoJSON exterior ring.
+    """
+    west, south, east, north = (boxes[:, i : i + 1] for i in range(4))
+    nx = max(1, math.ceil(float(np.max(east - west)) / step))
+    ny = max(1, math.ceil(float(np.max(north - south)) / step))
+    xs = west + (east - west) * np.linspace(0.0, 1.0, nx + 1)
+    ys = south + (north - south) * np.linspace(0.0, 1.0, ny + 1)
+    xs[:, -1:] = east
+    ys[:, -1:] = north
+    ring_x = np.hstack(
+        [
+            xs[:, :-1],
+            np.repeat(east, ny, axis=1),
+            xs[:, :0:-1],
+            np.repeat(west, ny + 1, axis=1),
+        ]
+    )
+    ring_y = np.hstack(
+        [
+            np.repeat(south, nx, axis=1),
+            ys[:, :-1],
+            np.repeat(north, nx, axis=1),
+            ys[:, ::-1],
+        ]
+    )
+    lon, lat = _transformer(crs, "EPSG:4326").transform(ring_x.ravel(), ring_y.ravel())
+    coords = np.stack(
+        [np.reshape(lon, ring_x.shape), np.reshape(lat, ring_y.shape)], axis=-1
+    )
+    polygons: np.ndarray = shapely.polygons(coords)
+    return polygons
+
+
+def _outlines(
+    crs: str, boxes: np.ndarray, sheets: np.ndarray, area: Any
+) -> list[dict[str, Any]]:
+    """GeoJSON outlines: the sheet inside its zone, else its part inside it."""
+    whole = shapely.covers(area, sheets)
+    outlines = []
+    for sheet, inside in zip(sheets, whole, strict=True):
+        if inside:
+            ring = shapely.get_coordinates(sheet).tolist()
+            outlines.append({"type": "Polygon", "coordinates": [ring]})
+            continue
+        parts = [
+            p
+            for p in shapely.get_parts(shapely.intersection(sheet, area))
+            if p.geom_type == "Polygon" and not p.is_empty
+        ]
+        clipped = parts[0] if len(parts) == 1 else shapely.MultiPolygon(parts)
+        outlines.append(
+            json.loads(shapely.to_geojson(shapely.orient_polygons(clipped)))
+        )
+    return outlines
