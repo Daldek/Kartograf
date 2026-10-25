@@ -351,7 +351,7 @@ class TestTransformPolymorphic:
             np.array([3.0, 4.0]),
         )
         pinned = self._pinned(t)
-        with pytest.raises(TransformError, match="nieskonczon"):
+        with pytest.raises(TransformError, match="infinite value"):
             pinned.transform(np.zeros(2), np.zeros(2))
 
 
@@ -392,7 +392,7 @@ class TestGdalOperation:
         pinned = PinnedTransform(
             accuracy_m=0.5, description="op", _transformer=MagicMock()
         )
-        with pytest.raises(TransformError, match="uklad"):
+        with pytest.raises(TransformError, match="known pair of systems"):
             pinned.gdal_operation()
 
 

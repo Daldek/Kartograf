@@ -156,9 +156,6 @@ _PENDING = frozenset(
         # Transforms, transports, cache, auth.
         "auth/proxy.py",
         "cache/metadata.py",
-        "transform/crs.py",
-        "transform/gpkg.py",
-        "transform/raster.py",
         "transport/aaigrid.py",
         "transport/atom.py",
         "transport/chunks.py",
