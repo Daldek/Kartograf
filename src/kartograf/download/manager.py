@@ -73,6 +73,7 @@ from kartograf.exceptions import (
     YearRangeError,
 )
 from kartograf.interrupt import run_parallel
+from kartograf.marker import lenient_store, prepare_store
 from kartograf.notices import (
     CHECK_FAILED,
     DOWNLOAD_SIZE,
@@ -1129,6 +1130,7 @@ class DownloadManager:
         """
         from kartograf.download.updates import _items
 
+        lenient_store(self._storage.root)
         inspections = self.inspect_sheets(sheets)
         conflicts: dict[str, tuple[int, ...]] = {}
         no_data: dict[str, NoCoverageError] = {}
@@ -1383,11 +1385,13 @@ class DownloadManager:
             self._announce_size(sheet, record)
         root = self._storage.get_versions_root(sheet)
         name = self._storage.get_path(sheet, ext).name
+        lenient_store(self._storage.root)
         staged = new_incoming_dir(self._storage.get_versions_base(sheet)) / name
         try:
             self._campaign_provider.download_record(record, staged)
             verify_file_format(staged, ext)
             verify_sheet_extent(staged, sheet, ext)
+            prepare_store(self._storage.root)
             # coverage only for rasters: archives are source files (ADR-041)
             measure = ref.full_sheet is not True and ext in RASTER_EXTENSIONS
             digest = read_content(staged, ext=ext, coverage=measure)

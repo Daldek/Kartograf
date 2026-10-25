@@ -171,8 +171,9 @@ def build_instructions(
             "This server does not write: a command that writes only plans "
             "(check_updates is true; update, plan, workers and summary are "
             "forbidden), and "
-            f"{_tool('project init')}, {_tool('project add')} and "
-            f"{_tool('project remove')} are unavailable. Start kartograf-mcp with "
+            f"{_tool('project init')}, {_tool('project add')}, "
+            f"{_tool('project remove')} and {_tool('store init')} are unavailable. "
+            "Start kartograf-mcp with "
             "--allow-writes and --allow-dir DIR to download."
         )
         if directories:

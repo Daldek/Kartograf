@@ -273,7 +273,7 @@ def test_real_parser_matches_the_catalog():
     leaves = dict(_leaf_parsers(create_parser()))
     commands = {c.id: c for c in _DECLARED.commands}
 
-    assert len(commands) == 44 and set(leaves) == set(commands)
+    assert len(commands) == 45 and set(leaves) == set(commands)
     for command_id, command in commands.items():
         leaf = leaves[command_id]
         expected_flags = {
@@ -347,7 +347,7 @@ def test_the_list_has_every_group_and_command():
 
     assert [g.name for g in document.groups] == list(_GROUPS)
     assert [c.name for c in document.commands] == [c.id for c in _DECLARED.commands]
-    assert len(document.commands) == 44
+    assert len(document.commands) == 45
     for group in document.groups:
         assert [c.name for c in document.commands if c.name.startswith(group.name)]
     assert {c.name for c in document.commands if "core" in c.families} == {

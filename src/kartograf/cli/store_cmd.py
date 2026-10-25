@@ -17,6 +17,7 @@ from kartograf.cli._args import store_dir
 from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.cli._language import language, localized
 from kartograf.exceptions import ValidationError
+from kartograf.marker import init_store
 from kartograf.messages import message
 from kartograf.store_documents import (
     StoreEntries,
@@ -134,6 +135,16 @@ def cmd_store_entries(args: argparse.Namespace) -> int:
     if wants_json(args):
         return emit_result(command_id(args), listed)
     print(format_entries(listed))
+    return 0
+
+
+def cmd_store_init(args: argparse.Namespace) -> int:
+    """Write the marker of the store of ``--root`` (``--json``: the document)."""
+    marker = init_store(args.root)
+    if wants_json(args):
+        return emit_result(command_id(args), marker)
+    key = "store.init_written" if marker.created else "store.init_present"
+    print(message(key, lang=language(), marker=marker.marker))
     return 0
 
 

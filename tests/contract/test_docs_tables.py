@@ -158,7 +158,7 @@ def test_usage_tool_table_lists_every_mcp_tool():
     named = [_plain(row[0]) for row in rows if re.fullmatch(r"`[a-z0-9_]+`", row[0])]
 
     assert sorted(named) == sorted(spec.name for spec in tool_specs(allow_writes=True))
-    assert len(named) == 39
+    assert len(named) == 40
 
 
 def test_usage_quotes_the_instructions_of_the_server():

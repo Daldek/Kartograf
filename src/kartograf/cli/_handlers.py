@@ -37,6 +37,7 @@ from kartograf.cli.soil_cmd import cmd_soil_download, cmd_soil_hsg
 from kartograf.cli.sources_cmd import cmd_list_sources
 from kartograf.cli.store_cmd import (
     cmd_store_entries,
+    cmd_store_init,
     cmd_store_overview,
     cmd_store_sidecar,
 )
@@ -84,6 +85,7 @@ HANDLERS: dict[str, Handler] = {
     "project download": cmd_project_download,
     "project status": cmd_project_status,
     "project verify": cmd_project_verify,
+    "store init": cmd_store_init,
     "store overview": cmd_store_overview,
     "store entries": cmd_store_entries,
     "store sidecar": cmd_store_sidecar,

@@ -405,7 +405,7 @@ def test_list_tools_equals_tool_specs(mode, tmp_path):
     tools = run_session(scenario, **arguments)
     specs = tool_specs(allow_writes=mode == "writes")
 
-    assert len(tools) == (39 if mode == "writes" else 36)
+    assert len(tools) == (40 if mode == "writes" else 36)
     assert [t.name for t in tools] == [s.name for s in specs]
     for tool, spec in zip(tools, specs, strict=True):
         assert tool.title == spec.title
@@ -1664,7 +1664,7 @@ def test_allow_writes_flag_lists_the_tools_that_write(tmp_path, monkeypatch):
 
     tools = run_session(scenario, server=server)
 
-    assert len(tools) == 39
+    assert len(tools) == 40
     download = tools["kartograf_elevation_download"]
     assert download.annotations.read_only_hint is False
     assert download.annotations.destructive_hint is False
@@ -1830,7 +1830,7 @@ def test_stdio_server_with_writes_downloads_inside_its_directory(tmp_path):
 
     tools, refused, created = anyio.run(scenario)
 
-    assert len(tools) == 39
+    assert len(tools) == 40
     assert error_of(refused, code="forbidden")["details"]["allowed"] == [
         inside.resolve().as_posix()
     ]

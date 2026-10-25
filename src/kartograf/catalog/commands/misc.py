@@ -236,6 +236,16 @@ _ROOT = replace(
     section=None,
 )
 
+_INIT_ROOT = replace(
+    _ROOT,
+    description="Store directory: a new or empty one, or the layout of a store "
+    "without its marker. Default: the store of the user data directory "
+    "(`KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml`, else "
+    "`<data_dir>/kartograf`).",
+    description_pl="Katalog magazynu: nowy albo pusty, albo uklad magazynu bez "
+    "znacznika (domyslnie magazyn w katalogu danych uzytkownika)",
+)
+
 _STORE_ENTRIES_PARAMS = (
     _ROOT,
     Param(
@@ -758,6 +768,47 @@ COMMANDS = (
         ),
         family="store",
     ),
+    Command(
+        "store init",
+        "Write the marker of a store (kartograf-store.json)",
+        "manage",
+        "init_store",
+        "kartograf-store-init/1",
+        (_INIT_ROOT, shared.JSON),
+        description=(
+            "Writes `kartograf-store.json` into the store `root` (a new or empty "
+            "directory, or one that has the layout of a store and no marker: the "
+            "layout is verified first, no file is touched). A store with its marker "
+            "is left as it is. Every download writes the marker into a new root by "
+            "itself; this is for a store of 0.8.0-dev."
+        ),
+        effects=("store_write",),
+        examples=(
+            Example(
+                {},
+                title="Mark the store in ./data",
+                title_pl="Oznacz magazyn w ./data",
+            ),
+        ),
+        summary_pl="Zapisz znacznik magazynu (kartograf-store.json)",
+        description_pl=(
+            "Zapisz kartograf-store.json w magazynie --root (nowy albo pusty "
+            "katalog, albo katalog z ukladem magazynu bez znacznika: uklad jest "
+            "najpierw sprawdzany, zadnego pliku nie zmienia). Magazyn ze "
+            "znacznikiem zostaje bez zmian. Kazde pobranie samo zapisuje "
+            "znacznik w nowym katalogu; ta komenda jest dla magazynu 0.8.0-dev."
+        ),
+        rules=("Run it once on a store that fails with `no_marker`.",),
+        rules_pl=("Uruchom raz na magazynie, ktory konczy sie bledem no_marker.",),
+        errors=(
+            "validation_error",
+            "conflict",
+            "data_error",
+            "io_error",
+            "forbidden",
+        ),
+        family="store",
+    ),
 )
 
 GROUPS = (
@@ -808,16 +859,17 @@ GROUPS = (
     ),
     Group(
         "store",
-        "Read the store",
+        "Read the store and mark it",
         (
             "Read access to the versioned store (read only, offline): its "
             "segments, the entries with their sidecars and the sidecar of "
-            "one file."
+            "one file; `store init` writes the marker of a store root."
         ),
-        summary_pl="Odczyt magazynu",
+        summary_pl="Odczyt magazynu i jego znacznik",
         description_pl=(
             "Odczyt magazynu wersji (tylko odczyt, bez sieci): segmenty, "
-            "wpisy z sidecarami i sidecar jednego pliku."
+            "wpisy z sidecarami i sidecar jednego pliku; store init zapisuje "
+            "znacznik magazynu."
         ),
     ),
 )

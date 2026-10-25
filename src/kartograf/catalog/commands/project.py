@@ -209,8 +209,8 @@ COMMANDS = (
             "ktorych nie ma. Jeden projekt = jeden magazyn; wiele projektow"
             " moze dzielic magazyn."
         ),
-        rules=("Give `root`: a project has no default store.",),
-        rules_pl=("Podaj `root`: projekt nie ma domyslnego magazynu.",),
+        rules=("Without `root` the manifest points at the default store.",),
+        rules_pl=("Bez `root` manifest wskazuje domyslny magazyn.",),
         errors=(
             "validation_error",
             "io_error",

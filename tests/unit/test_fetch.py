@@ -19,6 +19,7 @@ from kartograf.download.fetch import (
     use_local,
 )
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.marker import prepare_store
 from kartograf.sources.edition import Edition
 
 NAME = "CTES96.tif"
@@ -275,6 +276,7 @@ def test_check_mode_names_the_plan_function_of_the_track(
 
 def test_fetch_version_legacy_plain_file_replaced_by_link(tmp_path):
     """D24: a regular 0.7.x file at the standard path becomes a hardlink."""
+    prepare_store(tmp_path)
     slot = make_slot(tmp_path)
     slot.std.parent.mkdir(parents=True)
     slot.std.write_bytes(b"stary")

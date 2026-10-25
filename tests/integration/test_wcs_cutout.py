@@ -23,6 +23,7 @@ from kartograf.download.cutout import (
 )
 from kartograf.download.plan import UpdatePlan
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.marker import prepare_store
 from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -354,6 +355,7 @@ def test_pl_cutout_failure_keeps_previous_version_and_link(tmp_path):
 
 
 def test_pl_cutout_dated_files_ignored(tmp_path):
+    prepare_store(tmp_path)
     cut = _cutout(tmp_path)
     legacy = cut.target_path.with_name(f"{cut.target_path.stem}_20261011.tif")
     legacy.parent.mkdir(parents=True)
@@ -1069,14 +1071,14 @@ class TestCli:
                     "--horizontal-crs",
                     "EPSG:2180",
                     "--root",
-                    str(tmp_path),
+                    str(tmp_path / "store"),
                     "-q",
                 ]
             )
 
         assert rc == 0
         assert [_subset(c.args[0]) for c in session.get.call_args_list] == [WINDOW]
-        (tif,) = (tmp_path / "nmt").rglob("bbox/*.tif")
+        (tif,) = (tmp_path / "store" / "nmt").rglob("bbox/*.tif")
         assert _meta(tif)["extra"]["parent_request"]["countries"] == ["PL"]
 
     def _cz_provider(self, *, fail=False):

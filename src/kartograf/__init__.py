@@ -202,13 +202,16 @@ from kartograf.error_report import ErrorReport, error_report
 from kartograf.exceptions import (
     CacheError,
     ConfigError,
+    ConflictError,
     DownloadError,
     ForbiddenError,
+    InvalidLayoutError,
     InvalidSidecarError,
     KartografError,
     MissingDependencyError,
     NoCoverageError,
     ParseError,
+    StoreUnavailableError,
     UsageError,
     ValidationError,
     YearRangeError,
@@ -229,6 +232,7 @@ from kartograf.landcover.manager import (
     download_landcover,
     download_soil,
 )
+from kartograf.marker import StoreInit, init_store
 from kartograf.notices import Notice
 from kartograf.project import (
     FileCheck,
@@ -445,6 +449,8 @@ __all__ = [
     "describe_segment",
     "SegmentInfo",
     "describe_store",
+    "init_store",
+    "StoreInit",
     "StoreOverview",
     "list_store_entries",
     "StoreEntries",
@@ -466,6 +472,9 @@ __all__ = [
     "CacheError",
     "ConfigError",
     "InvalidSidecarError",
+    "InvalidLayoutError",
+    "StoreUnavailableError",
+    "ConflictError",
     "ForbiddenError",
     "MissingDependencyError",
     # Sources, layers and the metadata cache as data (spec 5.4.6-5.4.9)

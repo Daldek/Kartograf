@@ -1841,6 +1841,7 @@ schema, and that every `result_schema` of the catalog is in the registry.
 | `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `root, segments` |
 | `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `root, segment, units, limit, truncated, entries` |
 | `kartograf-store-sidecar/1` | `StoreSidecar` | `store_documents` | `path, sidecar` |
+| `kartograf-store-init/1` | `StoreInit` | `marker` | `root, marker, created, tool, created_at, producer_version` |
 | `kartograf-error/1` | `ErrorReport` | `error_report` | `code, title, message, hint, details, exit_code, command` |
 
 Document rules (source: `docs/superpowers/specs/2026-10-18-agent-interface-design.md`,

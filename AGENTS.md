@@ -58,8 +58,9 @@ An error is a `kartograf-error/1` document (`code`, `title`, `message`, `hint`, 
 | `validation_error` | 2 | wrong or missing option: fix `details.option` as `hint` says |
 | `source_unavailable` | 5 | network, HTTP or timeout: wait and retry the same call |
 | `no_data` | 14 | the source has no data there (`details.reason`): change area or year |
-| `store_unavailable` | 8 | the metadata cache is locked or unreadable: retry or `--no-cache` |
-| `data_error` | 7 | a sidecar is unreadable or of another schema: see `details.path` |
+| `store_unavailable` | 8 | the metadata cache is locked or unreadable: retry or `--no-cache`; a store root without its marker (`details.reason` `no_marker`): run `store init` |
+| `data_error` | 7 | a sidecar is unreadable or of another schema: see `details.path`; `invalid_layout`: see `details.problems` |
+| `conflict` | 4 | the target cannot be written (`details.reason`): a store root must be new or empty and never inside another store, see `hint` |
 | `missing_dependency` | 6 | an extra is missing: install it as `hint` says |
 | `forbidden` | 12 | MCP refused: a path outside `--allow-dir` or a write without `--allow-writes` |
 | `calculation_error` | 13 | a coordinate transformation failed: change the CRS or area |
@@ -115,6 +116,7 @@ One line per command: name, `operation_id`, summary. Options, allowed values, un
 - `store overview` (`kartograf_store_overview`): List the segments of a store
 - `store entries` (`kartograf_store_entries`): List the entries of one store segment: version files with their sidecars
 - `store sidecar` (`kartograf_store_sidecar`): Read the sidecar of one store file (kartograf-meta/1)
+- `store init` (`kartograf_store_init`): Write the marker of a store (kartograf-store.json)
 - `config show` (no MCP tool): Show the settings in force: the value and source of every key
 
 ## Typical flows

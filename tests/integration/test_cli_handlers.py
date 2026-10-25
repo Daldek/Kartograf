@@ -135,6 +135,6 @@ def test_every_catalog_command_has_a_handler_and_the_other_way_round():
     parsed = _command_ids(create_parser())
     declared_ids = {c.id for c in declared().commands}
 
-    assert len(parsed) == 44 and None not in parsed
+    assert len(parsed) == 45 and None not in parsed
     assert parsed == declared_ids
     assert set(HANDLERS) == declared_ids

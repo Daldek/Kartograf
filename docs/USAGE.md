@@ -3234,6 +3234,7 @@ the catalog, a project that was changed) is `ok` with no items. The documents:
 | `kartograf-store-overview/1` | `store overview` (MCP: `kartograf_store_overview`) | `describe_store` | - |
 | `kartograf-store-entries/1` | `store entries` (MCP: `kartograf_store_entries`) | `list_store_entries` | - |
 | `kartograf-store-sidecar/1` | `store sidecar` (MCP: `kartograf_store_sidecar`) | `read_store_sidecar` | - |
+| `kartograf-store-init/1` | `store init` (MCP: `kartograf_store_init`) | `init_store` | - |
 | `kartograf-error/1` | each command on error: the last line of stderr (9.3) | `error_report` | - |
 
 Common rules of the documents:
@@ -3399,6 +3400,7 @@ failed units; the result lists them (`items`) and no error document is written.
 | 0 | `ok` | Operation completed for every unit. |
 | 1 | `internal_error` | Defect in the tool or an unexpected exception. |
 | 2 | `validation_error` | Unknown command or option, wrong type, value out of range or not allowed, missing required option, violated exclusion rule. |
+| 4 | `conflict` | Operation conflicts with current state: version collision, lock held, identifier taken. |
 | 5 | `source_unavailable` | Remote service failed: timeout, connection error, HTTP error, download failure. |
 | 6 | `missing_dependency` | Feature needs an extra or an external program that is not installed; hint names the install command. |
 | 7 | `data_error` | Data read by the tool (input file, archive, sidecar, stored series) is malformed or violates its format. |
@@ -3426,7 +3428,10 @@ failed units; the result lists them (`items`) and no error document is written.
 | `no_data` | `no_coverage` | `NoCoverageError` | 14 | the source has no data for the sheet (a state of the data, retrying does not help) |
 | `no_data` | `year_out_of_range` | `YearRangeError` | 14 | data exists but not in the requested year range (found before any download) |
 | `store_unavailable` | `cache` | `CacheError` | 8 | the metadata cache is unavailable, locked or unreadable |
+| `store_unavailable` | - | `StoreUnavailableError` | 8 | the store root has the layout of a store but no kartograf-store.json (reason no_marker: kartograf store init verifies the layout and writes it) |
 | `data_error` | `invalid_sidecar` | `InvalidSidecarError` | 7 | the kartograf-meta/1 sidecar is missing, unreadable or of another schema |
+| `data_error` | `invalid_layout` | `InvalidLayoutError` | 7 | a root without a marker is not the layout of a Kartograf store, or the marker is not a kartograf-store/1 document (details.problems lists what is wrong) |
+| `conflict` | - | `ConflictError` | 4 | the target forbids the write (reasons: output_exists, duplicate_output_name, output_in_store, nested_store, not_empty): an output file that exists, two targets of one name, a plain directory in a store, a store in another store or a store root that is not empty |
 | `missing_dependency` | - | `MissingDependencyError` | 6 | an optional extra is not installed (kartograf[mcp] for the MCP server); the hint names the install command (uv add "kartograf[mcp]") |
 | `forbidden` | - | `ForbiddenError` | 12 | the MCP server refuses the call: a path outside its allowed directories (--allow-dir), or a write on a server that does not write (--allow-writes) |
 | `calculation_error` | `transform_failed` | `TransformError` | 13 | coordinate transformation failed (for example an infinite result) |
@@ -3729,6 +3734,7 @@ not write does with the tool.
 | `kartograf_store_overview` | `store overview` | `describe_store` | `store`, `core` | `kartograf-store-overview/1` | RO, I | same |
 | `kartograf_store_entries` | `store entries` | `list_store_entries` | `store` | `kartograf-store-entries/1` | RO, I | same |
 | `kartograf_store_sidecar` | `store sidecar` | `read_store_sidecar` | `store` | `kartograf-store-sidecar/1` | RO, I | same |
+| `kartograf_store_init` | `store init` | `init_store` | `store` | `kartograf-store-init/1` | I | not offered |
 <!-- end generated -->
 
 `cache *` and `config show` have no tool (the cache of the server is its own business, and
@@ -3829,7 +3835,7 @@ in the default state (`kartograf.mcp_server.INSTRUCTIONS`); a test compares it:
 Kartograf downloads spatial data of Poland and Czechia (GUGiK, CUZK, Copernicus, ISRIC) into a versioned store: the directory root, one directory per product, files never overwritten. Order: discover, check, run, read. Discover with kartograf_commands_list (groups, products and commands) and kartograf_commands_schema(command="elevation download") (the options of one command, its allowed values with their meanings, rules, examples and errors). What years, grids and CRSs an area has: kartograf_elevation_availability. Read the store: kartograf_store_overview, kartograf_store_entries, kartograf_store_sidecar; the sidecar of a file has its CRS, source and licence.
 Shared arguments. Paths (root, project_dir, geometry, path) are absolute. Area: sheet (a sheet code, for example N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no default) or geometry (a SHP or GPKG file; layer is its GPKG layer), exactly one; some commands also take teryt, ku or whole_country. country is pl, cz or auto: required with bbox and geometry, implied by a sheet code. Select data explicitly (product, resolution, vertical_crs, ...): nothing is guessed. A value per country is a string or {"pl": ..., "cz": ...}.
 Updates. update omitted fetches what is missing, update=upgrade fetches newer content when the source signals it, update=force fetches again; a version is never overwritten. check_updates=true plans without fetching: its plan (the result of the envelope, kartograf-plan/1) runs later with update=upgrade and plan.
-This server does not write: a command that writes only plans (check_updates is true; update, plan, workers and summary are forbidden), and kartograf_project_init, kartograf_project_add and kartograf_project_remove are unavailable. Start kartograf-mcp with --allow-writes and --allow-dir DIR to download.
+This server does not write: a command that writes only plans (check_updates is true; update, plan, workers and summary are forbidden), and kartograf_project_init, kartograf_project_add, kartograf_project_remove and kartograf_store_init are unavailable. Start kartograf-mcp with --allow-writes and --allow-dir DIR to download.
 Results. A result is the envelope kartograf-result/1: status (ok, partial, failed), result (the document of the command), items (one per unit; a failed one has code and reason) and notices. partial and failed are results (isError false): read items. An error (isError true) is kartograf-error/1 with code, message, hint and details; details.option names the argument to fix. forbidden is a path outside --allow-dir or a write on a server that only plans.
 ```
 <!-- end generated -->

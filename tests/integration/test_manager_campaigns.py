@@ -35,6 +35,7 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.marker import prepare_store
 from kartograf.notices import CHECK_FAILED, NEWER_AVAILABLE, Notice
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
@@ -298,6 +299,7 @@ def test_rerun_newest_existing_campaign_no_download_skipped(tmp_path):
 
 
 def test_existing_standard_file_is_not_a_reason_to_skip(tmp_path):
+    prepare_store(tmp_path)
     std = std_path(tmp_path)
     std.parent.mkdir(parents=True)
     std.write_text(ASC_TEMPLATE.format(tag="stary"))
@@ -310,6 +312,7 @@ def test_existing_standard_file_is_not_a_reason_to_skip(tmp_path):
 
 
 def test_legacy_regular_file_replaced_by_link(tmp_path):
+    prepare_store(tmp_path)
     std = std_path(tmp_path)
     std.parent.mkdir(parents=True)
     std.write_text(ASC_TEMPLATE.format(tag="stary"))
@@ -327,6 +330,7 @@ def test_legacy_regular_file_replaced_by_link(tmp_path):
 
 def test_legacy_kampanie_files_are_not_versions(tmp_path):
     """0.7.x ``kampanie/`` is never read: the campaign is downloaded again."""
+    prepare_store(tmp_path)
     old = tmp_path / SEGMENT / "kampanie" / "2025-10-21_84183" / "N-34" / f"{G}.asc"
     old.parent.mkdir(parents=True)
     old.write_text("stary")
@@ -1020,7 +1024,7 @@ def test_manager_without_range_unchanged_uses_record_cache(tmp_path):
     from tests.integration.test_campaigns_flow import recorded_session
 
     key = ("pl.gugik.nmt_1m", "1m", "EVRF2007", W)
-    cache = MetadataCache(tmp_path / "cache.db")
+    cache = MetadataCache(tmp_path.with_name(tmp_path.name + "-cache.db"))
     provider = GugikProvider(
         session=recorded_session(W),
         cache=cache,
@@ -1033,7 +1037,9 @@ def test_manager_without_range_unchanged_uses_record_cache(tmp_path):
     assert cache.get_campaigns(*key) is None
     offline = Mock(spec=requests.Session)
     offline.get = Mock(side_effect=requests.ConnectionError("brak indeksu"))
-    refresh = MetadataCache(tmp_path / "cache.db", refresh=True)
+    refresh = MetadataCache(
+        tmp_path.with_name(tmp_path.name + "-cache.db"), refresh=True
+    )
     manager = DownloadManager(
         provider=GugikProvider(
             session=offline, cache=refresh, vertical_crs="EVRF2007", resolution="1m"
@@ -1052,7 +1058,7 @@ def test_range_index_down_all_local_uses_local(tmp_path, caplog):
     from tests.integration.test_campaigns_flow import G as W
     from tests.integration.test_campaigns_flow import recorded_session
 
-    cache = MetadataCache(tmp_path / "cache.db")
+    cache = MetadataCache(tmp_path.with_name(tmp_path.name + "-cache.db"))
     DownloadManager(
         provider=GugikProvider(
             session=recorded_session(W),
@@ -1064,7 +1070,9 @@ def test_range_index_down_all_local_uses_local(tmp_path, caplog):
     ).download_sheet(W)
     offline = Mock(spec=requests.Session)
     offline.get = Mock(side_effect=requests.ConnectionError("brak indeksu"))
-    refresh = MetadataCache(tmp_path / "cache.db", refresh=True)
+    refresh = MetadataCache(
+        tmp_path.with_name(tmp_path.name + "-cache.db"), refresh=True
+    )
     manager = DownloadManager(
         provider=GugikProvider(
             session=offline, cache=refresh, vertical_crs="EVRF2007", resolution="1m"
@@ -1176,15 +1184,16 @@ def test_manager_coverage_measured_at_commit_for_partial_flights(tmp_path):
     assert result.better_coverage == {G: "83233"}
 
     full = "N-34-139-C-a-3-4"
+    full_root = tmp_path.with_name(tmp_path.name + "-full")
     manager = DownloadManager(
         provider=c14_fake(),
         all_campaigns=True,
         min_year=2025,
         max_year=2025,
-        root=tmp_path / "full",
+        root=full_root,
     )
     full_result = manager.download_sheet(full)
-    full_meta = meta(std_path(tmp_path / "full", full))["extra"]
+    full_meta = meta(std_path(full_root, full))["extra"]
     assert len(full_meta["flights"]) == 3
     assert all("coverage" not in f for f in full_meta["flights"])
     assert "coverage" not in full_meta and "better_coverage" not in full_meta
@@ -2005,7 +2014,7 @@ def test_full_sheet_flag_respects_year_range(tmp_path):
     assert fake.downloads == [REC["78047"].url]  # newest in range is full
     assert linked_version(full_path(tmp_path)) == campaign_path(tmp_path, REC["78047"])
 
-    other = tmp_path / "other"
+    other = tmp_path.with_name(tmp_path.name + "-other")
     records = [
         dataclasses.replace(r, full_sheet=False) if r is REC["78047"] else r
         for r in C14_ALL
