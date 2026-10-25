@@ -253,7 +253,7 @@ def test_source_fields():
     assert nmt["country"] == "PL"
     assert nmt["provider"] == "GUGiK"
     assert nmt["product"] == "nmt"
-    assert nmt["directory"] == "nmt/pl_<uklad>_1m_<uklad-wys>"
+    assert nmt["directory"] == "nmt/pl_<crs>_1m_<vertical-crs>"
     assert nmt["license"]["id"] == "PL-PGiK-40a"
     assert nmt["license"]["attribution"]
     assert nmt["auth"] == "none"
@@ -291,7 +291,7 @@ def test_directory_names_the_placeholders_of_the_storage_segment():
     sources = _sources("elevation")
 
     assert sources["pl.gugik.nmt_xyz_1m"]["directory"] == (
-        "nmt/pl_<uklad>_xyz_1m_<uklad-wys>"
+        "nmt/pl_<crs>_xyz_1m_<vertical-crs>"
     )
     assert sources["pl.gugik.nmt_100m"]["directory"] == "nmt/pl_1992_100m"
     assert all("{" not in s["directory"] for s in sources.values())
@@ -359,9 +359,9 @@ def test_list_layers_corine_years_and_data():
     assert list(years) == [2018, 2012, 2006, 2000, 1990]
     assert [years[year].data for year in years] == ["clms"] * 4 + ["wms"]
     assert years[2018].description == (
-        "dane CLMS z CLMS_CREDENTIALS, bez nich podglad WMS"
+        "CLMS data with CLMS_CREDENTIALS, the WMS preview without them"
     )
-    assert years[1990].description == "tylko podglad WMS"
+    assert years[1990].description == "WMS preview only"
     assert document.classes is None
 
 

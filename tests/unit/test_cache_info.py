@@ -218,7 +218,7 @@ def test_clear_without_the_right_to_delete_is_a_cache_error(tmp_path, monkeypatc
         target.parent.chmod(0o700)
 
     assert str(error.value).startswith(
-        f"nie mozna usunac nieczytelnego pliku cache {target}: "
+        f"cannot delete the unreadable cache file {target}: "
     )
     assert target.exists()
     # the advice is not the command that just failed
@@ -237,8 +237,8 @@ def test_clear_never_removes_a_locked_database(db):
         holder.execute("ROLLBACK")
         holder.close()
 
-    assert str(error.value).startswith(f"cache zablokowany przez inny proces: {db} (")
-    assert str(error.value).endswith("- sprobuj ponownie po jego zakonczeniu")
+    assert str(error.value).startswith(f"cache locked by another process: {db} (")
+    assert str(error.value).endswith("- try again when it has finished")
     # a locked cache is not repaired by clearing it: the advice is to wait
     assert error.value.hint is not None
     assert "kartograf cache clear" not in error.value.hint
@@ -275,7 +275,7 @@ def test_info_of_a_database_locked_exclusively_is_a_cache_error(db):
         holder.execute("ROLLBACK")
         holder.close()
 
-    assert str(error.value).startswith(f"cache zablokowany przez inny proces: {db} (")
+    assert str(error.value).startswith(f"cache locked by another process: {db} (")
     assert db.exists()
 
 
@@ -288,8 +288,8 @@ def test_info_of_an_unreadable_database_is_cache_error(db, make_broken):
         get_cache_info()
 
     message = str(error.value)
-    assert message.startswith(f"cache nieczytelny: {db} (")
-    assert message.endswith("- uzyj `kartograf cache clear`")
+    assert message.startswith(f"cache unreadable: {db} (")
+    assert message.endswith("- use `kartograf cache clear`")
     assert "DatabaseError" not in message
     assert error_report(error.value).hint == CacheError.DEFAULT_HINT
     # reading never repairs and never deletes

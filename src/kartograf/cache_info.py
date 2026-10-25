@@ -30,15 +30,16 @@ from typing import Literal
 from kartograf.cache.defaults import default_cache_path, open_cache
 from kartograf.cache.metadata import is_lock_error, is_unwritable_error
 from kartograf.exceptions import CacheError
+from kartograf.messages import message, reason
 from kartograf.notices import Notice
 from kartograf.serialization import Document
 
 # Hints where the default hint of ``CacheError`` (clear the cache) would be the
 # command that cannot help: a locked file is fine and only has to wait, and an
 # unreadable file that cannot be deleted is what ``clear`` just failed at.
-_LOCKED_HINT = "Poczekaj, az inny proces zwolni baze cache, i powtorz komende"
-_UNDELETABLE_HINT = "Usun plik cache recznie albo sprawdz uprawnienia jego katalogu"
-_UNWRITABLE_HINT = "Sprawdz uprawnienia katalogu i pliku cache (nie jest uszkodzony)"
+_LOCKED_HINT = message("cache.hint_locked")
+_UNDELETABLE_HINT = message("cache.hint_undeletable")
+_UNWRITABLE_HINT = message("cache.hint_unwritable")
 
 
 @dataclass(frozen=True)
@@ -215,18 +216,15 @@ def _unusable(path: Path, error: Exception) -> CacheError:
     """Return the error of a cache that cannot be used: locked, or unreadable."""
     if is_lock_error(error):
         return CacheError(
-            f"cache zablokowany przez inny proces: {path} ({error}) - "
-            "sprobuj ponownie po jego zakonczeniu",
+            message("cache.error_locked", path=path, error=error),
             hint=_LOCKED_HINT,
         )
     if is_unwritable_error(error, path):
         return CacheError(
-            f"cache niedostepny do otwarcia lub zapisu: {path} ({error})",
+            message("cache.error_unwritable", path=path, error=error),
             hint=_UNWRITABLE_HINT,
         )
-    return CacheError(
-        f"cache nieczytelny: {path} ({error}) - uzyj `kartograf cache clear`"
-    )
+    return CacheError(message("cache.error_unreadable", path=path, error=error))
 
 
 def _remove_unreadable(path: Path) -> None:
@@ -238,6 +236,8 @@ def _remove_unreadable(path: Path) -> None:
             continue
         except OSError as e:
             raise CacheError(
-                f"nie mozna usunac nieczytelnego pliku cache {candidate}: {e}",
+                message(
+                    "cache.error_undeletable", candidate=candidate, error=reason(e)
+                ),
                 hint=_UNDELETABLE_HINT,
             ) from e

@@ -32,6 +32,7 @@ from kartograf.download.campaigns import FULL_SHEET_DIR
 from kartograf.download.links import linked_version
 from kartograf.download.versions import INCOMING_DIR, STALE_AFTER_S, VERSIONS_DIR
 from kartograf.exceptions import InvalidSidecarError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.sources.descriptor import (
     AtomFilesParams,
     FeatureBBoxParams,
@@ -189,6 +190,9 @@ class SegmentInfo:
 
 _SCHEMA = "kartograf-meta/1"
 _META_SUFFIX = ".meta.json"
+# Joins the parts of the name of a segment; a parameter of the messages, whose texts are
+# ASCII.
+_SEPARATOR = " · "
 # 0.7.x campaign directory (download/storage.py, ``has_legacy_campaigns``).
 _LEGACY_DIR = "kampanie"
 _RESERVED = frozenset({VERSIONS_DIR, FULL_SHEET_DIR, _LEGACY_DIR})
@@ -506,12 +510,18 @@ def _load(side: str | Path) -> Sidecar:
         raw = json.loads(_read_bytes(os.fspath(side)))
     except (OSError, ValueError) as exc:
         raise InvalidSidecarError(
-            f"Nie mozna odczytac sidecara {side}: {exc}", path=Path(side)
+            message("store.sidecar_unreadable", side=side, error=reason(exc)),
+            path=Path(side),
         ) from exc
     if not isinstance(raw, dict) or not _is_meta(raw):
         schema = raw.get("schema") if isinstance(raw, dict) else None
         raise InvalidSidecarError(
-            f"Nieznany schemat sidecara {schema!r} (oczekiwano {_SCHEMA}): {side}",
+            message(
+                "store.sidecar_unknown_schema",
+                schema=schema,
+                expected=_SCHEMA,
+                side=side,
+            ),
             path=Path(side),
         )
     name = os.path.basename(side)
@@ -610,7 +620,7 @@ def _content_variant(descriptor: SourceDescriptor, suffix: str) -> str | None:
 
         year = _year(parts[0]) if parts else None
         if parts[1:] == ["preview"] and year in CorineProvider.AVAILABLE_YEARS:
-            return f" · {parts[0]} · podglad"
+            return message("store.preview_label", separator=_SEPARATOR, year=parts[0])
         if len(parts) == 1 and year in CorineProvider.CLMS_YEARS:
             return f" · {parts[0]}"
     if key == "global.isric.soilgrids":
@@ -778,7 +788,11 @@ def describe_segment(segment: str) -> SegmentInfo:
                 "hsg",
                 soil.country,
                 soil.key,
-                "Grupy hydrologiczne gleb HSG (z SoilGrids) · " + " · ".join(tokens),
+                message(
+                    "store.hsg_segment_name",
+                    separator=_SEPARATOR,
+                    tokens=_SEPARATOR.join(tokens),
+                ),
                 True,
             )
     if found is None:
@@ -801,7 +815,7 @@ def describe_segment(segment: str) -> SegmentInfo:
         descriptor.product,
         descriptor.country,
         descriptor.key,
-        descriptor.name + label,
+        message("store.segment_name", name=descriptor.name, label=label),
         True,
     )
 
@@ -1381,9 +1395,7 @@ def _unit_slot(
     A stem ``None`` = every file of the directory (the slot of one sheet).
     """
     if not isinstance(unit, str) or any(c in unit for c in ("\\", "\x00", ":")):
-        raise ValidationError(
-            f"Nieprawidlowa jednostka magazynu: {unit!r}", option="units"
-        )
+        raise ValidationError(message("store.invalid_unit", unit=unit), option="units")
     *directory, code = unit.split("/")
     if (
         any(
@@ -1393,9 +1405,7 @@ def _unit_slot(
         or (directory and directory[0] in _RESERVED)
         or code in _RESERVED
     ):
-        raise ValidationError(
-            f"Nieprawidlowa jednostka magazynu: {unit!r}", option="units"
-        )
+        raise ValidationError(message("store.invalid_unit", unit=unit), option="units")
     if directory:
         if tuple(directory) == _sheet_parts(code):
             return tuple(directory), None
@@ -1416,9 +1426,7 @@ def _unit_slot(
         or len(part.encode()) > _NAME_MAX
         for part in parts
     ):
-        raise ValidationError(
-            f"Nieprawidlowa jednostka magazynu: {unit!r}", option="units"
-        )
+        raise ValidationError(message("store.invalid_unit", unit=unit), option="units")
     return parts, None
 
 
@@ -1431,7 +1439,7 @@ def _unit_groups(
     """
     if isinstance(units, str):
         raise ValidationError(
-            f"units: podaj kolekcje nazw jednostek, nie napis ({units!r})",
+            message("store.units_not_string", units=units),
             option="units",
         )
     kinds = _unit_kinds(segment)
@@ -1472,7 +1480,7 @@ def _real_directory(
             except OSError as exc:
                 if exc.errno == errno.ENAMETOOLONG:
                     raise ValidationError(
-                        f"Jednostka magazynu daje zbyt dluga sciezke: {path}",
+                        message("store.unit_path_too_long", path=path),
                         option="units",
                     ) from exc
                 raise
@@ -1518,8 +1526,7 @@ def _validated_segment(segment: str) -> tuple[str, str]:
         or any(not part or part.startswith(".") for part in parts)
     ):
         raise ValidationError(
-            f"Nieprawidlowy segment magazynu: {segment!r} (oczekiwano "
-            "<produkt>/<wariant>, np. nmt/pl_1992_1m_evrf2007)",
+            message("store.invalid_segment", segment=segment),
             option="segment",
         )
     return parts[0], parts[1]
@@ -1555,9 +1562,7 @@ def _partition_scope(partition: str) -> tuple[tuple[str, ...], bool]:
     )
     if not parts or not all(_single_name(part) for part in parts):
         raise ValidationError(
-            f"Nieprawidlowa czesc segmentu: {partition!r} (oczekiwano klucza "
-            'z list_partitions: ".", "<katalog>[/<katalog>...]" albo '
-            '"<katalog>[/<katalog>...]/.")',
+            message("store.invalid_partition", partition=partition),
             option="partition",
         )
     return parts, exact
@@ -1570,7 +1575,7 @@ def _known_versions(
         return None
     if isinstance(skip_versions, str):
         raise ValidationError(
-            "skip_versions: podaj kolekcje sciezek katalogow wersji, nie napis",
+            message("store.skip_versions_not_string"),
             option="skip_versions",
         )
     if isinstance(skip_versions, (Set, Mapping)):
@@ -1592,8 +1597,7 @@ def _known_names(key: str, names: Collection[str]) -> list[str]:
         )
     ):
         raise ValidationError(
-            f"skip_versions[{key!r}]: podaj nazwy plikow danych wersji (bez "
-            f"sidecarow, sciezek i nazw ukrytych), nie {names!r}",
+            message("store.skip_versions_names", version=key, names=names),
             option="skip_versions",
         )
     return sorted(set(names))  # a listing never repeats a name
@@ -1615,7 +1619,7 @@ def _segment_dir(root: str, segment: str) -> str | None:
             return None
         if stat.S_ISLNK(mode):
             raise ValidationError(
-                f"Segment magazynu jest dowiazaniem: {path}", option="segment"
+                message("store.segment_is_link", path=path), option="segment"
             )
         if not stat.S_ISDIR(mode):
             return None
@@ -1676,7 +1680,7 @@ def list_partitions(
     _validated_segment(segment)
     if isinstance(target, bool) or not isinstance(target, int) or target < 1:
         raise ValidationError(
-            f"target: podaj dodatnia liczbe czesci, nie {target!r}", option="target"
+            message("store.target_positive", target=target), option="target"
         )
     base = _segment_dir(root, segment)
     listing = _listing(base) if base is not None else None
@@ -1786,18 +1790,16 @@ def iter_store(
     skip = _known_versions(skip_versions)
     if segment is None:
         if units is not None:
-            raise ValidationError(
-                "units wymaga segment (jednostki jednego segmentu)", option="units"
-            )
+            raise ValidationError(message("store.units_need_segment"), option="units")
         if partition is not None:
             raise ValidationError(
-                "partition wymaga segment (czesc jednego segmentu)", option="partition"
+                message("store.partition_needs_segment"), option="partition"
             )
         return _scan_store(root, list_segments(root), skip)
     _validated_segment(segment)
     if units is not None and partition is not None:
         raise ValidationError(
-            "units albo partition, nie oba naraz", options=("units", "partition")
+            message("store.units_or_partition"), options=("units", "partition")
         )
     groups = _unit_groups(segment, units) if units is not None else None
     scope = _partition_scope(partition) if partition is not None else None

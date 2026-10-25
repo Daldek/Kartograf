@@ -3643,7 +3643,7 @@ Other clients (a file with the key `mcpServers`; the options of the server are `
 
 Where the scripts directory is not on `PATH` (a worktree, `uvx`) use `"command": "python"` and
 `"args": ["-m", "kartograf.mcp_server", ...]`. The server prints one line on stderr when it
-starts (`kartograf-mcp 0.8.0: stdio, writes off, allow-dir none, tools all, lang pl`); a
+starts (`kartograf-mcp 0.8.0: stdio, writes off, allow-dir none, tools all`); a
 failure to start prints `Error: ...` and the `kartograf-error/1` document as the last line.
 
 **Server options:**
@@ -3653,7 +3653,6 @@ failure to start prints `Error: ...` and the `kartograf-error/1` document as the
 | `--tools FAMILIES` | tool families, comma separated: `discovery`, `availability`, `data`, `project`, `store` and `core` (default: every tool). `core` is the ten tools of the main tasks (AGI-5.12) for clients that limit the number of tools or have no tool search; an unknown family stops the start (exit code 2) |
 | `--allow-dir DIR` | repeatable; an absolute directory (or with `~`; a relative one stops the start with a usage error, exit code 2: it would depend on the working directory the client chose). When given, every path argument (`output_dir`, `geometry`, `project_dir`, `path`, and the paths among the options of `project add`) must lie, after `Path.resolve()`, inside one of the directories, else the call is `forbidden` (exit code 12) with `details.option`, `details.path`, `details.allowed` and a `hint`. Without it a call may read any absolute path. The store that a project manifest names is not checked, the project directory is |
 | `--allow-writes` | the tools that write do write, inside `--allow-dir` (required with it: without a directory the start fails with a usage error, exit code 2). Without it the server reads and plans (see below) |
-| `--lang pl\|en` | language of human-readable text (AGI-3.4). The server answers in English whatever the value (AGI-9.2): the value is validated and reported in the start line, and changes nothing else. Default: the setting `lang` (`pl`) |
 | `--cache-file FILE` | file of the metadata cache; default `<cache_dir>/kartograf/metadata.db`, the same file as the CLI and the library (section 10); it does not depend on the working directory the client chose |
 | `--no-cache` | no metadata cache (exclusive with `--cache-file`) |
 | `--version` | the version |

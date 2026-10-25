@@ -32,6 +32,7 @@ from kartograf.landcover.manager import (
     LandCoverManager,
     soil_choices,
 )
+from kartograf.messages import message
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.soilgrids import PROPERTY_UNITS, SoilGridsProvider
@@ -62,8 +63,8 @@ _SOIL_PRODUCTS: tuple[str, ...] = ("soil",)
 
 # What a CORINE release holds: the CLMS data (with ``CLMS_CREDENTIALS``; without
 # them the WMS preview) or the WMS preview only.
-_CORINE_CLMS = "dane CLMS z CLMS_CREDENTIALS, bez nich podglad WMS"
-_CORINE_WMS = "tylko podglad WMS"
+_CORINE_CLMS = message("source_info.corine_clms")
+_CORINE_WMS = message("source_info.corine_wms")
 
 # One option of ``select``: a value, a list of admissible values or ``None`` (a
 # free choice from the values of ``list_layers``).
@@ -249,8 +250,12 @@ def list_sources(*, group: str, product: str | None = None) -> SourceList:
     products = _group_products(group)
     if product is not None and product not in products:
         raise ValidationError(
-            f"product {product!r}: nieznana wartosc dla grupy {group} - "
-            f"dostepne: {', '.join(products)}",
+            message(
+                "source_info.unknown_product_for_group",
+                product=product,
+                group=group,
+                products=", ".join(products),
+            ),
             option="product",
             allowed=products,
         )
@@ -297,27 +302,37 @@ def list_layers(*, group: str, product: str | None = None) -> LayerList:
     """
     if group not in LAYER_GROUPS:
         raise ValidationError(
-            f"group {group!r}: warstwy wypisuja tylko grupy {', '.join(LAYER_GROUPS)}",
+            message(
+                "source_info.layers_only_groups",
+                group=group,
+                layer_groups=", ".join(LAYER_GROUPS),
+            ),
             option="group",
             allowed=LAYER_GROUPS,
         )
     if group == "soil":
         if product is not None:
             raise ValidationError(
-                "product: grupa soil nie ma produktow - pomin product",
+                message("source_info.soil_has_no_products"),
                 option="product",
             )
         return _soil_layers()
     if product is None:
         raise ValidationError(
-            f"--product wymagane: {LANDCOVER_PRODUCT_CHOICES}",
+            message(
+                "source_info.product_required",
+                landcover_product_choices=LANDCOVER_PRODUCT_CHOICES,
+            ),
             option="product",
             allowed=LANDCOVER_PRODUCTS,
         )
     if product not in LANDCOVER_PRODUCTS:
         raise ValidationError(
-            f"--product {product!r}: nieznana wartosc - dostepne: "
-            f"{LANDCOVER_PRODUCT_CHOICES}",
+            message(
+                "source_info.unknown_product",
+                product=product,
+                landcover_product_choices=LANDCOVER_PRODUCT_CHOICES,
+            ),
             option="product",
             allowed=LANDCOVER_PRODUCTS,
         )
@@ -333,7 +348,11 @@ def _group_products(group: str) -> tuple[str, ...]:
     """Return the products of ``group`` in the order of its ``download`` command."""
     if group not in SOURCE_GROUPS:
         raise ValidationError(
-            f"group {group!r}: nieznana wartosc - dostepne: {', '.join(SOURCE_GROUPS)}",
+            message(
+                "source_info.unknown_group",
+                group=group,
+                source_groups=", ".join(SOURCE_GROUPS),
+            ),
             option="group",
             allowed=SOURCE_GROUPS,
         )
@@ -357,8 +376,8 @@ def _source_info(group: str, source: SourceDescriptor) -> SourceInfo:
         country=source.country,
         provider=source.provider_name,
         product=source.product,
-        directory=source.storage_subdir.replace("{system}", "<uklad>").replace(
-            "{vcrs}", "<uklad-wys>"
+        directory=source.storage_subdir.replace("{system}", "<crs>").replace(
+            "{vcrs}", "<vertical-crs>"
         ),
         select=_select(group, source),
         license=SourceLicense(
