@@ -92,3 +92,9 @@ client asks the WFS for powiat codes only).
 - The zones follow PRG as fetched: when powiat boundaries change, rebuild the data with the script (a
   new PRG request) and record the new PRG version in an erratum here.
 - Archiwista draws `find_sheet_outlines` and shows the zone of each sheet (after its re-pin).
+
+**Erratum 1 (2026-10-25, Archiwista's sheet-size estimate):** `SheetOutline` also carries `bbox`,
+the envelope of the whole sheet in EPSG:4326 (the bounds of its rectangle with the 1 km edge
+points, within 1e-6 deg of `SheetParser(sheet).get_bbox("EPSG:4326")`). The outline of a cut sheet
+is only a part of it, so a consumer that sizes a view by one sheet (Archiwista refuses a map view
+with far too many sheets before drawing them) reads the size from `bbox`, not from the outline.
