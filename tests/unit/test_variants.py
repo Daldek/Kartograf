@@ -301,8 +301,8 @@ def test_find_variant_unique_choice(
 
 
 _NMT_LABELS = (
-    "EVRF2007: 0.15m, 0.5m, 0.6m, 1m, 5m, 10m; KRON86: 0.5m, 1m; "
-    "uklad wysokosci nieznany: 100m"
+    "EVRF2007: 0.15m, 0.5m, 0.6m, 1m, 5m, 10m; KRON86: 0.5m, 1m; vertical CRS "
+    "unknown: 100m"
 )
 _NMPT_LABELS = "EVRF2007: 0.5m, 0.6m, 1m; KRON86: 0.5m, 1m"
 
@@ -316,8 +316,10 @@ _NMPT_LABELS = "EVRF2007: 0.5m, 0.6m, 1m; KRON86: 0.5m, 1m"
             None,
             "5m",
             "KRON86",
-            "NMT 5m (PL) jest dostepny tylko w EVRF2007 - podano --vertical-crs "
-            "KRON86; dostepne w KRON86: 0.5m, 1m",
+            (
+                "NMT 5m (PL) is only available in EVRF2007 - got --vertical-crs "
+                "KRON86; available in KRON86: 0.5m, 1m"
+            ),
         ),
         # resolution absent from the product
         (
@@ -325,7 +327,7 @@ _NMPT_LABELS = "EVRF2007: 0.5m, 0.6m, 1m; KRON86: 0.5m, 1m"
             None,
             "5m",
             "EVRF2007",
-            f"PL nie ma rozdzielczosci 5m dla NMPT - dostepne: {_NMPT_LABELS}",
+            f"PL has no resolution 5m for NMPT - available: {_NMPT_LABELS}",
         ),
         # a non-canonical label is not a label of the registry
         (
@@ -333,7 +335,7 @@ _NMPT_LABELS = "EVRF2007: 0.5m, 0.6m, 1m; KRON86: 0.5m, 1m"
             None,
             "0.50m",
             "EVRF2007",
-            f"PL nie ma rozdzielczosci 0.50m dla NMT - dostepne: {_NMT_LABELS}",
+            f"PL has no resolution 0.50m for NMT - available: {_NMT_LABELS}",
         ),
         # several labels left: --resolution required
         (
@@ -341,15 +343,17 @@ _NMPT_LABELS = "EVRF2007: 0.5m, 0.6m, 1m; KRON86: 0.5m, 1m"
             None,
             None,
             "EVRF2007",
-            f"--resolution wymagane dla NMPT PL: {_NMPT_LABELS}",
+            f"--resolution required for NMPT PL: {_NMPT_LABELS}",
         ),
         (
             "nmt",
             "TBD",
             None,
             "KRON86",
-            "--resolution wymagane dla NMT TBD PL: EVRF2007: 1m, 5m, 10m, 15m, "
-            "20m, 25m; KRON86: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 40m, 50m",
+            (
+                "--resolution required for NMT TBD PL: EVRF2007: 1m, 5m, 10m, 15m, "
+                "20m, 25m; KRON86: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 40m, 50m"
+            ),
         ),
         # format not available for the product
         (
@@ -357,15 +361,17 @@ _NMPT_LABELS = "EVRF2007: 0.5m, 0.6m, 1m; KRON86: 0.5m, 1m"
             "TBD",
             "1m",
             "EVRF2007",
-            "--format TBD: niedostepny dla NMPT PL - dostepne: ASC, XYZ",
+            "--format TBD: not available for NMPT PL - available: ASC, XYZ",
         ),
         (
             "nmt",
             "LAS",
             "1m",
             "EVRF2007",
-            "--format LAS: niedostepny dla NMT PL - dostepne: ASC, XYZ, ASCII-NMT, "
-            "TBD, TIN, TTN, GRD, DXF, DGN",
+            (
+                "--format LAS: not available for NMT PL - available: ASC, XYZ, "
+                "ASCII-NMT, TBD, TIN, TTN, GRD, DXF, DGN"
+            ),
         ),
         # height system not available for the format / product
         (
@@ -373,16 +379,14 @@ _NMPT_LABELS = "EVRF2007: 0.5m, 0.6m, 1m; KRON86: 0.5m, 1m"
             "GRD",
             None,
             "EVRF2007",
-            "NMT GRD (PL) jest dostepny tylko w KRON86 - podano --vertical-crs "
-            "EVRF2007",
+            "NMT GRD (PL) is only available in KRON86 - got --vertical-crs EVRF2007",
         ),
         (
             "nmt",
             None,
             "1m",
             "Bpv",
-            "NMT (PL) jest dostepny tylko w EVRF2007, KRON86 - podano "
-            "--vertical-crs Bpv",
+            "NMT (PL) is only available in EVRF2007, KRON86 - got --vertical-crs Bpv",
         ),
         # a format without resolution in the index
         (
@@ -390,8 +394,10 @@ _NMPT_LABELS = "EVRF2007: 0.5m, 0.6m, 1m; KRON86: 0.5m, 1m"
             "TIN",
             "5m",
             "KRON86",
-            "--resolution nie dotyczy NMT TIN (skorowidz nie podaje rozdzielczosci) "
-            "- pomin --resolution",
+            (
+                "--resolution does not apply to NMT TIN (the sheet index gives no "
+                "resolution) - omit --resolution"
+            ),
         ),
     ],
 )
@@ -422,9 +428,7 @@ def test_variant_error_without_vertical_crs_checks_resolution_in_any_system():
     error = variant_error(
         product="nmt", country="PL", resolution="3m", vertical_crs=None
     )
-    assert (
-        str(error) == f"PL nie ma rozdzielczosci 3m dla NMT - dostepne: {_NMT_LABELS}"
-    )
+    assert str(error) == f"PL has no resolution 3m for NMT - available: {_NMT_LABELS}"
 
 
 def test_variant_error_for_country_without_variants():
@@ -435,7 +439,7 @@ def test_variant_error_for_country_without_variants():
                 product="nmt", country="DE", resolution="1m", vertical_crs=None
             )
         )
-        == "--product nmt nie ma wariantow w DE"
+        == "--product nmt has no variants in DE"
     )
 
 
@@ -523,8 +527,8 @@ def test_cz_model_values():
     found = variants(product="laz", country="CZ", vertical_crs="Bpv")
     assert [v.model for v in found] == list(_CZ_MODELS)
     assert cz_model_text() == (
-        "dmr5g (teren, DMR 5G), dmr4g (teren, siatka 5 m), dmp1g (powierzchnia, "
-        "DMP 1G), dmpok (powierzchnia, korelacja obrazowa)"
+        "dmr5g (terrain, DMR 5G), dmr4g (terrain, 5 m grid), dmp1g (surface, "
+        "DMP 1G), dmpok (surface, image correlation)"
     )
     assert cz_resolution_text("nmt") == "2m (DMR 5G), 5m (DMR 4G)"
     assert cz_resolution_text("nmpt") == "0.5m (DMP OK), 2m (DMP 1G)"
@@ -538,7 +542,7 @@ def test_cz_sheet_system(sheet, system):
 
 
 def test_cz_sheet_system_rejects_pl_code():
-    with pytest.raises(ValidationError, match="nie nalezy do zadnego systemu CZ"):
+    with pytest.raises(ValidationError, match="does not belong to any CZ system"):
         cz_sheet_system("N-34-130-D")
 
 
@@ -550,47 +554,50 @@ def test_cz_sheet_system_rejects_pl_code():
             "2m",
             "Bpv",
             "sm5",
-            "Arkusze SM5 NMT CZ sa tylko w 5m (DMR 4G) - pomin --resolution albo "
-            "podaj 5m; 2m: kafel TM33 (np. 302_5550) albo --bbox z --cutout",
+            (
+                "SM5 sheets of NMT CZ exist only in 5m (DMR 4G) - omit --resolution or "
+                "give 5m; 2m: a TM33 tile (e.g. 302_5550) or --bbox with --cutout"
+            ),
         ),
         (
             "nmpt",
             "2m",
             None,
             "sm5",
-            "Arkusze SM5 NMPT CZ sa tylko w 0.5m (DMP OK) - pomin --resolution "
-            "albo podaj 0.5m; 2m: kafel TM33 (np. 302_5550) albo --bbox z --cutout",
+            (
+                "SM5 sheets of NMPT CZ exist only in 0.5m (DMP OK) - omit --resolution "
+                "or give 0.5m; 2m: a TM33 tile (e.g. 302_5550) or --bbox with --cutout"
+            ),
         ),
         (
             "nmt",
             None,
             "Bpv",
             "tm33",
-            "--resolution wymagane dla NMT CZ: 2m (DMR 5G), 5m (DMR 4G)",
+            "--resolution required for NMT CZ: 2m (DMR 5G), 5m (DMR 4G)",
         ),
         (
             "nmpt",
             None,
             "Bpv",
             None,
-            "--resolution wymagane dla NMPT CZ: 0.5m (DMP OK), 2m (DMP 1G)",
+            "--resolution required for NMPT CZ: 0.5m (DMP OK), 2m (DMP 1G)",
         ),
         (
             "nmpt",
             "1m",
             "Bpv",
             None,
-            "CZ nie ma rozdzielczosci 1m dla NMPT - dostepne: 0.5m (DMP OK), "
-            "2m (DMP 1G)",
+            "CZ has no 1m resolution for NMPT - available: 0.5m (DMP OK), 2m (DMP 1G)",
         ),
         (
             "nmt",
             "5m",
             "KRON86",
             "tm33",
-            f"KRON86 nie jest dostepny dla CZ - dostepne: {CZ_VERTICAL_TEXT}",
+            f"KRON86 is not available for CZ - available: {CZ_VERTICAL_TEXT}",
         ),
-        ("orto", None, None, None, "--product orto nie ma wariantow rastrowych w CZ"),
+        ("orto", None, None, None, "--product orto has no raster variants in CZ"),
     ],
 )
 def test_cz_variant_error_names_flags_and_registry_values(
@@ -629,49 +636,59 @@ def test_find_cz_variant(product, resolution, vertical_crs, system, source, chan
 
 
 def test_find_cz_variant_raises_the_error_text():
-    with pytest.raises(ValidationError, match="Arkusze SM5 NMT CZ sa tylko w 5m"):
+    with pytest.raises(ValidationError, match="SM5 sheets of NMT CZ exist only in 5m"):
         find_cz_variant(
             product="nmt", resolution="2m", vertical_crs="Bpv", system="sm5"
         )
 
 
 _MODELS_TEXT = (
-    "dmr5g (teren, DMR 5G), dmr4g (teren, siatka 5 m), dmp1g (powierzchnia, "
-    "DMP 1G), dmpok (powierzchnia, korelacja obrazowa)"
+    "dmr5g (terrain, DMR 5G), dmr4g (terrain, 5 m grid), dmp1g (surface, "
+    "DMP 1G), dmpok (surface, image correlation)"
 )
 
 
 @pytest.mark.parametrize(
     ("model", "vertical_crs", "system", "message"),
     [
-        (None, "Bpv", None, f"--model wymagane dla --product laz w CZ: {_MODELS_TEXT}"),
+        (
+            None,
+            "Bpv",
+            None,
+            f"--model required for --product laz in CZ: {_MODELS_TEXT}",
+        ),
         (
             "dmr6g",
             "Bpv",
             None,
-            f"--model 'dmr6g': nieznana wartosc - dostepne: {_MODELS_TEXT}",
+            f"--model 'dmr6g': unknown value - available: {_MODELS_TEXT}",
         ),
         (
             "dmr5g",
             "EVRF2007",
             "sm5",
-            "LAZ CZ - arkusze SM5 (S-JTSK) sa tylko w Bpv, podano --vertical-crs "
-            "EVRF2007 (chmury punktow bez transformacji); EVRF2007: kafle TM33 "
-            "(ETRS89), np. 760_5518, albo obszar (--bbox/--geometry)",
+            (
+                "LAZ CZ - SM5 sheets (S-JTSK) exist only in Bpv, but --vertical-crs "
+                "EVRF2007 was given (point clouds without transformation); EVRF2007: "
+                "TM33 tiles (ETRS89), e.g. 760_5518, or an area (--bbox/--geometry)"
+            ),
         ),
         (
             "dmpok",
             "Bpv",
             "tm33",
-            "LAZ CZ - kafle TM33 (ETRS89) sa tylko w EVRF2007, podano --vertical-crs "
-            "Bpv (chmury punktow bez transformacji); Bpv: arkusze SM5 (S-JTSK), "
-            "np. CTES96, albo obszar (--bbox/--geometry)",
+            (
+                "LAZ CZ - TM33 tiles (ETRS89) exist only in EVRF2007, but "
+                "--vertical-crs Bpv was given (point clouds without "
+                "transformation); Bpv: SM5 sheets (S-JTSK), e.g. CTES96, or an "
+                "area (--bbox/--geometry)"
+            ),
         ),
         (
             "dmr4g",
             "KRON86",
             None,
-            f"KRON86 nie jest dostepny dla LAZ CZ - dostepne: {CZ_LAZ_VERTICAL_TEXT}",
+            f"KRON86 is not available for LAZ CZ - available: {CZ_LAZ_VERTICAL_TEXT}",
         ),
     ],
 )

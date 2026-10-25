@@ -180,8 +180,8 @@ class TestPairRule:
     @pytest.mark.parametrize(
         ("vertical_crs", "sheet", "shown"),
         [
-            ("EVRF2007", "CTES96", "arkusze SM5 (S-JTSK) sa tylko w Bpv"),
-            ("Bpv", "760_5518", "kafle TM33 (ETRS89) sa tylko w EVRF2007"),
+            ("EVRF2007", "CTES96", "SM5 sheets (S-JTSK) exist only in Bpv"),
+            ("Bpv", "760_5518", "TM33 tiles (ETRS89) exist only in EVRF2007"),
         ],
     )
     def test_laz_wrong_pair_rejected(self, vertical_crs, sheet, shown, tmp_path):
@@ -195,16 +195,16 @@ class TestPairRule:
             with pytest.raises(ValidationError) as caught:
                 call()
             assert shown in str(caught.value)
-            assert "chmury punktow bez transformacji" in str(caught.value)
+            assert "point clouds without transformation" in str(caught.value)
         assert session.calls == []
         assert list(tmp_path.iterdir()) == []
 
     @pytest.mark.parametrize(
         ("model", "vertical_crs", "expected"),
         [
-            (None, "Bpv", "--model wymagane"),
-            ("dmr6g", "Bpv", "--model 'dmr6g': nieznana wartosc"),
-            ("dmr4g", "KRON86", "KRON86 nie jest dostepny dla LAZ CZ"),
+            (None, "Bpv", "--model required"),
+            ("dmr6g", "Bpv", "--model 'dmr6g': unknown value"),
+            ("dmr4g", "KRON86", "KRON86 is not available for LAZ CZ"),
         ],
     )
     def test_bad_choice_rejected_before_network(self, model, vertical_crs, expected):

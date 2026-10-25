@@ -495,11 +495,11 @@ class TestRegistry:
             "/dmr4g/ImageServer"
         )
         # two file channels: the CRS chooses; none in a CRS: error
-        with pytest.raises(ValidationError, match="kilka kanalow"):
+        with pytest.raises(ValidationError, match="has several"):
             channel_for(key, TransportKind.DIRECT_FILES)
-        with pytest.raises(ValidationError, match="nie ma kanalu"):
+        with pytest.raises(ValidationError, match="has no"):
             channel_for(key, TransportKind.DIRECT_FILES, "EPSG:2180")
-        with pytest.raises(ValidationError, match="nie ma kanalu"):
+        with pytest.raises(ValidationError, match="has no"):
             channel_for("cz.cuzk.dmr5g", TransportKind.DIRECT_FILES, "EPSG:5514")
 
     def test_channel_signal_by_crs(self):
@@ -509,7 +509,7 @@ class TestRegistry:
         assert channel_signal(key, TransportKind.ARCGIS_IMAGE, "EPSG:5514") == "none"
         # channels of one transport with the same signal need no CRS
         assert channel_signal(key, TransportKind.DIRECT_FILES) == "http"
-        with pytest.raises(ValidationError, match="nie ma kanalu"):
+        with pytest.raises(ValidationError, match="has no 'arcgis_image' channel"):
             channel_signal(key, TransportKind.ARCGIS_IMAGE, "EPSG:3045")
 
 
@@ -725,7 +725,7 @@ class TestResolveSubdir:
         from kartograf.exceptions import ValidationError
 
         d = self._descriptor("nmt/pl_{system}_1m_{vcrs}")
-        with pytest.raises(ValidationError, match="Pusty wymiar"):
+        with pytest.raises(ValidationError, match="Empty storage segment dimension"):
             d.resolve_subdir(**kwargs)
 
 

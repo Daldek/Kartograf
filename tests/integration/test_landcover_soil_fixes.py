@@ -431,8 +431,8 @@ def test_absent_class_of_a_powiat_is_an_info_and_the_others_are_saved(tmp_path):
     assert report.ok and not report.failed
     (info,) = [n for n in notices if n.code == "classes_absent"]
     assert info.level == "info"
-    assert "paczka nie ma plikow klas SWKN" in info.message
-    assert "zapisano klasy PTWP" in info.message
+    assert "package has no files for classes SWKN" in info.message
+    assert "saved classes PTWP" in info.message
     meta = json.loads(Path(f"{report.files[0].file.path}.meta.json").read_text())
     assert meta["request"]["layers"] == ["PTWP", "SWKN"]
     assert meta["extra"]["source"]["classes"] == ["PTWP"]
@@ -461,7 +461,7 @@ def test_bdot10k_area_over_the_volume_limit_is_refused_before_any_download(tmp_p
     assert str(refused.value).startswith("bdot10k: obszar daje 101 plikow do pobrania")
     assert "wybierz jednostke (--teryt <4 cyfry>)" in str(refused.value)
     (listed,) = [n for n in notices if n.code == "unit_list"]
-    assert "bdot10k: powiaty obszaru wg PRG (101): 0201, 0202" in listed.message
+    assert "bdot10k: counties of the area per PRG (101): 0201, 0202" in listed.message
     assert listed.message.endswith("i 91 innych")
     assert not list(tmp_path.rglob("*.gpkg"))
 

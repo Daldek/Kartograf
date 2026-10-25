@@ -219,7 +219,7 @@ def test_bdot10k_voivodeship_teryt_names_the_powiat_choice(tmp_path):
     with pytest.raises(ValidationError) as error:
         LandCoverManager(tmp_path, "bdot10k").validate_request(teryt="14")
     assert str(error.value).startswith(
-        "--teryt 14: BDOT10k jest publikowany per powiat - podaj --teryt <4 cyfry>"
+        "--teryt 14: BDOT10k is published per county - give --teryt <4 digits>"
     )
 
 

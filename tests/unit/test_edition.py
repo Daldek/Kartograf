@@ -33,7 +33,7 @@ def _session(*, content: bytes = b"", payload: object = None, status: int = 200)
 
 @pytest.mark.parametrize("raw", ["", "2.0 beta", "a/b", "v1\n"])
 def test_edition_label_rejects_unsafe(raw):
-    with pytest.raises(DownloadError, match="etykiete"):
+    with pytest.raises(DownloadError, match="version label"):
         edition_label(raw, what="X")
 
 

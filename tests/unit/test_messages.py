@@ -51,21 +51,16 @@ POLISH = re.compile(
     r"|(?-i:\bGodl[ao]\b)",
     re.IGNORECASE,
 )
-# Polish words that are data, not text: a header cell, the names of fields and the
-# value of a flag (NIE = no) of the GUGiK sheet index, compared with what the
+# Polish words that are data, not text: a header cell, the value of a flag (NIE = no)
+# and the names of the contour formats of the GUGiK sheet index, compared with what the
 # service sent.
-DOMAIN = frozenset(
-    {
-        "god\u0142o",
-        "NIE",
-        "zrodloDanych",
-        "zrodlo_danych",
-        "bladSredniWysokosci",
-        "bladSredniPolozenia",
-        "blad_sr_wys",
-        "blad_sr_syt",
-    }
-)
+DOMAIN = frozenset({"god\u0142o", "NIE", "Warstwice DXF", "Warstwice DGN"})
+# A name or a path is data too: no space, and an underscore, a slash or a CamelCase
+# join (the layer, field and path names of the GUGiK services, ``zrodlo_danych``).
+NAME = re.compile(r"[\w./-]*(?:[_/]|[a-z][A-Z])[\w./-]*")
+# Areas whose texts are one wording in every language: legal formulas that files
+# persist, so a file does not depend on the language of its writer.
+_SAME_AREAS = ("legal.",)
 SCOPES = ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
 # The generated registry of the Nogat standard carries the Polish titles of its codes.
 GENERATED = frozenset({"_errors.py"})
@@ -139,28 +134,20 @@ _PENDING = frozenset(
         "download/plan.py",
         "download/storage.py",
         "download/versions.py",
-        # Land cover, HSG, projects.
-        "hydrology/hsg.py",
-        "landcover/manager.py",
-        "landcover/store.py",
+        # Projects.
         "project/commands.py",
         "project/manifest.py",
         "project/operations.py",
-        # Source registry.
-        "sources/descriptor.py",
-        "sources/edition.py",
-        "sources/registry.py",
-        "sources/sidecar.py",
-        "sources/variants.py",
     }
 )
 
 
 def is_polish(value: str) -> bool:
-    """Whether a string literal is Polish text: not a domain token and not a URL."""
+    """Whether a string literal is Polish text: not a domain token, a name or a URL."""
     return (
         POLISH.search(value) is not None
         and value not in DOMAIN
+        and NAME.fullmatch(value) is None
         and not value.startswith(("http://", "https://"))
     )
 
@@ -234,8 +221,10 @@ def test_every_entry_has_both_languages_with_the_same_placeholders():
             )
         if "lang" in english:
             problems.append(f"{key}: a placeholder is called lang")
-        if text.en == text.pl and re.search(
-            r"[^\W\d_]", re.sub(r"\{[^}]*\}", " ", text.en)
+        if (
+            text.en == text.pl
+            and not key.startswith(_SAME_AREAS)
+            and re.search(r"[^\W\d_]", re.sub(r"\{[^}]*\}", " ", text.en))
         ):
             problems.append(f"{key}: the Polish text is the English one")
         for template in (text.en, text.pl):

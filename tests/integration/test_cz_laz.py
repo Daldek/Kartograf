@@ -103,7 +103,7 @@ def test_laz_wrong_pair_rejected(vertical_crs, sheet, tmp_path):
     for call in (download_cz_laz, check_cz_laz):
         with (
             recorded(CuzkSession()) as session,
-            pytest.raises(ValidationError, match="chmury punktow bez transformacji"),
+            pytest.raises(ValidationError, match="point clouds without transformation"),
         ):
             call(
                 model="dmr4g",

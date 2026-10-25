@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Literal
 
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 
 if TYPE_CHECKING:
     # variants.py imports TransportKind from here; the field only needs the type
@@ -432,8 +433,11 @@ class SourceDescriptor:
         for name, value in (("system", system), ("vcrs", vertical_crs)):
             if value is not None and not value.strip():
                 raise ValidationError(
-                    f"Pusty wymiar segmentu storage '{name}' (zrodlo '{self.key}') "
-                    "- podaj wartosc albo None"
+                    message(
+                        "sources.empty_segment_dimension",
+                        name=name,
+                        source_key=self.key,
+                    )
                 )
         subdir = self.storage_subdir
         if system is not None:

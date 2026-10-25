@@ -432,15 +432,15 @@ def test_download_cz_sheet_sm5_2m_is_validation_error(tmp_path):
             cache=False,
         )
     assert str(error.value) == (
-        "Arkusze SM5 NMT CZ sa tylko w 5m (DMR 4G) - pomin --resolution albo "
-        "podaj 5m; 2m: kafel TM33 (np. 302_5550) albo --bbox z --cutout"
+        "SM5 sheets of NMT CZ exist only in 5m (DMR 4G) - omit --resolution or give "
+        "5m; 2m: a TM33 tile (e.g. 302_5550) or --bbox with --cutout"
     )
     assert provider.fetches == 0
 
 
 def test_download_cz_sheet_tm33_requires_resolution(tmp_path):
     provider = SheetProvider(sm5=False)
-    with _factory(provider), pytest.raises(ValidationError, match="wymagane"):
+    with _factory(provider), pytest.raises(ValidationError, match="required"):
         download_cz_sheet(
             sheet=_TM33,
             output_dir=tmp_path,
@@ -624,31 +624,34 @@ def test_route_table(product, resolution, vertical_crs, sheet, request_url, tmp_
             "2m",
             "Bpv",
             "CTES96",
-            "Arkusze SM5 NMT CZ sa tylko w 5m (DMR 4G) - pomin --resolution albo "
-            "podaj 5m; 2m: kafel TM33 (np. 302_5550) albo --bbox z --cutout",
+            (
+                "SM5 sheets of NMT CZ exist only in 5m (DMR 4G) - omit --resolution or "
+                "give 5m; 2m: a TM33 tile (e.g. 302_5550) or --bbox with --cutout"
+            ),
         ),
         (
             "nmpt",
             "2m",
             "EVRF2007",
             "CTES96",
-            "Arkusze SM5 NMPT CZ sa tylko w 0.5m (DMP OK) - pomin --resolution albo "
-            "podaj 0.5m; 2m: kafel TM33 (np. 302_5550) albo --bbox z --cutout",
+            (
+                "SM5 sheets of NMPT CZ exist only in 0.5m (DMP OK) - omit --resolution "
+                "or give 0.5m; 2m: a TM33 tile (e.g. 302_5550) or --bbox with --cutout"
+            ),
         ),
         (
             "nmpt",
             None,
             "Bpv",
             _RAW_TM33,
-            "--resolution wymagane dla NMPT CZ: 0.5m (DMP OK), 2m (DMP 1G)",
+            "--resolution required for NMPT CZ: 0.5m (DMP OK), 2m (DMP 1G)",
         ),
         (
             "nmpt",
             "1m",
             "Bpv",
             _RAW_TM33,
-            "CZ nie ma rozdzielczosci 1m dla NMPT - dostepne: 0.5m (DMP OK), "
-            "2m (DMP 1G)",
+            "CZ has no 1m resolution for NMPT - available: 0.5m (DMP OK), 2m (DMP 1G)",
         ),
     ],
 )

@@ -492,7 +492,7 @@ class TestEmitSidecar:
         with caplog.at_level(logging.WARNING):
             result = emit_sidecar("brak.takiego.klucza", data, request={"bbox": [1]})
         assert result is None
-        assert "Nie udalo sie zapisac sidecara" in caplog.text
+        assert "Failed to write sidecar" in caplog.text
 
     def test_pinned_transforms_and_horizontal_override(self, tmp_path):
         from types import SimpleNamespace

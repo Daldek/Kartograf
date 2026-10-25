@@ -249,7 +249,7 @@ def test_source_fields():
     corine = _sources("landcover")["eu.clms.corine"]
 
     assert nmt["key"] == "pl.gugik.nmt_1m"
-    assert nmt["name"] == "Numeryczny Model Terenu 1 m (siatka ASC)"
+    assert nmt["name"] == "Digital Terrain Model 1 m (ASC grid)"
     assert nmt["country"] == "PL"
     assert nmt["provider"] == "GUGiK"
     assert nmt["product"] == "nmt"

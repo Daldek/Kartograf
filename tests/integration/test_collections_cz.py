@@ -290,7 +290,7 @@ def test_zabaged_bbox_gpkg(tmp_path, monkeypatch, frozen_clock):
     # the land cover source names the message, not the "landcover" group
     (omitted,) = [n for n in area.notices if n.code == AREA_OMITTED]
     assert omitted.level == "info"
-    assert omitted.message.startswith("zabaged: wynik obszaru ma 22 warstwy")
+    assert omitted.message.startswith("zabaged: the area result has 22 land cover")
     assert "--whole-country --horizontal-crs EPSG:5514|EPSG:3045" in omitted.message
     assert notices == list(area.notices)
 
@@ -413,7 +413,9 @@ def test_hynet_links_and_nodes_and_misleading_next(tmp_path, monkeypatch, frozen
     assert report.ok, report.failed
     (omitted,) = [n for n in report.notices if n.code == AREA_OMITTED]
     assert omitted.level == "info"
-    assert omitted.message.startswith("network: wynik obszaru bez skrzyzowan")
+    assert omitted.message.startswith(
+        "network: area result without grade-separated crossings"
+    )
     assert "WatercourseSeparatedCrossing" in omitted.message
     assert "--whole-country --country cz" in omitted.message
     (item,) = report.files

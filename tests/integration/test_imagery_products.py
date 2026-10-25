@@ -230,7 +230,7 @@ def test_true_orto_sheets_and_size_notice(tmp_path, images):
     assert not krakow.ok
     assert [f.kind for f in krakow.failed] == ["no_coverage"]
     hints = [n.message for n in krakow.notices if n.code == NO_COVERAGE_HINT]
-    assert any("wybrane miasta" in hint for hint in hints)
+    assert any("covers only selected cities" in hint for hint in hints)
 
 
 def test_true_orto_cutout_native_grid(tmp_path, images):

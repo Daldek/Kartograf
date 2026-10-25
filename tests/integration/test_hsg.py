@@ -342,8 +342,8 @@ class TestHSGCalculator:
             with pytest.raises(ValidationError) as caught:
                 HSGCalculator(tmp_path / f"hsg{extension}")
             assert str(caught.value) == (
-                "--output to katalog magazynu (od 0.8.0); plik poza "
-                "magazynem: hsg_from_rasters"
+                "--output is a store directory (since 0.8.0); for a file outside the "
+                "store use hsg_from_rasters"
             )
         assert list(tmp_path.iterdir()) == []
 
@@ -507,9 +507,9 @@ class TestHSGCalculatorCalculateFull:
     )
     def test_exactly_one_selection(self, tmp_path, selection):
         calc = HSGCalculator(tmp_path, RasterSoilGrids())
-        with pytest.raises(ValidationError, match="dokladnie jeden wybor"):
+        with pytest.raises(ValidationError, match="Give exactly one selection"):
             calc.calculate_hsg(**selection, depth="0-5cm")
-        with pytest.raises(ValidationError, match="dokladnie jeden wybor"):
+        with pytest.raises(ValidationError, match="Give exactly one selection"):
             calc.check_hsg(**selection, depth="0-5cm")
 
     def test_calculate_hsg_bbox_sand_is_a(self, tmp_path):

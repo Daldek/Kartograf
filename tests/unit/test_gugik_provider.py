@@ -188,8 +188,8 @@ class TestGugikProviderResolution:
             GugikProvider(resolution="5m", vertical_crs="KRON86")
 
         message = str(exc_info.value)
-        assert "5m (PL) jest dostepny tylko w EVRF2007" in message
-        assert f"dostepne w KRON86: {_grid_labels('KRON86')}" in message
+        assert "5m (PL) is only available in EVRF2007" in message
+        assert f"available in KRON86: {_grid_labels('KRON86')}" in message
 
     def test_every_registry_variant_is_accepted(self):
         """Every NMT variant of the registry (grids of every resolution,

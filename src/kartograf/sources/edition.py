@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from kartograf.exceptions import DownloadError
+from kartograf.messages import message
 
 _LABEL_RE = re.compile(r"[A-Za-z0-9._+-]+")
 
@@ -53,7 +54,6 @@ def edition_label(raw: str, *, what: str) -> str:
     """
     if not _LABEL_RE.fullmatch(raw):
         raise DownloadError(
-            f"{what}: wydanie {raw!r} nie nadaje sie na etykiete wersji "
-            "(dozwolone [A-Za-z0-9._+-])"
+            message("sources.edition_invalid_label", what=what, raw=raw)
         )
     return raw

@@ -174,7 +174,9 @@ def test_special_area_leaves_out_census_districts(tmp_path, monkeypatch, frozen_
     assert pyogrio.read_info(path, layer="SadRejonowy")["features"] == 1
     (omitted,) = [n for n in report.notices if n.code == AREA_OMITTED]
     assert omitted.level == "info"
-    assert omitted.message.startswith("special: wynik obszaru bez obwodow spisowych")
+    assert omitted.message.startswith(
+        "special: area result without census enumeration districts"
+    )
     assert CENSUS in omitted.message and "--whole-country" in omitted.message
     assert notices == list(report.notices)
 

@@ -39,7 +39,7 @@ def test_required_sidecar_failure_raises_and_leaves_no_file(tmp_path, monkeypatc
     monkeypatch.setattr(
         "kartograf.sources.sidecar.os.replace", Mock(side_effect=OSError("dysk pelny"))
     )
-    with pytest.raises(DownloadError, match="obowiazkowego sidecara") as exc:
+    with pytest.raises(DownloadError, match="mandatory sidecar") as exc:
         emit_sidecar(
             "pl.gugik.nmt_1m", _data(tmp_path), request={"sheet": SHEET}, required=True
         )
@@ -61,7 +61,7 @@ def test_required_sidecar_build_error_raises(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("key", [None, Mock()])
 def test_required_sidecar_without_descriptor_raises(tmp_path, key):
-    with pytest.raises(DownloadError, match="deskryptor"):
+    with pytest.raises(DownloadError, match="no source descriptor"):
         emit_sidecar(key, _data(tmp_path), request={}, required=True)
 
 
@@ -72,4 +72,4 @@ def test_best_effort_default_unchanged(tmp_path, monkeypatch, caplog):
     assert (
         emit_sidecar("pl.gugik.nmt_1m", _data(tmp_path), request={}) is None
     )  # warning, no exception
-    assert "Nie udalo sie zapisac sidecara" in caplog.text
+    assert "Failed to write sidecar for" in caplog.text

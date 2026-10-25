@@ -180,8 +180,8 @@ BASE = {
             {"coverage": None},
             [
                 "--coverage required",
-                "standard (najnowsze dostepne ortofotomapy)",
-                "high (ortofotomapy o pikselu 10 cm i mniejszym)",
+                "standard (latest available orthophotos)",
+                "high (orthophotos with a pixel of 10 cm or smaller)",
             ],
         ),
         ({"coverage": "medium"}, ["--coverage 'medium'", "standard", "high"]),

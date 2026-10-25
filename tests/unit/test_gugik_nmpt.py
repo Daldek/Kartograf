@@ -148,7 +148,7 @@ class TestGugikNmptProviderInit:
             GugikNmptProvider(vertical_crs="EVRF2007", resolution=None)
 
         message = str(exc.value)
-        assert message.startswith("--resolution wymagane dla NMPT ASC PL: ")
+        assert message.startswith("--resolution required for NMPT ASC PL: ")
         for vertical_crs in ("EVRF2007", "KRON86"):
             grid = variants(
                 product="nmpt", country="PL", vertical_crs=vertical_crs, format="ASC"
@@ -165,7 +165,7 @@ class TestGugikNmptProviderInit:
 
         message = str(exc.value)
         assert message.startswith(
-            f"PL nie ma rozdzielczosci {resolution} dla NMPT ASC - dostepne: "
+            f"PL has no resolution {resolution} for NMPT ASC - available: "
         )
         grid_labels = {v.label for v in variants(product="nmpt", format="ASC")}
         assert grid_labels == {"0.5m", "0.6m", "1m"}
@@ -178,8 +178,8 @@ class TestGugikNmptProviderInit:
             _nmpt(vertical_crs="KRON86", resolution="0.6m")
 
         assert str(exc.value) == (
-            "NMPT ASC 0.6m (PL) jest dostepny tylko w EVRF2007 - podano "
-            "--vertical-crs KRON86; dostepne w KRON86: 0.5m, 1m"
+            "NMPT ASC 0.6m (PL) is only available in EVRF2007 - got --vertical-crs "
+            "KRON86; available in KRON86: 0.5m, 1m"
         )
 
     def test_archive_only_in_kron86(self):
@@ -188,8 +188,7 @@ class TestGugikNmptProviderInit:
             _nmpt(resolution="0.5m", format="XYZ")
 
         assert str(exc.value) == (
-            "NMPT XYZ (PL) jest dostepny tylko w KRON86 - podano "
-            "--vertical-crs EVRF2007"
+            "NMPT XYZ (PL) is only available in KRON86 - got --vertical-crs EVRF2007"
         )
 
     def test_invalid_vertical_crs(self):
@@ -198,7 +197,7 @@ class TestGugikNmptProviderInit:
             _nmpt(vertical_crs="INVALID")
 
         assert str(exc.value) == (
-            "NMPT ASC (PL) jest dostepny tylko w EVRF2007, KRON86 - podano "
+            "NMPT ASC (PL) is only available in EVRF2007, KRON86 - got "
             "--vertical-crs INVALID"
         )
 
