@@ -32,6 +32,7 @@ from kartograf.download.data import (
     UnitFile,
 )
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.notices import ALL_NODATA, Notice, NoticeSink
 from kartograf.serialization import Document
 
@@ -77,10 +78,10 @@ HSG_VALUES = {
 
 # HSG descriptions (user texts: Polish in ASCII, Z5)
 HSG_DESCRIPTIONS = {
-    "A": "Duza infiltracja - gleby piaszczyste, maly potencjal splywu",
-    "B": "Umiarkowana infiltracja - gleby gliniaste, umiarkowany splyw",
-    "C": "Mala infiltracja - gliny ilaste, duzy splyw",
-    "D": "Bardzo mala infiltracja - gleby ilaste, bardzo duzy splyw",
+    "A": message("hydrology.class_a"),
+    "B": message("hydrology.class_b"),
+    "C": message("hydrology.class_c"),
+    "D": message("hydrology.class_d"),
 }
 # Statistics area: each cell split into _SUBCELLS x _SUBCELLS parts to
 # measure its share inside the request area (precision 1 % of a cell).
@@ -413,8 +414,10 @@ _SOILGRIDS = "global.isric.soilgrids"
 _HSG_PRODUCT = "hsg"
 # Where ``calculate_hsg`` writes (the ``--output`` help of ``soil hsg`` and
 # the error of a call without a store).
-HSG_OUTPUT_FILES = "wejscia w <KATALOG>/soil/..., HSG w <KATALOG>/hsg/..."
-_OUTPUT_REQUIRED = f"--output wymagane: katalog magazynu ({HSG_OUTPUT_FILES})"
+HSG_OUTPUT_FILES = message("hydrology.hsg_output_files")
+_OUTPUT_REQUIRED = message(
+    "hydrology.output_required", hsg_output_files=HSG_OUTPUT_FILES
+)
 
 
 @dataclass(frozen=True)
@@ -490,8 +493,7 @@ class HSGCalculator:
         self._output_dir = Path(output_dir)
         if self._output_dir.suffix.lower() in (".tif", ".tiff"):
             raise ValidationError(
-                "--output to katalog magazynu (od 0.8.0); plik poza "
-                "magazynem: hsg_from_rasters",
+                message("hydrology.output_is_store_dir"),
                 option="output_dir",
             )
         self._provider = provider
@@ -613,7 +615,7 @@ class HSGCalculator:
 
         if sum(v is not None for v in (sheet, bbox, geometry)) != 1:
             raise ValidationError(
-                "Podaj dokladnie jeden wybor: --sheet, --bbox albo --geometry",
+                message("hydrology.exactly_one_selection"),
                 options=("sheet", "bbox", "geometry"),
             )
         check_layer(layer, geometry)
@@ -621,7 +623,7 @@ class HSGCalculator:
             return {"sheet": SheetParser(sheet).sheet}
         if geometry is not None:
             envelope = geometry_envelope_2180(geometry, layer, sink)
-            require_geometry_area(envelope, "obliczenie HSG")
+            require_geometry_area(envelope, message("hydrology.hsg_calculation"))
             return _bbox_request(envelope)
         assert bbox is not None
         return _bbox_request(bbox_to_2180(validate_request_bbox(bbox)))
@@ -745,7 +747,7 @@ class HSGCalculator:
         if plan is not None:
             if update != "upgrade":
                 raise ValidationError(
-                    "Plan aktualizacji wymaga update='upgrade'",
+                    message("hydrology.plan_requires_upgrade"),
                     options=("plan", "update"),
                 )
             require_store(plan, store_id(self._output_dir))
@@ -832,7 +834,7 @@ class HSGCalculator:
         match = _matching_version(slot, shas)
         if match is not None:
             link_version(slot.std, match, refresh=True)
-            logger.info(f"HSG {slot.std}: wersja {match.label} uzyta ponownie")
+            logger.info(f"HSG {slot.std}: version {match.label} reused")
             return VersionedFile(
                 slot.std, "reused", match.label, match.sha256, match.path
             )
@@ -909,10 +911,10 @@ class HSGCalculator:
             sink.emit(
                 "warning",
                 ALL_NODATA,
-                f"{stored.path.relative_to(self._output_dir).as_posix()}: HSG "
-                "w calosci bez danych - clay, sand i silt sa zerami (SoilGrids "
-                "nie ma danych: morze, woda, zabudowa, skaly, lod); sprawdz "
-                "--bbox",
+                message(
+                    "hydrology.hsg_all_nodata",
+                    relative_to=stored.path.relative_to(self._output_dir).as_posix(),
+                ),
             )
         return stored
 
@@ -1144,7 +1146,7 @@ def hsg_statistics(hsg_path: str | Path) -> dict[str, Any]:
         "area_m2": empty_m2,
         "area_ha": empty_m2 / 10000,
         "percent": empty_m2 / total_m2 * 100 if total_m2 > 0 else 0.0,
-        "description": "Brak danych: komorki bez wartosci wejsc (klasa 0)",
+        "description": message("hydrology.stat_nodata_description"),
     }
     return stats
 
@@ -1256,7 +1258,7 @@ def hsg_from_rasters(
 
     if pixel_m <= 0:
         raise ValidationError(
-            f"pixel_m musi byc dodatni (podano {pixel_m})", option="pixel_m"
+            message("hydrology.pixel_m_not_positive", pixel_m=pixel_m), option="pixel_m"
         )
     grid = bbox if bbox.crs == crs else transform_bbox(bbox, crs)
     layers = {"clay": Path(clay), "sand": Path(sand), "silt": Path(silt)}

@@ -735,7 +735,7 @@ def test_campaign_sidecar_failure_removes_data_and_keeps_link(tmp_path, monkeypa
 
     monkeypatch.setattr("kartograf.sources.sidecar.build_metadata", broken)
     fake.records = {"newest": [REC["84183"]]}
-    with pytest.raises(DownloadError, match="obowiazkowego sidecara"):
+    with pytest.raises(DownloadError, match="Failed to write mandatory sidecar"):
         m.download_sheet(G, update="upgrade")
     assert not campaign_path(tmp_path, REC["84183"]).exists()
     assert "2025-04-27_83233" in linked(std)
@@ -802,7 +802,7 @@ def test_plain_track_sidecar_failure_fails_sheet_without_version(tmp_path, monke
 
     monkeypatch.setattr("kartograf.sources.sidecar.build_metadata", broken)
     m = DownloadManager(tmp_path, provider=_mock_provider())
-    with pytest.raises(DownloadError, match="obowiazkowego sidecara"):
+    with pytest.raises(DownloadError, match="Failed to write mandatory sidecar"):
         m.download_sheet(G)
     assert not std_path(tmp_path).exists()
     assert list((tmp_path / SEGMENT / "versions").rglob(f"{G}.asc")) == []

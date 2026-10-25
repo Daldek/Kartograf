@@ -229,7 +229,7 @@ class TestSoilGridsStore:
     def test_soilgrids_teryt_not_supported_before_network(self, tmp_path):
         session = FakeSoilGrids()
         with pytest.raises(
-            ValidationError, match="--teryt dziala tylko z --product bdot10k"
+            ValidationError, match="--teryt works only with --product bdot10k"
         ):
             _soil(tmp_path, session).download(teryt="1465", **CLAY)
         assert session.capabilities == 0
@@ -307,7 +307,7 @@ class TestCorineStore:
 
     def test_corine_teryt_not_supported(self, tmp_path):
         with pytest.raises(
-            ValidationError, match="--teryt dziala tylko z --product bdot10k"
+            ValidationError, match="--teryt works only with --product bdot10k"
         ):
             _corine(tmp_path, FakeCorine()).download(teryt="1465", year=2018)
 
@@ -339,21 +339,21 @@ def test_no_dir_created_on_init(tmp_path):
 @pytest.mark.parametrize(
     ("source", "options", "missing"),
     [
-        ("corine", {}, "--year wymagane dla corine:"),
+        ("corine", {}, "--year required for corine:"),
         (
             "soilgrids",
             {"depth": "0-5cm", "stat": "mean"},
-            "--property wymagane:",
+            "--property required:",
         ),
         (
             "soilgrids",
             {"property": "clay", "stat": "mean"},
-            "--depth wymagane:",
+            "--depth required:",
         ),
         (
             "soilgrids",
             {"property": "clay", "depth": "0-5cm"},
-            "--stat wymagane:",
+            "--stat required:",
         ),
     ],
 )
@@ -692,8 +692,10 @@ class TestCommandLevel:
         expected = Notice(
             "info",
             CORINE_PREVIEW,
-            "CORINE 2018: podglad WMS (stylizowany PNG, nie dane; dane CLMS "
-            "wymagaja CLMS_CREDENTIALS)",
+            (
+                "CORINE 2018: WMS preview (styled PNG, not data; CLMS data requires "
+                "CLMS_CREDENTIALS)"
+            ),
         )
         assert area.notices == (expected,) and seen == [expected]
         assert seen[0] == area.notices[0]

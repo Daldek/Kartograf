@@ -170,7 +170,9 @@ def test_zip_kept_with_txt(tmp_path, gugik, frozen_clock):
     assert (meta["horizontal_crs"], meta["vertical_crs"]) == ("EPSG:2180", None)
     assert meta["resolution"] == "100m"
     assert meta["request"] == {"teryt": "12", "resolution": "100m"}
-    assert "GUGiK nie deklaruje ukladu wysokosci" in meta["extra"]["vertical_crs_note"]
+    assert ("GUGiK does not declare the vertical CRS") in meta["extra"][
+        "vertical_crs_note"
+    ]
     assert meta["extra"]["source"] == {
         "url": FILES["12"],
         "service_feed": SERVICE,
@@ -255,7 +257,7 @@ def test_100m_has_no_height_system(tmp_path, gugik):
     """Decision P1: GUGiK declares no height system - ``--vertical-crs`` is
     an error, ``--format XYZ`` (the only format of the files) may be given,
     another archive format is not the 100 m variant."""
-    with pytest.raises(ValidationError, match="uklad wysokosci nieznany"):
+    with pytest.raises(ValidationError, match="vertical CRS unknown"):
         download_data(
             output_dir=tmp_path,
             bbox=KRAKOW,
@@ -263,7 +265,7 @@ def test_100m_has_no_height_system(tmp_path, gugik):
             vertical_crs="EVRF2007",
             **CHOICE,
         )
-    with pytest.raises(ValidationError, match="nie ma rozdzielczosci 100m dla NMT TBD"):
+    with pytest.raises(ValidationError, match="has no resolution 100m for NMT TBD"):
         download_data(
             output_dir=tmp_path, bbox=KRAKOW, country="pl", format="TBD", **CHOICE
         )

@@ -31,6 +31,7 @@ from kartograf.download.laz import LazDownloadResult
 from kartograf.download.manager import DownloadProgress, DownloadResult
 from kartograf.download.options import pl_file_variant
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.messages import Lang
 from kartograf.notices import Notice
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -2002,7 +2003,7 @@ class TestCreateProviderAndStorage:
             "nmt", tmp_path, "EVRF2007", "5m"
         )
         assert storage._subdir == "nmt/pl_{system}_5m_evrf2007"
-        with pytest.raises(ValidationError, match="tylko w EVRF2007"):
+        with pytest.raises(ValidationError, match="only available in EVRF2007"):
             _create_provider_and_storage("nmt", tmp_path, "KRON86", "5m")
 
     def test_nmpt_storage_segment(self, tmp_path):
@@ -2039,12 +2040,12 @@ def _choose_vertical_crs(wybor: str, vertical_crs: str | None) -> list[str]:
     return flags
 
 
-def _registry_grids(product: str) -> set[tuple[str, str]]:
+def _registry_grids(product: str, lang: Lang = "en") -> set[tuple[str, str]]:
     """``{(vertical CRS, label)}`` of the product's PL variants in the product
     format (registry): the ASC grids and the voivodeship files without a
     height system (NMT 100 m, listed under ``UNKNOWN_VERTICAL``)."""
     return {
-        (v.vertical_crs or UNKNOWN_VERTICAL, v.label)
+        (v.vertical_crs or UNKNOWN_VERTICAL.localized(lang), v.label)
         for v in variants(product=product, country="PL")
         if v.label is not None and not v.source_file
     }
@@ -2342,7 +2343,7 @@ class TestRegistryVariantsCli:
         prefix = f"Error: PL nie ma rozdzielczosci {label} dla NMT - dostepne: "
         assert err.startswith(prefix)
         listed = _labels_by_system(err.removeprefix(prefix).rstrip("\n"))
-        assert listed == _registry_grids("nmt")
+        assert listed == _registry_grids("nmt", "pl")
         mock_manager_cls.assert_not_called()
 
     @patch("kartograf.download.data.DownloadManager")
@@ -2367,8 +2368,8 @@ class TestRegistryVariantsCli:
             )
 
         message = str(exc.value)
-        assert without_error_document(err) == f"Error: {message}\n"
-        prefix = "--resolution wymagane dla NMPT PL: "
+        assert without_error_document(err) == f"Error: {exc.value.localized('pl')}\n"
+        prefix = "--resolution required for NMPT PL: "
         assert message.startswith(prefix)
         listed = _labels_by_system(message.removeprefix(prefix))
         assert listed == _registry_grids("nmpt")
@@ -6495,7 +6496,7 @@ class TestCountryDispatch:
                 "dmr4g",
                 "Bpv",
                 None,
-                "kafle TM33 (ETRS89) sa tylko w EVRF2007",
+                "TM33 tiles (ETRS89) exist only in EVRF2007",
             ),
         ],
     )
@@ -6537,7 +6538,7 @@ class TestCountryDispatch:
                 vertical_crs=vertical_crs,
             )
         assert (
-            str(exc.value)
+            exc.value.localized("pl")
             == without_error_document(capsys.readouterr().err)
             .removeprefix("Error: ")
             .strip()

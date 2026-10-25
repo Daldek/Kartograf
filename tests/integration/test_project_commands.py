@@ -70,11 +70,11 @@ def _raised(call) -> KartografError:
         (
             LANDCOVER,
             {"product": "soilgrids", "bbox": BDOT_BBOX},
-            "--product 'soilgrids': nieznana wartosc",
+            "--product 'soilgrids': unknown value",
         ),
         (IMAGERY, {"product": "nmt", "sheet": G}, "--product 'nmt': nieznana wartosc"),
         (ELEVATION, {"sheet": G}, "--product wymagane: nmt ("),
-        (LANDCOVER, {"teryt": "1465"}, "--product wymagane: bdot10k ("),
+        (LANDCOVER, {"teryt": "1465"}, "--product required: bdot10k ("),
     ],
     ids=["soilgrids-in-landcover", "nmt-in-imagery", "no-product", "no-landcover"],
 )

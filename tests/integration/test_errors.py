@@ -1034,7 +1034,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "product",
         None,
         ("bdot10k", "bdoo", "corine", "zabaged", "data50", "data250"),
-        "--product wymagane",
+        "--product required",
     ),
     _row(
         kartograf.download_landcover,
@@ -1042,7 +1042,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "product",
         None,
         ("bdot10k", "bdoo", "corine", "zabaged", "data50", "data250"),
-        "nieznana wartosc",
+        "unknown value",
     ),
     _row(
         kartograf.download_landcover,
@@ -1058,7 +1058,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         None,
         ("teryt", *_AREA_NAMES),
         None,
-        "Podaj dokladnie jeden wybor dla --product bdot10k",
+        "Give exactly one selection for --product bdot10k",
     ),
     _row(
         kartograf.check_landcover,
@@ -1072,7 +1072,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         None,
         ("sheet", "bbox"),
         None,
-        "Podaj dokladnie jeden wybor dla --product corine",
+        "Give exactly one selection for --product corine",
     ),
     _row(
         kartograf.download_landcover,
@@ -1080,7 +1080,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         None,
         _AREA_NAMES,
         None,
-        "Podaj dokladnie jeden wybor dla --product corine",
+        "Give exactly one selection for --product corine",
     ),
     _row(
         kartograf.download_landcover,
@@ -1088,7 +1088,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "year",
         None,
         ("2018", "2012", "2006", "2000", "1990"),
-        "--year wymagane dla corine",
+        "--year required for corine",
     ),
     _row(
         kartograf.download_landcover,
@@ -1110,7 +1110,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "format",
         None,
         None,
-        "--format dziala tylko z --product bdot10k",
+        "--format only works with --product bdot10k",
     ),
     _row(
         kartograf.download_landcover,
@@ -1118,7 +1118,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "format",
         None,
         ("GPKG", "SHP"),
-        "GML tylko z --year",
+        "GML only with --year",
     ),
     _row(
         kartograf.download_landcover,
@@ -1132,7 +1132,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         None,
         ("layers", "format"),
         None,
-        "--layers dotyczy tylko --format GPKG",
+        "--layers applies only to --format GPKG",
     ),
     _row(
         kartograf.download_landcover,
@@ -1147,7 +1147,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "layers",
         None,
         None,
-        "nie dotyczy archiwum BDOT10k",
+        "does not apply to the BDOT10k archive",
     ),
     _row(
         kartograf.download_landcover,
@@ -1163,7 +1163,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "teryt",
         None,
         None,
-        "publikowany per powiat",
+        "is published per county",
     ),
     _row(
         kartograf.download_landcover,
@@ -1171,7 +1171,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "teryt",
         None,
         None,
-        "--teryt dziala tylko z",
+        "--teryt works only with",
     ),
     _row(
         kartograf.download_landcover,
@@ -1185,7 +1185,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "layers",
         None,
         None,
-        "--layers dziala tylko z --product bdot10k albo bdoo",
+        "--layers only works with --product bdot10k or bdoo",
     ),
     _row(
         kartograf.download_landcover,
@@ -1211,7 +1211,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         None,
         ("plan", "update"),
         None,
-        "Plan aktualizacji wymaga update='upgrade'",
+        "The update plan requires update='upgrade'",
     ),
     _row(
         kartograf.download_soil,
@@ -1245,7 +1245,7 @@ LANDCOVER_OPTION_SCENARIOS = [
             "silt",
             "soc",
         ),
-        "--property wymagane",
+        "--property required",
     ),
     _row(
         kartograf.download_soil,
@@ -1267,7 +1267,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "stat",
         None,
         ("mean", "Q0.05", "Q0.5", "Q0.95", "uncertainty"),
-        "--stat wymagane",
+        "--stat required",
     ),
     _row(
         kartograf.check_soil,
@@ -1306,7 +1306,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         None,
         _AREA_NAMES,
         None,
-        "Podaj dokladnie jeden wybor",
+        "Give exactly one selection",
     ),
     _row(
         kartograf.calculate_hsg,
@@ -1314,7 +1314,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "output_dir",
         None,
         None,
-        "--output wymagane",
+        "--output required",
     ),
     _row(
         kartograf.calculate_hsg,
@@ -1322,7 +1322,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "output_dir",
         None,
         None,
-        "--output to katalog magazynu",
+        "--output is a store directory",
     ),
     _row(
         kartograf.calculate_hsg,
@@ -1330,7 +1330,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "depth",
         None,
         _DEPTHS,
-        "--depth wymagane",
+        "--depth required",
     ),
     _row(
         kartograf.calculate_hsg,
@@ -1346,7 +1346,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         None,
         _AREA_NAMES,
         None,
-        "Podaj dokladnie jeden wybor",
+        "Give exactly one selection",
     ),
     _row(
         kartograf.calculate_hsg,
@@ -1354,7 +1354,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         None,
         ("plan", "update"),
         None,
-        "Plan aktualizacji wymaga update='upgrade'",
+        "The update plan requires update='upgrade'",
     ),
 ]
 
@@ -1504,7 +1504,7 @@ OPTION_SCENARIOS = [
         "resolution",
         None,
         _pl_labels("nmt"),
-        "--resolution wymagane dla NMT PL",
+        "--resolution required for NMT PL",
     ),
     _row(
         kartograf.download_data,
@@ -1512,7 +1512,7 @@ OPTION_SCENARIOS = [
         "resolution",
         None,
         _pl_labels("nmt"),
-        "PL nie ma rozdzielczosci 7m",
+        "PL has no resolution 7m",
     ),
     _row(
         kartograf.download_data,
@@ -1850,7 +1850,7 @@ OPTION_SCENARIOS = [
         "resolution",
         None,
         ("2m", "5m"),
-        "CZ nie ma rozdzielczosci 7m",
+        "CZ has no 7m resolution",
     ),
     _row(
         kartograf.download_data,
@@ -1858,7 +1858,7 @@ OPTION_SCENARIOS = [
         "model",
         None,
         cz_models(),
-        "--model wymagane dla --product laz w CZ",
+        "--model required for --product laz in CZ",
     ),
     _row(
         kartograf.download_data,

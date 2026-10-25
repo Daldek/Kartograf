@@ -15,6 +15,7 @@ from kartograf.core.bbox import BBox
 from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.sources.descriptor import (
     AccessChannel,
     AtomFilesParams,
@@ -61,10 +62,7 @@ PL_1992_CRS = "EPSG:2180"
 
 _GUGIK_LICENSE = LicenseInfo(
     id="PL-PGiK-40a",
-    attribution=(
-        "Dane: Glowny Urzad Geodezji i Kartografii (www.geoportal.gov.pl), "
-        "art. 40a ust. 2 pkt 1 ustawy Prawo geodezyjne i kartograficzne"
-    ),
+    attribution=message("legal.gugik_attribution"),
     url="https://www.geoportal.gov.pl",
 )
 
@@ -182,8 +180,8 @@ _PL_INDEX = {
 }
 
 _PRODUCT_NAMES = {
-    "nmt": "Numeryczny Model Terenu",
-    "nmpt": "Numeryczny Model Pokrycia Terenu",
+    "nmt": message("sources.product_name_nmt"),
+    "nmpt": message("sources.product_name_nmpt"),
 }
 
 _NMT_WCS = AccessChannel(
@@ -192,10 +190,7 @@ _NMT_WCS = AccessChannel(
     horizontal_crs="EPSG:2180",
     vertical_crs_options=_PL_VERTICAL_BOTH,
     capabilities=frozenset({"bbox_raster"}),
-    notes=(
-        "KRON86 GeoTIFF float32, EVRF2007 tylko image/x-aaigrid "
-        "(zapisywany jako GeoTIFF float32); siatka arkuszy 1 m"
-    ),
+    notes=message("sources.nmt_wcs_notes"),
 )
 _NMPT_WCS = AccessChannel(
     transport=TransportKind.WCS,
@@ -203,10 +198,7 @@ _NMPT_WCS = AccessChannel(
     horizontal_crs="EPSG:2180",
     vertical_crs_options=_PL_VERTICAL_BOTH,
     capabilities=frozenset({"bbox_raster"}),
-    notes=(
-        "wysokosci tylko image/x-aaigrid (zapisywany jako GeoTIFF "
-        "float32); 1 m przez SCALEFACTOR=0.5 na siatce arkuszy 1 m"
-    ),
+    notes=message("sources.nmpt_wcs_notes"),
 )
 
 
@@ -232,22 +224,28 @@ def _pl_sheet_source(
     fmt = file_format(format)
     value = parse_resolution(resolution) if resolution is not None else None
     if resolution is not None and value is None:
-        raise ValueError(f"etykieta rozdzielczosci spoza K2: {resolution!r}")
+        raise ValueError(f"resolution label outside K2: {resolution!r}")
     tokens = [format.lower()] if fmt.source_file else []
     if resolution is not None:
         tokens.append(resolution)
     if key is None:
         key_tokens = [t.replace("-", "_").replace(".", "_") for t in tokens]
         key = f"pl.gugik.{product}_{'_'.join(key_tokens)}"
-    shown = f"{resolution.replace('.', ',')[:-1]} m" if resolution else None
+    shown = f"{resolution[:-1]} m" if resolution else None
     if fmt.source_file:
-        name = (
-            f"{_PRODUCT_NAMES[product]} - archiwum {format}"
-            + (f" {shown}" if shown else "")
-            + f" ({fmt.description}; plik zrodlowy)"
+        name = message(
+            "sources.sheet_source_name",
+            product_name=_PRODUCT_NAMES[product],
+            format=format,
+            shown_suffix=f" {shown}" if shown else "",
+            description=fmt.description,
         )
     else:
-        name = f"{_PRODUCT_NAMES[product]} {shown} (siatka ASC)"
+        name = message(
+            "sources.sheet_asc_grid_name",
+            product_name=_PRODUCT_NAMES[product],
+            shown=shown,
+        )
     sheets = AccessChannel(
         transport=TransportKind.WFS,
         update_signal="index",
@@ -259,9 +257,9 @@ def _pl_sheet_source(
         ),
         capabilities=frozenset({"sheet_files"}),
         notes=(
-            "skorowidz WFS GUGiK; plik jak w zrodle (bez konwersji)"
+            message("sources.sheet_index_source_file")
             if fmt.source_file
-            else "skorowidz WFS GUGiK; arkusze OpenData"
+            else message("sources.sheet_index_opendata")
         ),
     )
     return SourceDescriptor(
@@ -346,25 +344,22 @@ CZ_SYSTEM_CRS = {"sm5": "EPSG:5514", "tm33": "EPSG:3045"}
 _CZ_FILE_VERTICAL = {"sm5": "Bpv", "tm33": "EVRF2007"}
 _CZ_VERTICAL = ("Bpv", "EVRF2007")
 _CZ_FILE_NOTES = {
-    "sm5": "arkusze SM5 (S-JTSK, wysokosci Bpv); plik 1:1 z ZIP, CRS z kanalu",
-    "tm33": "kafle TM33 2x2 km (ETRS89, wysokosci EVRF2007); plik 1:1 z ZIP",
+    "sm5": message("sources.cz_file_note_sm5"),
+    "tm33": message("sources.cz_file_note_tm33"),
 }
 _CZ_TM33_SCHEME = TileScheme(
     kind="computable",
     crs="EPSG:3045",
     width_m=2000.0,
     height_m=2000.0,
-    description="TM33 {E_km}_{N_km}, naroznik SW",
+    description=message("sources.cz_tm33_scheme"),
 )
 _CZ_SM5_SCHEME = TileScheme(
     kind="index",
     crs="EPSG:5514",
     width_m=2500.0,
     height_m=2000.0,
-    description=(
-        "SM5: 2 albo 4 litery miasta + 2 cyfry (indeks KladyMapovychListu w. 24); "
-        "kafle TM33 {E_km}_{N_km} (w. 26)"
-    ),
+    description=message("sources.cz_sm5_scheme"),
 )
 
 
@@ -376,10 +371,7 @@ def _cz_image(service: str) -> AccessChannel:
         horizontal_crs="EPSG:5514",
         vertical_crs_options=("EPSG:8357",),
         server_reprojection=False,
-        notes=(
-            "Serwer obsluguje imageSR, ale ADR-024 zabrania - "
-            "reprojekcja tresci wylacznie lokalna, przypieta operacja"
-        ),
+        notes=message("sources.cz_image_notes"),
         capabilities=frozenset({"bbox_raster"}),
         endpoint=f"{_AGS}/{service}/ImageServer",
     )
@@ -421,7 +413,7 @@ def _cz_raster_source(
     key = f"cz.cuzk.{model}"
     value = parse_resolution(resolution)
     if value is None:
-        raise ValueError(f"etykieta rozdzielczosci spoza K2: {resolution!r}")
+        raise ValueError(f"resolution label outside K2: {resolution!r}")
     rows = []
     for system in ("sm5", "tm33"):
         for vertical_crs in _CZ_VERTICAL:
@@ -546,7 +538,7 @@ _CZ_ZABAGED = SourceDescriptor(
     key="cz.cuzk.zabaged",
     country="CZ",
     product="zabaged",
-    name="ZABAGED - Zakladni baze geografickych dat CR (pokrycie terenu i wody)",
+    name=message("sources.zabaged_name"),
     provider_name="CUZK",
     channels=(
         AccessChannel(
@@ -555,10 +547,7 @@ _CZ_ZABAGED = SourceDescriptor(
             horizontal_crs="EPSG:5514",
             capabilities=frozenset({"bbox_vector"}),
             endpoint=f"{_CUZK_ARCGIS}/ZABAGED_POLOHOPIS/MapServer",
-            notes=(
-                "22 warstwy pokrycia terenu i hydrografii (nazwy zrodla); pelne "
-                "geometrie obiektow przecinajacych obszar"
-            ),
+            notes=message("sources.cz_zabaged_notes"),
             params=FeatureBBoxParams(
                 protocol="arcgis",
                 native_crs="EPSG:5514",
@@ -570,11 +559,7 @@ _CZ_ZABAGED = SourceDescriptor(
                 ),
                 selection="all",
                 order_field="OBJECTID",
-                area_omitted=(
-                    "wynik obszaru ma 22 warstwy pokrycia terenu i wod; pelna "
-                    "baza ZABAGED jest w pliku krajowym: --whole-country "
-                    "--horizontal-crs EPSG:5514|EPSG:3045"
-                ),
+                area_omitted=message("sources.cz_zabaged_area_omitted"),
             ),
         ),
         AccessChannel(
@@ -583,10 +568,7 @@ _CZ_ZABAGED = SourceDescriptor(
             horizontal_crs="EPSG:5514",
             capabilities=frozenset({"country_files"}),
             endpoint=f"{_CUZK_ATOM}/ZABAGED-GPKG/ZABAGED-GPKG.xml",
-            notes=(
-                "plik krajowy GPKG (5,8 GB EPSG:5514, 6,7 GB EPSG:3045; warstwy "
-                "pelnej bazy pod nazwami CUZK), tylko z --whole-country"
-            ),
+            notes=message("sources.zabaged_national_gpkg_note"),
             params=AtomFilesParams(
                 service_feed=f"{_CUZK_ATOM}/ZABAGED-GPKG/ZABAGED-GPKG.xml",
                 entry_pattern=r"CUZK_ZABAGED-GPKG_[0-9]+\.xml$",
@@ -613,7 +595,7 @@ _CZ_RUIAN = SourceDescriptor(
     key="cz.cuzk.ruian",
     country="CZ",
     product="admin",
-    name="RUIAN - granice jednostek terytorialnych (kraje, okresy, obce, k.u.)",
+    name=message("sources.ruian_admin_name"),
     provider_name="CUZK",
     channels=(
         AccessChannel(
@@ -622,7 +604,7 @@ _CZ_RUIAN = SourceDescriptor(
             horizontal_crs="EPSG:5514",
             capabilities=frozenset({"bbox_vector"}),
             endpoint=f"{_CUZK_ARCGIS}/RUIAN/MapServer",
-            notes="pelne geometrie jednostek przecinajacych obszar",
+            notes=message("sources.ruian_area_note"),
             params=FeatureBBoxParams(
                 protocol="arcgis",
                 native_crs="EPSG:5514",
@@ -642,7 +624,7 @@ _CZ_RUIAN = SourceDescriptor(
             horizontal_crs="EPSG:5514",
             capabilities=frozenset({"country_files"}),
             endpoint="https://services.cuzk.gov.cz/shp/stat/epsg-5514/",
-            notes="plik krajowy SHP (ok. 253 MB), tylko z --whole-country",
+            notes=message("sources.ruian_national_shp_note"),
             params=UnitPackageParams(
                 unit="country",
                 variants=(
@@ -666,7 +648,7 @@ _CZ_HYNET = SourceDescriptor(
     key="cz.cuzk.hynet",
     country="CZ",
     product="network",
-    name="HY-NET - siec hydrograficzna (INSPIRE Hydrography - Network)",
+    name=message("sources.hynet_network_name"),
     provider_name="CUZK",
     channels=(
         AccessChannel(
@@ -675,10 +657,7 @@ _CZ_HYNET = SourceDescriptor(
             horizontal_crs="EPSG:5514",
             capabilities=frozenset({"bbox_vector"}),
             endpoint="https://geoportal.cuzk.gov.cz/geoserver/hy-n/wfs",
-            notes=(
-                "odcinki ciekow i wezly sieci przecinajace obszar (skrzyzowania "
-                "bezkolizyjne - relacje bez geometrii - tylko w pliku krajowym)"
-            ),
+            notes=message("sources.hynet_area_note"),
             params=FeatureBBoxParams(
                 protocol="wfs",
                 native_crs="EPSG:5514",
@@ -696,12 +675,7 @@ _CZ_HYNET = SourceDescriptor(
                     for name in ("WatercourseLink", "HydroNode")
                 ),
                 selection="all",
-                area_omitted=(
-                    "wynik obszaru bez skrzyzowan bezkolizyjnych (typ "
-                    "WatercourseSeparatedCrossing: relacje odcinkow bez geometrii, "
-                    "usluga nie liczy ich w obszarze) - sa w pliku krajowym: "
-                    "--whole-country --country cz"
-                ),
+                area_omitted=message("sources.hynet_area_omitted"),
             ),
         ),
         AccessChannel(
@@ -710,10 +684,7 @@ _CZ_HYNET = SourceDescriptor(
             horizontal_crs="EPSG:3045",
             capabilities=frozenset({"country_files"}),
             endpoint=f"{_CUZK_OPENZU}/HY-NET/",
-            notes=(
-                "plik krajowy GPKG (ok. 194 MB) w EPSG:3045 (kategoria feedu ATOM), "
-                "tylko z --whole-country"
-            ),
+            notes=message("sources.hynet_national_gpkg_note"),
             params=UnitPackageParams(
                 unit="country",
                 variants=(
@@ -780,8 +751,7 @@ _CZ_SOURCES = (
         "dmr5g",
         "nmt",
         "2m",
-        "DMR 5G - Digitalni model reliefu 5. generace (2 m, ImageServer: kafel "
-        "TM33 i wycinek)",
+        message("sources.cz_dmr5g_name"),
         "dmr5g",
         None,
     ),
@@ -789,7 +759,7 @@ _CZ_SOURCES = (
         "dmr4g",
         "nmt",
         "5m",
-        "DMR 4G - Digitalni model reliefu 4. generace (5 m, arkusze SM5 i kafle TM33)",
+        message("sources.cz_dmr4g_name"),
         "dmr4g",
         "DMR4G-TIFF",
     ),
@@ -797,8 +767,7 @@ _CZ_SOURCES = (
         "dmp1g",
         "nmpt",
         "2m",
-        "DMP 1G - Digitalni model povrchu 1. generace (2 m, ImageServer: kafel "
-        "TM33 i wycinek)",
+        message("sources.cz_dmp1g_name"),
         "dmp1g",
         None,
     ),
@@ -806,26 +775,21 @@ _CZ_SOURCES = (
         "dmpok",
         "nmpt",
         "0.5m",
-        "DMP OK - Digitalni model povrchu z obrazove korelace (0,5 m, arkusze "
-        "SM5 i kafle TM33)",
+        message("sources.cz_dmpok_name"),
         "dmp_obrazova_korelace",
         "DMPOK-TIFF",
     ),
-    _cz_laz_source(
-        "dmr5g", "DMR5G", "DMR 5G - chmura punktow LAZ (arkusze SM5 i kafle TM33)"
-    ),
+    _cz_laz_source("dmr5g", "DMR5G", message("sources.cz_dmr5g_laz_name")),
     _cz_laz_source(
         "dmr4g",
         "DMR4G",
-        "DMR 4G - chmura punktow LAZ (siatka 5 m; arkusze SM5 i kafle TM33)",
+        message("sources.cz_dmr4g_laz_name"),
     ),
-    _cz_laz_source(
-        "dmp1g", "DMP1G", "DMP 1G - chmura punktow LAZ (arkusze SM5 i kafle TM33)"
-    ),
+    _cz_laz_source("dmp1g", "DMP1G", message("sources.cz_dmp1g_laz_name")),
     _cz_laz_source(
         "dmpok",
         "DMPOK-LAZ",
-        "DMP OK - chmura punktow LAZ (korelacja obrazowa; arkusze SM5 i kafle TM33)",
+        message("sources.cz_dmpok_laz_name"),
     ),
 )
 
@@ -837,7 +801,7 @@ _CZ_ORTO = SourceDescriptor(
     key="cz.cuzk.orto",
     country="CZ",
     product="orto",
-    name="Ortofoto CR (JPEG, arkusze SM5)",
+    name=message("sources.cz_orto_name"),
     provider_name="CUZK",
     channels=(
         AccessChannel(
@@ -846,10 +810,7 @@ _CZ_ORTO = SourceDescriptor(
             horizontal_crs="EPSG:5514",
             capabilities=frozenset({"sheet_files"}),
             endpoint=_ORTOFOTO_FEED,
-            notes=(
-                "aktualny rocznik arkusza (archiwalne ortofoto CUZK sa platne - "
-                "poza zakresem); JPEG z plikami JGW w S-JTSK, TM33N i TM34N"
-            ),
+            notes=message("sources.cz_orto_notes"),
             params=AtomFilesParams(
                 service_feed=_ORTOFOTO_FEED,
                 entry_pattern=(
@@ -870,9 +831,7 @@ _CZ_ORTO = SourceDescriptor(
         crs="EPSG:5514",
         width_m=2500.0,
         height_m=2000.0,
-        description=(
-            "SM5: 2 albo 4 litery miasta + 2 cyfry; indeks KladyMapovychListu w. 24"
-        ),
+        description=message("sources.cz_orto_sheet_scheme"),
     ),
     storage_subdir="orto/cz_sjtsk",
     default_extension=".jpg",
@@ -888,16 +847,12 @@ _CZ_ORTO = SourceDescriptor(
 _NMT100_FEED = (
     "https://mapy.geoportal.gov.pl/wss/service/ATOM/httpauth/atom/GUGIK_NMT100"
 )
-_NMT100_NOTE = (
-    "GUGiK nie deklaruje ukladu wysokosci NMT 100 m (feed ATOM i rekord CSW bez "
-    "ukladu; model z NMT projektu LPIS) - uklad wysokosci nieznany"
-)
+_NMT100_NOTE = message("sources.nmt100_vertical_crs_note")
 _PL_NMT_100M = SourceDescriptor(
     key="pl.gugik.nmt_100m",
     country="PL",
     product="nmt",
-    name="Numeryczny Model Terenu 100 m (XYZ, pliki wojewodztw; uklad wysokosci "
-    "nieznany)",
+    name=message("sources.nmt100_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -906,10 +861,7 @@ _PL_NMT_100M = SourceDescriptor(
             horizontal_crs=PL_1992_CRS,
             capabilities=frozenset({"admin_unit_files"}),
             endpoint=_NMT100_FEED,
-            notes=(
-                "feed ATOM GUGiK: jeden ZIP z plikiem XYZ na wojewodztwo (wydanie "
-                "2019); wojewodztwa obszaru wg PRG; ZIP zapisywany 1:1"
-            ),
+            notes=message("sources.nmt100_notes"),
             params=AtomFilesParams(
                 service_feed=_NMT100_FEED,
                 entry_pattern=r"spatial_dataset_identifier_code=NMT100_(?P<woj>[0-9]{2})",
@@ -948,7 +900,7 @@ _PL_INTENSITY = SourceDescriptor(
     key="pl.gugik.intensity",
     country="PL",
     product="intensity",
-    name="Obrazy intensywnosci LIDAR (arkusze wg lotow)",
+    name=message("sources.intensity_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -957,10 +909,7 @@ _PL_INTENSITY = SourceDescriptor(
             horizontal_crs=PL_1992_CRS,
             capabilities=frozenset({"sheet_files"}),
             endpoint=f"{_PZGIK}/OI/WMS/SkorowidzeObrazowIntensywnosci",
-            notes=(
-                "GeoTIFF 1 pasmo (intensywnosc odbicia), piksel 0,25 m; arkusze "
-                "PL-1992 (godla 7-czlonowe) i PL-2000 wg lotow"
-            ),
+            notes=message("sources.intensity_notes"),
             params=SheetIndexParams(
                 layers=("SkorowidzeOI",),
                 systems=("1992", "2000"),
@@ -978,7 +927,7 @@ _PL_TRUE_ORTO = SourceDescriptor(
     key="pl.gugik.true_orto",
     country="PL",
     product="true-orto",
-    name="Prawdziwa ortofotomapa (true orto) wybranych miast (arkusze; wycinek WCS)",
+    name=message("sources.true_orto_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -987,23 +936,20 @@ _PL_TRUE_ORTO = SourceDescriptor(
             horizontal_crs=PL_1992_CRS,
             capabilities=frozenset({"sheet_files"}),
             endpoint=f"{_PZGIK}/ORTO/WMS/TrueOrtho",
-            notes=(
-                "GeoTIFF RGB, piksel 0,05 m; arkusze PL-1992 8-czlonowe (modul "
-                "GUGiK 1:2500) wg lotow"
-            ),
+            notes=message("sources.true_orto_notes"),
             params=SheetIndexParams(
                 layers=("Skorowidze",),
                 systems=("1992",),
                 sheet_parts=8,
                 full_sheet=False,
-                extent="true orto GUGiK obejmuje tylko wybrane miasta (np. Gdansk)",
+                extent=message("sources.true_orto_extent"),
             ),
         ),
         _orto_wcs(
             "TrueOrto",
             "true",
             "True_Orthoimagery",
-            "prawdziwa ortofotomapa 0,05 m wybranych miast (poza nimi piksele 0,0,0)",
+            message("sources.true_orto_wcs_desc"),
             native_step="0.05",
             resolutions=("0.05", *_ORTO_PIXELS),
         ),
@@ -1018,7 +964,7 @@ _PL_OBLIQUE_ORTO = SourceDescriptor(
     key="pl.gugik.oblique_orto",
     country="PL",
     product="oblique-orto",
-    name="Ortofotomapa ukosna wybranych miast (arkusze PL-2000, kierunki N, E, S, W)",
+    name=message("sources.oblique_orto_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -1027,10 +973,7 @@ _PL_OBLIQUE_ORTO = SourceDescriptor(
             horizontal_crs=PL_1992_CRS,
             capabilities=frozenset({"sheet_files"}),
             endpoint=f"{_PZGIK}/ORTO/WMS/{_OBLIQUE_LAYER}",
-            notes=(
-                "GeoTIFF RGB, piksel 0,05 m; arkusz to 4 pliki kierunkow (n, e, s, "
-                "w); arkusze PL-2000 (1:2000, 1:1000) wg lotow"
-            ),
+            notes=message("sources.oblique_orto_notes"),
             params=SheetIndexParams(
                 layers=(),
                 systems=("2000",),
@@ -1045,10 +988,7 @@ _PL_OBLIQUE_ORTO = SourceDescriptor(
                         ("w", "Zachod"),
                     )
                 ),
-                extent=(
-                    "orto ukosna GUGiK obejmuje tylko wybrane miasta (np. Krakow, "
-                    "Gdansk)"
-                ),
+                extent=message("sources.oblique_orto_extent"),
             ),
         ),
     ),
@@ -1076,7 +1016,7 @@ def _cz_contours_source(fmt: str, directory: str) -> SourceDescriptor:
         key=key,
         country="CZ",
         product="contours",
-        name=f"ZABAGED - warstwice 2D (vrstevnice; {fmt}, ZIP arkusza SM5)",
+        name=message("sources.cz_contours_name", fmt=fmt),
         provider_name="CUZK",
         channels=(
             AccessChannel(
@@ -1086,10 +1026,7 @@ def _cz_contours_source(fmt: str, directory: str) -> SourceDescriptor:
                 vertical_crs_options=(_VERTICAL_CRS_CODES["Bpv"],),
                 capabilities=frozenset({"sheet_files"}),
                 endpoint=f"{_CUZK_OPENZU}/{directory}/epsg-5514/{{sheet}}.zip",
-                notes=(
-                    "arkusze SM5 (S-JTSK, wysokosci Bpv); ZIP zapisywany 1:1, bez "
-                    "rozpakowania i konwersji"
-                ),
+                notes=message("sources.cz_contours_notes"),
             ),
         ),
         tile_scheme=_CZ_SM5_SCHEME,
@@ -1138,9 +1075,9 @@ def _prng_source(*, world: bool) -> SourceDescriptor:
         country="PL",
         product=product,
         name=(
-            "PRNG - polskie nazwy geograficzne swiata"
+            message("sources.prng_world_name")
             if world
-            else "PRNG - nazwy geograficzne RP"
+            else message("sources.prng_poland_name")
         ),
         provider_name="GUGiK",
         channels=(
@@ -1169,10 +1106,7 @@ def _prng_source(*, world: bool) -> SourceDescriptor:
                     # world (7 s of a whole request, 2026-10-19) are not slow
                     response_note=None
                     if world
-                    else (
-                        "zapytanie OGC API PRNG - usluga odpowiada ok. 80-95 s na "
-                        "strone obiektow (pomiar 2026-10-16), czekaj"
-                    ),
+                    else message("sources.prng_slow_response_note"),
                 ),
             ),
             AccessChannel(
@@ -1209,7 +1143,7 @@ _PL_BDOT10K_MAPS = SourceDescriptor(
     key="pl.gugik.bdot10k_maps",
     country="PL",
     product="topographic",
-    name="Wizualizacje map topograficznych BDOT10k",
+    name=message("sources.bdot10k_maps_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -1280,7 +1214,7 @@ _CZ_GEONAMES = SourceDescriptor(
     key="cz.cuzk.geonames",
     country="CZ",
     product="geographic",
-    name="Geonames - nazwy geograficzne Czech",
+    name=message("sources.cz_geonames_name"),
     provider_name="CUZK",
     channels=(
         AccessChannel(
@@ -1332,7 +1266,7 @@ _CZ_ZTM = SourceDescriptor(
     key="cz.cuzk.ztm",
     country="CZ",
     product="topographic",
-    name="ZTM - zakladni topograficke mapy Czech",
+    name=message("sources.ztm_name"),
     provider_name="CUZK",
     channels=(
         AccessChannel(
@@ -1437,7 +1371,7 @@ _PL_PRG_SPECIAL = SourceDescriptor(
     key="pl.gugik.prg_special",
     country="PL",
     product="special",
-    name="PRG - granice specjalne",
+    name=message("sources.prg_special_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -1457,11 +1391,7 @@ _PL_PRG_SPECIAL = SourceDescriptor(
                 ),
                 selection="all",
                 timeout=120,
-                area_omitted=(
-                    "wynik obszaru bez obwodow spisowych (kolekcja "
-                    "GranicaObwoduSpisowego: usluga odpowiada minutami) - sa "
-                    "w pliku krajowym: --whole-country --format SHP|GML"
-                ),
+                area_omitted=message("sources.prg_special_area_omitted"),
             ),
         ),
         AccessChannel(
@@ -1506,7 +1436,7 @@ _PL_PRG_ADDRESSES = SourceDescriptor(
     key="pl.gugik.prg_addresses",
     country="PL",
     product="addresses",
-    name="PRG - punkty adresowe i ulice",
+    name=message("sources.prg_addresses_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -1518,7 +1448,7 @@ _PL_PRG_ADDRESSES = SourceDescriptor(
                 "KrajowaIntegracjaNumeracjiAdresowej"
             ),
             update_signal="none",
-            notes="punkty adresowe i ulice przecinajace obszar (stan uslugi)",
+            notes=message("sources.prg_addresses_service_note"),
             params=FeatureBBoxParams(
                 protocol="wfs",
                 native_crs="EPSG:2180",
@@ -1547,10 +1477,7 @@ _PL_PRG_ADDRESSES = SourceDescriptor(
             capabilities=frozenset({"admin_unit_files"}),
             endpoint=f"{_PRG_ADDRESSES}/PunktyAdresowe/",
             update_signal="none",
-            notes=(
-                "paczka SHP powiatu: punkty adresowe, ulice, place, miejscowosci "
-                "(GUGiK nie publikuje paczek wojewodztw)"
-            ),
+            notes=message("sources.prg_addresses_county_note"),
             params=UnitPackageParams(
                 unit="powiat",
                 variants=(
@@ -1569,10 +1496,7 @@ _PL_PRG_ADDRESSES = SourceDescriptor(
             capabilities=frozenset({"country_files"}),
             endpoint=f"{_PRG_ADDRESSES}/",
             update_signal="none",
-            notes=(
-                "plik krajowy SHP (ok. 564 MB) albo GML (16 plikow wojewodztw, "
-                "ok. 804 MB), tylko z --whole-country"
-            ),
+            notes=message("sources.prg_addresses_national_note"),
             params=UnitPackageParams(
                 unit="country",
                 variants=(
@@ -1606,7 +1530,7 @@ _PL_PRG_ADDRESSES = SourceDescriptor(
 _RCN = f"{_OPENDATA}/InneDane/latest_exports/rcn_transakcje_ceny/GPKG"
 
 
-def _rcn_channel(unit: Literal["powiat", "woj"], text: str) -> AccessChannel:
+def _rcn_channel(unit: Literal["powiat", "woj"], scope: str) -> AccessChannel:
     """Build the RCN export channel of one TERYT unit (``powiat`` or ``woj``)."""
     return AccessChannel(
         transport=TransportKind.DIRECT_FILES,
@@ -1614,10 +1538,7 @@ def _rcn_channel(unit: Literal["powiat", "woj"], text: str) -> AccessChannel:
         capabilities=frozenset({"admin_unit_files"}),
         endpoint=f"{_RCN}/",
         update_signal="none",
-        notes=(
-            f"eksport {text} odswiezany co dobe: GeoPackage z warstwami "
-            "transakcje_dzialki, transakcje_budynki, transakcje_lokale"
-        ),
+        notes=message("sources.rcn_daily_export_note", scope=scope),
         params=UnitPackageParams(
             unit=unit,
             variants=(
@@ -1640,9 +1561,12 @@ _PL_RCN = SourceDescriptor(
     key="pl.gugik.rcn",
     country="PL",
     product="prices",
-    name="RCN - rejestr cen nieruchomosci (transakcje: dzialki, budynki, lokale)",
+    name=message("sources.rcn_name"),
     provider_name="GUGiK",
-    channels=(_rcn_channel("powiat", "powiatu"), _rcn_channel("woj", "wojewodztwa")),
+    channels=(
+        _rcn_channel("powiat", message("sources.rcn_scope_county")),
+        _rcn_channel("woj", message("sources.rcn_scope_voivodeship")),
+    ),
     tile_scheme=None,
     storage_subdir="cadastre/pl_rcn",
     default_extension=".gpkg",
@@ -1667,7 +1591,7 @@ _CZ_GEOMORPHOLOGY = SourceDescriptor(
     key="cz.cuzk.geomorphology",
     country="CZ",
     product="geomorphology",
-    name="Jednostki geomorfologiczne Czech (od subprovincie do casti)",
+    name=message("sources.cz_geomorphology_name"),
     provider_name="CUZK",
     channels=(
         AccessChannel(
@@ -1676,7 +1600,7 @@ _CZ_GEOMORPHOLOGY = SourceDescriptor(
             capabilities=frozenset({"bbox_vector"}),
             endpoint=f"{_CUZK_ARCGIS}/GeomorfologickeJednotky/MapServer",
             update_signal="none",
-            notes="pelne geometrie jednostek poziomu --level przecinajacych obszar",
+            notes=message("sources.cz_geomorphology_note"),
             params=FeatureBBoxParams(
                 protocol="arcgis",
                 native_crs="EPSG:5514",
@@ -1709,7 +1633,7 @@ _CZ_CADASTRAL_MAP = SourceDescriptor(
     key="cz.cuzk.cadastral_map",
     country="CZ",
     product="map",
-    name="Mapa katastralna Czech (katastralni mapa: SHP, DXF, DGN, VFK)",
+    name=message("sources.cz_cadastral_map_name"),
     provider_name="CUZK",
     channels=(
         AccessChannel(
@@ -1718,10 +1642,7 @@ _CZ_CADASTRAL_MAP = SourceDescriptor(
             capabilities=frozenset({"admin_unit_files"}),
             endpoint=f"{_CUZK_SERVICES}/",
             update_signal="http",
-            notes=(
-                "paczka katastralniho uzemi (KU) w jednym z formatow; KU obszaru "
-                "wg RUIAN; ZIP zapisywany 1:1"
-            ),
+            notes=message("sources.cz_cadastral_map_note"),
             params=UnitPackageParams(
                 unit="ku",
                 ku_layer=f"{_CUZK_ARCGIS}/RUIAN/MapServer/7",
@@ -1884,7 +1805,7 @@ _PL_BDOO = SourceDescriptor(
     key="pl.gugik.bdoo",
     country="PL",
     product="bdoo",
-    name="BDOO - baza danych obiektow ogolnogeograficznych (1:250 000)",
+    name=message("sources.bdoo_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -1893,10 +1814,7 @@ _PL_BDOO = SourceDescriptor(
             horizontal_crs="EPSG:2180",
             capabilities=frozenset({"admin_unit_files"}),
             endpoint=f"{_BDOO}/",
-            notes=(
-                "paczka GML wojewodztwa wg rocznika (2015, 2021-2026) zapisywana "
-                "1:1; z --layers ZIP plikow wybranych klas"
-            ),
+            notes=message("sources.bdoo_gml_package_note"),
             params=UnitPackageParams(
                 unit="woj",
                 variants=tuple(
@@ -2132,7 +2050,7 @@ def _cz_data_source(
         key=f"cz.cuzk.{dataset.lower()}",
         country="CZ",
         product=dataset.lower(),
-        name=f"{dataset} - cyfrowy model geograficzny Czech ({scale})",
+        name=message("sources.cz_data_model_name", dataset=dataset, scale=scale),
         provider_name="CUZK",
         channels=(
             AccessChannel(
@@ -2142,8 +2060,7 @@ def _cz_data_source(
                 capabilities=frozenset({"bbox_vector"}),
                 endpoint=f"{_CUZK_ARCGIS}/{dataset.upper()}/MapServer",
                 notes=(
-                    f"{len(layers)} warstw obiektowych (nazwy zrodla); pelne "
-                    "geometrie obiektow przecinajacych obszar"
+                    message("sources.cz_feature_layers_note", layers_count=len(layers))
                 ),
                 params=FeatureBBoxParams(
                     protocol="arcgis",
@@ -2166,7 +2083,7 @@ def _cz_data_source(
                 horizontal_crs="EPSG:5514",
                 capabilities=frozenset({"country_files"}),
                 endpoint=feed,
-                notes=f"plik krajowy SHP ({sizes}), tylko z --whole-country",
+                notes=message("sources.cz_national_shp_note", sizes=sizes),
                 params=AtomFilesParams(
                     service_feed=feed,
                     entry_pattern=rf"CUZK_{dataset}_[0-9]+\.xml$",
@@ -2212,7 +2129,7 @@ _PL_MESH = SourceDescriptor(
     key="pl.gugik.mesh",
     country="PL",
     product="mesh",
-    name="Modele siatkowe 3D miast (mesh OBJ z teksturami)",
+    name=message("sources.mesh_product_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -2222,11 +2139,7 @@ _PL_MESH = SourceDescriptor(
             vertical_crs_options=("EPSG:9651",),
             capabilities=frozenset({"area_files"}),
             endpoint=_MESH_3D_INDEX.endpoint,
-            notes=(
-                "kafel = plik rekordu indeksu WFS (ZIP z OBJ, MTL i JPG zapisywany "
-                "1:1); uklad kafla z rekordu (PL-1992, PL-2000 S5-S7), wysokosci "
-                "PL-EVRF2007-NH"
-            ),
+            notes=message("sources.mesh_tile_note"),
             params=UnitPackageParams(
                 unit="tile",
                 index=_MESH_3D_INDEX,
@@ -2257,7 +2170,7 @@ _PL_TREES = SourceDescriptor(
     key="pl.gugik.trees",
     country="PL",
     product="trees",
-    name="Modele 3D drzew (CityGML LoD1)",
+    name=message("sources.trees_product_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -2266,10 +2179,7 @@ _PL_TREES = SourceDescriptor(
             horizontal_crs="EPSG:2180",
             capabilities=frozenset({"admin_unit_files"}),
             endpoint=f"{_TREES_3D}/",
-            notes=(
-                "paczka powiatu (0,3-25 GB): pliki GML arkuszy 1:500, EPSG:2180 bez "
-                "ukladu wysokosci; nie kazdy powiat ma paczke"
-            ),
+            notes=message("sources.trees_county_package_note"),
             params=UnitPackageParams(
                 unit="powiat",
                 variants=(
@@ -2335,7 +2245,7 @@ def _pl_control_wfs(
         horizontal_crs="EPSG:2180",
         capabilities=frozenset({"bbox_vector"}),
         endpoint=f"{_PZGIK}/{service}/WFS",
-        notes="punkty osnowy (i strefy izogon) przecinajace obszar, stan uslugi",
+        notes=message("sources.control_wfs_note"),
         params=FeatureBBoxParams(
             protocol="wfs",
             native_crs="EPSG:2180",
@@ -2364,8 +2274,7 @@ _PL_CONTROL = SourceDescriptor(
     key="pl.gugik.control",
     country="PL",
     product="control",
-    name="Osnowy podstawowe: pozioma, wysokosciowa, grawimetryczna, magnetyczna "
-    "(z archiwami)",
+    name=message("sources.control_product_name"),
     provider_name="GUGiK",
     channels=(
         *(
@@ -2378,10 +2287,7 @@ _PL_CONTROL = SourceDescriptor(
             horizontal_crs="EPSG:2180",
             capabilities=frozenset({"admin_unit_files"}),
             endpoint=f"{_BDPOG}/",
-            notes=(
-                "paczka powiatu sieci poziomej albo wysokosciowej: wykazy "
-                "wspolrzednych (XLS) i opisy topograficzne (JPG), ZIP 1:1"
-            ),
+            notes=message("sources.control_county_package_note"),
             params=UnitPackageParams(
                 unit="powiat",
                 variants=tuple(
@@ -2406,10 +2312,7 @@ _PL_CONTROL = SourceDescriptor(
             horizontal_crs="EPSG:2180",
             capabilities=frozenset({"sheet_files"}),
             endpoint=f"{_BDPOG}/MaterialyArchiwalne/",
-            notes=(
-                "archiwalne katalogi i kartoteki punktow arkusza 1:100 000 (skany "
-                "PDF i TIFF w ukladach historycznych), ZIP 1:1"
-            ),
+            notes=message("sources.control_archive_notes"),
             params=UnitPackageParams(
                 unit="sheet",
                 variants=tuple(
@@ -2445,7 +2348,7 @@ _PL_GEOID2021 = SourceDescriptor(
     key="pl.gugik.geoid2021",
     country="PL",
     product="geoid",
-    name="Model quasi-geoidy PL-geoid2021 (PL-EVRF2007-NH)",
+    name=message("sources.geoid2021_name"),
     provider_name="GUGiK",
     channels=(
         AccessChannel(
@@ -2454,10 +2357,7 @@ _PL_GEOID2021 = SourceDescriptor(
             horizontal_crs="EPSG:9702",
             capabilities=frozenset({"country_files"}),
             endpoint=f"{_QUASIGEOID}/",
-            notes=(
-                "jeden plik krajowy TXT (szerokosc, dlugosc, zeta; siatka 0,01 st., "
-                "42 MB) zapisywany 1:1, tylko z --whole-country"
-            ),
+            notes=message("sources.geoid2021_notes"),
             params=UnitPackageParams(
                 unit="country",
                 variants=(
@@ -2521,7 +2421,7 @@ _CZ_CONTROL = SourceDescriptor(
     key="cz.cuzk.control",
     country="CZ",
     product="control",
-    name="Bodove pole - osnowy geodezyjne Czech (polohove, vyskove, tihove, CZEPOS)",
+    name=message("sources.cz_control_name"),
     provider_name="CUZK",
     channels=(
         AccessChannel(
@@ -2530,7 +2430,7 @@ _CZ_CONTROL = SourceDescriptor(
             horizontal_crs="EPSG:5514",
             capabilities=frozenset({"bbox_vector"}),
             endpoint=f"{_CUZK_ARCGIS}/BodovaPole/MapServer",
-            notes="punkty sieci --network przecinajace obszar (suma jej warstw)",
+            notes=message("sources.cz_control_notes"),
             params=FeatureBBoxParams(
                 protocol="arcgis",
                 native_crs="EPSG:5514",
@@ -2563,7 +2463,7 @@ _CZ_QGZU2013 = SourceDescriptor(
     key="cz.cuzk.qgzu2013",
     country="CZ",
     product="geoid",
-    name="Kvazigeoid QGZU-2013 (siatki TXT, Bpv)",
+    name=message("sources.cz_qgzu2013_name"),
     provider_name="CUZK",
     channels=(
         AccessChannel(
@@ -2572,10 +2472,7 @@ _CZ_QGZU2013 = SourceDescriptor(
             horizontal_crs="EPSG:4258",
             capabilities=frozenset({"country_files"}),
             endpoint=_QGZU_FEED,
-            notes=(
-                "jeden plik krajowy: ZIP 17 siatek TXT (58 MB) zapisywany 1:1, "
-                "tylko z --whole-country; wydanie z feedu ATOM"
-            ),
+            notes=message("sources.cz_qgzu2013_notes"),
             params=AtomFilesParams(
                 service_feed=_QGZU_FEED,
                 entry_pattern=r"CUZK_QGZU_KVAZIGEOID\.xml$",
@@ -2598,7 +2495,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="pl.gugik.orto",
             country="PL",
             product="orto",
-            name="Ortofotomapa (arkusze wg kampanii; wycinek WCS Standard i High)",
+            name=message("sources.orto_name"),
             provider_name="GUGiK",
             channels=(
                 AccessChannel(
@@ -2618,7 +2515,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     "StandardResolution",
                     "standard",
                     "Orthoimagery_StandardResolution",
-                    "najnowsze dostepne ortofotomapy",
+                    message("sources.orto_standard_desc"),
                     native_step="0.1",
                     resolutions=_ORTO_PIXELS,
                 ),
@@ -2626,7 +2523,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     "HighResolution",
                     "high",
                     "Orthoimagery_High_Resolution",
-                    "ortofotomapy o pikselu 10 cm i mniejszym",
+                    message("sources.orto_high_desc"),
                     native_step="0.1",
                     resolutions=_ORTO_PIXELS,
                 ),
@@ -2640,7 +2537,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="pl.gugik.laz",
             country="PL",
             product="laz",
-            name="Chmury punktow LIDAR (dane pomiarowe ALS)",
+            name=message("sources.laz_name"),
             provider_name="GUGiK",
             channels=(
                 AccessChannel(
@@ -2649,7 +2546,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"area_files"}),
-                    notes="WMS skorowidzy LAZ zwraca 401 - WFS jedyna droga",
+                    notes=message("sources.laz_wms_notes"),
                 ),
             ),
             tile_scheme=None,
@@ -2675,7 +2572,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="pl.gugik.bdot10k",
             country="PL",
             product="bdot10k",
-            name="BDOT10k - baza danych obiektow topograficznych",
+            name=message("sources.bdot10k_name"),
             provider_name="GUGiK",
             channels=(
                 AccessChannel(
@@ -2690,10 +2587,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"archive_unit_files"}),
                     endpoint=f"{_BDOT10K_ARCHIVE}/",
-                    notes=(
-                        "archiwum rocznikow 2014-2025 (stan z poczatku roku), "
-                        "GML albo SHP; paczka powiatu zapisywana 1:1"
-                    ),
+                    notes=message("sources.bdot10k_notes"),
                     params=UnitPackageParams(
                         unit="powiat", variants=_bdot10k_archive_variants()
                     ),
@@ -2708,7 +2602,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="pl.gugik.prg",
             country="PL",
             product="admin",
-            name="PRG - granice jednostek administracyjnych i ewidencyjnych",
+            name=message("sources.admin_name"),
             provider_name="GUGiK",
             channels=(
                 AccessChannel(
@@ -2717,7 +2611,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"bbox_vector"}),
                     endpoint=f"{_PZGIK}/PRG/WFS/AdministrativeBoundaries",
-                    notes="pelne geometrie jednostek przecinajacych obszar",
+                    notes=message("sources.ruian_area_note"),
                     params=FeatureBBoxParams(
                         protocol="wfs",
                         native_crs="EPSG:2180",
@@ -2741,7 +2635,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"admin_unit_files"}),
                     endpoint=f"{_OPENDATA}/prg/granice/",
-                    notes="paczka wojewodztwa: GML poziomow A01, A02, A03, A05, A06",
+                    notes=message("sources.admin_notes"),
                     params=UnitPackageParams(
                         unit="woj",
                         variants=(
@@ -2763,7 +2657,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"country_files"}),
                     endpoint=f"{_OPENDATA}/prg/granice/",
-                    notes="plik krajowy SHP (ok. 377 MB), tylko z --whole-country",
+                    notes=message("sources.national_shp_note"),
                     params=UnitPackageParams(
                         unit="country",
                         variants=(
@@ -2789,7 +2683,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="pl.gugik.egib",
             country="PL",
             product="map",
-            name="EGiB - mapa ewidencyjna (dzialki i budynki)",
+            name=message("sources.product_name_egib_map"),
             provider_name="GUGiK",
             channels=(
                 AccessChannel(
@@ -2798,10 +2692,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"admin_unit_files"}),
                     endpoint=f"{_OPENDATA}/InneDane/latest_exports/eziudp_wfs/GPKG/",
-                    notes=(
-                        "eksport powiatu odswiezany co dobe: warstwy dzialki, "
-                        "budynki i transakcje (RCN)"
-                    ),
+                    notes=message("sources.county_export_note"),
                     params=UnitPackageParams(
                         unit="powiat",
                         variants=(
@@ -2823,10 +2714,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"bbox_vector"}),
                     endpoint=f"{_PZGIK}/EGIB/WFS/UslugaZbiorcza",
-                    notes=(
-                        "usluga zbiorcza powiatowych WFS: luki w powiatach bez "
-                        "integracji, atrybuty zastrzezone = brak_uprawnien"
-                    ),
+                    notes=message("sources.county_wfs_note"),
                     params=FeatureBBoxParams(
                         protocol="wfs",
                         native_crs="EPSG:2180",
@@ -2860,7 +2748,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="pl.gugik.buildings",
             country="PL",
             product="buildings",
-            name="Modele 3D budynkow (CityGML LoD1, LoD2)",
+            name=message("sources.product_name_buildings"),
             provider_name="GUGiK",
             channels=(
                 AccessChannel(
@@ -2870,10 +2758,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"admin_unit_files"}),
                     endpoint=f"{_BUILDINGS_3D}/",
-                    notes=(
-                        "LoD2 nie pokrywa calego kraju (brak paczki powiatu = "
-                        "brak danych); pliki krajowe (3,5-4,1 GB) poza zakresem"
-                    ),
+                    notes=message("sources.lod2_coverage_note"),
                     params=UnitPackageParams(
                         unit="powiat", variants=_buildings_variants()
                     ),
@@ -2908,17 +2793,14 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     update_signal="metadata",
                     horizontal_crs="EPSG:3035",
                     capabilities=frozenset({"bbox_raster"}),
-                    notes="wymaga credentials CLMS (CLMS_CREDENTIALS)",
+                    notes=message("sources.clms_credentials_note"),
                 ),
                 AccessChannel(
                     transport=TransportKind.WMS,
                     update_signal="none",
                     horizontal_crs="EPSG:3857",
                     capabilities=frozenset({"bbox_raster"}),
-                    notes=(
-                        "bez credentials CLMS: stylizowany PNG z WMS EEA - podglad, "
-                        "nie dane; 1990: WMS DLR w EPSG:4326"
-                    ),
+                    notes=message("sources.clms_no_credentials_note"),
                 ),
             ),
             tile_scheme=None,
@@ -2931,7 +2813,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="global.isric.soilgrids",
             country="GLOBAL",
             product="soil",
-            name="SoilGrids - globalne dane glebowe",
+            name=message("sources.product_name_soilgrids"),
             provider_name="ISRIC",
             channels=(
                 AccessChannel(
@@ -2939,7 +2821,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     update_signal="metadata",
                     horizontal_crs="EPSG:4326",
                     capabilities=frozenset({"bbox_raster"}),
-                    notes="tylko WGS84 bbox; transformacja z EPSG:2180 automatyczna",
+                    notes=message("sources.soilgrids_bbox_note"),
                 ),
             ),
             tile_scheme=None,
@@ -2969,13 +2851,13 @@ _SOURCES: dict[str, SourceDescriptor] = {
 _COUNTRIES: dict[str, CountryProfile] = {
     "PL": CountryProfile(
         code="PL",
-        name="Polska",
+        name=message("sources.country_name_pl"),
         extent_wgs84=BBox(14.07, 49.00, 24.20, 54.90, "EPSG:4326"),
         dataset_keys=tuple(sorted(k for k in _SOURCES if k.startswith("pl."))),
     ),
     "CZ": CountryProfile(
         code="CZ",
-        name="Czechy",
+        name=message("sources.country_name_cz"),
         extent_wgs84=BBox(12.09, 48.55, 18.86, 51.06, "EPSG:4326"),
         dataset_keys=tuple(sorted(k for k in _SOURCES if k.startswith("cz."))),
     ),
@@ -2988,7 +2870,7 @@ def get_source(key: str) -> SourceDescriptor:
         return _SOURCES[key]
     except KeyError:
         raise KeyError(
-            f"Nieznane zrodlo: '{key}'. Dostepne: {sorted(_SOURCES)}"
+            f"Unknown source: '{key}'. Available: {sorted(_SOURCES)}"
         ) from None
 
 
@@ -3002,7 +2884,9 @@ def _channels(
     """
     source = _SOURCES.get(key)
     if source is None:
-        raise ValidationError(f"Nieznane zrodlo: '{key}'. Dostepne: {sorted(_SOURCES)}")
+        raise ValidationError(
+            message("sources.unknown_source", key_value=key, sources=sorted(_SOURCES))
+        )
     found = [
         channel
         for channel in source.channels
@@ -3012,8 +2896,15 @@ def _channels(
     if not found:
         where = f" w {horizontal_crs}" if horizontal_crs is not None else ""
         raise ValidationError(
-            f"Zrodlo '{key}' nie ma kanalu {transport.value!r}{where} (kanaly: "
-            f"{[(c.transport.value, c.horizontal_crs) for c in source.channels]})"
+            message(
+                "sources.source_no_channel",
+                source_key=key,
+                transport=transport.value,
+                where=where,
+                channels=[
+                    (c.transport.value, c.horizontal_crs) for c in source.channels
+                ],
+            )
         )
     return found
 
@@ -3036,9 +2927,12 @@ def channel_for(
     found = _channels(key, transport, horizontal_crs)
     if len(found) > 1:
         raise ValidationError(
-            f"Zrodlo '{key}' ma kilka kanalow {transport.value!r} "
-            f"({', '.join(c.horizontal_crs for c in found)}) - wybor wymaga "
-            "ukladu poziomego kanalu"
+            message(
+                "sources.multiple_channels_ambiguous",
+                source_key=key,
+                transport=transport.value,
+                crs_list=", ".join(c.horizontal_crs for c in found),
+            )
         )
     return found[0]
 
@@ -3061,8 +2955,12 @@ def channel_signal(
     signals = {c.update_signal for c in _channels(key, transport, horizontal_crs)}
     if len(signals) > 1:
         raise ValidationError(
-            f"Kanaly {transport.value!r} zrodla '{key}' maja rozne sygnaly "
-            f"({', '.join(sorted(signals))}) - wybor wymaga ukladu poziomego kanalu"
+            message(
+                "sources.channels_differing_signals",
+                transport=transport.value,
+                source_key=key,
+                signals=", ".join(sorted(signals)),
+            )
         )
     return signals.pop()
 
@@ -3090,7 +2988,7 @@ def get_country(code: str) -> CountryProfile:
         return _COUNTRIES[code]
     except KeyError:
         raise KeyError(
-            f"Nieznany kraj: '{code}'. Dostepne: {sorted(_COUNTRIES)}"
+            f"Unknown country: '{code}'. Available: {sorted(_COUNTRIES)}"
         ) from None
 
 
@@ -3106,7 +3004,7 @@ def vertical_crs_code(name: str) -> str:
     if name in _VERTICAL_CRS_CODES.values():
         return name
     raise KeyError(
-        f"Nieznany uklad pionowy: '{name}'. Dostepne: {sorted(_VERTICAL_CRS_CODES)}"
+        f"Unknown vertical CRS: '{name}'. Available: {sorted(_VERTICAL_CRS_CODES)}"
     )
 
 

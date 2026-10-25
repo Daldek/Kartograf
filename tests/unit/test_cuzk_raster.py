@@ -147,7 +147,7 @@ class TestConstruction:
             CuzkRasterProvider("nmt", "1m", vertical_crs="Bpv")
 
     def test_point_clouds_are_not_a_raster(self):
-        with pytest.raises(ValidationError, match="rastrowych"):
+        with pytest.raises(ValidationError, match="no raster variants"):
             CuzkRasterProvider("laz", "2m", vertical_crs="Bpv")
 
     def test_kron86_raises_with_remedy(self):

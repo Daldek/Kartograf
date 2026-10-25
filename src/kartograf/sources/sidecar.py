@@ -21,6 +21,7 @@ from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.exceptions import DownloadError
+from kartograf.messages import message, reason
 from kartograf.sources.descriptor import AccessChannel, SourceDescriptor
 from kartograf.sources.registry import (
     PL_1992_CRS,
@@ -142,8 +143,9 @@ def pl_sheet_horizontal_crs(data_path: Path | None, sheet: str) -> str:
     if actual is None or actual == expected:
         return expected
     logger.debug(
-        f"Sidecar {data_path}: godlo {sheet} wskazuje {expected}, ale wspolrzedne "
-        f"pliku (x = {x:.0f}) sa w {actual} - zapisano uklad pliku"
+        f"Sidecar {data_path}: sheet code {sheet} points to {expected}, but "
+        f"the file coordinates (x = {x:.0f}) are in {actual} - recorded the "
+        f"file CRS"
     )
     return actual
 
@@ -185,7 +187,7 @@ def _select_channel_by_capability(
         if capability in ch.capabilities:
             return ch
     raise KeyError(
-        f"Deskryptor '{descriptor.key}' nie ma kanalu z capability '{capability}'"
+        f"Descriptor '{descriptor.key}' has no channel with capability '{capability}'"
     )
 
 
@@ -322,7 +324,13 @@ def write_sidecar(
         payload = json.dumps(fields, ensure_ascii=False, indent=2)
         sidecar_path.write_text(payload + "\n", encoding="utf-8")
     except OSError as e:
-        logger.warning(f"Nie udalo sie zapisac sidecara {sidecar_path}: {e}")
+        logger.warning(
+            message(
+                "sources.sidecar_write_failed",
+                sidecar_path=sidecar_path,
+                error=reason(e),
+            )
+        )
     return sidecar_path
 
 
@@ -390,8 +398,11 @@ def emit_sidecar(
     if not isinstance(descriptor_key, str) and not exclusive:
         if required:
             raise DownloadError(
-                f"Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: "
-                f"brak deskryptora zrodla ({descriptor_key!r})"
+                message(
+                    "sources.mandatory_sidecar_no_descriptor",
+                    sidecar_path=sidecar_path,
+                    descriptor_key=descriptor_key,
+                )
             )
         return None
     try:
@@ -435,7 +446,15 @@ def emit_sidecar(
             raise
         if required:
             raise DownloadError(
-                f"Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: {e}"
+                message(
+                    "sources.mandatory_sidecar_failed",
+                    sidecar_path=sidecar_path,
+                    error=reason(e),
+                )
             ) from e
-        logger.warning(f"Nie udalo sie zapisac sidecara dla {data_path}: {e}")
+        logger.warning(
+            message(
+                "sources.sidecar_for_file_failed", data_path=data_path, error=reason(e)
+            )
+        )
         return None

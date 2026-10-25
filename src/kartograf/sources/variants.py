@@ -36,6 +36,7 @@ from urllib.parse import urlparse
 
 from kartograf.core.parser_registry import detect_system
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.sources.descriptor import TransportKind
 
 
@@ -100,7 +101,7 @@ FORMATS: tuple[FileFormat, ...] = (
         "ASCII NMT",
         ".zip",
         (".zip",),
-        "ASCII NMT - punkty X Y Z, ZIP",
+        message("sources.format_ascii_nmt"),
         source_file=True,
     ),
     FileFormat(
@@ -108,7 +109,7 @@ FORMATS: tuple[FileFormat, ...] = (
         "ASCII TBD",
         ".zip",
         (".zip",),
-        "ASCII TBD - punkty i linie struktury, ZIP",
+        message("sources.format_ascii_tbd"),
         source_file=True,
     ),
     FileFormat(
@@ -140,7 +141,7 @@ FORMATS: tuple[FileFormat, ...] = (
         "Warstwice DXF",
         ".dxf",
         (".dxf",),
-        "warstwice DXF",
+        message("sources.format_dxf_description"),
         source_file=True,
     ),
     FileFormat(
@@ -148,7 +149,7 @@ FORMATS: tuple[FileFormat, ...] = (
         "Warstwice DGN",
         ".dgn",
         (".dgn",),
-        "warstwice DGN",
+        message("sources.format_dgn_description"),
         source_file=True,
     ),
 )
@@ -162,26 +163,20 @@ _PRODUCT_NAMES = {"nmt": "NMT", "nmpt": "NMPT", "laz": "LAZ"}
 # CUZK models (``ProductVariant.model``): the name in messages and the
 # description of the ``--model`` choice (LAZ CZ).
 CZ_MODELS: dict[str, tuple[str, str]] = {
-    "dmr5g": ("DMR 5G", "teren, DMR 5G"),
-    "dmr4g": ("DMR 4G", "teren, siatka 5 m"),
-    "dmp1g": ("DMP 1G", "powierzchnia, DMP 1G"),
-    "dmpok": ("DMP OK", "powierzchnia, korelacja obrazowa"),
+    "dmr5g": ("DMR 5G", message("sources.model_desc_dmr5g")),
+    "dmr4g": ("DMR 4G", message("sources.model_desc_dmr4g")),
+    "dmp1g": ("DMP 1G", message("sources.model_desc_dmp1g")),
+    "dmpok": ("DMP OK", message("sources.model_desc_dmpok")),
 }
 # Sheet systems of the CZ codes (``detect_system`` id -> variant system).
 _CZ_SYSTEMS = {"cz_sm5": "sm5", "cz_tm33": "tm33"}
 # Height systems of the CZ rasters (``--vertical-crs`` texts).
-CZ_VERTICAL_TEXT = (
-    "Bpv (natywny dla S-JTSK/SM5 i uslug ImageServer), EVRF2007 (natywny dla "
-    "plikow ETRS89/TM33; z Bpv przypieta transformacja)"
-)
+CZ_VERTICAL_TEXT = message("sources.cz_vertical_text")
 # LAZ CZ: a point cloud keeps the CRS of its file, the height system chooses
 # the files (S-JTSK sheets in Bpv, ETRS89 tiles in EVRF2007).
-CZ_LAZ_VERTICAL_TEXT = (
-    "Bpv (arkusze SM5, S-JTSK) albo EVRF2007 (kafle TM33, ETRS89); chmury "
-    "punktow bez transformacji"
-)
+CZ_LAZ_VERTICAL_TEXT = message("sources.cz_laz_vertical_text")
 # Name of the missing height system of a variant in messages (P1).
-UNKNOWN_VERTICAL = "uklad wysokosci nieznany"
+UNKNOWN_VERTICAL = message("sources.unknown_vertical_crs")
 
 
 @dataclass(frozen=True)
@@ -345,10 +340,17 @@ def labels_by_vertical_crs(found: tuple[ProductVariant, ...]) -> str:
     for vertical_crs, group in groups.items():
         labels = _sorted_labels(tuple(group))
         parts.append(
-            f"{_system_name(vertical_crs)}: "
-            f"{', '.join(labels) if labels else 'bez rozdzielczosci'}"
+            message(
+                "sources.vertical_crs_labels",
+                vertical_crs=_system_name(vertical_crs),
+                labels=(
+                    ", ".join(labels)
+                    if labels
+                    else message("sources.no_resolution_label")
+                ),
+            )
         )
-    return "; ".join(parts)
+    return message("sources.vertical_crs_labels_list", parts=parts)
 
 
 def _primary(found: tuple[ProductVariant, ...]) -> tuple[ProductVariant, ...]:
@@ -385,7 +387,7 @@ def variant_error(
     found = variants(product=product, country=country)
     if not found:
         return ValidationError(
-            f"--product {product} nie ma wariantow w {country}",
+            message("sources.product_no_variants", product=product, country=country),
             option="product",
             allowed=tuple(dict.fromkeys(v.product for v in variants(country=country))),
         )
@@ -398,8 +400,13 @@ def variant_error(
         if not chosen:
             tokens = format_tokens(found)
             return ValidationError(
-                f"--format {format}: niedostepny dla {name} {country} - dostepne: "
-                f"{', '.join(tokens)}",
+                message(
+                    "sources.format_unavailable",
+                    format=format,
+                    name=name,
+                    country=country,
+                    tokens=", ".join(tokens),
+                ),
                 option="format",
                 allowed=tuple(tokens),
             )
@@ -411,13 +418,22 @@ def variant_error(
             named = _named_systems(chosen)
             if not named:
                 return ValidationError(
-                    f"{shown} ({country}): {UNKNOWN_VERTICAL} (zrodlo go nie "
-                    "deklaruje) - pomin --vertical-crs",
+                    message(
+                        "sources.vertical_undeclared_omit",
+                        shown=shown,
+                        country=country,
+                        unknown_vertical=UNKNOWN_VERTICAL,
+                    ),
                     option="vertical_crs",
                 )
             return ValidationError(
-                f"{shown} ({country}) jest dostepny tylko w {', '.join(named)} - "
-                f"podano --vertical-crs {vertical_crs}",
+                message(
+                    "sources.vertical_crs_only_named",
+                    shown=shown,
+                    country=country,
+                    named=", ".join(named),
+                    vertical_crs=vertical_crs,
+                ),
                 option="vertical_crs",
                 allowed=tuple(named),
             )
@@ -426,15 +442,18 @@ def variant_error(
         if len({v.label for v in in_crs}) <= 1:
             return None
         return ValidationError(
-            f"--resolution wymagane dla {shown} {country}: "
-            f"{labels_by_vertical_crs(chosen)}",
+            message(
+                "sources.resolution_required",
+                shown=shown,
+                country=country,
+                labels_by_vertical_crs=labels_by_vertical_crs(chosen),
+            ),
             option="resolution",
             allowed=tuple(labels),
         )
     if not labels:
         return ValidationError(
-            f"--resolution nie dotyczy {shown} (skorowidz nie podaje "
-            "rozdzielczosci) - pomin --resolution",
+            message("sources.resolution_not_applicable", shown=shown),
             option="resolution",
         )
     if resolution in labels:
@@ -445,19 +464,35 @@ def variant_error(
         named = _named_systems(of_label)
         if not named:
             return ValidationError(
-                f"{shown} {resolution} ({country}): {UNKNOWN_VERTICAL} (zrodlo go "
-                "nie deklaruje) - pomin --vertical-crs",
+                message(
+                    "sources.res_vertical_undeclared",
+                    shown=shown,
+                    resolution=resolution,
+                    country=country,
+                    unknown_vertical=UNKNOWN_VERTICAL,
+                ),
                 option="vertical_crs",
             )
         return ValidationError(
-            f"{shown} {resolution} ({country}) jest dostepny tylko w "
-            f"{', '.join(named)} - podano --vertical-crs {vertical_crs}; "
-            f"dostepne w {vertical_crs}: {', '.join(labels)}",
+            message(
+                "sources.res_vertical_crs_mismatch",
+                shown=shown,
+                resolution=resolution,
+                country=country,
+                named=", ".join(named),
+                vertical_crs=vertical_crs,
+                labels=", ".join(labels),
+            ),
             options=("resolution", "vertical_crs"),
         )
     return ValidationError(
-        f"{country} nie ma rozdzielczosci {resolution} dla {shown} - dostepne: "
-        f"{labels_by_vertical_crs(chosen)}",
+        message(
+            "sources.resolution_unavailable",
+            country=country,
+            resolution=resolution,
+            shown=shown,
+            labels_by_vertical_crs=labels_by_vertical_crs(chosen),
+        ),
         option="resolution",
         allowed=tuple(everywhere),
     )
@@ -497,8 +532,12 @@ def find_variant(
     if not candidates:
         name = _PRODUCT_NAMES.get(product, product.upper())
         raise ValidationError(
-            f"--vertical-crs wymagane dla {name} {country}: "
-            f"{', '.join(_named_systems(found))}",
+            message(
+                "sources.vertical_crs_required",
+                name=name,
+                country=country,
+                named_systems=", ".join(_named_systems(found)),
+            ),
             option="vertical_crs",
             allowed=tuple(_named_systems(found)),
         )
@@ -511,8 +550,8 @@ def find_variant(
 
 # Sheet systems of CZ variants in messages, with an example code.
 _CZ_SYSTEM_TEXT = {
-    "sm5": ("arkusze SM5 (S-JTSK)", "CTES96"),
-    "tm33": ("kafle TM33 (ETRS89)", "760_5518"),
+    "sm5": (message("sources.cz_system_sm5"), "CTES96"),
+    "tm33": (message("sources.cz_system_tm33"), "760_5518"),
 }
 
 
@@ -528,8 +567,7 @@ def cz_sheet_system(sheet: str) -> str:
     system = _CZ_SYSTEMS.get(detect_system(sheet).id)
     if system is None:
         raise ValidationError(
-            f"Godlo '{sheet}' nie nalezy do zadnego systemu CZ (arkusz SM5, "
-            "np. CTES96, albo kafel TM33, np. 302_5550)",
+            message("sources.sheet_not_cz_system", sheet=sheet),
             option="sheet",
         )
     return system
@@ -566,8 +604,18 @@ def cz_models() -> tuple[str, ...]:
 
 
 def cz_model_text() -> str:
-    """``dmr5g (teren, DMR 5G), ...``: the models of LAZ CZ (``--model``)."""
-    return ", ".join(f"{model} ({CZ_MODELS[model][1]})" for model in cz_models())
+    """``dmr5g (terrain, DMR 5G), ...``: the models of LAZ CZ (``--model``)."""
+    return message(
+        "sources.model_choices",
+        models=[
+            message(
+                "sources.model_choice",
+                model=model,
+                description=CZ_MODELS[model][1],
+            )
+            for model in cz_models()
+        ],
+    )
 
 
 def cz_variant_error(
@@ -592,7 +640,7 @@ def cz_variant_error(
     )
     if not found:
         return ValidationError(
-            f"--product {product} nie ma wariantow rastrowych w CZ",
+            message("sources.no_cz_raster_variants", product=product),
             option="product",
             allowed=tuple(
                 dict.fromkeys(
@@ -605,29 +653,44 @@ def cz_variant_error(
     if resolution is None:
         if system != "sm5" or len(sm5_labels) != 1:
             return ValidationError(
-                f"--resolution wymagane dla {name} CZ: {_cz_labels(found)}",
+                message(
+                    "sources.cz_resolution_required",
+                    name=name,
+                    cz_labels=_cz_labels(found),
+                ),
                 option="resolution",
                 allowed=tuple(_sorted_labels(found)),
             )
     elif resolution not in {v.label for v in found}:
         return ValidationError(
-            f"CZ nie ma rozdzielczosci {resolution} dla {name} - dostepne: "
-            f"{_cz_labels(found)}",
+            message(
+                "sources.cz_resolution_unavailable",
+                resolution=resolution,
+                name=name,
+                cz_labels=_cz_labels(found),
+            ),
             option="resolution",
             allowed=tuple(_sorted_labels(found)),
         )
     elif system == "sm5" and resolution not in sm5_labels:
         return ValidationError(
-            f"Arkusze SM5 {name} CZ sa tylko w {_cz_labels(on_sm5)} - pomin "
-            f"--resolution albo podaj {', '.join(_sorted_labels(on_sm5))}; "
-            f"{resolution}: kafel "
-            "TM33 (np. 302_5550) albo --bbox z --cutout",
+            message(
+                "sources.cz_sm5_resolution_limit",
+                name=name,
+                cz_labels=_cz_labels(on_sm5),
+                sorted_labels=", ".join(_sorted_labels(on_sm5)),
+                resolution=resolution,
+            ),
             option="resolution",
             allowed=tuple(_sorted_labels(on_sm5)),
         )
     if vertical_crs is not None and vertical_crs not in {v.vertical_crs for v in found}:
         return ValidationError(
-            f"{vertical_crs} nie jest dostepny dla CZ - dostepne: {CZ_VERTICAL_TEXT}",
+            message(
+                "sources.cz_vertical_crs_unavailable",
+                vertical_crs=vertical_crs,
+                cz_vertical_text=CZ_VERTICAL_TEXT,
+            ),
             option="vertical_crs",
             allowed=tuple(_named_systems(found)),
         )
@@ -680,14 +743,18 @@ def cz_laz_error(
     """
     if model is None:
         return ValidationError(
-            f"--model wymagane dla --product laz w CZ: {cz_model_text()}",
+            message("sources.cz_laz_model_required", cz_model_text=cz_model_text()),
             option="model",
             allowed=cz_models(),
         )
     rows = variants(product="laz", country="CZ", model=model)
     if not rows:
         return ValidationError(
-            f"--model {model!r}: nieznana wartosc - dostepne: {cz_model_text()}",
+            message(
+                "sources.cz_laz_model_unknown",
+                model=model,
+                cz_model_text=cz_model_text(),
+            ),
             option="model",
             allowed=cz_models(),
         )
@@ -696,8 +763,11 @@ def cz_laz_error(
     chosen = tuple(v for v in rows if v.vertical_crs == vertical_crs)
     if not chosen:
         return ValidationError(
-            f"{vertical_crs} nie jest dostepny dla LAZ CZ - dostepne: "
-            f"{CZ_LAZ_VERTICAL_TEXT}",
+            message(
+                "sources.cz_laz_vertical_unavailable",
+                vertical_crs=vertical_crs,
+                cz_laz_vertical_text=CZ_LAZ_VERTICAL_TEXT,
+            ),
             option="vertical_crs",
             allowed=tuple(_named_systems(rows)),
         )
@@ -707,10 +777,14 @@ def cz_laz_error(
         shown, _example = _CZ_SYSTEM_TEXT[system]
         alternative, example = _CZ_SYSTEM_TEXT[other]
         return ValidationError(
-            f"LAZ CZ - {shown} sa tylko w {', '.join(native)}, podano "
-            f"--vertical-crs {vertical_crs} (chmury punktow bez transformacji); "
-            f"{vertical_crs}: {alternative}, np. {example}, albo obszar "
-            "(--bbox/--geometry)",
+            message(
+                "sources.cz_laz_native_vertical_only",
+                shown=shown,
+                native=", ".join(native),
+                vertical_crs=vertical_crs,
+                alternative=alternative,
+                example=example,
+            ),
             options=("vertical_crs", "sheet"),
         )
     return None

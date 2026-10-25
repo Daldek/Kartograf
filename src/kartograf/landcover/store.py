@@ -13,6 +13,7 @@ from kartograf.core.bbox import BBox
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.storage import bbox_cutout_path, token_segment
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 
 # Derived product: no descriptor of its own (D33).
 HSG_SEGMENT_PREFIX = "hsg/global_soilgrids"
@@ -28,7 +29,7 @@ def selection_unit(
 ) -> str:
     """Plan unit of a selection: TERYT, bbox coordinates or the canonical sheet."""
     if sum(x is not None for x in (teryt, bbox, sheet)) != 1:
-        raise ValidationError("Podaj dokladnie jeden wybor: teryt, bbox albo sheet")
+        raise ValidationError(message("landcover.exactly_one_selection"))
     if teryt is not None:
         return teryt
     if bbox is not None:

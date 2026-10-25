@@ -266,9 +266,9 @@ def test_area_options(data, monkeypatch, tmp_path):
     manager = LandCoverManager(tmp_path, data.name, cache=False)
     for options, message in (
         ({"bbox": AREA, "horizontal_crs": "EPSG:3045"}, "--horizontal-crs"),
-        ({"teryt": "12"}, "--teryt dziala tylko z --product bdot10k"),
-        ({"bbox": AREA, "year": 2023}, "--year dziala tylko z --product"),
-        ({"bbox": AREA, "layers": ["les"]}, "--layers dziala tylko z --product"),
+        ({"teryt": "12"}, "--teryt works only with --product bdot10k"),
+        ({"bbox": AREA, "year": 2023}, "--year only works with --product"),
+        ({"bbox": AREA, "layers": ["les"]}, "--layers only works with --product"),
     ):
         with pytest.raises(ValidationError, match=message):
             manager.download(**options)

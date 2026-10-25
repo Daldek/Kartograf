@@ -634,8 +634,10 @@ _SCALE_ERROR = (
                 "resolution": "0.5m",
                 "vertical_crs": "KRON86",
             },
-            "PL nie ma rozdzielczosci 0.5m dla NMT XYZ - dostepne: EVRF2007: 1m, 5m; "
-            "KRON86: 1m; uklad wysokosci nieznany: 100m",
+            (
+                "PL has no resolution 0.5m for NMT XYZ - available: EVRF2007: 1m, 5m; "
+                "KRON86: 1m; vertical CRS unknown: 100m"
+            ),
         ),
         (
             ["--product", "laz", "--sheet", f"{SHEET}-1", "--format", "TBD"]
@@ -662,8 +664,8 @@ def test_rejected_before_network_cli_equals_api(tmp_path, argv, selection, messa
         )
 
     assert run.cli_code == 2
-    assert f"Error: {message}" in run.cli_stderr.splitlines()
     assert isinstance(run.api_error, ValidationError)
+    assert f"Error: {run.api_error.localized('pl')}" in run.cli_stderr.splitlines()
     assert str(run.api_error) == message
     session.get.assert_not_called()
     assert not run.cli_store.exists() and not run.api_store.exists()
@@ -688,7 +690,7 @@ def test_format_for_orto_is_validation_error(tmp_path):
 def test_xyz_resolution_error_lists_the_registry(tmp_path):
     """The labels offered for ``--format XYZ`` are those of the registry
     (with the voivodeship files NMT 100 m, whose height system is unknown)."""
-    prefix = "PL nie ma rozdzielczosci 0.5m dla NMT XYZ - dostepne: "
+    prefix = "PL has no resolution 0.5m for NMT XYZ - available: "
     with pytest.raises(ValidationError) as caught:
         download_data(
             product="nmt",

@@ -244,7 +244,7 @@ class TestDownloadManagerStorageFromDescriptor:
         provider.vertical_crs = ""
         provider.resolution = "1m"
         provider.descriptor_key = "pl.gugik.nmt_1m"
-        with pytest.raises(ValidationError, match="Pusty wymiar"):
+        with pytest.raises(ValidationError, match="Empty storage segment dimension"):
             DownloadManager(output_dir=tmp_path, provider=provider)
 
 
@@ -956,9 +956,9 @@ class TestCreateNmtProviderFactory:
         with caplog.at_level(logging.WARNING), pytest.raises(ValidationError) as exc:
             create_nmt_provider(vertical_crs="KRON86", resolution="5m")
         message = str(exc.value)
-        assert "5m (PL) jest dostepny tylko w EVRF2007" in message
-        assert "podano --vertical-crs KRON86" in message
-        assert message.endswith(f"; dostepne w KRON86: {labels}")
+        assert "5m (PL) is only available in EVRF2007" in message
+        assert "got --vertical-crs KRON86" in message
+        assert message.endswith(f"; available in KRON86: {labels}")
         assert caplog.text == ""
 
 
@@ -1061,7 +1061,7 @@ class TestSidecarWritten:
                 "kartograf.sources.sidecar.write_sidecar",
                 side_effect=OSError("dysk pelny"),
             ),
-            pytest.raises(DownloadError, match="sidecara"),
+            pytest.raises(DownloadError, match="mandatory sidecar"),
         ):
             manager.download_sheet("N-34-130-D-d-2-4")
         assert manager.storage.list_files("**/*.asc") == []
