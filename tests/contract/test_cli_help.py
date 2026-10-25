@@ -10,6 +10,7 @@ from kartograf.catalog.commands import declared_commands
 from kartograf.cli._parser import _subparsers, create_parser
 from kartograf.cli.commands import main
 from kartograf.landcover.manager import soil_choices
+from kartograf.messages import localize
 from kartograf.sheet_info import describe_sheet
 
 
@@ -122,7 +123,8 @@ def test_soil_list_layers_explains_depths_with_the_library_description(capsys):
     """The depth codes are introduced by the description the library gives them."""
     (description,) = set(soil_choices()["depth"].values())
     assert main(["soil", "list-layers"]) == 0
-    assert f"  Glebokosci ({description}):\n    0-5cm\n" in capsys.readouterr().out
+    shown = localize(description, "pl")
+    assert f"  Glebokosci ({shown}):\n    0-5cm\n" in capsys.readouterr().out
 
 
 def test_parse_cz_code_without_pl_hierarchy(capsys):

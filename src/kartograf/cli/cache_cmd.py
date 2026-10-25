@@ -18,6 +18,8 @@ from kartograf.cache_info import (
     get_cache_path,
 )
 from kartograf.cli._json import command_id, emit_result, wants_json
+from kartograf.cli._language import language
+from kartograf.messages import message
 
 
 def _print_stats(info: CacheInfo) -> None:
@@ -26,21 +28,27 @@ def _print_stats(info: CacheInfo) -> None:
     A database that does not exist yet has none.
     """
     entries = info.entries or CacheEntries(0, 0, 0, 0, 0, 0)
-    print("Statystyki cache metadanych:")
-    print(f"  Wpisy rekordow: {entries.records}")
-    print(f"  Wpisy kampanii: {entries.campaigns}")
-    print(f"  Wpisy TERYT: {entries.teryt}")
-    print(f"  Wpisy arkuszy: {entries.sheets}")
-    print(f"  Wpisy obszarow skorowidza: {entries.index_areas}")
-    print(f"  Indeksy feedow ATOM: {entries.atom_feeds}")
+    print(message("cli.stats_header", lang=language()))
+    print(message("cli.stats_records", lang=language(), records=entries.records))
+    print(message("cli.stats_campaigns", lang=language(), campaigns=entries.campaigns))
+    print(message("cli.stats_teryt", lang=language(), teryt=entries.teryt))
+    print(message("cli.stats_sheets", lang=language(), sheets=entries.sheets))
+    print(
+        message(
+            "cli.stats_index_areas", lang=language(), index_areas=entries.index_areas
+        )
+    )
+    print(
+        message("cli.stats_atom_feeds", lang=language(), atom_feeds=entries.atom_feeds)
+    )
     db_size_kb = (info.size_bytes or 0) / 1024
     if not info.exists:
-        print("  Rozmiar bazy: - (plik jeszcze nie utworzony)")
+        print(message("cli.stats_size_no_file", lang=language()))
     elif db_size_kb < 1024:
-        print(f"  Rozmiar bazy: {db_size_kb:.1f} KB")
+        print(message("cli.stats_size_kb", lang=language(), db_size_kb=db_size_kb))
     else:
-        print(f"  Rozmiar bazy: {db_size_kb / 1024:.1f} MB")
-    print(f"  Sciezka bazy: {info.path}")
+        print(message("cli.stats_size_mb", lang=language(), size_mb=db_size_kb / 1024))
+    print(message("cli.stats_db_path", lang=language(), path=info.path))
 
 
 def cmd_cache(args: argparse.Namespace, action: str) -> int:
@@ -71,11 +79,13 @@ def cmd_cache(args: argparse.Namespace, action: str) -> int:
         return emit_result(command_id(args), info)
     if action == "clear":
         if info.removed_unreadable:
-            print(f"Usunieto nieczytelny plik cache: {info.path}")
+            print(
+                message("cli.clear_removed_unreadable", lang=language(), path=info.path)
+            )
         elif not info.exists:
-            print(f"Cache jest pusty: nie ma pliku cache ({info.path})")
+            print(message("cli.clear_cache_empty", lang=language(), path=info.path))
         else:
-            print("Cache wyczyszczony.")
+            print(message("cli.clear_done", lang=language()))
     else:
         _print_stats(info)
     return 0

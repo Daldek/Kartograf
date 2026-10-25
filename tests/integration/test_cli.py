@@ -10776,8 +10776,8 @@ class TestListMessagesUx:
         assert "nie ma danych dla zadnego z 2 arkuszy" in captured.err
         info = [x for x in captured.err.splitlines() if x.startswith("Info:")]
         assert info == [
-            "Info: Available descendant 7.173.21.01 - use --scale 1:2000",
-            "Info: Available descendant 7.173.22.01 - use --scale 1:2000",
+            "Info: Dostepny potomek 7.173.21.01 - uzyj --scale 1:2000",
+            "Info: Dostepny potomek 7.173.22.01 - uzyj --scale 1:2000",
         ]
         assert "Downloaded 0" not in captured.out
 
@@ -10857,7 +10857,7 @@ class TestListMessagesUx:
         assert rc == 11
         captured = capsys.readouterr()
         assert "nie ma danych dla zadnego z 1 arkusza" in captured.err
-        assert "Info: Available descendant 7.173.21.01" in captured.err
+        assert "Info: Dostepny potomek 7.173.21.01" in captured.err
         assert "Downloaded" not in captured.out
 
     @pytest.mark.parametrize("all_campaigns", [False, True])
@@ -10909,7 +10909,7 @@ class TestListMessagesUx:
 
         assert rc == 11
         captured = capsys.readouterr()
-        assert "use --scale 1:2000" in captured.err
+        assert "uzyj --scale 1:2000" in captured.err
         assert "Downloaded 0" not in captured.out
 
 

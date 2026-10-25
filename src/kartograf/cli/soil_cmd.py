@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from kartograf.cli._args import library_arguments
+from kartograf.cli._language import language, localized
 from kartograf.cli.download_cmd import (
     _plan_context,
     _present,
@@ -29,6 +30,7 @@ from kartograf.exceptions import ValidationError
 from kartograf.hydrology import calculate_hsg, check_hsg
 from kartograf.hydrology.hsg import HSG_OUTPUT_FILES, HsgReport
 from kartograf.landcover.manager import SoilReport, check_soil, download_soil
+from kartograf.messages import message
 
 
 def cmd_soil_download(args: argparse.Namespace) -> int:
@@ -85,7 +87,7 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
     """
     if args.output is None:
         raise ValidationError(
-            f"--output wymagane: katalog magazynu ({HSG_OUTPUT_FILES})",
+            message("hydrology.output_required", hsg_output_files=HSG_OUTPUT_FILES),
             option="output_dir",
         )
 
@@ -128,26 +130,38 @@ def _print_hsg(
         _print_summary(result.summary)
     if result.files and not args.quiet:
         print()
-        print("Legenda: 1=A (duza infiltracja), 2=B (umiarkowana),")
-        print("         3=C (mala), 4=D (bardzo mala)")
-        print("Metoda SCS-CN: HSG + uzytkowanie terenu -> Curve Number")
+        print(message("cli.hsg_legend_first", lang=language()))
+        print(message("cli.hsg_legend_second", lang=language()))
+        print(message("cli.hsg_scs_cn_method", lang=language()))
     return exit_code_of(result)
 
 
 def _print_summary(summary: dict[str, Any]) -> None:
     """Print the statistics of the HSG raster (``report.summary``) as text."""
     print()
-    print("Statystyki HSG obszaru zadania (grupy: % powierzchni z danymi):")
+    print(message("cli.hsg_statistics_header", lang=language()))
     groups = dict(summary)
     nodata = groups.pop("nodata")
     for group, data in groups.items():
         pct = data["percent"]
         area = data["area_ha"]
-        print(f"  Grupa {group}: {pct:.1f}% ({area:.2f} ha)")
-        print(f"           {data['description']}")
+        print(
+            message(
+                "cli.hsg_group_line",
+                lang=language(),
+                group=group,
+                percent=pct,
+                area_ha=area,
+            )
+        )
+        print(f"           {localized(data['description'])}")
     print(
-        f"  Brak danych: {nodata['percent']:.1f}% obszaru zadania "
-        f"({nodata['area_ha']:.2f} ha)"
+        message(
+            "cli.hsg_nodata_area",
+            lang=language(),
+            nodata_percent=nodata["percent"],
+            nodata_area_ha=nodata["area_ha"],
+        )
     )
     total = nodata["area_ha"] + sum(data["area_ha"] for data in groups.values())
-    print(f"  Obszar zadania: {total:.2f} ha")
+    print(message("cli.hsg_task_area_total", lang=language(), total=total))

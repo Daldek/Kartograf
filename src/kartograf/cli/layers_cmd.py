@@ -12,33 +12,15 @@ import argparse
 import textwrap
 
 from kartograf.cli._json import command_id, emit_result, wants_json
+from kartograf.cli._language import language, localized
 from kartograf.landcover.manager import soil_choices
-from kartograf.source_info import LayerList, PropertyInfo, list_layers
+from kartograf.messages import message
+from kartograf.source_info import LayerInfo, LayerList, PropertyInfo, list_layers
 
 _WIDTH = 78
-_CLASSES_NOTE = (
-    "--layers zapisuje ZIP plikow wybranych klas. Paczka ma pliki tylko "
-    "tych klas, ktorych obiekty sa w wojewodztwie (do 2023): brak czesci "
-    "klas = Info, brak wszystkich = blad wojewodztwa."
-)
-_BDOT10K_NOTE = (
-    "Klasy BDOT10k ({count}): kazdy kod przyjmuje --layers (z --format GPKG; "
-    "kod = OT_<KOD> w nazwach tabel). Paczka powiatu ma tabele tylko tych "
-    "klas, ktorych obiekty sa w powiecie: brak czesci wybranych klas = Info, "
-    "brak wszystkich = blad powiatu."
-)
-_AREA_LAYERS_NOTE = (
-    "Nazwy = warstwy GeoPackage obszaru (--bbox/--geometry); wynik "
-    "obszaru ma zawsze wszystkie te warstwy (--layers dziala tylko "
-    "z --product bdot10k albo bdoo). Plik krajowy (--whole-country) "
-    "ma warstwy pelnej bazy pod nazwami CUZK."
-)
-_SOIL_NOTE = (
-    'Plik SoilGrids to liczby calkowite w jednostkach ISRIC ("w pliku"); '
-    "wartosc / dzielnik = jednostka konwencjonalna (ten sam opis w sidecarze: "
-    "extra.units). Wartosc 0 oznacza obszar bez danych (morze, woda, "
-    "zabudowa, skaly, lod); plik nie ma tagu NoData."
-)
+_CLASSES_NOTE = message("cli.classes_note")
+_AREA_LAYERS_NOTE = message("cli.area_layers_note")
+_SOIL_NOTE = message("cli.soil_note")
 
 
 def _depth_note() -> str:
@@ -47,7 +29,9 @@ def _depth_note() -> str:
     The description the library gives the depths of SoilGrids (every depth is a depth
     interval below the surface).
     """
-    return "; ".join(dict.fromkeys(soil_choices()["depth"].values()))
+    return "; ".join(
+        dict.fromkeys(localized(text) for text in soil_choices()["depth"].values())
+    )
 
 
 def _wrapped(text: str, indent: str) -> str:
@@ -56,11 +40,16 @@ def _wrapped(text: str, indent: str) -> str:
     )
 
 
+def _description(item: LayerInfo) -> str:
+    """Return the description of a layer, property or statistic as a person reads it."""
+    return localized(item.description or "")
+
+
 def _classes(layers: LayerList) -> list[str]:
     """Class codes of a source of packages (BDOO) per release (``--year``)."""
-    lines = [
-        "  Klasy obiektow (--layers) wg rocznika; kod = OT_<KOD> w nazwach plikow",
-        "  paczki wojewodztwa.",
+    lines: list[str] = [
+        message("cli.classes_header_line1", lang=language()),
+        message("cli.classes_header_line2", lang=language()),
     ]
     for year, codes in (layers.classes or {}).items():
         lines += [
@@ -68,7 +57,7 @@ def _classes(layers: LayerList) -> list[str]:
             f"  --year {year} ({len(codes)}):",
             _wrapped(", ".join(codes), "    "),
         ]
-    return [*lines, "", _wrapped(_CLASSES_NOTE, "  ")]
+    return [*lines, "", _wrapped(localized(_CLASSES_NOTE), "  ")]
 
 
 def _depths(layers: LayerList) -> list[str]:
@@ -82,7 +71,7 @@ def _depths(layers: LayerList) -> list[str]:
     for depth in layers.depths or ():
         owners = [p.code for p in properties if depth in p.depths]
         only = (
-            f"  (tylko {', '.join(owners)})"
+            message("cli.depths_only_owners", lang=language(), owners=", ".join(owners))
             if len(owners) * 2 < len(properties)
             else ""
         )
@@ -93,33 +82,36 @@ def _depths(layers: LayerList) -> list[str]:
 def _soil(layers: LayerList) -> list[str]:
     """Properties, depths and statistics of SoilGrids."""
     return [
-        "  Wlasciwosci gleb (w pliku = jednostka wartosci w pliku):",
+        message("cli.soil_properties_header", lang=language()),
         *(
-            f"    {item.code:11} - {item.description}"
+            f"    {item.code:11} - {_description(item)}"
             for item in layers.properties or ()
         ),
         "",
-        f"  Glebokosci ({_depth_note()}):",
+        message("cli.soil_depths_header", lang=language(), depth_note=_depth_note()),
         *_depths(layers),
         "",
-        "  Statystyki:",
+        message("cli.soil_statistics_header", lang=language()),
         *(
-            f"    {item.code:11} - {item.description}"
+            f"    {item.code:11} - {_description(item)}"
             for item in layers.statistics or ()
         ),
         "",
-        "  Wybor pobrania: --property, --depth, --stat.",
+        message("cli.soil_download_selection", lang=language()),
         "",
-        _wrapped(_SOIL_NOTE, "  "),
+        _wrapped(localized(_SOIL_NOTE), "  "),
     ]
 
 
 def _corine(layers: LayerList) -> list[str]:
     """Return the release years of CORINE: CLMS data or the WMS preview."""
     return [
-        "  CORINE: jedna klasyfikacja pokrycia terenu.",
-        "  Dostepne lata (--year, rok referencyjny):",
-        *(f"    {item.year}  ({item.description})" for item in layers.years or ()),
+        message("cli.corine_intro", lang=language()),
+        message("cli.corine_available_years", lang=language()),
+        *(
+            f"    {item.year}  ({localized(item.description)})"
+            for item in layers.years or ()
+        ),
     ]
 
 
@@ -131,14 +123,21 @@ def _named(layers: LayerList) -> list[str]:
     """
     if any(layer.description is not None for layer in layers.layers):
         return [
-            *(f"    {layer.code}  - {layer.description}" for layer in layers.layers),
+            *(f"    {layer.code}  - {_description(layer)}" for layer in layers.layers),
             "",
-            _wrapped(_BDOT10K_NOTE.format(count=len(layers.layers)), "  "),
+            _wrapped(
+                message(
+                    "cli.bdot10k_classes_note",
+                    lang=language(),
+                    count=len(layers.layers),
+                ),
+                "  ",
+            ),
         ]
     return [
         *(f"    {layer.code}" for layer in layers.layers),
         "",
-        _wrapped(_AREA_LAYERS_NOTE, "  "),
+        _wrapped(localized(_AREA_LAYERS_NOTE), "  "),
     ]
 
 
@@ -152,7 +151,13 @@ def format_layers(layers: LayerList) -> str:
         body = _corine(layers)
     else:
         body = _named(layers)
-    return "\n".join([f"Warstwy zrodla {layers.source}:", "", *body])
+    return "\n".join(
+        [
+            message("cli.source_layers_header", lang=language(), source=layers.source),
+            "",
+            *body,
+        ]
+    )
 
 
 def cmd_list_layers(args: argparse.Namespace, group: str) -> int:

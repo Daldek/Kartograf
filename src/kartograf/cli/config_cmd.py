@@ -10,51 +10,88 @@ refuses it, ``check_config``): the report says what is wrong with the file.
 import argparse
 
 from kartograf.cli._json import command_id, emit_result, wants_json
+from kartograf.cli._language import language, localized, yes_no
 from kartograf.config import Config, Setting, get_config
+from kartograf.messages import message
 
-_SOURCE_TEXT = {"default": "domyslnie", "env": "zmienna", "file": "plik"}
+_SOURCE_TEXT = {
+    "default": message("cli.source_default"),
+    "env": message("cli.source_env"),
+    "file": message("cli.source_file"),
+}
 
 
 def _origin(source: str, name: str | None) -> str:
     if source == "default":
-        return _SOURCE_TEXT["default"]
-    return f"{_SOURCE_TEXT[source]} {name}"
+        return localized(_SOURCE_TEXT["default"])
+    return f"{localized(_SOURCE_TEXT[source])} {name}"
 
 
 def _shown(setting: Setting) -> str:
     if isinstance(setting.value, bool):
-        return "tak" if setting.value else "nie"
+        return yes_no(setting.value)
     return str(setting.value)
 
 
 def _state(report: Config) -> str:
     file = report.config_file
     if file.error is not None:
-        return f"blad: {file.error}"
-    return "istnieje" if file.exists else "brak"
+        return message("cli.state_error", lang=language(), error=file.error)
+    return (
+        message("cli.state_exists", lang=language())
+        if file.exists
+        else message("cli.missing", lang=language())
+    )
 
 
 def render(report: Config) -> str:
     """Return the text of a report: file, settings, credentials and store."""
     file = report.config_file
-    lines = [
-        f"Plik ustawien: {file.path} ({_state(report)})",
-        "Ustawienia:",
+    lines: list[str] = [
+        message(
+            "cli.settings_file_line",
+            lang=language(),
+            path=file.path,
+            state=_state(report),
+        ),
+        message("cli.settings_header", lang=language()),
     ]
     for key, setting in report.keys.items():
         line = f"  {key} = {_shown(setting)}  [{_origin(setting.source, setting.name)}]"
         if setting.error is not None:
-            line += f"  (pominieto wartosc: {setting.error})"
+            line += message("cli.value_skipped", lang=language(), error=setting.error)
         lines.append(line)
     for ignored in file.ignored:
-        lines.append(f"  pominieto klucz [kartograf] {ignored.key}: {ignored.reason}")
-    lines.append("Dane uwierzytelniajace (tylko zmienne srodowiskowe):")
+        lines.append(
+            message(
+                "cli.ignored_config_key",
+                lang=language(),
+                setting_key=ignored.key,
+                reason=ignored.reason,
+            )
+        )
+    lines.append(message("cli.credentials_header", lang=language()))
     for name, state in report.credentials.items():
-        lines.append(f"  {name}: {'ustawione' if state == 'present' else 'brak'}")
+        state_text = (
+            message("cli.credential_set", lang=language())
+            if state == "present"
+            else message("cli.missing", lang=language())
+        )
+        lines.append(f"  {name}: {state_text}")
     store = report.store
-    size = "brak katalogu" if store.size_bytes is None else f"{store.size_bytes} B"
+    size = (
+        message("cli.store_no_directory", lang=language())
+        if store.size_bytes is None
+        else f"{store.size_bytes} B"
+    )
     lines.append(
-        f"Magazyn: {store.root}  [{_origin(store.source, store.name)}]  {size}"
+        message(
+            "cli.store_line",
+            lang=language(),
+            root=store.root,
+            origin=_origin(store.source, store.name),
+            size=size,
+        )
     )
     return "\n".join(lines) + "\n"
 

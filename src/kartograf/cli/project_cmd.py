@@ -28,12 +28,14 @@ from kartograf import (
 )
 from kartograf.catalog.kinds import convert_arguments
 from kartograf.cli._json import command_id, emit_result, wants_json
+from kartograf.cli._language import language, localized
 from kartograf.cli._parser import create_parser
 from kartograf.cli.download_cmd import notice_printer, progress_printer
 from kartograf.commands import CommandCall, parse_command
 from kartograf.download.fetch import UpdateMode
 from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.project.commands import project_command, task_command
 
 
@@ -42,11 +44,22 @@ def cmd_project_init(args: argparse.Namespace) -> int:
     project = init_project(args.project, output_dir=args.output)
     if wants_json(args):
         return emit_result(command_id(args), project)
-    print(f"Utworzono projekt: {project.directory / 'kartograf-project.json'}")
-    print(f"Magazyn: {project.output_dir}")
     print(
-        "Dodaj zadanie: "
-        f"{project_command(args.project, 'add', 'NAZWA <grupa> <komenda> ...')}"
+        message(
+            "cli.project_created",
+            lang=language(),
+            path=project.directory / "kartograf-project.json",
+        )
+    )
+    print(message("cli.project_store", lang=language(), output_dir=project.output_dir))
+    print(
+        message(
+            "cli.project_add_task_hint",
+            lang=language(),
+            project_command=project_command(
+                args.project, "add", message("cli.project_add_usage", lang=language())
+            ),
+        )
     )
     return 0
 
@@ -66,34 +79,43 @@ def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
     ):
         if name in call.run:
             raise ValidationError(
-                f"{flag} nie jest czescia zadania; aktualizacja projektu: "
-                f"{project_command(args.project, 'download', '--upgrade', args.name)}",
+                message(
+                    "cli.run_option_upgrade",
+                    flag=flag,
+                    project_command=project_command(
+                        args.project, "download", "--upgrade", args.name
+                    ),
+                ),
                 option=name,
             )
     if "workers" in call.run:
         raise ValidationError(
-            "--workers nie jest czescia zadania (opcja uruchomienia); rownolegle "
-            "pobieranie: "
-            f"{project_command(args.project, 'download', '--workers', 'N', args.name)}",
+            message(
+                "cli.run_option_workers",
+                project_command=project_command(
+                    args.project, "download", "--workers", "N", args.name
+                ),
+            ),
             option="workers",
         )
     if "quiet" in call.run:
         raise ValidationError(
-            "-q/--quiet nie jest czescia zadania (wycisza tekst komendy danych, "
-            "a add niczego nie pobiera); usun -q",
+            message("cli.run_option_quiet"),
             option="quiet",
         )
     if "summary" in call.run:
         raise ValidationError(
-            "--summary nie jest czescia zadania (tylko wypisuje statystyki HSG "
-            "po obliczeniu); usun --summary",
+            message("cli.run_option_summary"),
             option="summary",
         )
     if "json" in call.run:
         raise ValidationError(
-            "--json nie jest czescia zadania (to tryb wyniku komendy project add); "
-            "podaj go przed nazwa zadania: "
-            f"{project_command(args.project, 'add', '--json', args.name, '...')}",
+            message(
+                "cli.run_option_json",
+                project_command=project_command(
+                    args.project, "add", "--json", args.name, "..."
+                ),
+            ),
             option="json",
         )
     output = call.run.get("output_dir")
@@ -101,8 +123,11 @@ def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
         store = open_project(args.project).output_dir
         if Path(str(output)).resolve() != store.resolve():
             raise ValidationError(
-                f"zadanie pobiera do magazynu projektu ({store}), a --output "
-                f"wskazuje {Path(str(output)).resolve()}; usun --output",
+                message(
+                    "cli.run_option_output",
+                    store=store,
+                    resolved_path=Path(str(output)).resolve(),
+                ),
                 option="output_dir",
             )
 
@@ -116,7 +141,7 @@ def cmd_project_add(args: argparse.Namespace) -> int:
     if command_args and command_args[0] == "--":
         command_args = command_args[1:]
     if any(arg == "--project" or arg.startswith("--project=") for arg in command_args):
-        raise ValidationError("--project podaj przed nazwa zadania (przed NAZWA)")
+        raise ValidationError(message("cli.project_option_position"))
     if any(arg in ("-h", "--help") for arg in command_args):
         # the help of the data command itself: argparse prints it and exits
         create_parser().parse_args(command_args)
@@ -131,8 +156,13 @@ def cmd_project_add(args: argparse.Namespace) -> int:
     if wants_json(args):
         return emit_result(command_id(args), project)
     print(
-        f"Dodano zadanie {args.name} ({call.command}); pobierz: "
-        f"{project_command(args.project, 'download', args.name)}"
+        message(
+            "cli.project_task_added",
+            lang=language(),
+            name=args.name,
+            command=call.command,
+            project_command=project_command(args.project, "download", args.name),
+        )
     )
     return 0
 
@@ -142,7 +172,7 @@ def cmd_project_remove(args: argparse.Namespace) -> int:
     project = remove_project_task(args.project, name=args.name)
     if wants_json(args):
         return emit_result(command_id(args), project)
-    print(f"Usunieto zadanie {args.name}; pliki zostaly w magazynie")
+    print(message("cli.project_task_removed", lang=language(), name=args.name))
     return 0
 
 
@@ -156,39 +186,41 @@ def _error(task: str, text: str) -> None:
 
 
 def _file_count(count: int) -> str:
-    if count == 1:
-        noun = "plik"
-    elif count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14):
-        noun = "pliki"
-    else:
-        noun = "plikow"
-    return f"{count} {noun}"
+    return message("cli.file_count", lang=language(), count=count)
 
 
 def _check_line(file: FileCheck, checking_updates: bool) -> str:
-    """Polish status relative to the pin, never to the latest store alias."""
+    """Return the status of a file relative to the pin, never to the latest alias."""
+    status: str
     if checking_updates:
         if file.status == "newer":
-            status = f"nowsza: {file.available_label or 'nieznana'}"
+            status = message(
+                "cli.status_newer",
+                lang=language(),
+                available_label=file.available_label
+                or message("cli.status_unknown", lang=language()),
+            )
             if file.pinned_label:
-                status += f" (przypieta {file.pinned_label})"
+                status += message(
+                    "cli.status_pinned", lang=language(), pinned_label=file.pinned_label
+                )
         else:
             status = {
-                "current": "aktualne",
-                "added": "nowy plik w wyniku zadania",
-                "removed": "poza wynikiem zadania",
-                "unverifiable": "nie da sie sprawdzic bez pobrania (--force)",
-                "missing": "brak przypietego pliku w magazynie",
-                "check_failed": "blad sprawdzenia",
+                "current": message("cli.status_current", lang=language()),
+                "added": message("cli.status_added", lang=language()),
+                "removed": message("cli.status_removed", lang=language()),
+                "unverifiable": message("cli.status_unverifiable", lang=language()),
+                "missing": message("cli.status_missing", lang=language()),
+                "check_failed": message("cli.status_check_failed", lang=language()),
             }.get(file.status, file.status)
     else:
         status = {
             "ok": "ok",
-            "missing": "brak przypietego pliku w magazynie",
-            "corrupt": "uszkodzony przypiety plik",
+            "missing": message("cli.status_missing", lang=language()),
+            "corrupt": message("cli.status_corrupt", lang=language()),
         }.get(file.status, file.status)
     if file.detail and file.detail != status:
-        status += f": {file.detail}"
+        status += f": {localized(file.detail)}"
     return f"{file.task}: {_unit_file(file.unit, file.path)}: {status}"
 
 
@@ -204,20 +236,42 @@ def _unit_file(unit: str, path: str) -> str:
 def _render_check(report: ProjectCheck, *, quiet: bool, checking_updates: bool) -> int:
     """Render API file statuses and report failures; notices stay on stderr."""
     if not quiet and not checking_updates:
-        print(f"Projekt: {report.project.directory}")
-        print(f"Magazyn: {report.project.output_dir}")
+        print(
+            message(
+                "cli.project_directory",
+                lang=language(),
+                directory=report.project.directory,
+            )
+        )
+        print(
+            message(
+                "cli.project_store",
+                lang=language(),
+                output_dir=report.project.output_dir,
+            )
+        )
         selected = {file.task for file in report.files} | set(report.not_downloaded)
         for task in report.project.tasks:
             if task.name in selected and task.files:
                 print(
-                    f"{task.name}  {task.command}  {_file_count(len(task.files))}  "
-                    f"przypiete {task.pinned_at}"
+                    message(
+                        "cli.task_pinned_line",
+                        lang=language(),
+                        name=task.name,
+                        command=task.command,
+                        file_count=_file_count(len(task.files)),
+                        pinned_at=task.pinned_at,
+                    )
                 )
     for name in report.not_downloaded:
         # a state, not an error: the exit code 1 says it (status -q || download)
         if not quiet:
             hint = project_command(report.project.directory, "download", name)
-            print(f"{name}: nie pobrane (pobierz: {hint})")
+            print(
+                message(
+                    "cli.task_not_downloaded", lang=language(), name=name, hint=hint
+                )
+            )
     for file in report.files:
         line = _check_line(file, checking_updates)
         if file.status in ("check_failed", "missing", "corrupt"):
@@ -237,15 +291,15 @@ def _print_download(
     if getattr(progress, "pending", False):
         print()
     for result in report.tasks:
-        for message in result.errors:
-            _error(result.name, message)
+        for error in result.errors:
+            _error(result.name, localized(error))
         if not args.quiet:
             outcome = {
-                "pinned": "przypieto",
-                "restored": "odtworzono",
-                "updated": "zaktualizowano",
-                "unchanged": "bez zmian",
-                "failed": "blad",
+                "pinned": message("cli.outcome_pinned", lang=language()),
+                "restored": message("cli.outcome_restored", lang=language()),
+                "updated": message("cli.outcome_updated", lang=language()),
+                "unchanged": message("cli.status_unchanged", lang=language()),
+                "failed": message("cli.outcome_failed", lang=language()),
             }[result.outcome]
             line = f"{result.name}: {outcome}"
             if result.outcome in ("pinned", "restored"):
@@ -258,15 +312,26 @@ def _print_download(
             print(line)
             for pin in result.pinned:
                 print(
-                    f"{result.name}: {_unit_file(pin.unit, pin.path)}: "
-                    f"przypieto {pin.label}"
+                    message(
+                        "cli.unit_file_pinned",
+                        lang=language(),
+                        name=result.name,
+                        unit_file=_unit_file(pin.unit, pin.path),
+                        label=pin.label,
+                    )
                 )
     if not args.quiet:
         counts = Counter(task.outcome for task in report.tasks)
         print(
-            f"Projekt: przypiete {counts['pinned']}, odtworzone {counts['restored']}, "
-            f"zaktualizowane {counts['updated']}, bez zmian {counts['unchanged']}, "
-            f"bledy {counts['failed']}"
+            message(
+                "cli.download_summary",
+                lang=language(),
+                counts_pinned=counts["pinned"],
+                counts_restored=counts["restored"],
+                counts_updated=counts["updated"],
+                counts_unchanged=counts["unchanged"],
+                counts_failed=counts["failed"],
+            )
         )
     return exit_code_of(report)
 

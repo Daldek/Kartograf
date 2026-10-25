@@ -3,10 +3,10 @@
 
 The table is rendered from the library document ``list_sources`` (spec 5.4.6):
 no network and no second catalogue; with ``--json`` the CLI prints that
-document (``kartograf-sources/1``). WYBOR is the options that choose a source in
+document (``kartograf-sources/1``). CHOICE is the options that choose a source in
 ``<group> download`` written as flags (``--product nmt --country pl --resolution
-1m --vertical-crs EVRF2007|KRON86``), KATALOG the segment of the files below
-``--output``, KLUCZ the ``dataset`` field of their sidecar.
+1m --vertical-crs EVRF2007|KRON86``), DIRECTORY the segment of the files below
+``--output``, KEY the ``dataset`` field of their sidecar.
 """
 
 import argparse
@@ -15,14 +15,19 @@ from collections.abc import Sequence
 
 from kartograf.catalog.commands import declared
 from kartograf.cli._json import command_id, emit_result, wants_json
+from kartograf.cli._language import language, localized
+from kartograf.messages import message
 from kartograf.source_info import SelectValue, list_sources
 
-_HEADER = ("WYBOR", "KRAJ", "DOSTAWCA", "KATALOG", "KLUCZ", "NAZWA")
-_NOTE = (
-    "WYBOR: a|b = jedna z wartosci. KATALOG: pod --output; <uklad> i <uklad-wys> "
-    "wynikaja z wyboru, wybory wariantu (skala, format, rocznik) dopisuja "
-    "czlony _<wartosc>."
+_HEADER = (
+    message("cli.header_choice"),
+    message("cli.header_country"),
+    message("cli.header_provider"),
+    message("cli.header_directory"),
+    message("cli.header_key"),
+    message("cli.header_name"),
 )
+_NOTE = message("cli.list_sources_note")
 
 
 def _collapse(values: Sequence[str | int]) -> list[str]:
@@ -72,6 +77,7 @@ def cmd_list_sources(args: argparse.Namespace, group: str) -> int:
     if wants_json(args):
         return emit_result(command_id(args), sources)
     metavars = _metavars(group)
+    header = tuple(localized(cell) for cell in _HEADER)
     rows = [
         (
             _choice(source.select, metavars),
@@ -79,16 +85,16 @@ def cmd_list_sources(args: argparse.Namespace, group: str) -> int:
             source.provider,
             source.directory,
             source.key,
-            source.name,
+            localized(source.name),
         )
         for source in sources.sources
     ]
-    widths = [max(len(row[i]) for row in (_HEADER, *rows)) for i in range(len(_HEADER))]
-    print(f"Zrodla grupy {group}:")
-    for row in (_HEADER, *rows):
+    widths = [max(len(row[i]) for row in (header, *rows)) for i in range(len(header))]
+    print(message("cli.sources_of_group", lang=language(), group=group))
+    for row in (header, *rows):
         cells = (cell.ljust(width) for cell, width in zip(row, widths, strict=True))
         print("  " + "  ".join(cells).rstrip())
     print()
-    print(textwrap.fill(_NOTE, width=78))
-    print(f"Opcje pobrania: kartograf {group} download --help")
+    print(textwrap.fill(localized(_NOTE), width=78))
+    print(message("cli.download_options_hint", lang=language(), group=group))
     return 0
