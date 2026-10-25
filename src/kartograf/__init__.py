@@ -82,7 +82,7 @@ Example usage::
     # Download NMT data (one sheet from GUGiK OpenData); every data choice
     # (product, resolution, vertical CRS, output) is explicit
     provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
-    manager = DownloadManager("./data", provider)
+    manager = DownloadManager(provider, root="./data")
     result = manager.download_sheet("N-34-130-D-d-2-4")
     print(result.files["N-34-130-D-d-2-4"][0].version_path)
 

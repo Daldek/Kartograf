@@ -63,8 +63,12 @@ _INIT_PARAMS = (
     _PROJECT_DIR_WRITTEN,
     replace(
         shared.ROOT,
-        description="Store directory of the project (required): there is no default.",
-        description_pl="Katalog magazynu projektu (wymagany; bez domyslnej sciezki)",
+        description="Store directory of the project, written into the manifest. "
+        "Default: the store of the user data directory (`KARTOGRAF_ROOT`, "
+        "`[kartograf] root` of `nogat.toml`, else `<data_dir>/kartograf`), as an "
+        "absolute path.",
+        description_pl="Katalog magazynu projektu, zapisany w manifescie (domyslnie "
+        "magazyn w katalogu danych uzytkownika, jako sciezka bezwzgledna)",
         section=None,
     ),
     shared.JSON,

@@ -603,10 +603,6 @@ MESSAGES = {
     ),
     # ``cli.store_cmd``.
     "header_product": Text("PRODUCT", "PRODUKT"),
-    "root_required": Text(
-        "--root is required (store directory)",
-        "--root jest wymagane (katalog magazynu)",
-    ),
     "store_empty": Text(
         "Store {root} is empty (no segments)",
         "Magazyn {root} jest pusty (brak segmentow)",

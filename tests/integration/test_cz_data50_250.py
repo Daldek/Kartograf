@@ -180,7 +180,7 @@ def test_bbox_feature_layers(data, monkeypatch, tmp_path):
     of an area."""
     _page_size(monkeypatch, data.key, 1, sources=set(data.layers))
     fake = serve(monkeypatch, data)
-    manager = LandCoverManager(tmp_path, data.name, cache=False)
+    manager = LandCoverManager(data.name, cache=False, root=tmp_path)
 
     result = manager.download(bbox=AREA)
 
@@ -221,7 +221,7 @@ def test_whole_country_crs(data, monkeypatch, tmp_path):
     is stored 1:1 and labelled by the ``updated`` of its entry."""
     body = zip_bytes(NATIONAL[data.name]["members"])
     fake = serve(monkeypatch, data, body)
-    manager = LandCoverManager(tmp_path, data.name, cache=False)
+    manager = LandCoverManager(data.name, cache=False, root=tmp_path)
     with pytest.raises(ValidationError, match="required .*: EPSG:5514, EPSG:3045$"):
         manager.download(whole_country=True)
     with pytest.raises(
@@ -263,7 +263,7 @@ def test_area_options(data, monkeypatch, tmp_path):
     """An area is always in the CRS of the service; TERYT units, years and
     classes belong to other sources."""
     fake = serve(monkeypatch, data)
-    manager = LandCoverManager(tmp_path, data.name, cache=False)
+    manager = LandCoverManager(data.name, cache=False, root=tmp_path)
     for options, message in (
         ({"bbox": AREA, "horizontal_crs": "EPSG:3045"}, "--horizontal-crs"),
         ({"teryt": "12"}, "--teryt works only with --product bdot10k"),

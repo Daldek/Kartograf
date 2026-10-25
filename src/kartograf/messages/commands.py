@@ -32,10 +32,6 @@ MESSAGES = {
         "option {name!r} is given as a task option and as a run flag",
         "opcja {name!r} podana jako opcja zadania i jako flaga uruchomienia",
     ),
-    "root_required": Text(
-        "root is required (the store directory)",
-        "root wymagane (katalog magazynu)",
-    ),
     "summary_only_for_hsg": Text(
         "summary applies only to the command {summary_command} (HSG statistics)",
         "summary dotyczy tylko komendy {summary_command} (statystyki HSG)",

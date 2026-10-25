@@ -60,6 +60,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox
 from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox
 from kartograf.download.area import (
@@ -374,7 +375,7 @@ def _check_error(run: _Run) -> DownloadError:
 
 def _task(**kwargs: Any) -> SimpleNamespace:
     task = SimpleNamespace(**kwargs)
-    task.root = Path(task.root) if task.root is not None else None
+    task.root = resolve_root(task.root)
     task.geometry = Path(task.geometry) if task.geometry is not None else None
     # enumerated values in any case: the spelling of the registry (UX-11)
     task.country = canonical_country(task.country)
@@ -419,7 +420,7 @@ def _start(
 def download_data(
     *,
     product: str | None,
-    root: str | Path | None,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -521,7 +522,7 @@ def download_data(
 def check_data(
     *,
     product: str | None,
-    root: str | Path | None,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -578,7 +579,7 @@ def check_data(
 def validate_data_request(
     *,
     product: str | None,
-    root: str | Path | None,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,

@@ -39,6 +39,7 @@ from typing import Any
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.area import bbox_to_2180, geometry_envelope_2180
@@ -93,7 +94,6 @@ from kartograf.download.options import (
     canonical_crs,
     canonical_format,
     check_layer,
-    output_required,
     validate_request_bbox,
 )
 from kartograf.download.plan import (
@@ -600,8 +600,9 @@ class LandCoverManager:
 
     def __init__(
         self,
-        root: str | Path,
         provider: LandCoverProvider | str,
+        *,
+        root: str | Path | None = None,
         cache: MetadataCache | bool = True,
     ):
         """
@@ -609,20 +610,21 @@ class LandCoverManager:
 
         Parameters
         ----------
-        root : str or Path
-            Store root. It is not created here: the directory appears only
-            when a download writes its first file.
         provider : LandCoverProvider or str
             Provider instance or name: "bdot10k" (topographic vectors),
             "corine" (land cover raster), "soilgrids" (soil rasters) or a
             source on the collection engines without a provider class:
             "bdoo" (PL general geographic database), "zabaged", "data50",
             "data250" (CZ).
+        root : str or Path, optional
+            Store root. It is not created here: the directory appears only
+            when a download writes its first file. Default: the store root of
+            the settings (``store_root()``).
         cache : MetadataCache or bool
             Cache for providers created by name (see the class docstring);
             opened per ``download``/``check`` call.
         """
-        self._root = Path(root)
+        self._root = resolve_root(root)
         self._cache = cache
         self._provider: LandCoverProvider
         self._provider_name: str | None = None
@@ -2033,27 +2035,23 @@ def _landcover_manager(
 ) -> LandCoverManager:
     """Return the manager of ``product`` in the store ``root``.
 
-    Both are checked first, without network.
+    The product is checked first, without network.
     """
     chosen = require_landcover_product(product)
-    if root is None:
-        raise ValidationError(output_required("landcover"), option="root")
-    return LandCoverManager(root, chosen, cache=cache)
+    return LandCoverManager(chosen, root=root, cache=cache)
 
 
 def _soil_manager(
     root: str | Path | None, cache: MetadataCache | bool
 ) -> LandCoverManager:
-    """Return the SoilGrids manager of the store ``root`` (checked first)."""
-    if root is None:
-        raise ValidationError(output_required("soil"), option="root")
-    return LandCoverManager(root, "soilgrids", cache=cache)
+    """Return the SoilGrids manager of the store ``root``."""
+    return LandCoverManager("soilgrids", root=root, cache=cache)
 
 
 def download_landcover(
     *,
     product: str | None,
-    root: str | Path | None,
+    root: str | Path | None = None,
     teryt: str | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
@@ -2168,7 +2166,7 @@ def download_landcover(
 def check_landcover(
     *,
     product: str | None,
-    root: str | Path | None,
+    root: str | Path | None = None,
     teryt: str | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
@@ -2220,7 +2218,7 @@ def check_landcover(
 def validate_landcover_request(
     *,
     product: str | None,
-    root: str | Path | None,
+    root: str | Path | None = None,
     teryt: str | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
@@ -2256,7 +2254,7 @@ def validate_landcover_request(
 
 def download_soil(
     *,
-    root: str | Path | None,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -2327,7 +2325,7 @@ def download_soil(
 
 def check_soil(
     *,
-    root: str | Path | None,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -2360,7 +2358,7 @@ def check_soil(
 
 def validate_soil_request(
     *,
-    root: str | Path | None,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,

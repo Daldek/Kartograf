@@ -217,7 +217,7 @@ def test_landcover_corine_preview_line(tmp_path, capsys, caplog):
 
 def test_corine_preview_not_emitted_for_invalid_sheet(tmp_path, capsys):
     with patch.object(CorineProvider, "has_clms_token", new=False):
-        manager = LandCoverManager(tmp_path / "api", "corine", cache=False)
+        manager = LandCoverManager("corine", cache=False, root=tmp_path / "api")
         with pytest.raises(ValidationError) as exc:
             manager.download(sheet="XYZ", year=2018)
         assert (
@@ -233,7 +233,7 @@ def test_corine_preview_not_emitted_for_invalid_sheet(tmp_path, capsys):
 
 def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
     with pytest.raises(ValidationError) as exc:
-        HSGCalculator(tmp_path / "api", cache=False).calculate_hsg(
+        HSGCalculator(cache=False, root=tmp_path / "api").calculate_hsg(
             sheet="XYZ", depth="0-5cm"
         )
     assert (
@@ -260,7 +260,7 @@ def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
 
 @pytest.mark.parametrize("mode", ["check", "download"])
 def test_invalid_teryt_matches_cli_and_api(tmp_path, capsys, mode):
-    manager = LandCoverManager(tmp_path / "api", "bdot10k", cache=False)
+    manager = LandCoverManager("bdot10k", cache=False, root=tmp_path / "api")
     with pytest.raises(
         ValidationError,
         match="^--teryt 14: BDOT10k is published per county - give --teryt <4 digits>",
@@ -286,7 +286,7 @@ def test_invalid_teryt_matches_cli_and_api(tmp_path, capsys, mode):
 def test_invalid_landcover_bbox_matches_cli_and_api(
     tmp_path, capsys, coordinates, bbox, mode
 ):
-    manager = LandCoverManager(tmp_path / "api", "bdot10k", cache=False)
+    manager = LandCoverManager("bdot10k", cache=False, root=tmp_path / "api")
     with pytest.raises(ValidationError) as exc:
         getattr(manager, mode)(bbox=bbox)
     flags = ["--check-updates"] if mode == "check" else []
@@ -309,7 +309,7 @@ def test_invalid_landcover_bbox_matches_cli_and_api(
 def test_invalid_hsg_bbox_matches_cli_and_api(
     tmp_path, capsys, coordinates, bbox, mode
 ):
-    calc = HSGCalculator(tmp_path / "api", cache=False)
+    calc = HSGCalculator(cache=False, root=tmp_path / "api")
     with pytest.raises(ValidationError) as exc:
         getattr(calc, mode)(bbox=bbox, depth="0-5cm")
     flags = ["--check-updates"] if mode == "check_hsg" else []
@@ -338,7 +338,7 @@ def test_invalid_hsg_bbox_matches_cli_and_api(
 
 @pytest.mark.parametrize("mode", ["check", "download"])
 def test_unsupported_bbox_crs_rejected_before_transform(tmp_path, mode):
-    manager = LandCoverManager(tmp_path / "api", "corine", cache=False)
+    manager = LandCoverManager("corine", cache=False, root=tmp_path / "api")
     with pytest.raises(ValidationError, match="Invalid bbox:") as exc:
         getattr(manager, mode)(bbox=BBox(0, 0, 1, 1, "EPSG:999999"), year=2018)
     assert "EPSG:999999" in str(exc.value)
@@ -346,7 +346,7 @@ def test_unsupported_bbox_crs_rejected_before_transform(tmp_path, mode):
 
 @pytest.mark.parametrize("mode", ["check_hsg", "calculate_hsg"])
 def test_hsg_unsupported_bbox_crs_rejected_before_transform(tmp_path, mode):
-    calc = HSGCalculator(tmp_path / "api", cache=False)
+    calc = HSGCalculator(cache=False, root=tmp_path / "api")
     with pytest.raises(ValidationError, match="Invalid bbox:") as exc:
         getattr(calc, mode)(bbox=BBox(0, 0, 1, 1, "EPSG:999999"), depth="0-5cm")
     assert "EPSG:999999" in str(exc.value)
@@ -365,7 +365,7 @@ def test_hsg_cli_output_tif_rejected(tmp_path, capsys):
     assert rc == 2
     assert fake.capabilities == 0
     with pytest.raises(ValidationError) as error:
-        HSGCalculator(tmp_path / "hsg.tif")
+        HSGCalculator(root=tmp_path / "hsg.tif")
     assert (
         without_error_document(capsys.readouterr().err)
         == f"Error: {error.value.localized('pl')}\n"

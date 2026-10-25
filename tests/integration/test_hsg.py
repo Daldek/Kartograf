@@ -310,14 +310,10 @@ class TestHSGDescriptions:
 class TestHSGCalculator:
     """Test HSGCalculator class."""
 
-    def test_calculator_requires_root(self):
-        with pytest.raises(TypeError):
-            HSGCalculator()  # type: ignore[call-arg]
-
     def test_lazy_provider_loading(self, tmp_path):
         from kartograf.providers.soilgrids import SoilGridsProvider
 
-        calc = HSGCalculator(tmp_path)
+        calc = HSGCalculator(root=tmp_path)
         assert isinstance(calc.provider, SoilGridsProvider)
         assert list(tmp_path.iterdir()) == []
 
@@ -325,7 +321,7 @@ class TestHSGCalculator:
         self, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        calc = HSGCalculator(tmp_path / "data")
+        calc = HSGCalculator(root=tmp_path / "data")
         assert isinstance(calc.provider, SoilGridsProvider)
 
         def edition_requiring_cache(provider, property, timeout=120):
@@ -340,7 +336,7 @@ class TestHSGCalculator:
     def test_output_path_must_be_a_store_directory(self, tmp_path):
         for extension in (".tif", ".tiff"):
             with pytest.raises(ValidationError) as caught:
-                HSGCalculator(tmp_path / f"hsg{extension}")
+                HSGCalculator(root=tmp_path / f"hsg{extension}")
             assert str(caught.value) == (
                 "--root is a store directory (since 0.8.0); for a file outside the "
                 "store use hsg_from_rasters"
@@ -435,7 +431,7 @@ class TestHSGCalculatorCalculateFull:
     def test_calculate_hsg_bbox_and_sheet_and_geometry(self, tmp_path):
         from unittest.mock import patch
 
-        calc = HSGCalculator(tmp_path, RasterSoilGrids())
+        calc = HSGCalculator(RasterSoilGrids(), root=tmp_path)
         by_sheet = calc.calculate_hsg(sheet="N-34-130-D", depth="0-5cm")
         assert by_sheet.files[0].file.path == (
             tmp_path / HSG_SEG / "N-34/130/D/N-34-130-D.tif"
@@ -450,7 +446,7 @@ class TestHSGCalculatorCalculateFull:
         assert by_geometry.files[0].file.status == "reused" and by_geometry.ok
 
     def test_stat_argument_rejected(self, tmp_path):
-        calc = HSGCalculator(tmp_path, RasterSoilGrids())
+        calc = HSGCalculator(RasterSoilGrids(), root=tmp_path)
         with pytest.raises(TypeError):
             calc.calculate_hsg(bbox=BBOX, depth="0-5cm", stat="mean")  # type: ignore[call-arg]
         with pytest.raises(TypeError):
@@ -459,7 +455,7 @@ class TestHSGCalculatorCalculateFull:
     def test_hsg_segment_unchanged_after_stat_removal(self, tmp_path):
         """The store written with ``stat="mean"`` keeps working: same segments,
         the HSG version of the same inputs is reused (no migration)."""
-        first = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
+        first = HSGCalculator(RasterSoilGrids(), root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         assert first.files[0].file.path == tmp_path / HSG_SEG / "bbox" / f"{COORDS}.tif"
@@ -469,7 +465,7 @@ class TestHSGCalculatorCalculateFull:
         meta = _meta(first.files[0].file)
         assert (meta["extra"]["stat"], meta["product"]) == ("mean", "hsg")
         assert {_meta(i.file)["product"] for i in first.inputs} == {"soil"}
-        again = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
+        again = HSGCalculator(RasterSoilGrids(), root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         assert again.files[0].file.status == "reused"
@@ -481,7 +477,7 @@ class TestHSGCalculatorCalculateFull:
         from kartograf.landcover.store import selection_unit
 
         wgs = transform_bbox(BBOX, "EPSG:4326")
-        result = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
+        result = HSGCalculator(RasterSoilGrids(), root=tmp_path).calculate_hsg(
             bbox=wgs, depth="0-5cm"
         )
         unit = selection_unit(bbox=transform_bbox(wgs, "EPSG:2180"))
@@ -490,7 +486,7 @@ class TestHSGCalculatorCalculateFull:
         assert _meta(result.files[0].file)["request"]["bbox_crs"] == "EPSG:2180"
 
     def test_check_hsg_items(self, tmp_path):
-        calc = HSGCalculator(tmp_path, RasterSoilGrids())
+        calc = HSGCalculator(RasterSoilGrids(), root=tmp_path)
         plan = calc.check_hsg(sheet="N-34-130-D", depth="0-5cm")
         assert [(i.track, i.status) for i in plan.items] == [
             ("landcover", "missing"),
@@ -506,7 +502,7 @@ class TestHSGCalculatorCalculateFull:
         ids=["none", "two"],
     )
     def test_exactly_one_selection(self, tmp_path, selection):
-        calc = HSGCalculator(tmp_path, RasterSoilGrids())
+        calc = HSGCalculator(RasterSoilGrids(), root=tmp_path)
         with pytest.raises(ValidationError, match="Give exactly one selection"):
             calc.calculate_hsg(**selection, depth="0-5cm")
         with pytest.raises(ValidationError, match="Give exactly one selection"):
@@ -518,7 +514,7 @@ class TestHSGCalculatorCalculateFull:
             "sand": (np.full((5, 5), 900, np.float32), 0),  # 90%
             "silt": (np.full((5, 5), 50, np.float32), 0),  # 5%
         }
-        result = HSGCalculator(tmp_path, RasterSoilGrids(rasters)).calculate_hsg(
+        result = HSGCalculator(RasterSoilGrids(rasters), root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         assert np.all(_hsg(result.files[0].file.path) == 1)  # sand -> A
@@ -526,7 +522,7 @@ class TestHSGCalculatorCalculateFull:
     def test_calculate_hsg_nodata_handling(self, tmp_path):
         """Cells with all-zero values -> nodata (0)."""
         zeros = {p: (np.zeros((5, 5), np.float32), 0) for p in ("clay", "sand", "silt")}
-        result = HSGCalculator(tmp_path, RasterSoilGrids(zeros)).calculate_hsg(
+        result = HSGCalculator(RasterSoilGrids(zeros), root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         assert np.all(_hsg(result.files[0].file.path) == 0)
@@ -540,7 +536,7 @@ class TestHSGCalculatorCalculateFull:
                 data[1, 1] = -32768  # nodata in clay only
             data[2, 2] = -32768  # nodata in all three
             rasters[prop] = (data, -32768)
-        result = HSGCalculator(tmp_path, RasterSoilGrids(rasters)).calculate_hsg(
+        result = HSGCalculator(RasterSoilGrids(rasters), root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         hsg = _hsg(result.files[0].file.path)
@@ -556,7 +552,7 @@ class TestHSGCalculatorCalculateFull:
             if prop == "sand":
                 data[1, 1] = np.nan
             rasters[prop] = (data, None)
-        result = HSGCalculator(tmp_path, RasterSoilGrids(rasters)).calculate_hsg(
+        result = HSGCalculator(RasterSoilGrids(rasters), root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         hsg = _hsg(result.files[0].file.path)
@@ -565,7 +561,7 @@ class TestHSGCalculatorCalculateFull:
 
     def test_hsg_version_from_input_versions(self, tmp_path):
         provider = RasterSoilGrids()
-        result = HSGCalculator(tmp_path, provider).calculate_hsg(
+        result = HSGCalculator(provider, root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         file = result.files[0].file
@@ -599,12 +595,12 @@ class TestHSGCalculatorCalculateFull:
         assert (meta["extra"]["depth"], meta["extra"]["stat"]) == ("0-5cm", "mean")
 
     def test_hsg_rerun_reused_no_compute(self, tmp_path):
-        first = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
+        first = HSGCalculator(RasterSoilGrids(), root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         provider = RasterSoilGrids()
         with patch("kartograf.hydrology.hsg._classify_hsg") as classify:
-            again = HSGCalculator(tmp_path, provider).calculate_hsg(
+            again = HSGCalculator(provider, root=tmp_path).calculate_hsg(
                 bbox=BBOX, depth="0-5cm"
             )
         classify.assert_not_called()
@@ -616,12 +612,12 @@ class TestHSGCalculatorCalculateFull:
         assert [r.file.status for r in again.inputs] == ["local"] * 3
 
     def test_hsg_new_input_content_new_version(self, tmp_path):
-        HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
+        HSGCalculator(RasterSoilGrids(), root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         # 600 g/kg clay with sand/silt 400 -> clay -> D (loam B before)
         sandy = RasterSoilGrids({"clay": (np.full((5, 5), 600, np.float32), 0)})
-        result = HSGCalculator(tmp_path, sandy).calculate_hsg(
+        result = HSGCalculator(sandy, root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm", update="force"
         )
         assert [r.file.status for r in result.inputs] == [
@@ -633,11 +629,11 @@ class TestHSGCalculatorCalculateFull:
         assert len(list(result.files[0].file.version_path.parent.parent.iterdir())) == 2
 
     def test_hsg_force_same_inputs_is_reused(self, tmp_path):
-        first = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
+        first = HSGCalculator(RasterSoilGrids(), root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         provider = RasterSoilGrids()
-        again = HSGCalculator(tmp_path, provider).calculate_hsg(
+        again = HSGCalculator(provider, root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm", update="force"
         )
         assert provider.downloads == ["clay", "sand", "silt"]
@@ -647,7 +643,7 @@ class TestHSGCalculatorCalculateFull:
 
     def test_hsg_mixed_editions_label(self, tmp_path):
         provider = RasterSoilGrids(editions={"sand": "2.1"})
-        result = HSGCalculator(tmp_path, provider).calculate_hsg(
+        result = HSGCalculator(provider, root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         assert result.files[0].file.label == "2.0+2.1"
@@ -661,7 +657,7 @@ class TestHSGCalculatorCalculateFull:
 
     def test_hsg_input_error_no_result(self, tmp_path):
         provider = RasterSoilGrids({"silt": DownloadError("WCS 500")})
-        report = HSGCalculator(tmp_path, provider).calculate_hsg(
+        report = HSGCalculator(provider, root=tmp_path).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         assert not report.ok and report.files == ()
@@ -674,7 +670,7 @@ class TestHSGCalculatorCalculateFull:
 
     def test_check_hsg_never_downloads_or_computes(self, tmp_path):
         provider = RasterSoilGrids()
-        calc = HSGCalculator(tmp_path, provider)
+        calc = HSGCalculator(provider, root=tmp_path)
         with patch("kartograf.hydrology.hsg._classify_hsg") as classify:
             plan = calc.check_hsg(bbox=BBOX, depth="0-5cm")
         classify.assert_not_called()
@@ -708,7 +704,7 @@ class TestHSGCalculatorCalculateFull:
         """The default mode asks no source for local inputs (ADR-036 erratum
         3): an edition lookup that would fail changes nothing, no notice."""
         provider = RasterSoilGrids()
-        calc = HSGCalculator(tmp_path, provider)
+        calc = HSGCalculator(provider, root=tmp_path)
         calc.calculate_hsg(bbox=BBOX, depth="0-5cm")
         provider.editions["clay"] = DownloadError("caps 503")
         observed = []
@@ -720,7 +716,7 @@ class TestHSGCalculatorCalculateFull:
 
     def test_hsg_plan_upgrade_recomputes_with_new_input(self, tmp_path):
         provider = RasterSoilGrids()
-        calc = HSGCalculator(tmp_path, provider)
+        calc = HSGCalculator(provider, root=tmp_path)
         calc.calculate_hsg(bbox=BBOX, depth="0-5cm")
         provider.editions["clay"] = "2.1"
         provider.rasters["clay"] = (np.full((5, 5), 600, np.float32), 0)  # -> D
@@ -736,7 +732,7 @@ class TestHSGCalculatorCalculateFull:
         assert result.stale == ()
 
     def test_hsg_sheet_and_bbox_distinct_paths(self, tmp_path):
-        calc = HSGCalculator(tmp_path, RasterSoilGrids())
+        calc = HSGCalculator(RasterSoilGrids(), root=tmp_path)
         by_sheet = calc.calculate_hsg(sheet="M-33-036-A", depth="0-5cm")
         by_bbox = calc.calculate_hsg(bbox=BBOX, depth="0-5cm")
         other = calc.calculate_hsg(
@@ -754,7 +750,7 @@ class TestHSGCalculatorCalculateFull:
 
     def test_hsg_no_keep_intermediate(self, tmp_path):
         with pytest.raises(TypeError):
-            HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
+            HSGCalculator(RasterSoilGrids(), root=tmp_path).calculate_hsg(
                 bbox=BBOX, depth="0-5cm", keep_intermediate=True
             )
 
@@ -859,12 +855,12 @@ class TestHSGRootOnWrite:
     """The store root is not touched before an input exists."""
 
     def test_init_creates_nothing(self, tmp_path):
-        HSGCalculator(tmp_path / "a" / "b", RasterSoilGrids())
+        HSGCalculator(RasterSoilGrids(), root=tmp_path / "a" / "b")
         assert list(tmp_path.iterdir()) == []
 
     def test_edition_failure_records_failed_input_without_hsg(self, tmp_path):
         provider = RasterSoilGrids(editions={"clay": DownloadError("caps")})
-        report = HSGCalculator(tmp_path / "a", provider).calculate_hsg(
+        report = HSGCalculator(provider, root=tmp_path / "a").calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
         assert not report.ok and not report.files

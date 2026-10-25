@@ -20,6 +20,7 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.download.cz_cutout import (
     _all_nodata,
@@ -318,7 +319,7 @@ def _sheet_provider(
 def check_cz_sheet(
     *,
     sheet: str,
-    root: str | Path,
+    root: str | Path | None = None,
     product: str,
     vertical_crs: str,
     resolution: str | None = None,
@@ -332,6 +333,7 @@ def check_cz_sheet(
     never read); an ImageServer tile has no remote signal and reads only the
     local store. Invalid choices raise the same errors as the download.
     """
+    root = resolve_root(root)
     sink = NoticeSink(on_notice)
     with open_cache(cache, force=True, on_notice=sink.add) as metadata:
         provider = _sheet_provider(
@@ -347,7 +349,7 @@ def check_cz_sheet(
 def download_cz_sheet(
     *,
     sheet: str,
-    root: str | Path,
+    root: str | Path | None = None,
     product: str,
     vertical_crs: str,
     resolution: str | None = None,
@@ -387,6 +389,7 @@ def download_cz_sheet(
     DownloadError
         CUZK service failure; no new version is committed.
     """
+    root = resolve_root(root)
     validate_update(update, check="check_cz_sheet")
     sink = NoticeSink(on_notice)
     with open_cache(

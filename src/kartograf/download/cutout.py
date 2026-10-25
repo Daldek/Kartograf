@@ -37,6 +37,7 @@ from typing import Any
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.download.area import bbox_to_2180
 from kartograf.download.fetch import (
@@ -428,7 +429,7 @@ def check_pl_cutout(
     *,
     bbox: BBox,
     horizontal_crs: str,
-    root: str | Path,
+    root: str | Path | None = None,
     vertical_crs: str,
     product: str,
     cache: MetadataCache | bool = True,
@@ -443,6 +444,7 @@ def check_pl_cutout(
     Raises ``ValidationError`` for invalid choices and ``TransformError``
     when no safe pinned reprojection exists, exactly as the download does.
     """
+    root = resolve_root(root)
     del cache, on_notice  # same signature as the download (Z2); unused here
     cutout = _prepare_pl_cutout(
         bbox,
@@ -626,7 +628,7 @@ def download_pl_cutout(
     *,
     bbox: BBox,
     horizontal_crs: str,
-    root: str | Path,
+    root: str | Path | None = None,
     vertical_crs: str,
     product: str,
     update: UpdateMode | None = None,
@@ -678,6 +680,7 @@ def download_pl_cutout(
     DownloadError
         PRG or WCS failure; no new version is committed.
     """
+    root = resolve_root(root)
     validate_update(update, check="check_pl_cutout")
     cutout = _prepare_pl_cutout(
         bbox,

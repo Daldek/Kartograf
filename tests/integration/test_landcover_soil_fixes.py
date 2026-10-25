@@ -164,7 +164,7 @@ def test_corine_year_error_lists_the_years_with_the_flag():
 
 
 def test_unusable_clms_credentials_are_a_warning_naming_the_reason(tmp_path):
-    manager = LandCoverManager(tmp_path, CorineProvider(use_proxy=False))
+    manager = LandCoverManager(CorineProvider(use_proxy=False), root=tmp_path)
     for year, level in ((2018, "warning"), (1990, "info")):
         sink = NoticeSink(None)
         with patch.object(

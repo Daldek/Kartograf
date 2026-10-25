@@ -70,7 +70,7 @@ def test_flags_map_to_download_collection_kwargs(tmp_path):
     assert (kwargs["product"], kwargs["country"]) == ("admin", "auto")
     assert kwargs["level"] == {"pl": "gmina"}
     assert (kwargs["workers"], kwargs["update"]) == (3, "force")
-    assert kwargs["root"] == str(tmp_path)
+    assert kwargs["root"] == tmp_path
     assert kwargs.get("teryt") is None and not kwargs.get("whole_country")
     with patch(_DOWNLOAD, return_value=_report()) as download:
         main(

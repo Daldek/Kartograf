@@ -420,8 +420,8 @@ def test_the_store_reads_require_what_the_spec_requires():
     }
 
     assert required == {
-        "store overview": {"root"},
-        "store entries": {"root", "segment", "limit"},
+        "store overview": set(),
+        "store entries": {"segment", "limit"},
         "store sidecar": {"path"},
     }
 

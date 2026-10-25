@@ -161,14 +161,11 @@ def test_country_offers_only_countries_of_the_group(group, product, country, cap
         (["soil", "download"], "soil"),
     ],
 )
-def test_output_help_and_error_name_the_store_directory(argv, directory, capsys):
-    """The ``--root`` help and the error of a missing ``--root`` name the
-    same directory of the store - the one of the group, no placeholder."""
-    assert main(argv) == 2
-    error = capsys.readouterr().err
+def test_root_help_names_the_store_directory_and_the_default(argv, directory, capsys):
+    """The ``--root`` help names the directory of the store of the group, no
+    placeholder, and says that the flag is optional (the default store)."""
     with pytest.raises(SystemExit):
         main([argv[0], argv[1], "--help"])
     help_text = " ".join(capsys.readouterr().out.split())
     expected = f"pliki w <KATALOG>/{directory}/..."
-    assert expected in error
-    assert f"Katalog magazynu (wymagany): {expected}" in help_text
+    assert f"Katalog magazynu (domyslnie magazyn uzytkownika): {expected}" in help_text

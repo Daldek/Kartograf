@@ -55,6 +55,7 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox, bbox_coords, is_czech_crs, transform_bbox
 from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox, series_scale
 from kartograf.download.area import (
@@ -108,7 +109,6 @@ from kartograf.download.options import (
     check_layer,
     check_per_country,
     country_value,
-    output_required,
     validate_request_bbox,
 )
 from kartograf.download.plan import (
@@ -1410,7 +1410,7 @@ def _to_crs(bbox: BBox, crs: str) -> BBox:
 def validate_collection_request(
     *,
     product: str | None,
-    root: str | Path | None,
+    root: str | Path | None = None,
     country: str | None = None,
     teryt: str | None = None,
     ku: str | None = None,
@@ -1492,9 +1492,6 @@ def _resolve(
     product = args["product"]
     if descriptors is None:
         descriptors = _descriptors(product)
-    if args["root"] is None:
-        top = next(iter(descriptors.values())).storage_subdir.split("/", 1)[0]
-        raise ValidationError(output_required(top), option="root")
     kind = _selection_kind(args, descriptors)
     check_per_country(args["level"], "--level")
     country = args["country"]
@@ -1515,7 +1512,7 @@ def _resolve(
         "classes": classes,
     }
     teryt, ku = args["teryt"], args["ku"]
-    root = Path(args["root"])
+    root = resolve_root(args["root"])
 
     def part(
         code: str, area_kind: str, countries: tuple[str, ...] = ()
@@ -3091,7 +3088,7 @@ _CHOICE_NAMES = (
 def download_collection(
     *,
     product: str | None,
-    root: str | Path | None,
+    root: str | Path | None = None,
     country: str | None = None,
     teryt: str | None = None,
     ku: str | None = None,
@@ -3199,7 +3196,7 @@ def download_collection(
 def landcover_request(
     descriptor_key: str,
     *,
-    root: str | Path | None,
+    root: str | Path | None = None,
     teryt: str | None,
     sheet: str | None,
     bbox: BBox | None,
@@ -3627,7 +3624,7 @@ def plan_request(
 def check_collection(
     *,
     product: str | None,
-    root: str | Path | None,
+    root: str | Path | None = None,
     country: str | None = None,
     teryt: str | None = None,
     ku: str | None = None,

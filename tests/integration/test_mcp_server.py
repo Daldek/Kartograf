@@ -725,7 +725,6 @@ def test_check_updates_input_errors(tmp_path):
     here = str(tmp_path)
     selection = {**PL_SHEET, "root": here, "check_updates": True}
     cases = [
-        ({k: v for k, v in selection.items() if k != "root"}, "root"),
         (selection | {"root": "rel"}, "root"),
         (selection | {"check_updates": "yes"}, "check_updates"),
         ({"root": here, "check_updates": True}, "product"),

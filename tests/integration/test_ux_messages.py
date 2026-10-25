@@ -64,7 +64,7 @@ def test_layer_without_geometry_is_an_error_in_cli_api_and_project(tmp_path, cap
             product="admin", root=tmp_path, teryt="14", layer="x"
         )
     with pytest.raises(ValidationError, match=f"{text}.*wybiera --layers"):
-        LandCoverManager(tmp_path, "bdot10k").validate_request(
+        LandCoverManager("bdot10k", root=tmp_path).validate_request(
             teryt="1465", layer="PTWP"
         )
     with pytest.raises(ValidationError, match=text):
@@ -139,7 +139,7 @@ def test_survey_control_hint_names_the_network_of_each_selection(tmp_path):
 def test_cz_source_with_a_pl_sheet_code_names_the_source(tmp_path):
     # UX-05: the error pointed to --country cz, a flag landcover does not have
     with pytest.raises(ValidationError) as error:
-        LandCoverManager(tmp_path, "zabaged").validate_request(sheet="N-34-130-D")
+        LandCoverManager("zabaged", root=tmp_path).validate_request(sheet="N-34-130-D")
     assert str(error.value) == (
         "--product zabaged (CZ): godlo N-34-130-D nie wyznacza obszaru CZ - podaj "
         "--bbox (np. w EPSG:5514) albo --geometry"
@@ -215,7 +215,7 @@ def test_negative_bbox_after_a_space_is_the_bbox_value(tmp_path, capsys):
 def test_bdot10k_voivodeship_teryt_names_the_powiat_choice(tmp_path):
     # UX-12: "Nieprawidlowy kod TERYT: 14" without a hint
     with pytest.raises(ValidationError) as error:
-        LandCoverManager(tmp_path, "bdot10k").validate_request(teryt="14")
+        LandCoverManager("bdot10k", root=tmp_path).validate_request(teryt="14")
     assert str(error.value).startswith(
         "--teryt 14: BDOT10k is published per county - give --teryt <4 digits>"
     )
@@ -346,11 +346,19 @@ def test_survey_network_per_country(tmp_path):
     )
 
 
-def test_project_init_without_output_is_an_input_error(tmp_path, capsys):
-    # UX-42: argparse "the following arguments are required" (code 2) instead
-    # of the Error: of every other command
-    err = _cli_error(capsys, "project", "init", "--project", str(tmp_path))
-    assert "Error: --root wymagane: katalog magazynu projektu" in err
+def test_project_init_with_an_empty_root_is_an_input_error(tmp_path, capsys):
+    err = _cli_error(
+        capsys,
+        "project",
+        "init",
+        "--project",
+        str(tmp_path),
+        "--root",
+        "",
+        "--lang",
+        "en",
+    )
+    assert "Error: root is empty" in err
     assert not (tmp_path / "kartograf-project.json").exists()
 
 

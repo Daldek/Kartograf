@@ -29,6 +29,7 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import detect_system
 from kartograf.download.fetch import (
@@ -415,7 +416,9 @@ def _run(
     return CzContoursResult(file, stale)
 
 
-def check_cz_contours_sheet(sheet: str, *, format: str, root: str | Path) -> UpdatePlan:
+def check_cz_contours_sheet(
+    sheet: str, *, format: str, root: str | Path | None = None
+) -> UpdatePlan:
     """Build the update plan of ``download_cz_contours_sheet``.
 
     One position (track ``cz_sheet``), one ``HEAD`` of the ZIP, nothing downloaded.
@@ -425,6 +428,7 @@ def check_cz_contours_sheet(sheet: str, *, format: str, root: str | Path) -> Upd
     ValidationError
         Not an SM5 sheet code, or a format without contours.
     """
+    root = resolve_root(root)
     sheet = cz_contours_sheet(sheet)
     source = contours_source(format)
     item = _inspect(_session(), source, sheet, _slot(source, sheet, root))
@@ -435,7 +439,7 @@ def download_cz_contours_sheet(
     sheet: str,
     *,
     format: str,
-    root: str | Path,
+    root: str | Path | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     parent_request: dict[str, Any] | None = None,
@@ -467,6 +471,7 @@ def download_cz_contours_sheet(
         openzu failure (a 404 names the sheet index), not a ZIP or a ZIP
         without the format's file; no version is committed.
     """
+    root = resolve_root(root)
     sheet = cz_contours_sheet(sheet)
     source = contours_source(format)
     validate_update(update, check="check_cz_contours_sheet")

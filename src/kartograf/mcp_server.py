@@ -66,7 +66,7 @@ from kartograf.catalog.tools import (
     tool_specs,
 )
 from kartograf.commands import check_command, run_command, validate_command
-from kartograf.config import check_config
+from kartograf.config import check_config, store_root
 from kartograf.download.manager import DownloadProgress
 from kartograf.envelope import CommandResult, wrap
 from kartograf.error_report import ErrorReport, error_line, error_report
@@ -465,6 +465,7 @@ class _Toolbox:
         self._refuse_writes(spec, arguments)
         self._check_schema(self._validators[spec.name], arguments)
         self._check_paths(spec.paths, arguments)
+        self._check_default_root(spec, arguments)
         check = spec.plan_only or arguments.get(CHECK_OPTION) is True
         if check:
             self._no_run_options(spec, arguments)
@@ -524,6 +525,32 @@ class _Toolbox:
                     hint=f"Allowed directories: {', '.join(directories)}.",
                 )
 
+    def _check_default_root(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> None:
+        """Check the default store of a call that names no ``root`` (ADR-054, AGI-5.8).
+
+        A tool with a store ``root`` that is given none works on the default root of
+        the settings; with ``--allow-dir`` that directory must lie inside one of them,
+        like every path of a call.
+        """
+        if (
+            spec.paths.get("root") != "root"
+            or arguments.get("root") is not None
+            or not self._allow_dirs
+        ):
+            return
+        default = store_root().resolve()
+        if any(default.is_relative_to(directory) for directory in self._allow_dirs):
+            return
+        directories = [directory.as_posix() for directory in self._allow_dirs]
+        raise ForbiddenError(
+            f"argument root: the default store {default.as_posix()!r} lies outside "
+            "the directories this server allows (--allow-dir)",
+            option="root",
+            path=default,
+            allowed=directories,
+            hint=f"Give root inside an allowed directory: {', '.join(directories)}.",
+        )
+
     @staticmethod
     def _no_run_options(spec: ToolSpec, arguments: Mapping[str, Any]) -> None:
         """Refuse an option of a run next to ``check_updates``: it fetches nothing."""
@@ -546,7 +573,7 @@ class _Toolbox:
         run = convert_arguments(
             run_kinds, {k: v for k, v in arguments.items() if k in run_kinds}
         )
-        root = run["root"]
+        root = run.get("root")
 
         def validate() -> None:
             validate_command(command, options, root=root)

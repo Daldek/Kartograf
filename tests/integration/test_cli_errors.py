@@ -29,8 +29,7 @@ from tests.support.errors import error_document, without_error_document
 from tests.support.interrupt_fakes import PATIENCE_S
 
 SHEET = "N-34-130-D-d-2-4"
-OUTPUT_REQUIRED = "--root wymagane: katalog magazynu (pliki w <KATALOG>/nmt/...)"
-# a complete PL elevation request but for the store (``-o``)
+# a complete PL elevation request but for the store (none: the default store)
 ELEVATION = [
     "elevation",
     "download",
@@ -43,6 +42,14 @@ ELEVATION = [
     "--vertical-crs",
     "EVRF2007",
 ]
+
+
+# the same request without the vertical CRS: an input error before any store is touched
+NO_VERTICAL_CRS = [x for x in ELEVATION if x not in ("--vertical-crs", "EVRF2007")]
+VERTICAL_CRS_REQUIRED = (
+    "--vertical-crs wymagane dla --product nmt (PL): EVRF2007 (PL-EVRF2007-NH, "
+    "uklad obowiazujacy), KRON86 (PL-KRON86-NH, uklad historyczny)"
+)
 
 
 def _run(capsys, argv: list[str]) -> tuple[int, str, str]:
@@ -61,12 +68,12 @@ def _handler_fails(error):
 
 
 def test_input_error_exits_2_in_text_mode(capsys):
-    code, out, err = _run(capsys, ELEVATION)
+    code, out, err = _run(capsys, NO_VERTICAL_CRS)
 
     assert code == 2
     assert out == ""
-    assert without_error_document(err) == f"Error: {OUTPUT_REQUIRED}\n"
-    assert error_document(err)["message"] == OUTPUT_REQUIRED
+    assert without_error_document(err) == f"Error: {VERTICAL_CRS_REQUIRED}\n"
+    assert error_document(err)["message"] == VERTICAL_CRS_REQUIRED
 
 
 def test_source_failure_exits_5(capsys, tmp_path):
@@ -146,20 +153,23 @@ def test_transform_failure_exits_13_or_15_and_text_has_the_remedy(
 
 
 def test_json_input_error_is_an_error_document(capsys):
-    code, out, err = _run(capsys, [*ELEVATION, "--json"])
+    code, out, err = _run(capsys, [*NO_VERTICAL_CRS, "--json"])
 
     document = error_document(err)
     assert code == 2 and out == ""
     assert document["schema"] == "kartograf-error/1"
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "invalid_input"
-    assert document["message"] == OUTPUT_REQUIRED
+    assert document["message"] == VERTICAL_CRS_REQUIRED
     assert document["exit_code"] == 2
     assert document["command"] == "elevation download"
-    assert document["details"] == {"reason": "invalid_input", "option": "root"}
+    assert document["details"] == {
+        "reason": "invalid_input",
+        "option": "vertical_crs",
+        "allowed": ["EVRF2007", "KRON86"],
+    }
     # the hint is a command line of the catalog that works as it stands
-    example = document["hint"].removeprefix("Example: kartograf ")
-    assert example != document["hint"]
+    example = document["hint"].split("Example: kartograf ", 1)[1]
     assert parse_command(example).command == "elevation download"
 
 
@@ -504,10 +514,10 @@ def test_library_warnings_pass_with_debug_in_json_mode(capsys, tmp_path, monkeyp
     ("argv", "option"),
     [
         (["landcover", "download"], "product"),
-        (["landcover", "download", "--product", "corine"], "root"),
+        (["landcover", "download", "--product", "corine"], "year"),
         (["landcover", "list-layers"], "product"),
-        (["soil", "download"], "root"),
-        (["soil", "hsg"], "root"),
+        (["soil", "download"], "property"),
+        (["soil", "hsg", "--sheet", "N-34-130-D"], "depth"),
         (["sheet", "parse", "NIE-GODLO"], "sheet"),
         (["sheet", "parse", "CTES96", "--hierarchy"], "hierarchy"),
         (["sheet", "parse", "N-34-130-D", "--descendants", "1:77"], "descendants"),

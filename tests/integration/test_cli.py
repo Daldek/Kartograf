@@ -3270,7 +3270,6 @@ class TestCmdLandcoverDownload:
         ("flags", "missing", "choices"),
         [
             (["--root", "out"], "--product", "bdot10k"),
-            (["--product", "bdot10k"], "--root", "katalog"),
         ],
     )
     def test_missing_manager_argument_fails_before_download(
@@ -3349,10 +3348,10 @@ class TestCmdSoil:
         assert "ValueError" not in captured.err
         assert "Oczekiwano" not in captured.out
 
-    def test_hsg_missing_output_fails_before_calculation(self, capsys):
-        rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"])
+    def test_hsg_missing_depth_fails_before_calculation(self, capsys):
+        rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "--root", "out"])
         assert rc == 2
-        assert "Error: --root" in capsys.readouterr().err
+        assert "Error: --depth" in capsys.readouterr().err
 
     def test_hsg_missing_depth_is_library_error(self, tmp_path, capsys):
         """The library text (same as ``calculate_hsg(depth=None)``), no network."""

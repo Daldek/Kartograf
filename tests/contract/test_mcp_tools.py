@@ -397,7 +397,8 @@ def test_every_argument_has_a_kind_and_the_data_tools_know_their_task_options():
         spec = WRITES[command.operation_id]
 
         assert set(spec.task_options) == set(COMMANDS[command.id].options)
-        assert "root" in spec.input_schema["required"]
+        assert "root" in spec.input_schema["properties"]
+        assert "root" not in spec.input_schema["required"]  # the default store
         assert not {"quiet", "json", "upgrade", "force"} & set(spec.kinds)
     assert all(
         not s.task_options

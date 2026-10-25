@@ -32,6 +32,7 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox
 from kartograf.download.arguments import require_workers
 from kartograf.download.fetch import (
@@ -335,7 +336,7 @@ def check_cz_laz(
     *,
     model: str,
     vertical_crs: str,
-    root: str | Path,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     cache: MetadataCache | bool = True,
@@ -348,6 +349,7 @@ def check_cz_laz(
     asked: the metadata cache is refreshed, never read. Invalid choices
     raise the same errors as the download.
     """
+    root = resolve_root(root)
     bbox = _validate_selection(
         model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox
     )
@@ -361,7 +363,7 @@ def download_cz_laz(
     *,
     model: str,
     vertical_crs: str,
-    root: str | Path,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     update: UpdateMode | None = None,
@@ -421,6 +423,7 @@ def download_cz_laz(
     DownloadError
         Index or plan check failure.
     """
+    root = resolve_root(root)
     validate_update(update, check="check_cz_laz")
     require_workers(workers, "workers")
     bbox = _validate_selection(

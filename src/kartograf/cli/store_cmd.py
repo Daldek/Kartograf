@@ -13,6 +13,7 @@ cannot be read its ``InvalidSidecarError``; ``main`` reports them.
 import argparse
 import json
 
+from kartograf.cli._args import store_dir
 from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.cli._language import language, localized
 from kartograf.exceptions import ValidationError
@@ -34,14 +35,6 @@ _OVERVIEW_HEADER = (
     message("cli.header_key"),
     message("cli.header_name"),
 )
-
-
-def _output(args: argparse.Namespace) -> str:
-    """Return the store directory of ``--root``; the library has no default for it."""
-    if not args.root:
-        raise ValidationError(message("cli.root_required"), option="root")
-    output: str = args.root
-    return output
 
 
 def format_overview(overview: StoreOverview) -> str:
@@ -126,7 +119,7 @@ def format_sidecar(document: StoreSidecar) -> str:
 
 def cmd_store_overview(args: argparse.Namespace) -> int:
     """Print the segments of the store of ``--root`` (``--json``: the document)."""
-    overview = describe_store(_output(args))
+    overview = describe_store(store_dir(args))
     if wants_json(args):
         return emit_result(command_id(args), overview)
     print(format_overview(overview))
@@ -136,7 +129,7 @@ def cmd_store_overview(args: argparse.Namespace) -> int:
 def cmd_store_entries(args: argparse.Namespace) -> int:
     """Print the first ``--limit`` entries of a segment (``--json``: the document)."""
     listed = list_store_entries(
-        _output(args), segment=args.segment, units=args.units, limit=args.limit
+        store_dir(args), segment=args.segment, units=args.units, limit=args.limit
     )
     if wants_json(args):
         return emit_result(command_id(args), listed)

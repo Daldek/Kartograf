@@ -78,8 +78,7 @@ through `--product`, like every group; the former `--source`/`-s` ends with an e
 with a hint pointing to `--product`.
 
 Since 0.8.0 the CLI has no default values that affect the data: `--product`,
-`--root` (also `landcover download`,
-`soil download` and `soil hsg`), `--country` (with `--bbox`/`--geometry`),
+`--country` (with `--bbox`/`--geometry`),
 `--vertical-crs` (digital terrain model (NMT), digital surface model (NMPT), LAZ), `--model` (LAZ CZ), `--resolution` (NMT
 and NMPT, where there is a choice; orthophoto cutout pixel), `--sheet-system` (PL
 `--bbox`/`--geometry` without `--cutout`; ZTM CZ area in `maps`),
@@ -97,6 +96,16 @@ explicitly. A missing value gives an `Error:` with the list of permitted values
 (ASC grid; the GUGiK archive selects `--format`) and of current BDOT10k
 (GPKG), the `--bbox-crs EPSG:2180` CRS, switches and technical parameters
 (`--workers`) remain default.
+
+**The store without `--root`.** `--root` names the store (`<root>/<product>/<variant>/versions/...`);
+a command given none works on the default store, the first of `KARTOGRAF_ROOT`, `[kartograf] root`
+of `nogat.toml` and `<data_dir>/kartograf` (`data_dir`: `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR`,
+`[kartograf] data_dir`, `[nogat] data_dir`, else the user data directory of `nogat`;
+`kartograf config show` names the root and where it comes from). The same holds for the library
+(`root=None`), for `store overview` and `store entries`, and for `project init`, which writes the
+default root, as an absolute path, into the manifest. The MCP server accepts a call without `root`
+only when the default store lies inside `--allow-dir` (`forbidden` otherwise). Nothing is written
+into the current directory.
 
 ---
 
@@ -2048,7 +2057,7 @@ bbox = parser.get_bbox(crs="EPSG:2180")  # or "EPSG:4326"
 # vertical CRS and resolution (TypeError if missing)
 # Download by sheet code -> ASC (OpenData); hierarchy: download_hierarchy()
 provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
-manager = DownloadManager("./data", provider)
+manager = DownloadManager(provider, root="./data")
 result = manager.download_sheet("N-34-130-D-d-2-4")
 path = result.files["N-34-130-D-d-2-4"][0].version_path
 # Variants from the registry (kartograf.sources.variants.variants()); a combination
@@ -2204,10 +2213,10 @@ from kartograf import DownloadManager, MetadataCache, download_landcover
 from kartograf.providers.pl import create_nmt_provider
 
 manager = DownloadManager(
-    "./data",
     create_nmt_provider(
         vertical_crs="EVRF2007", resolution="1m", cache=MetadataCache("metadata.db")
     ),  # or GugikProvider(..., cache=...)
+    root="./data",
 )
 # Land cover: cache for a provider created by name (BDOT10k: PRG responses)
 report = download_landcover(product="bdot10k", root="./data",
@@ -2218,8 +2227,8 @@ report = download_landcover(product="bdot10k", root="./data",
 from the cache that the function itself opens (the `cache` parameter
 of a command-level function, also `download_landcover`): the record
 is downloaded again and stored. A provider passed as a ready instance
-in the lower-level API (`DownloadManager("./data", provider)`, the
-internal `LandCoverManager("./data", Bdot10kProvider(cache=...))`,
+in the lower-level API (`DownloadManager(provider, root="./data")`, the
+internal `LandCoverManager(Bdot10kProvider(cache=...), root="./data")`,
 `download_laz_area(..., provider=...)`) keeps ITS cache: `update="force"`
 downloads the files again, but it may take sheet index records or PRG
 responses from that cache (until the TTL ends). Full refresh: create the
@@ -2719,7 +2728,7 @@ from kartograf import DownloadManager, GugikProvider, UpdatePlan
 
 godlo = "N-34-139-C-a-3-1"
 manager = DownloadManager(
-    "./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m")
+    GugikProvider(vertical_crs="EVRF2007", resolution="1m"), root="./data"
 )
 result = manager.download_sheet(godlo)
 print(result.files[godlo][0].status, result.files[godlo][0].label)
@@ -3784,9 +3793,10 @@ them with the meaning of every allowed value. The same task, run and then planne
   missing companion such as `bbox_crs`, then a wrong value); the rule of paths (absolute;
   `--allow-dir`); the options of a run next to `check_updates` (`validation_error`: a plan
   fetches nothing); `validate_command` (the rules of the library, with `option`); then the
-  execution in a worker thread. The server adds no default that changes data: `root` is
-  always explicit and absolute (a relative one is `validation_error` with `option: root`
-  and a `hint`), and a `bbox` always comes with `bbox_crs`.
+  execution in a worker thread. The server adds no default that changes data: a `root`
+  that is given is absolute (a relative one is `validation_error` with `option: root` and a
+  `hint`), one that is left out is the default store, which must lie inside `--allow-dir`
+  (`forbidden` otherwise), and a `bbox` always comes with `bbox_crs`.
 - Progress: a tool whose library function has `on_progress` (`kartograf_elevation_download`,
   `kartograf_imagery_download`, `kartograf_landcover_download`, the seven collection download
   tools and `kartograf_project_download`) sends MCP `progress` notifications when it runs (a

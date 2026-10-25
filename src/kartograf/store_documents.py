@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
 
+from kartograf.config import resolve_root
 from kartograf.download.arguments import require_int
 from kartograf.exceptions import ValidationError
 from kartograf.messages import message
@@ -121,13 +122,14 @@ class StoreSidecar(Document):
     sidecar: Sidecar
 
 
-def describe_store(root: str | Path) -> StoreOverview:
+def describe_store(root: str | Path | None = None) -> StoreOverview:
     """List the segments of the store with their registered sources.
 
     Parameters
     ----------
-    root : str or Path
-        The ``data/`` directory (not its parent).
+    root : str or Path, optional
+        The store root (not its parent). Default: the store root of the settings
+        (``store_root()``, DEV-19.2).
 
     Returns
     -------
@@ -139,12 +141,13 @@ def describe_store(root: str | Path) -> StoreOverview:
     OSError
         ``root`` cannot be listed.
     """
-    segments = tuple(describe_segment(name) for name in list_segments(root))
-    return StoreOverview(Path(root), segments)
+    store = resolve_root(root)
+    segments = tuple(describe_segment(name) for name in list_segments(store))
+    return StoreOverview(store, segments)
 
 
 def list_store_entries(
-    root: str | Path,
+    root: str | Path | None = None,
     *,
     segment: str,
     units: Iterable[str] | None = None,
@@ -154,8 +157,8 @@ def list_store_entries(
 
     Parameters
     ----------
-    root : str or Path
-        The ``data/`` directory (not its parent).
+    root : str or Path, optional
+        The store root (not its parent). Default: the store root of the settings.
     segment : str
         ``<product>/<variant>`` (``describe_store`` lists them); required.
     units : iterable of str, optional
@@ -191,9 +194,10 @@ def list_store_entries(
         )
     # A string is passed through unchanged: iter_store rejects it by name.
     scoped = units if units is None or isinstance(units, str) else tuple(units)
-    found = tuple(islice(iter_store(root, segment=segment, units=scoped), limit + 1))
+    store = resolve_root(root)
+    found = tuple(islice(iter_store(store, segment=segment, units=scoped), limit + 1))
     return StoreEntries(
-        Path(root),
+        store,
         segment,
         None if scoped is None else tuple(scoped),
         limit,
