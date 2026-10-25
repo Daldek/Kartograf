@@ -8,6 +8,7 @@ History is the git log and [`docs/CHANGELOG.md`](CHANGELOG.md); this file holds 
 |---|---|---|
 | Release 0.8.0 | done | Complete on `develop` (`__version__ = "0.8.0"`, CHANGELOG `[0.8.0] - 2026-10-17`); untagged, no `v0.8.0` tag yet; tagging, merge to `main` and push are the author's steps |
 | NMT PL (GUGiK) | done | Sheets (PL-1992, PL-2000), all resolutions from one variant registry (ADR-041), `--cutout` from WCS with PRG land mask (ADR-035, ADR-038) |
+| PL-2000 zones | done | A zone is the area of its powiats (§ 22 of Dz.U. 2012 poz. 1247; ADR-055): `find_sheets_for_bbox(..., "2000")` lists each zone's sheets only inside its area, `find_sheet_outlines` adds the zone and the outline cut at the zone boundary (for Archiwista's grid); zone data from GUGiK PRG of 2026-10-25, rebuilt by `scripts/build_pl2000_zones.py` when powiat boundaries change |
 | NMPT PL | done | Sheets and WCS cutout (float32 heights, 4 Mpx coverage chunks) |
 | Orthophoto PL | done | RGB, newest campaign, cutout (ADR-042) |
 | LAZ PL | done | WFS area-based tile selection (ADR-029), `--year`, `--min-density` |
@@ -36,7 +37,7 @@ History is the git log and [`docs/CHANGELOG.md`](CHANGELOG.md); this file holds 
 | Nogat: user environment | done | `src/kartograf/config.py` (ADR-050): `nogat.toml`, `KARTOGRAF_<KEY>` and `NOGAT_<KEY>` (`root`, `data_dir`, `cache_dir`, `lang`, `debug`), `kartograf config show [--json]` (`kartograf-config/1`), `ConfigError` (reason `invalid_config`), the metadata cache in `<cache_dir>/kartograf/metadata.db`, `.env.example`, README table and backup notes (DEV-18); `root` is the store of a command that names no target (ADR-054), `lang` effective with the message catalogue |
 | Nogat: English documentation | in progress | `docs/PROGRESS.md`, the six living docs (`DECISIONS`, `ARCHITECTURE`, `CHANGELOG`, `USAGE`, `SCOPE`, `PRD`), `README.md` and `CLAUDE.md` are English (ECO-005) and `docs/DEVELOPMENT_STANDARDS.md` is deleted (DEV-1.3); the frozen records of `docs/research` and `docs/superpowers` are still Polish (Next item 26) |
 | Data-output convention (ADR-054, branch `feature/data-output` from `chore/nogat-2.1` `1ded38b7`) | done except a CLI smoke as a subprocess and the plain-mode prose | Landed: ADR-054, the rename of every store root to `root` / `--root`, the default root, the store marker, `--check`, the engine `kartograf.output`, `files[]`, the plain mode of every track at library level with its tests, and (step 8) `--output-dir` / `-o` beside `--root` in the catalog, the CLI, `run_command`, `check_command`, `validate_command` and MCP, the store-only rules of `project *` and `store init`, SIGINT/SIGTERM and no-link tests through a real command, the migration guide in the CHANGELOG; open: Next item 4 |
-| Documentation | done | ADR-001..054 in `docs/DECISIONS.md`; `README.md` follows DOC-2.1 and `tests/contract/test_readme.py` runs its examples; `CLAUDE.md` follows DOC-3.1 with a Deviations section |
+| Documentation | done | ADR-001..055 in `docs/DECISIONS.md`; `README.md` follows DOC-2.1 and `tests/contract/test_readme.py` runs its examples; `CLAUDE.md` follows DOC-3.1 with a Deviations section |
 | Distribution | planned | PyPI and MCP registry (`server.json`), distribution rename to `nogat-kartograf`; author's step |
 
 ## Next

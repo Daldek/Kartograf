@@ -1421,6 +1421,11 @@ from the key `root`, and the MCP tool names.
 
 ### Added
 
+- `find_sheet_outlines(bbox, target_scale, sheet_system) -> list[SheetOutline]` (ADR-055): the
+  sheets of `find_sheets_for_bbox` with their PL-2000 `zone` (`None` for PL-1992) and the
+  `outline` a map draws (GeoJSON in EPSG:4326: the sheet with its edges split at 1 km, and for a
+  PL-2000 sheet that a zone boundary cuts, its part inside its zone; the outlines of two zones
+  never overlap). For Archiwista's sheet grid.
 - Sheet and campaign details in the availability report (KD-1, KD-2; ADR-047;
   added to the prepared 0.8.0 release before tagging): new fields of
   `AvailabilityCombination` - `full_m2` (land within full sheets, lower
@@ -2021,6 +2026,7 @@ from the key `root`, and the MCP tool names.
 
 ### Changed
 
+- New runtime dependency `shapely>=2.1` (ADR-055): the PL-2000 zone areas of the sheet search.
 - AI agent interface (ADR-046), changes to existing APIs and behaviours:
   `calculate_hsg(..., summary=False)` and `HsgReport.summary` (HSG statistics after
   the calculation); `--summary` calls the API instead of `hsg_statistics` in the CLI (text
@@ -2514,6 +2520,19 @@ from the key `root`, and the MCP tool names.
   2.87 GB and rightly passes); above 100 files the refusal is decided by
   the count, and the size in the message is only indicative (average of 5 files,
   for 378 counties 6.4 GB against 18 GB actual).
+- PL-2000 sheets of a bbox across a zone boundary (ADR-055): `find_sheets_for_bbox(..., "2000")`
+  took the zones as longitude strips and returned the whole grid of every zone whose strip the
+  bbox touched, so a map drew two grids over each other and a `--sheet-system 2000` download
+  asked for both (19.3-19.7 E x 51.95-52.05 N: 228 + 228 sheets 1:2000, 862 pairs of sheets of
+  different zones overlapping). A zone is now the area of its powiats: § 22 of the regulation on
+  the national spatial reference system (Dz.U. 2012 poz. 1247) gives a powiat that 16.5, 19.5 or
+  22.5 E cuts to the zone of its larger part; the 73 cut powiats come from GUGiK PRG
+  (`_data/pl2000_zones.json.gz`, `_data/pl2000_powiat_zones.json`, built by
+  `scripts/build_pl2000_zones.py`). Each zone's sheets are listed only where they meet its area
+  (the bbox above: 214 zone-6 and 29 zone-7 sheets 1:2000); a bbox inside one zone and the
+  nominal strips outside Poland give the former result. A point on a zone boundary still gives
+  one sheet: the zone of its powiat (Łódź at 19.5 E: zone 6), on a meridian outside Poland the
+  east zone.
 
 ## [0.7.2] - 2026-10-11
 

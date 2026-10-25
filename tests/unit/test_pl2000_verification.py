@@ -660,12 +660,16 @@ class TestPL2000EdgeCases:
         assert 8 in zones_found, "Should find sheets in zone 8"
 
     def test_round_trip_sheet_to_bbox_and_back(self):
-        """Round-trip: sheet code -> BBox -> find_sheets -> contains the original."""
+        """Round-trip: sheet code -> BBox -> find_sheets -> contains the original.
+
+        Each sheet lies inside the area of its zone: a zone-8 sheet over a
+        zone-7 powiat (e.g. 8.175.8 at 22.5E) is not a sheet of that area.
+        """
         test_sheets = [
             "5.170.10",
             "6.179.12",
             "7.180.15",
-            "8.175.8",
+            "8.175.15",
         ]
         for sheet in test_sheets:
             p = Parser2000(sheet)

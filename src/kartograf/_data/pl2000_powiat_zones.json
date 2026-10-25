@@ -1,0 +1,2140 @@
+{
+ "schema": "kartograf-pl2000-powiat-zones/1",
+ "rule": "Rozporządzenie Rady Ministrów z dnia 15 października 2012 r. w sprawie państwowego systemu odniesień przestrzennych (Dz.U. 2012 poz. 1247), § 22: faktyczne granice pasów południkowych w układzie współrzędnych PL-2000 wyznacza się wzdłuż granic jednostek administracyjnych szczebla powiatowego, przy czym w przypadku jednostek administracyjnych przecinanych na dwie części przez południki graniczne pasów południkowych: 16,5ºE, 19,5ºE lub 22,5ºE o przynależności obszaru powiatu do określonego pasa południkowego przesądza część o większej powierzchni.",
+ "source": {
+  "service": "https://mapy.geoportal.gov.pl/wss/service/PZGIK/PRG/WFS/AdministrativeBoundaries",
+  "layer": "ms:A02_Granice_powiatow",
+  "fetched": "2026-10-25",
+  "powiats": 380,
+  "versions": {
+   "IIP_WERSJA": "2026-10-23T08:26:38",
+   "WAZNY_OD": "2024-02-21T00:00:00",
+   "WERSJA_OD": "2026-10-23T08:26:38"
+  },
+  "licence": {
+   "id": "PL-PGiK-40a",
+   "attribution": "Dane: Glowny Urzad Geodezji i Kartografii (www.geoportal.gov.pl), art. 40a ust. 2 pkt 1 ustawy Prawo geodezyjne i kartograficzne"
+  }
+ },
+ "powiats": [
+  {
+   "teryt": "0201",
+   "name": "powiat bolesławiecki",
+   "zone": 5
+  },
+  {
+   "teryt": "0202",
+   "name": "powiat dzierżoniowski",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 3801055,
+   "east_m2": 474359077
+  },
+  {
+   "teryt": "0203",
+   "name": "powiat głogowski",
+   "zone": 5
+  },
+  {
+   "teryt": "0204",
+   "name": "powiat górowski",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 268090541,
+   "east_m2": 469600425
+  },
+  {
+   "teryt": "0205",
+   "name": "powiat jaworski",
+   "zone": 5
+  },
+  {
+   "teryt": "0206",
+   "name": "powiat karkonoski",
+   "zone": 5
+  },
+  {
+   "teryt": "0207",
+   "name": "powiat kamiennogórski",
+   "zone": 5
+  },
+  {
+   "teryt": "0208",
+   "name": "powiat kłodzki",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 442502566,
+   "east_m2": 1199755948
+  },
+  {
+   "teryt": "0209",
+   "name": "powiat legnicki",
+   "zone": 5
+  },
+  {
+   "teryt": "0210",
+   "name": "powiat lubański",
+   "zone": 5
+  },
+  {
+   "teryt": "0211",
+   "name": "powiat lubiński",
+   "zone": 5
+  },
+  {
+   "teryt": "0212",
+   "name": "powiat lwówecki",
+   "zone": 5
+  },
+  {
+   "teryt": "0213",
+   "name": "powiat milicki",
+   "zone": 6
+  },
+  {
+   "teryt": "0214",
+   "name": "powiat oleśnicki",
+   "zone": 6
+  },
+  {
+   "teryt": "0215",
+   "name": "powiat oławski",
+   "zone": 6
+  },
+  {
+   "teryt": "0216",
+   "name": "powiat polkowicki",
+   "zone": 5
+  },
+  {
+   "teryt": "0217",
+   "name": "powiat strzeliński",
+   "zone": 6
+  },
+  {
+   "teryt": "0218",
+   "name": "powiat średzki",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 126842278,
+   "east_m2": 576852256
+  },
+  {
+   "teryt": "0219",
+   "name": "powiat świdnicki",
+   "zone": 5,
+   "meridian": 16.5,
+   "west_m2": 488159309,
+   "east_m2": 252784123
+  },
+  {
+   "teryt": "0220",
+   "name": "powiat trzebnicki",
+   "zone": 6
+  },
+  {
+   "teryt": "0221",
+   "name": "powiat wałbrzyski",
+   "zone": 5
+  },
+  {
+   "teryt": "0222",
+   "name": "powiat wołowski",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 100442636,
+   "east_m2": 574040976
+  },
+  {
+   "teryt": "0223",
+   "name": "powiat wrocławski",
+   "zone": 6
+  },
+  {
+   "teryt": "0224",
+   "name": "powiat ząbkowicki",
+   "zone": 6
+  },
+  {
+   "teryt": "0225",
+   "name": "powiat zgorzelecki",
+   "zone": 5
+  },
+  {
+   "teryt": "0226",
+   "name": "powiat złotoryjski",
+   "zone": 5
+  },
+  {
+   "teryt": "0261",
+   "name": "powiat Jelenia Góra",
+   "zone": 5
+  },
+  {
+   "teryt": "0262",
+   "name": "powiat Legnica",
+   "zone": 5
+  },
+  {
+   "teryt": "0264",
+   "name": "powiat Wrocław",
+   "zone": 6
+  },
+  {
+   "teryt": "0265",
+   "name": "powiat Wałbrzych",
+   "zone": 5
+  },
+  {
+   "teryt": "0401",
+   "name": "powiat aleksandrowski",
+   "zone": 6
+  },
+  {
+   "teryt": "0402",
+   "name": "powiat brodnicki",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 654536256,
+   "east_m2": 383989889
+  },
+  {
+   "teryt": "0403",
+   "name": "powiat bydgoski",
+   "zone": 6
+  },
+  {
+   "teryt": "0404",
+   "name": "powiat chełmiński",
+   "zone": 6
+  },
+  {
+   "teryt": "0405",
+   "name": "powiat golubsko-dobrzyński",
+   "zone": 6
+  },
+  {
+   "teryt": "0406",
+   "name": "powiat grudziądzki",
+   "zone": 6
+  },
+  {
+   "teryt": "0407",
+   "name": "powiat inowrocławski",
+   "zone": 6
+  },
+  {
+   "teryt": "0408",
+   "name": "powiat lipnowski",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 1011507319,
+   "east_m2": 4055362
+  },
+  {
+   "teryt": "0409",
+   "name": "powiat mogileński",
+   "zone": 6
+  },
+  {
+   "teryt": "0410",
+   "name": "powiat nakielski",
+   "zone": 6
+  },
+  {
+   "teryt": "0411",
+   "name": "powiat radziejowski",
+   "zone": 6
+  },
+  {
+   "teryt": "0412",
+   "name": "powiat rypiński",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 415965613,
+   "east_m2": 170050901
+  },
+  {
+   "teryt": "0413",
+   "name": "powiat sępoleński",
+   "zone": 6
+  },
+  {
+   "teryt": "0414",
+   "name": "powiat świecki",
+   "zone": 6
+  },
+  {
+   "teryt": "0415",
+   "name": "powiat toruński",
+   "zone": 6
+  },
+  {
+   "teryt": "0416",
+   "name": "powiat tucholski",
+   "zone": 6
+  },
+  {
+   "teryt": "0417",
+   "name": "powiat wąbrzeski",
+   "zone": 6
+  },
+  {
+   "teryt": "0418",
+   "name": "powiat włocławski",
+   "zone": 6
+  },
+  {
+   "teryt": "0419",
+   "name": "powiat żniński",
+   "zone": 6
+  },
+  {
+   "teryt": "0461",
+   "name": "powiat Bydgoszcz",
+   "zone": 6
+  },
+  {
+   "teryt": "0462",
+   "name": "powiat Grudziądz",
+   "zone": 6
+  },
+  {
+   "teryt": "0463",
+   "name": "powiat Toruń",
+   "zone": 6
+  },
+  {
+   "teryt": "0464",
+   "name": "powiat Włocławek",
+   "zone": 6
+  },
+  {
+   "teryt": "0601",
+   "name": "powiat bialski",
+   "zone": 8
+  },
+  {
+   "teryt": "0602",
+   "name": "powiat biłgorajski",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 46999078,
+   "east_m2": 1634671125
+  },
+  {
+   "teryt": "0603",
+   "name": "powiat chełmski",
+   "zone": 8
+  },
+  {
+   "teryt": "0604",
+   "name": "powiat hrubieszowski",
+   "zone": 8
+  },
+  {
+   "teryt": "0605",
+   "name": "powiat janowski",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 571636600,
+   "east_m2": 303685215
+  },
+  {
+   "teryt": "0606",
+   "name": "powiat krasnostawski",
+   "zone": 8
+  },
+  {
+   "teryt": "0607",
+   "name": "powiat kraśnicki",
+   "zone": 7
+  },
+  {
+   "teryt": "0608",
+   "name": "powiat lubartowski",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 560450477,
+   "east_m2": 728343006
+  },
+  {
+   "teryt": "0609",
+   "name": "powiat lubelski",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 853041714,
+   "east_m2": 826615441
+  },
+  {
+   "teryt": "0610",
+   "name": "powiat łęczyński",
+   "zone": 8
+  },
+  {
+   "teryt": "0611",
+   "name": "powiat łukowski",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 1276532120,
+   "east_m2": 117469571
+  },
+  {
+   "teryt": "0612",
+   "name": "powiat opolski",
+   "zone": 7
+  },
+  {
+   "teryt": "0613",
+   "name": "powiat parczewski",
+   "zone": 8
+  },
+  {
+   "teryt": "0614",
+   "name": "powiat puławski",
+   "zone": 7
+  },
+  {
+   "teryt": "0615",
+   "name": "powiat radzyński",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 127682501,
+   "east_m2": 837503175
+  },
+  {
+   "teryt": "0616",
+   "name": "powiat rycki",
+   "zone": 7
+  },
+  {
+   "teryt": "0617",
+   "name": "powiat świdnicki",
+   "zone": 8
+  },
+  {
+   "teryt": "0618",
+   "name": "powiat tomaszowski",
+   "zone": 8
+  },
+  {
+   "teryt": "0619",
+   "name": "powiat włodawski",
+   "zone": 8
+  },
+  {
+   "teryt": "0620",
+   "name": "powiat zamojski",
+   "zone": 8
+  },
+  {
+   "teryt": "0661",
+   "name": "powiat Biała Podlaska",
+   "zone": 8
+  },
+  {
+   "teryt": "0662",
+   "name": "powiat Chełm",
+   "zone": 8
+  },
+  {
+   "teryt": "0663",
+   "name": "powiat Lublin",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 19149902,
+   "east_m2": 128330094
+  },
+  {
+   "teryt": "0664",
+   "name": "powiat Zamość",
+   "zone": 8
+  },
+  {
+   "teryt": "0801",
+   "name": "powiat gorzowski",
+   "zone": 5
+  },
+  {
+   "teryt": "0802",
+   "name": "powiat krośnieński",
+   "zone": 5
+  },
+  {
+   "teryt": "0803",
+   "name": "powiat międzyrzecki",
+   "zone": 5
+  },
+  {
+   "teryt": "0804",
+   "name": "powiat nowosolski",
+   "zone": 5
+  },
+  {
+   "teryt": "0805",
+   "name": "powiat słubicki",
+   "zone": 5
+  },
+  {
+   "teryt": "0806",
+   "name": "powiat strzelecko-drezdenecki",
+   "zone": 5
+  },
+  {
+   "teryt": "0807",
+   "name": "powiat sulęciński",
+   "zone": 5
+  },
+  {
+   "teryt": "0808",
+   "name": "powiat świebodziński",
+   "zone": 5
+  },
+  {
+   "teryt": "0809",
+   "name": "powiat zielonogórski",
+   "zone": 5
+  },
+  {
+   "teryt": "0810",
+   "name": "powiat żagański",
+   "zone": 5
+  },
+  {
+   "teryt": "0811",
+   "name": "powiat żarski",
+   "zone": 5
+  },
+  {
+   "teryt": "0812",
+   "name": "powiat wschowski",
+   "zone": 5
+  },
+  {
+   "teryt": "0861",
+   "name": "powiat Gorzów Wielkopolski",
+   "zone": 5
+  },
+  {
+   "teryt": "0862",
+   "name": "powiat Zielona Góra",
+   "zone": 5
+  },
+  {
+   "teryt": "1001",
+   "name": "powiat bełchatowski",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 966258625,
+   "east_m2": 79
+  },
+  {
+   "teryt": "1002",
+   "name": "powiat kutnowski",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 626222892,
+   "east_m2": 259407906
+  },
+  {
+   "teryt": "1003",
+   "name": "powiat łaski",
+   "zone": 6
+  },
+  {
+   "teryt": "1004",
+   "name": "powiat łęczycki",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 735434581,
+   "east_m2": 36241310
+  },
+  {
+   "teryt": "1005",
+   "name": "powiat łowicki",
+   "zone": 7
+  },
+  {
+   "teryt": "1006",
+   "name": "powiat łódzki wschodni",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 60997080,
+   "east_m2": 438136223
+  },
+  {
+   "teryt": "1007",
+   "name": "powiat opoczyński",
+   "zone": 7
+  },
+  {
+   "teryt": "1008",
+   "name": "powiat pabianicki",
+   "zone": 6
+  },
+  {
+   "teryt": "1009",
+   "name": "powiat pajęczański",
+   "zone": 6
+  },
+  {
+   "teryt": "1010",
+   "name": "powiat piotrkowski",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 64617097,
+   "east_m2": 1362033106
+  },
+  {
+   "teryt": "1011",
+   "name": "powiat poddębicki",
+   "zone": 6
+  },
+  {
+   "teryt": "1012",
+   "name": "powiat radomszczański",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 460006405,
+   "east_m2": 980865730
+  },
+  {
+   "teryt": "1013",
+   "name": "powiat rawski",
+   "zone": 7
+  },
+  {
+   "teryt": "1014",
+   "name": "powiat sieradzki",
+   "zone": 6
+  },
+  {
+   "teryt": "1015",
+   "name": "powiat skierniewicki",
+   "zone": 7
+  },
+  {
+   "teryt": "1016",
+   "name": "powiat tomaszowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1017",
+   "name": "powiat wieluński",
+   "zone": 6
+  },
+  {
+   "teryt": "1018",
+   "name": "powiat wieruszowski",
+   "zone": 6
+  },
+  {
+   "teryt": "1019",
+   "name": "powiat zduńskowolski",
+   "zone": 6
+  },
+  {
+   "teryt": "1020",
+   "name": "powiat zgierski",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 543257962,
+   "east_m2": 310740646
+  },
+  {
+   "teryt": "1021",
+   "name": "powiat brzeziński",
+   "zone": 7
+  },
+  {
+   "teryt": "1061",
+   "name": "powiat Łódź",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 170366213,
+   "east_m2": 122483953
+  },
+  {
+   "teryt": "1062",
+   "name": "powiat Piotrków Trybunalski",
+   "zone": 7
+  },
+  {
+   "teryt": "1063",
+   "name": "powiat Skierniewice",
+   "zone": 7
+  },
+  {
+   "teryt": "1201",
+   "name": "powiat bocheński",
+   "zone": 7
+  },
+  {
+   "teryt": "1202",
+   "name": "powiat brzeski",
+   "zone": 7
+  },
+  {
+   "teryt": "1203",
+   "name": "powiat chrzanowski",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 267449920,
+   "east_m2": 101986960
+  },
+  {
+   "teryt": "1204",
+   "name": "powiat dąbrowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1205",
+   "name": "powiat gorlicki",
+   "zone": 7
+  },
+  {
+   "teryt": "1206",
+   "name": "powiat krakowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1207",
+   "name": "powiat limanowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1208",
+   "name": "powiat miechowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1209",
+   "name": "powiat myślenicki",
+   "zone": 7
+  },
+  {
+   "teryt": "1210",
+   "name": "powiat nowosądecki",
+   "zone": 7
+  },
+  {
+   "teryt": "1211",
+   "name": "powiat nowotarski",
+   "zone": 7
+  },
+  {
+   "teryt": "1212",
+   "name": "powiat olkuski",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 101735273,
+   "east_m2": 515565272
+  },
+  {
+   "teryt": "1213",
+   "name": "powiat oświęcimski",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 404794276,
+   "east_m2": 712797
+  },
+  {
+   "teryt": "1214",
+   "name": "powiat proszowicki",
+   "zone": 7
+  },
+  {
+   "teryt": "1215",
+   "name": "powiat suski",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 94508022,
+   "east_m2": 590173293
+  },
+  {
+   "teryt": "1216",
+   "name": "powiat tarnowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1217",
+   "name": "powiat tatrzański",
+   "zone": 7
+  },
+  {
+   "teryt": "1218",
+   "name": "powiat wadowicki",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 272677469,
+   "east_m2": 372402510
+  },
+  {
+   "teryt": "1219",
+   "name": "powiat wielicki",
+   "zone": 7
+  },
+  {
+   "teryt": "1261",
+   "name": "powiat Kraków",
+   "zone": 7
+  },
+  {
+   "teryt": "1262",
+   "name": "powiat Nowy Sącz",
+   "zone": 7
+  },
+  {
+   "teryt": "1263",
+   "name": "powiat Tarnów",
+   "zone": 7
+  },
+  {
+   "teryt": "1401",
+   "name": "powiat białobrzeski",
+   "zone": 7
+  },
+  {
+   "teryt": "1402",
+   "name": "powiat ciechanowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1403",
+   "name": "powiat garwoliński",
+   "zone": 7
+  },
+  {
+   "teryt": "1404",
+   "name": "powiat gostyniński",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 242462532,
+   "east_m2": 371556815
+  },
+  {
+   "teryt": "1405",
+   "name": "powiat grodziski",
+   "zone": 7
+  },
+  {
+   "teryt": "1406",
+   "name": "powiat grójecki",
+   "zone": 7
+  },
+  {
+   "teryt": "1407",
+   "name": "powiat kozienicki",
+   "zone": 7
+  },
+  {
+   "teryt": "1408",
+   "name": "powiat legionowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1409",
+   "name": "powiat lipski",
+   "zone": 7
+  },
+  {
+   "teryt": "1410",
+   "name": "powiat łosicki",
+   "zone": 8
+  },
+  {
+   "teryt": "1411",
+   "name": "powiat makowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1412",
+   "name": "powiat miński",
+   "zone": 7
+  },
+  {
+   "teryt": "1413",
+   "name": "powiat mławski",
+   "zone": 7
+  },
+  {
+   "teryt": "1414",
+   "name": "powiat nowodworski",
+   "zone": 7
+  },
+  {
+   "teryt": "1415",
+   "name": "powiat ostrołęcki",
+   "zone": 7
+  },
+  {
+   "teryt": "1416",
+   "name": "powiat ostrowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1417",
+   "name": "powiat otwocki",
+   "zone": 7
+  },
+  {
+   "teryt": "1418",
+   "name": "powiat piaseczyński",
+   "zone": 7
+  },
+  {
+   "teryt": "1419",
+   "name": "powiat płocki",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 155231827,
+   "east_m2": 1639066048
+  },
+  {
+   "teryt": "1420",
+   "name": "powiat płoński",
+   "zone": 7
+  },
+  {
+   "teryt": "1421",
+   "name": "powiat pruszkowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1422",
+   "name": "powiat przasnyski",
+   "zone": 7
+  },
+  {
+   "teryt": "1423",
+   "name": "powiat przysuski",
+   "zone": 7
+  },
+  {
+   "teryt": "1424",
+   "name": "powiat pułtuski",
+   "zone": 7
+  },
+  {
+   "teryt": "1425",
+   "name": "powiat radomski",
+   "zone": 7
+  },
+  {
+   "teryt": "1426",
+   "name": "powiat siedlecki",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 1183109361,
+   "east_m2": 420186676
+  },
+  {
+   "teryt": "1427",
+   "name": "powiat sierpecki",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 48353249,
+   "east_m2": 802531717
+  },
+  {
+   "teryt": "1428",
+   "name": "powiat sochaczewski",
+   "zone": 7
+  },
+  {
+   "teryt": "1429",
+   "name": "powiat sokołowski",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 1077912143,
+   "east_m2": 53085931
+  },
+  {
+   "teryt": "1430",
+   "name": "powiat szydłowiecki",
+   "zone": 7
+  },
+  {
+   "teryt": "1432",
+   "name": "powiat warszawski zachodni",
+   "zone": 7
+  },
+  {
+   "teryt": "1433",
+   "name": "powiat węgrowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1434",
+   "name": "powiat wołomiński",
+   "zone": 7
+  },
+  {
+   "teryt": "1435",
+   "name": "powiat wyszkowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1436",
+   "name": "powiat zwoleński",
+   "zone": 7
+  },
+  {
+   "teryt": "1437",
+   "name": "powiat żuromiński",
+   "zone": 7
+  },
+  {
+   "teryt": "1438",
+   "name": "powiat żyrardowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1461",
+   "name": "powiat Ostrołęka",
+   "zone": 7
+  },
+  {
+   "teryt": "1462",
+   "name": "powiat Płock",
+   "zone": 7
+  },
+  {
+   "teryt": "1463",
+   "name": "powiat Radom",
+   "zone": 7
+  },
+  {
+   "teryt": "1464",
+   "name": "powiat Siedlce",
+   "zone": 7
+  },
+  {
+   "teryt": "1465",
+   "name": "powiat Warszawa",
+   "zone": 7
+  },
+  {
+   "teryt": "1601",
+   "name": "powiat brzeski",
+   "zone": 6
+  },
+  {
+   "teryt": "1602",
+   "name": "powiat głubczycki",
+   "zone": 6
+  },
+  {
+   "teryt": "1603",
+   "name": "powiat kędzierzyńsko-kozielski",
+   "zone": 6
+  },
+  {
+   "teryt": "1604",
+   "name": "powiat kluczborski",
+   "zone": 6
+  },
+  {
+   "teryt": "1605",
+   "name": "powiat krapkowicki",
+   "zone": 6
+  },
+  {
+   "teryt": "1606",
+   "name": "powiat namysłowski",
+   "zone": 6
+  },
+  {
+   "teryt": "1607",
+   "name": "powiat nyski",
+   "zone": 6
+  },
+  {
+   "teryt": "1608",
+   "name": "powiat oleski",
+   "zone": 6
+  },
+  {
+   "teryt": "1609",
+   "name": "powiat opolski",
+   "zone": 6
+  },
+  {
+   "teryt": "1610",
+   "name": "powiat prudnicki",
+   "zone": 6
+  },
+  {
+   "teryt": "1611",
+   "name": "powiat strzelecki",
+   "zone": 6
+  },
+  {
+   "teryt": "1661",
+   "name": "powiat Opole",
+   "zone": 6
+  },
+  {
+   "teryt": "1801",
+   "name": "powiat bieszczadzki",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 89439355,
+   "east_m2": 1050048530
+  },
+  {
+   "teryt": "1802",
+   "name": "powiat brzozowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1803",
+   "name": "powiat dębicki",
+   "zone": 7
+  },
+  {
+   "teryt": "1804",
+   "name": "powiat jarosławski",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 47089940,
+   "east_m2": 982178522
+  },
+  {
+   "teryt": "1805",
+   "name": "powiat jasielski",
+   "zone": 7
+  },
+  {
+   "teryt": "1806",
+   "name": "powiat kolbuszowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1807",
+   "name": "powiat krośnieński",
+   "zone": 7
+  },
+  {
+   "teryt": "1808",
+   "name": "powiat leżajski",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 433961035,
+   "east_m2": 149804433
+  },
+  {
+   "teryt": "1809",
+   "name": "powiat lubaczowski",
+   "zone": 8
+  },
+  {
+   "teryt": "1810",
+   "name": "powiat łańcucki",
+   "zone": 7
+  },
+  {
+   "teryt": "1811",
+   "name": "powiat mielecki",
+   "zone": 7
+  },
+  {
+   "teryt": "1812",
+   "name": "powiat niżański",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 743533451,
+   "east_m2": 42099928
+  },
+  {
+   "teryt": "1813",
+   "name": "powiat przemyski",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 388101834,
+   "east_m2": 823436606
+  },
+  {
+   "teryt": "1814",
+   "name": "powiat przeworski",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 294425163,
+   "east_m2": 403543848
+  },
+  {
+   "teryt": "1815",
+   "name": "powiat ropczycko-sędziszowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1816",
+   "name": "powiat rzeszowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1817",
+   "name": "powiat sanocki",
+   "zone": 7
+  },
+  {
+   "teryt": "1818",
+   "name": "powiat stalowowolski",
+   "zone": 7
+  },
+  {
+   "teryt": "1819",
+   "name": "powiat strzyżowski",
+   "zone": 7
+  },
+  {
+   "teryt": "1820",
+   "name": "powiat tarnobrzeski",
+   "zone": 7
+  },
+  {
+   "teryt": "1821",
+   "name": "powiat leski",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 796877512,
+   "east_m2": 38089296
+  },
+  {
+   "teryt": "1861",
+   "name": "powiat Krosno",
+   "zone": 7
+  },
+  {
+   "teryt": "1862",
+   "name": "powiat Przemyśl",
+   "zone": 8
+  },
+  {
+   "teryt": "1863",
+   "name": "powiat Rzeszów",
+   "zone": 7
+  },
+  {
+   "teryt": "1864",
+   "name": "powiat Tarnobrzeg",
+   "zone": 7
+  },
+  {
+   "teryt": "2001",
+   "name": "powiat augustowski",
+   "zone": 8
+  },
+  {
+   "teryt": "2002",
+   "name": "powiat białostocki",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 8199160,
+   "east_m2": 2970012594
+  },
+  {
+   "teryt": "2003",
+   "name": "powiat bielski",
+   "zone": 8
+  },
+  {
+   "teryt": "2004",
+   "name": "powiat grajewski",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 536041446,
+   "east_m2": 431324892
+  },
+  {
+   "teryt": "2005",
+   "name": "powiat hajnowski",
+   "zone": 8
+  },
+  {
+   "teryt": "2006",
+   "name": "powiat kolneński",
+   "zone": 7
+  },
+  {
+   "teryt": "2007",
+   "name": "powiat łomżyński",
+   "zone": 7
+  },
+  {
+   "teryt": "2008",
+   "name": "powiat moniecki",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 39187518,
+   "east_m2": 1342834052
+  },
+  {
+   "teryt": "2009",
+   "name": "powiat sejneński",
+   "zone": 8
+  },
+  {
+   "teryt": "2010",
+   "name": "powiat siemiatycki",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 14137496,
+   "east_m2": 1445786080
+  },
+  {
+   "teryt": "2011",
+   "name": "powiat sokólski",
+   "zone": 8
+  },
+  {
+   "teryt": "2012",
+   "name": "powiat suwalski",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 1939729,
+   "east_m2": 1305234116
+  },
+  {
+   "teryt": "2013",
+   "name": "powiat wysokomazowiecki",
+   "zone": 8,
+   "meridian": 22.5,
+   "west_m2": 400031380,
+   "east_m2": 888885652
+  },
+  {
+   "teryt": "2014",
+   "name": "powiat zambrowski",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 695428527,
+   "east_m2": 37515534
+  },
+  {
+   "teryt": "2061",
+   "name": "powiat Białystok",
+   "zone": 8
+  },
+  {
+   "teryt": "2062",
+   "name": "powiat Łomża",
+   "zone": 7
+  },
+  {
+   "teryt": "2063",
+   "name": "powiat Suwałki",
+   "zone": 8
+  },
+  {
+   "teryt": "2201",
+   "name": "powiat bytowski",
+   "zone": 6
+  },
+  {
+   "teryt": "2202",
+   "name": "powiat chojnicki",
+   "zone": 6
+  },
+  {
+   "teryt": "2203",
+   "name": "powiat człuchowski",
+   "zone": 6
+  },
+  {
+   "teryt": "2204",
+   "name": "powiat gdański",
+   "zone": 6
+  },
+  {
+   "teryt": "2205",
+   "name": "powiat kartuski",
+   "zone": 6
+  },
+  {
+   "teryt": "2206",
+   "name": "powiat kościerski",
+   "zone": 6
+  },
+  {
+   "teryt": "2207",
+   "name": "powiat kwidzyński",
+   "zone": 6
+  },
+  {
+   "teryt": "2208",
+   "name": "powiat lęborski",
+   "zone": 6
+  },
+  {
+   "teryt": "2209",
+   "name": "powiat malborski",
+   "zone": 6
+  },
+  {
+   "teryt": "2210",
+   "name": "powiat nowodworski",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 852146215,
+   "east_m2": 60607475
+  },
+  {
+   "teryt": "2211",
+   "name": "powiat pucki",
+   "zone": 6
+  },
+  {
+   "teryt": "2212",
+   "name": "powiat słupski",
+   "zone": 6
+  },
+  {
+   "teryt": "2213",
+   "name": "powiat starogardzki",
+   "zone": 6
+  },
+  {
+   "teryt": "2214",
+   "name": "powiat tczewski",
+   "zone": 6
+  },
+  {
+   "teryt": "2215",
+   "name": "powiat wejherowski",
+   "zone": 6
+  },
+  {
+   "teryt": "2216",
+   "name": "powiat sztumski",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 693354133,
+   "east_m2": 36190468
+  },
+  {
+   "teryt": "2261",
+   "name": "powiat Gdańsk",
+   "zone": 6
+  },
+  {
+   "teryt": "2262",
+   "name": "powiat Gdynia",
+   "zone": 6
+  },
+  {
+   "teryt": "2263",
+   "name": "powiat Słupsk",
+   "zone": 6
+  },
+  {
+   "teryt": "2264",
+   "name": "powiat Sopot",
+   "zone": 6
+  },
+  {
+   "teryt": "2401",
+   "name": "powiat będziński",
+   "zone": 6
+  },
+  {
+   "teryt": "2402",
+   "name": "powiat bielski",
+   "zone": 6
+  },
+  {
+   "teryt": "2403",
+   "name": "powiat cieszyński",
+   "zone": 6
+  },
+  {
+   "teryt": "2404",
+   "name": "powiat częstochowski",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 1078318916,
+   "east_m2": 441465300
+  },
+  {
+   "teryt": "2405",
+   "name": "powiat gliwicki",
+   "zone": 6
+  },
+  {
+   "teryt": "2406",
+   "name": "powiat kłobucki",
+   "zone": 6
+  },
+  {
+   "teryt": "2407",
+   "name": "powiat lubliniecki",
+   "zone": 6
+  },
+  {
+   "teryt": "2408",
+   "name": "powiat mikołowski",
+   "zone": 6
+  },
+  {
+   "teryt": "2409",
+   "name": "powiat myszkowski",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 434342301,
+   "east_m2": 44251399
+  },
+  {
+   "teryt": "2410",
+   "name": "powiat pszczyński",
+   "zone": 6
+  },
+  {
+   "teryt": "2411",
+   "name": "powiat raciborski",
+   "zone": 6
+  },
+  {
+   "teryt": "2412",
+   "name": "powiat rybnicki",
+   "zone": 6
+  },
+  {
+   "teryt": "2413",
+   "name": "powiat tarnogórski",
+   "zone": 6
+  },
+  {
+   "teryt": "2414",
+   "name": "powiat bieruńsko-lędziński",
+   "zone": 6
+  },
+  {
+   "teryt": "2415",
+   "name": "powiat wodzisławski",
+   "zone": 6
+  },
+  {
+   "teryt": "2416",
+   "name": "powiat zawierciański",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 303859016,
+   "east_m2": 698437567
+  },
+  {
+   "teryt": "2417",
+   "name": "powiat żywiecki",
+   "zone": 6
+  },
+  {
+   "teryt": "2461",
+   "name": "powiat Bielsko-Biała",
+   "zone": 6
+  },
+  {
+   "teryt": "2462",
+   "name": "powiat Bytom",
+   "zone": 6
+  },
+  {
+   "teryt": "2463",
+   "name": "powiat Chorzów",
+   "zone": 6
+  },
+  {
+   "teryt": "2464",
+   "name": "powiat Częstochowa",
+   "zone": 6
+  },
+  {
+   "teryt": "2465",
+   "name": "powiat Dąbrowa Górnicza",
+   "zone": 6
+  },
+  {
+   "teryt": "2466",
+   "name": "powiat Gliwice",
+   "zone": 6
+  },
+  {
+   "teryt": "2467",
+   "name": "powiat Jastrzębie-Zdrój",
+   "zone": 6
+  },
+  {
+   "teryt": "2468",
+   "name": "powiat Jaworzno",
+   "zone": 6
+  },
+  {
+   "teryt": "2469",
+   "name": "powiat Katowice",
+   "zone": 6
+  },
+  {
+   "teryt": "2470",
+   "name": "powiat Mysłowice",
+   "zone": 6
+  },
+  {
+   "teryt": "2471",
+   "name": "powiat Piekary Śląskie",
+   "zone": 6
+  },
+  {
+   "teryt": "2472",
+   "name": "powiat Ruda Śląska",
+   "zone": 6
+  },
+  {
+   "teryt": "2473",
+   "name": "powiat Rybnik",
+   "zone": 6
+  },
+  {
+   "teryt": "2474",
+   "name": "powiat Siemianowice Śląskie",
+   "zone": 6
+  },
+  {
+   "teryt": "2475",
+   "name": "powiat Sosnowiec",
+   "zone": 6
+  },
+  {
+   "teryt": "2476",
+   "name": "powiat Świętochłowice",
+   "zone": 6
+  },
+  {
+   "teryt": "2477",
+   "name": "powiat Tychy",
+   "zone": 6
+  },
+  {
+   "teryt": "2478",
+   "name": "powiat Zabrze",
+   "zone": 6
+  },
+  {
+   "teryt": "2479",
+   "name": "powiat Żory",
+   "zone": 6
+  },
+  {
+   "teryt": "2601",
+   "name": "powiat buski",
+   "zone": 7
+  },
+  {
+   "teryt": "2602",
+   "name": "powiat jędrzejowski",
+   "zone": 7
+  },
+  {
+   "teryt": "2603",
+   "name": "powiat kazimierski",
+   "zone": 7
+  },
+  {
+   "teryt": "2604",
+   "name": "powiat kielecki",
+   "zone": 7
+  },
+  {
+   "teryt": "2605",
+   "name": "powiat konecki",
+   "zone": 7
+  },
+  {
+   "teryt": "2606",
+   "name": "powiat opatowski",
+   "zone": 7
+  },
+  {
+   "teryt": "2607",
+   "name": "powiat ostrowiecki",
+   "zone": 7
+  },
+  {
+   "teryt": "2608",
+   "name": "powiat pińczowski",
+   "zone": 7
+  },
+  {
+   "teryt": "2609",
+   "name": "powiat sandomierski",
+   "zone": 7
+  },
+  {
+   "teryt": "2610",
+   "name": "powiat skarżyski",
+   "zone": 7
+  },
+  {
+   "teryt": "2611",
+   "name": "powiat starachowicki",
+   "zone": 7
+  },
+  {
+   "teryt": "2612",
+   "name": "powiat staszowski",
+   "zone": 7
+  },
+  {
+   "teryt": "2613",
+   "name": "powiat włoszczowski",
+   "zone": 7
+  },
+  {
+   "teryt": "2661",
+   "name": "powiat Kielce",
+   "zone": 7
+  },
+  {
+   "teryt": "2801",
+   "name": "powiat bartoszycki",
+   "zone": 7
+  },
+  {
+   "teryt": "2802",
+   "name": "powiat braniewski",
+   "zone": 7
+  },
+  {
+   "teryt": "2803",
+   "name": "powiat działdowski",
+   "zone": 7
+  },
+  {
+   "teryt": "2804",
+   "name": "powiat elbląski",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 500957916,
+   "east_m2": 910117330
+  },
+  {
+   "teryt": "2805",
+   "name": "powiat ełcki",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 772157354,
+   "east_m2": 340543884
+  },
+  {
+   "teryt": "2806",
+   "name": "powiat giżycki",
+   "zone": 7
+  },
+  {
+   "teryt": "2807",
+   "name": "powiat iławski",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 521576692,
+   "east_m2": 861716870
+  },
+  {
+   "teryt": "2808",
+   "name": "powiat kętrzyński",
+   "zone": 7
+  },
+  {
+   "teryt": "2809",
+   "name": "powiat lidzbarski",
+   "zone": 7
+  },
+  {
+   "teryt": "2810",
+   "name": "powiat mrągowski",
+   "zone": 7
+  },
+  {
+   "teryt": "2811",
+   "name": "powiat nidzicki",
+   "zone": 7
+  },
+  {
+   "teryt": "2812",
+   "name": "powiat nowomiejski",
+   "zone": 7,
+   "meridian": 19.5,
+   "west_m2": 316699879,
+   "east_m2": 376099189
+  },
+  {
+   "teryt": "2813",
+   "name": "powiat olecki",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 608481288,
+   "east_m2": 264953808
+  },
+  {
+   "teryt": "2814",
+   "name": "powiat olsztyński",
+   "zone": 7
+  },
+  {
+   "teryt": "2815",
+   "name": "powiat ostródzki",
+   "zone": 7
+  },
+  {
+   "teryt": "2816",
+   "name": "powiat piski",
+   "zone": 7
+  },
+  {
+   "teryt": "2817",
+   "name": "powiat szczycieński",
+   "zone": 7
+  },
+  {
+   "teryt": "2818",
+   "name": "powiat gołdapski",
+   "zone": 7,
+   "meridian": 22.5,
+   "west_m2": 588690926,
+   "east_m2": 183447612
+  },
+  {
+   "teryt": "2819",
+   "name": "powiat węgorzewski",
+   "zone": 7
+  },
+  {
+   "teryt": "2861",
+   "name": "powiat Elbląg",
+   "zone": 6,
+   "meridian": 19.5,
+   "west_m2": 77761989,
+   "east_m2": 1946946
+  },
+  {
+   "teryt": "2862",
+   "name": "powiat Olsztyn",
+   "zone": 7
+  },
+  {
+   "teryt": "3001",
+   "name": "powiat chodzieski",
+   "zone": 6
+  },
+  {
+   "teryt": "3002",
+   "name": "powiat czarnkowsko-trzcianecki",
+   "zone": 5,
+   "meridian": 16.5,
+   "west_m2": 1200787629,
+   "east_m2": 605753798
+  },
+  {
+   "teryt": "3003",
+   "name": "powiat gnieźnieński",
+   "zone": 6
+  },
+  {
+   "teryt": "3004",
+   "name": "powiat gostyński",
+   "zone": 6
+  },
+  {
+   "teryt": "3005",
+   "name": "powiat grodziski",
+   "zone": 5,
+   "meridian": 16.5,
+   "west_m2": 531613950,
+   "east_m2": 111886163
+  },
+  {
+   "teryt": "3006",
+   "name": "powiat jarociński",
+   "zone": 6
+  },
+  {
+   "teryt": "3007",
+   "name": "powiat kaliski",
+   "zone": 6
+  },
+  {
+   "teryt": "3008",
+   "name": "powiat kępiński",
+   "zone": 6
+  },
+  {
+   "teryt": "3009",
+   "name": "powiat kolski",
+   "zone": 6
+  },
+  {
+   "teryt": "3010",
+   "name": "powiat koniński",
+   "zone": 6
+  },
+  {
+   "teryt": "3011",
+   "name": "powiat kościański",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 53702776,
+   "east_m2": 668122982
+  },
+  {
+   "teryt": "3012",
+   "name": "powiat krotoszyński",
+   "zone": 6
+  },
+  {
+   "teryt": "3013",
+   "name": "powiat leszczyński",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 286569448,
+   "east_m2": 518569016
+  },
+  {
+   "teryt": "3014",
+   "name": "powiat międzychodzki",
+   "zone": 5
+  },
+  {
+   "teryt": "3015",
+   "name": "powiat nowotomyski",
+   "zone": 5,
+   "meridian": 16.5,
+   "west_m2": 1008330648,
+   "east_m2": 2810723
+  },
+  {
+   "teryt": "3016",
+   "name": "powiat obornicki",
+   "zone": 6
+  },
+  {
+   "teryt": "3017",
+   "name": "powiat ostrowski",
+   "zone": 6
+  },
+  {
+   "teryt": "3018",
+   "name": "powiat ostrzeszowski",
+   "zone": 6
+  },
+  {
+   "teryt": "3019",
+   "name": "powiat pilski",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 29803796,
+   "east_m2": 1235045225
+  },
+  {
+   "teryt": "3020",
+   "name": "powiat pleszewski",
+   "zone": 6
+  },
+  {
+   "teryt": "3021",
+   "name": "powiat poznański",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 11433027,
+   "east_m2": 1886761183
+  },
+  {
+   "teryt": "3022",
+   "name": "powiat rawicki",
+   "zone": 6
+  },
+  {
+   "teryt": "3023",
+   "name": "powiat słupecki",
+   "zone": 6
+  },
+  {
+   "teryt": "3024",
+   "name": "powiat szamotulski",
+   "zone": 5,
+   "meridian": 16.5,
+   "west_m2": 765953007,
+   "east_m2": 352597234
+  },
+  {
+   "teryt": "3025",
+   "name": "powiat średzki",
+   "zone": 6
+  },
+  {
+   "teryt": "3026",
+   "name": "powiat śremski",
+   "zone": 6
+  },
+  {
+   "teryt": "3027",
+   "name": "powiat turecki",
+   "zone": 6
+  },
+  {
+   "teryt": "3028",
+   "name": "powiat wągrowiecki",
+   "zone": 6
+  },
+  {
+   "teryt": "3029",
+   "name": "powiat wolsztyński",
+   "zone": 5
+  },
+  {
+   "teryt": "3030",
+   "name": "powiat wrzesiński",
+   "zone": 6
+  },
+  {
+   "teryt": "3031",
+   "name": "powiat złotowski",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 29827174,
+   "east_m2": 1629171119
+  },
+  {
+   "teryt": "3061",
+   "name": "powiat Kalisz",
+   "zone": 6
+  },
+  {
+   "teryt": "3062",
+   "name": "powiat Konin",
+   "zone": 6
+  },
+  {
+   "teryt": "3063",
+   "name": "powiat Leszno",
+   "zone": 6
+  },
+  {
+   "teryt": "3064",
+   "name": "powiat Poznań",
+   "zone": 6
+  },
+  {
+   "teryt": "3201",
+   "name": "powiat białogardzki",
+   "zone": 5
+  },
+  {
+   "teryt": "3202",
+   "name": "powiat choszczeński",
+   "zone": 5
+  },
+  {
+   "teryt": "3203",
+   "name": "powiat drawski",
+   "zone": 5
+  },
+  {
+   "teryt": "3204",
+   "name": "powiat goleniowski",
+   "zone": 5
+  },
+  {
+   "teryt": "3205",
+   "name": "powiat gryficki",
+   "zone": 5
+  },
+  {
+   "teryt": "3206",
+   "name": "powiat gryfiński",
+   "zone": 5
+  },
+  {
+   "teryt": "3207",
+   "name": "powiat kamieński",
+   "zone": 5
+  },
+  {
+   "teryt": "3208",
+   "name": "powiat kołobrzeski",
+   "zone": 5
+  },
+  {
+   "teryt": "3209",
+   "name": "powiat koszaliński",
+   "zone": 5,
+   "meridian": 16.5,
+   "west_m2": 1030611638,
+   "east_m2": 616745597
+  },
+  {
+   "teryt": "3210",
+   "name": "powiat myśliborski",
+   "zone": 5
+  },
+  {
+   "teryt": "3211",
+   "name": "powiat policki",
+   "zone": 5
+  },
+  {
+   "teryt": "3212",
+   "name": "powiat pyrzycki",
+   "zone": 5
+  },
+  {
+   "teryt": "3213",
+   "name": "powiat sławieński",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 290443527,
+   "east_m2": 755907196
+  },
+  {
+   "teryt": "3214",
+   "name": "powiat stargardzki",
+   "zone": 5
+  },
+  {
+   "teryt": "3215",
+   "name": "powiat szczecinecki",
+   "zone": 6,
+   "meridian": 16.5,
+   "west_m2": 635222040,
+   "east_m2": 1128944289
+  },
+  {
+   "teryt": "3216",
+   "name": "powiat świdwiński",
+   "zone": 5
+  },
+  {
+   "teryt": "3217",
+   "name": "powiat wałecki",
+   "zone": 5,
+   "meridian": 16.5,
+   "west_m2": 1252207691,
+   "east_m2": 162076386
+  },
+  {
+   "teryt": "3218",
+   "name": "powiat łobeski",
+   "zone": 5
+  },
+  {
+   "teryt": "3261",
+   "name": "powiat Koszalin",
+   "zone": 5
+  },
+  {
+   "teryt": "3262",
+   "name": "powiat Szczecin",
+   "zone": 5
+  },
+  {
+   "teryt": "3263",
+   "name": "powiat Świnoujście",
+   "zone": 5
+  }
+ ]
+}

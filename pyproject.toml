@@ -35,6 +35,8 @@ dependencies = [
     "pyshp>=2.3.0",
     "pyogrio>=0.10",
     "platformdirs>=4",
+    # 2.1: orient_polygons (GeoJSON ring order of the PL-2000 sheet outlines).
+    "shapely>=2.1",
 ]
 
 [project.scripts]
@@ -53,7 +55,12 @@ where = ["src"]
 include = ["kartograf*"]
 
 [tool.setuptools.package-data]
-kartograf = ["py.typed", "_data/agents/*.md"]
+kartograf = [
+    "py.typed",
+    "_data/agents/*.md",
+    "_data/pl2000_zones.json.gz",
+    "_data/pl2000_powiat_zones.json",
+]
 
 [tool.setuptools.dynamic]
 version = {attr = "kartograf.__version__"}
@@ -96,7 +103,15 @@ exclude = ['^\.claude/']
 
 [[tool.mypy.overrides]]
 # Packages without type information (mypy cannot follow them).
-module = ["rasterio.*", "shapefile.*", "affine.*", "pyogrio.*", "jsonschema.*"]
+module = [
+    "rasterio.*",
+    "shapefile.*",
+    "affine.*",
+    "pyogrio.*",
+    "jsonschema.*",
+    "shapely",
+    "shapely.*",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

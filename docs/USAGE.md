@@ -880,6 +880,15 @@ kartograf elevation download --sheet 7.171.21 --scale 1:2000 --product nmt --res
 kartograf elevation download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --root ./data
 ```
 
+**PL-2000 — zones.** A PL-2000 zone is the area of its powiats, not a longitude strip:
+§ 22 of the regulation on the national spatial reference system (Dz.U. 2012 poz. 1247)
+puts the zone boundaries on powiat boundaries, and a powiat that 16.5, 19.5 or 22.5 E
+cuts belongs to the zone of its larger part (ADR-055; e.g. the whole of Łódź is zone 6).
+A `--bbox`/`--geometry` across a zone boundary downloads each zone's sheets only on its own
+side, each sheet once; outside Poland the nominal 3-degree strips hold. `kartograf sheet
+find --bbox ... --sheet-system 2000` lists the same sheets, and the library function
+`find_sheet_outlines` adds the zone of each sheet and the outline a map draws.
+
 **What happens on a mismatch.** The absence of a sheet with the ordered sheet code is
 a lack of coverage (`NoCoverageError`), never a silent fallback download (e.g.
 of a PL-1992 sheet). The sheet index does, however, return sheets from the queried location

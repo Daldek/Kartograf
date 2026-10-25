@@ -1587,12 +1587,19 @@ class TestFindSheets2000ForBBox:
         assert find_sheets_2000_for_bbox(bbox, target_scale="1:10000") == ["6.179.12"]
 
     def test_point_on_zone_boundary_meridian_returns_single_sheet(self):
-        """A point exactly on the meridian of the zone 6/7 border -> 1 zone-7 sheet."""
-        result = find_sheets_2000_for_bbox(
-            BBox(19.5, 52.0, 19.5, 52.0, "EPSG:4326"), target_scale="1:10000"
+        """A point on the zone 6/7 meridian -> 1 sheet: outside Poland, where the
+        nominal strips hold, of the east zone; in Poland of its powiat's zone
+        (Łódź, cut by 19.5E, lies mostly west of it: zone 6 - ADR-055)."""
+        abroad = find_sheets_2000_for_bbox(
+            BBox(19.5, 48.9, 19.5, 48.9, "EPSG:4326"), target_scale="1:10000"
         )
-        assert len(result) == 1
-        assert result[0].startswith("7.")
+        in_lodz = find_sheets_2000_for_bbox(
+            BBox(19.5, 51.77, 19.5, 51.77, "EPSG:4326"), target_scale="1:10000"
+        )
+        assert len(abroad) == 1
+        assert abroad[0].startswith("7.")
+        assert len(in_lodz) == 1
+        assert in_lodz[0].startswith("6.")
 
     def test_point_bbox_2000_inside_sheet_returns_single_sheet(self):
         """A degenerate bbox inside a sheet -> exactly 1 sheet."""
