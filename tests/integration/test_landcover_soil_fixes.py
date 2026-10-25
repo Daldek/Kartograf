@@ -317,7 +317,7 @@ def test_soil_sidecar_has_the_units_and_an_empty_raster_is_reported(tmp_path, va
         )
     ):
         report = download_soil(
-            output_dir=tmp_path / "store",
+            root=tmp_path / "store",
             bbox=AREA,
             property="clay",
             depth="0-5cm",
@@ -422,7 +422,7 @@ def test_absent_class_of_a_powiat_is_an_info_and_the_others_are_saved(tmp_path):
     with patch.object(Bdot10kProvider, "download_package", side_effect=package):
         report = download_landcover(
             product="bdot10k",
-            output_dir=tmp_path,
+            root=tmp_path,
             teryt="2264",
             layers=["SWKN", "PTWP"],
             cache=False,
@@ -453,7 +453,7 @@ def test_bdot10k_area_over_the_volume_limit_is_refused_before_any_download(tmp_p
     ):
         download_landcover(
             product="bdot10k",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=BBox(100000, 100000, 800000, 800000, "EPSG:2180"),
             cache=False,
             on_notice=notices.append,
@@ -492,7 +492,7 @@ def test_bdot10k_area_within_the_file_limit_is_measured_package_by_package(tmp_p
     ):
         download_landcover(
             product="bdot10k",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=BBox(400000, 300000, 600000, 500000, "EPSG:2180"),
             cache=False,
         )
@@ -513,7 +513,7 @@ def test_bdot10k_area_within_the_limit_downloads_every_powiat(tmp_path):
     ):
         report = download_landcover(
             product="bdot10k",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=AREA,
             cache=False,
         )

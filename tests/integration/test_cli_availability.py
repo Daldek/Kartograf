@@ -84,7 +84,7 @@ def test_table_sorted_and_footer(capsys):
     )
     assert out.endswith(
         "Najnowsza kompletna kombinacja: 2025 PL-1992 1m EVRF2007 ASC\n"
-        f"  Pobranie (dodaj --output KATALOG): kartograf {hint}\n"
+        f"  Pobranie (dodaj --root KATALOG): kartograf {hint}\n"
         f"  W projekcie: kartograf project add NAZWA {hint}\n"
     )
 
@@ -368,7 +368,7 @@ def test_pl_footer_shows_five_commands(capsys):
 
     shown = [line for line in footer.splitlines() if "Pobranie" in line]
     assert shown == [
-        f"  Pobranie (dodaj --output KATALOG): kartograf {hint}" for hint in hints[:5]
+        f"  Pobranie (dodaj --root KATALOG): kartograf {hint}" for hint in hints[:5]
     ]
     assert footer.endswith(
         "  ... pozostale polecenia: 2 (wszystkie: --details albo --json)\n"

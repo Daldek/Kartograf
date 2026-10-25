@@ -520,7 +520,7 @@ class CollectionRequest:
     """A request checked by ``validate_collection_request`` (no network)."""
 
     product: str
-    output_dir: Path
+    root: Path
     teryt: str | None
     whole_country: bool
     parts: tuple[CollectionPart, ...]
@@ -1410,7 +1410,7 @@ def _to_crs(bbox: BBox, crs: str) -> BBox:
 def validate_collection_request(
     *,
     product: str | None,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     country: str | None = None,
     teryt: str | None = None,
     ku: str | None = None,
@@ -1492,9 +1492,9 @@ def _resolve(
     product = args["product"]
     if descriptors is None:
         descriptors = _descriptors(product)
-    if args["output_dir"] is None:
+    if args["root"] is None:
         top = next(iter(descriptors.values())).storage_subdir.split("/", 1)[0]
-        raise ValidationError(output_required(top), option="output_dir")
+        raise ValidationError(output_required(top), option="root")
     kind = _selection_kind(args, descriptors)
     check_per_country(args["level"], "--level")
     country = args["country"]
@@ -1515,7 +1515,7 @@ def _resolve(
         "classes": classes,
     }
     teryt, ku = args["teryt"], args["ku"]
-    output_dir = Path(args["output_dir"])
+    root = Path(args["root"])
 
     def part(
         code: str, area_kind: str, countries: tuple[str, ...] = ()
@@ -1562,9 +1562,7 @@ def _resolve(
                 f"{of_powiat}; dostepne: {known}",
                 option="teryt",
             )
-        return CollectionRequest(
-            product, output_dir, teryt, False, (part("PL", "teryt"),)
-        )
+        return CollectionRequest(product, root, teryt, False, (part("PL", "teryt"),))
     if kind == "ku":
         assert ku is not None
         if country not in (None, "cz"):
@@ -1577,9 +1575,7 @@ def _resolve(
                 f"Nieprawidlowy kod katastralniho uzemi {ku!r}: 6 cyfr, np. 623164",
                 option="ku",
             )
-        return CollectionRequest(
-            product, output_dir, None, False, (part("CZ", "ku"),), ku=ku
-        )
+        return CollectionRequest(product, root, None, False, (part("CZ", "ku"),), ku=ku)
     if kind == "whole_country":
         if country not in ("pl", "cz"):
             # the countries of this product: hydro has CZ only, so no --country pl
@@ -1594,11 +1590,11 @@ def _resolve(
                 allowed=countries,
             )
         whole = part(country.upper(), "whole_country")
-        return CollectionRequest(product, output_dir, None, True, (whole,))
+        return CollectionRequest(product, root, None, True, (whole,))
     if args["sheet"] is not None:
         return CollectionRequest(
             product,
-            output_dir,
+            root,
             None,
             False,
             (_sheet_part(args, descriptors, part, options),),
@@ -1610,7 +1606,7 @@ def _resolve(
             allowed=COUNTRIES,
         )
     return CollectionRequest(
-        product, output_dir, None, False, _area_parts(args, descriptors, part, sink)
+        product, root, None, False, _area_parts(args, descriptors, part, sink)
     )
 
 
@@ -1856,7 +1852,7 @@ def _class_tokens(classes: Sequence[str]) -> tuple[str, ...]:
 
 
 def _related_roots(
-    output_dir: Path,
+    root: Path,
     descriptor: SourceDescriptor,
     params: UnitPackageParams,
     variant: PackageVariant,
@@ -1886,9 +1882,9 @@ def _related_roots(
             continue
         tokens = (*other.segment_tokens, *_class_tokens(classes))
         segment = content_segment(descriptor.key, tokens)
-        root = unit_slot(output_dir, segment, ext, teryt=teryt, country=country)
-        if root.versions_root.is_dir():
-            roots.append(root.versions_root)
+        other_slot = unit_slot(root, segment, ext, teryt=teryt, country=country)
+        if other_slot.versions_root.is_dir():
+            roots.append(other_slot.versions_root)
     return tuple(roots)
 
 
@@ -1904,7 +1900,7 @@ def _country_unit(country: str, theme: str | None) -> str:
 
 
 def package_job(
-    output_dir: Path,
+    root: Path,
     descriptor: SourceDescriptor,
     channel: AccessChannel,
     variant: PackageVariant,
@@ -1929,7 +1925,7 @@ def package_job(
     ext = params.unpack or FILE_SUFFIX[variant.file_kind]
     code = None if teryt is not None else _country_unit(country, theme)
     related = _related_roots(
-        output_dir,
+        root,
         descriptor,
         params,
         variant,
@@ -1939,7 +1935,7 @@ def package_job(
         classes=classes,
     )
     slot = unit_slot(
-        output_dir, segment, ext, teryt=teryt, country=code, related_roots=related
+        root, segment, ext, teryt=teryt, country=code, related_roots=related
     )
     return UnitJob(
         descriptor=descriptor,
@@ -1956,9 +1952,9 @@ def package_job(
     )
 
 
-def _feature_job(output_dir: Path, part: CollectionPart) -> UnitJob:
+def _feature_job(root: Path, part: CollectionPart) -> UnitJob:
     assert part.area is not None
-    slot = unit_slot(output_dir, part.segment, part.ext, bbox=part.area)
+    slot = unit_slot(root, part.segment, part.ext, bbox=part.area)
     return UnitJob(
         descriptor=part.descriptor,
         channel=part.channel,
@@ -1976,7 +1972,7 @@ def _feature_job(output_dir: Path, part: CollectionPart) -> UnitJob:
     )
 
 
-def _atom_job(output_dir: Path, part: CollectionPart) -> UnitJob:
+def _atom_job(root: Path, part: CollectionPart) -> UnitJob:
     """Return the national file of an ATOM channel (``whole_country``)."""
     code = part.country.lower()
     crs = part.choice.get("horizontal_crs")
@@ -1985,7 +1981,7 @@ def _atom_job(output_dir: Path, part: CollectionPart) -> UnitJob:
         channel=part.channel,
         country=part.country,
         unit=code,
-        slot=unit_slot(output_dir, part.segment, part.ext, country=code),
+        slot=unit_slot(root, part.segment, part.ext, country=code),
         request={"whole_country": True, **part.choice},
         whole_country=True,
         atom=True,
@@ -2062,7 +2058,7 @@ def atom_area_request(
     descriptor_key: str,
     *,
     product: str,
-    output_dir: Path,
+    root: Path,
     area: BBox,
     parent: dict[str, Any] | None,
     choice: dict[str, Any],
@@ -2098,7 +2094,7 @@ def atom_area_request(
         parent=parent,
         extra=dict(extra),
     )
-    return CollectionRequest(product, Path(output_dir), None, False, (part,))
+    return CollectionRequest(product, Path(root), None, False, (part,))
 
 
 def _record_job(
@@ -2429,7 +2425,7 @@ def _part_jobs(
     skip_local: bool,
 ) -> list[UnitJob]:
     """Return the unit jobs of one country part of a request (``_jobs``)."""
-    out = request.output_dir
+    out = request.root
     params = part.channel.params
     if part.layers:
         if isinstance(params, FeatureBBoxParams) and params.area_omitted:
@@ -3072,7 +3068,7 @@ def _choices(values: dict[str, Any]) -> dict[str, Any]:
 
 _CHOICE_NAMES = (
     "product",
-    "output_dir",
+    "root",
     "country",
     "teryt",
     "ku",
@@ -3095,7 +3091,7 @@ _CHOICE_NAMES = (
 def download_collection(
     *,
     product: str | None,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     country: str | None = None,
     teryt: str | None = None,
     ku: str | None = None,
@@ -3119,10 +3115,10 @@ def download_collection(
     on_progress: Callable[[DownloadProgress], None] | None = None,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> CollectionReport:
-    """Download a collection product into the version store of ``output_dir``.
+    """Download a collection product into the version store of ``root``.
 
     Download a collection product (``download`` of the collection groups)
-    into the version store of ``output_dir``.
+    into the version store of ``root``.
 
     Choices as in ``validate_collection_request`` (called first, no network):
     ``product`` (``admin`` PRG and RUIAN, ``map`` EGiB, ``buildings`` 3D
@@ -3203,7 +3199,7 @@ def download_collection(
 def landcover_request(
     descriptor_key: str,
     *,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     teryt: str | None,
     sheet: str | None,
     bbox: BBox | None,
@@ -3227,7 +3223,7 @@ def landcover_request(
     descriptor = get_source(descriptor_key)
     args = {
         "product": descriptor.product,
-        "output_dir": output_dir,
+        "root": root,
         "country": descriptor.country.lower(),
         "teryt": teryt,
         "ku": None,
@@ -3523,7 +3519,7 @@ def run_request(
             raise ValidationError(
                 "Plan aktualizacji wymaga update='upgrade'", options=("plan", "update")
             )
-        require_store(plan, store_id(request.output_dir))
+        require_store(plan, store_id(request.root))
     require_workers(workers, "--workers")
     with open_cache(
         cache, force=refreshes_cache(update), on_notice=sink.add
@@ -3599,7 +3595,7 @@ def run_request(
             failed.append(outcome)
         elif outcome is not None:
             files.append(UnitFile(job.unit, job.country, outcome))
-            unit = outcome.path.relative_to(request.output_dir).as_posix()
+            unit = outcome.path.relative_to(request.root).as_posix()
             emit_file_notices(sink, unit, outcome, update)
     return tuple(files), tuple(failed), stale
 
@@ -3625,13 +3621,13 @@ def plan_request(
     for failure in unlisted:
         sink.emit("warning", CHECK_FAILED, f"{failure.unit}: {failure.error}")
     _auto_partial_success(request, unlisted, sink, check=True)
-    return new_plan(request.output_dir, items)
+    return new_plan(request.root, items)
 
 
 def check_collection(
     *,
     product: str | None,
-    output_dir: str | Path | None,
+    root: str | Path | None,
     country: str | None = None,
     teryt: str | None = None,
     ku: str | None = None,

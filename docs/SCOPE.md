@@ -360,75 +360,75 @@ and ZTM (2.15), Bodove pole and QGZU-2013 (2.16).
 # Commands:
 kartograf sheet parse <sheet_code>                    # info about the sheet code (PL-1992 or PL-2000)
 kartograf sheet parse 6.179.12.20               # PL-2000 auto-detection
-kartograf elevation download --sheet <sheet_code> --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # download NMT
-kartograf elevation download --sheet <sheet_code> --product nmpt --resolution 1m --vertical-crs EVRF2007 -o ./data # download NMPT (--resolution required since 0.8.0)
-kartograf imagery download --sheet <sheet_code> --product orto -o ./data # download orthophoto
-kartograf elevation download --sheet <sheet_code> --product laz --vertical-crs EVRF2007 -o ./data # download LAZ point clouds (many tiles)
-kartograf elevation download --bbox ... --product laz --year 2024 --min-density 12 --country pl --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --bbox min_x,min_y,max_x,max_y --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # NMT for a bbox
-kartograf elevation download --bbox ... --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data # NMT in the PL-2000 system (1:2000 sheets)
-kartograf imagery download --bbox ... --product orto --country pl --sheet-system 1992 -o ./data # orthophoto for a bbox
-kartograf imagery download --bbox ... --product orto --country pl --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m -o ./data # WCS cutout
-kartograf imagery download --sheet CTES96 --product orto -o ./data # CZ orthophoto (sheet SM5: JPEG + 3 JGW)
-kartograf landcover download --product zabaged --bbox=... --bbox-crs EPSG:5514 -o ./data # ZABAGED (22 layers, EPSG:5514); --whole-country --horizontal-crs EPSG:5514|EPSG:3045
-kartograf boundaries download --product admin --country cz --level obec --bbox=... --bbox-crs EPSG:5514 -o ./data # RUIAN; auto: --level pl=gmina,cz=obec
-kartograf hydro download --product network --country cz --bbox=... --bbox-crs EPSG:5514 -o ./data # HY-NET; --whole-country (EPSG:3045)
-kartograf elevation download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # NMT from a geometry file
-kartograf elevation download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf elevation download --sheet <sheet_code> --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data # NMT 5m
-kartograf elevation download --sheet <sheet_code> --resolution 0.5m --product nmt --vertical-crs EVRF2007 -o ./data # NMT 0.5m (labels from the variant registry; elevation list-sources)
-kartograf elevation download --bbox ... --country pl --sheet-system 1992 --product nmt --format TBD --resolution 25m --vertical-crs KRON86 -o ./data # GUGiK archive as a source file (ADR-041)
+kartograf elevation download --sheet <sheet_code> --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data # download NMT
+kartograf elevation download --sheet <sheet_code> --product nmpt --resolution 1m --vertical-crs EVRF2007 --root ./data # download NMPT (--resolution required since 0.8.0)
+kartograf imagery download --sheet <sheet_code> --product orto --root ./data # download orthophoto
+kartograf elevation download --sheet <sheet_code> --product laz --vertical-crs EVRF2007 --root ./data # download LAZ point clouds (many tiles)
+kartograf elevation download --bbox ... --product laz --year 2024 --min-density 12 --country pl --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --bbox min_x,min_y,max_x,max_y --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data # NMT for a bbox
+kartograf elevation download --bbox ... --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --root ./data # NMT in the PL-2000 system (1:2000 sheets)
+kartograf imagery download --bbox ... --product orto --country pl --sheet-system 1992 --root ./data # orthophoto for a bbox
+kartograf imagery download --bbox ... --product orto --country pl --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m --root ./data # WCS cutout
+kartograf imagery download --sheet CTES96 --product orto --root ./data # CZ orthophoto (sheet SM5: JPEG + 3 JGW)
+kartograf landcover download --product zabaged --bbox=... --bbox-crs EPSG:5514 --root ./data # ZABAGED (22 layers, EPSG:5514); --whole-country --horizontal-crs EPSG:5514|EPSG:3045
+kartograf boundaries download --product admin --country cz --level obec --bbox=... --bbox-crs EPSG:5514 --root ./data # RUIAN; auto: --level pl=gmina,cz=obec
+kartograf hydro download --product network --country cz --bbox=... --bbox-crs EPSG:5514 --root ./data # HY-NET; --whole-country (EPSG:3045)
+kartograf elevation download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data # NMT from a geometry file
+kartograf elevation download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data
+kartograf elevation download --sheet <sheet_code> --resolution 5m --product nmt --vertical-crs EVRF2007 --root ./data # NMT 5m
+kartograf elevation download --sheet <sheet_code> --resolution 0.5m --product nmt --vertical-crs EVRF2007 --root ./data # NMT 0.5m (labels from the variant registry; elevation list-sources)
+kartograf elevation download --bbox ... --country pl --sheet-system 1992 --product nmt --format TBD --resolution 25m --vertical-crs KRON86 --root ./data # GUGiK archive as a source file (ADR-041)
 kartograf elevation list-sources                   # NMT/NMPT/LAZ variants from the registry (ready-made flags), no network
 kartograf elevation availability --product nmt --country pl --bbox ... # availability report: set of full sheets per year/system/resolution/format, without downloading
 kartograf elevation availability --product nmpt --sheet <sheet_code> --details # codes of incomplete sheets and download commands; --json = check_availability
-kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data # DMR 5G (CZ), sheet code TM33
-kartograf elevation download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (CZ, 5m), sheet code SM5, country from the sheet code
-kartograf elevation download --sheet CTES96 --product nmpt --resolution 0.5m --vertical-crs Bpv -o ./data # DMP OK CZ, sheet SM5
-kartograf elevation download --sheet 760_5518 --country cz --product nmpt --resolution 0.5m --vertical-crs EVRF2007 -o ./data # DMP OK native tile TM33
-kartograf elevation download --sheet CTES96 --country cz --product laz --model dmr5g --vertical-crs Bpv -o ./data # CZ LAZ from ZIP, no transformation
+kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv --root ./data # DMR 5G (CZ), sheet code TM33
+kartograf elevation download --sheet CTES96 --product nmt --vertical-crs Bpv --root ./data # DMR 4G (CZ, 5m), sheet code SM5, country from the sheet code
+kartograf elevation download --sheet CTES96 --product nmpt --resolution 0.5m --vertical-crs Bpv --root ./data # DMP OK CZ, sheet SM5
+kartograf elevation download --sheet 760_5518 --country cz --product nmpt --resolution 0.5m --vertical-crs EVRF2007 --root ./data # DMP OK native tile TM33
+kartograf elevation download --sheet CTES96 --country cz --product laz --model dmr5g --vertical-crs Bpv --root ./data # CZ LAZ from ZIP, no transformation
 kartograf elevation availability --product laz --country cz --sheet CTES96 # CZ report without downloading files
-kartograf elevation download --bbox ... --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data # cross-border bbox -> cutout per country
-kartograf elevation download --bbox ... --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data # local reprojection (pinned)
-kartograf elevation download --bbox ... --country pl --cutout --horizontal-crs EPSG:2180 --product nmt --vertical-crs EVRF2007 -o ./data # NMT/NMPT 1 m WCS cutout + PRG mask (ADR-035)
-kartograf elevation download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m -o ./data # Bpv -> EVRF2007 (EPSG:5621)
-kartograf elevation download --sheet <sheet_code> --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # all GUGiK campaigns of the sheet (ADR-030)
-kartograf elevation download --sheet <sheet_code> --year 2025 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # latest flight of the year (ADR-032)
-kartograf elevation download --sheet <sheet_code> --year 2025 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # all flights of the year
-kartograf elevation download --sheet <sheet_code> --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # latest flight, not older than the year
-kartograf elevation download --bbox ... --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # latest flight up to the year (hard link never backwards)
-kartograf elevation download --bbox ... --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data # LAZ without coverage deduplication
-kartograf landcover download --product bdot10k --teryt <code> -o ./data  # area: --bbox [--bbox-crs] / --sheet / --geometry; --layers, --keep-raw, --workers, -q
-kartograf landcover download --product bdot10k --teryt 1261 --year 2024 --format SHP -o ./data # BDOT10k yearly archives (2014-2025, GML|SHP, ZIP 1:1)
-kartograf landcover download --product corine --sheet <sheet> -o ./data --year 2018
-kartograf soil download --property <param> -o ./data --depth 0-5cm --stat mean # --sheet/--bbox (without --teryt)
+kartograf elevation download --bbox ... --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv --root ./data # cross-border bbox -> cutout per country
+kartograf elevation download --bbox ... --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv --root ./data # local reprojection (pinned)
+kartograf elevation download --bbox ... --country pl --cutout --horizontal-crs EPSG:2180 --product nmt --vertical-crs EVRF2007 --root ./data # NMT/NMPT 1 m WCS cutout + PRG mask (ADR-035)
+kartograf elevation download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m --root ./data # Bpv -> EVRF2007 (EPSG:5621)
+kartograf elevation download --sheet <sheet_code> --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data # all GUGiK campaigns of the sheet (ADR-030)
+kartograf elevation download --sheet <sheet_code> --year 2025 --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data # latest flight of the year (ADR-032)
+kartograf elevation download --sheet <sheet_code> --year 2025 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data # all flights of the year
+kartograf elevation download --sheet <sheet_code> --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data # latest flight, not older than the year
+kartograf elevation download --bbox ... --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data # latest flight up to the year (hard link never backwards)
+kartograf elevation download --bbox ... --product laz --all-campaigns --country pl --vertical-crs EVRF2007 --root ./data # LAZ without coverage deduplication
+kartograf landcover download --product bdot10k --teryt <code> --root ./data  # area: --bbox [--bbox-crs] / --sheet / --geometry; --layers, --keep-raw, --workers, -q
+kartograf landcover download --product bdot10k --teryt 1261 --year 2024 --format SHP --root ./data # BDOT10k yearly archives (2014-2025, GML|SHP, ZIP 1:1)
+kartograf landcover download --product corine --sheet <sheet> --root ./data --year 2018
+kartograf soil download --property <param> --root ./data --depth 0-5cm --stat mean # --sheet/--bbox (without --teryt)
 kartograf landcover list-sources
 kartograf landcover list-layers --product <produkt>
-kartograf soil hsg --sheet <sheet> -o ./data --depth 0-5cm # compute HSG from a SoilGrids version
-kartograf boundaries download --product admin --country pl --level gmina --bbox ... -o ./data # PRG boundaries of the area (GPKG from WFS); --teryt 12 / --whole-country --country pl
+kartograf soil hsg --sheet <sheet> --root ./data --depth 0-5cm # compute HSG from a SoilGrids version
+kartograf boundaries download --product admin --country pl --level gmina --bbox ... --root ./data # PRG boundaries of the area (GPKG from WFS); --teryt 12 / --whole-country --country pl
 kartograf boundaries list-sources
-kartograf cadastre download --product map --teryt 1261 -o ./data # EGiB of the county (GPKG); area: --country pl --bbox/--sheet/--geometry
+kartograf cadastre download --product map --teryt 1261 --root ./data # EGiB of the county (GPKG); area: --country pl --bbox/--sheet/--geometry
 kartograf cadastre list-sources
-kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data # CityGML 3D models; --lod 2 (2017) without --year
+kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 --root ./data # CityGML 3D models; --lod 2 (2017) without --year
 kartograf models3d list-sources
-kartograf elevation download --product contours --country cz --format SHP --sheet CTES96 -o ./data # ZABAGED contours CZ (ZIP of sheet SM5; SHP|DGN)
-kartograf elevation download --product nmt --resolution 100m --country pl --bbox ... -o ./data # NMT 100 m: voivodeship XYZ files from the ATOM feed
-kartograf imagery download --product intensity --sheet <sheet_code> -o ./data # LIDAR intensity images; also --product true-orto, oblique-orto (--direction)
-kartograf landcover download --product bdoo --teryt 12 --year 2023 -o ./data # BDOO: voivodeship GML package; --layers selected classes
-kartograf landcover download --product data50 --bbox=... --bbox-crs EPSG:5514 -o ./data # Data50/Data250 CZ; --whole-country --horizontal-crs EPSG:5514|EPSG:3045
-kartograf boundaries download --product addresses --country pl --bbox ... -o ./data # PRG address points and streets; --teryt <4 digits>; --whole-country --format SHP|GML
-kartograf boundaries download --product special --country pl --bbox ... -o ./data # 44 kinds of PRG special boundaries (OGC API); --whole-country --format SHP|GML
-kartograf boundaries download --product geomorphology --country cz --level celek --bbox=... --bbox-crs EPSG:5514 -o ./data # CZ geomorphological units
-kartograf cadastre download --product prices --teryt 1261 -o ./data # RCN: export for a county (4 digits) or voivodeship (2 digits)
-kartograf cadastre download --product map --ku 623164 --format SHP -o ./data # CZ cadastral map (SHP|DXF|DGN|VFK); area: KU by RUIAN
-kartograf models3d download --product mesh --country pl --bbox ... -o ./data # city mesh (OBJ tiles); --product trees --teryt <code> (CityGML trees)
-kartograf names download --product geographic --country pl --bbox ... -o ./data # PRNG (CZ: Geonames); --product world; --whole-country --format
+kartograf elevation download --product contours --country cz --format SHP --sheet CTES96 --root ./data # ZABAGED contours CZ (ZIP of sheet SM5; SHP|DGN)
+kartograf elevation download --product nmt --resolution 100m --country pl --bbox ... --root ./data # NMT 100 m: voivodeship XYZ files from the ATOM feed
+kartograf imagery download --product intensity --sheet <sheet_code> --root ./data # LIDAR intensity images; also --product true-orto, oblique-orto (--direction)
+kartograf landcover download --product bdoo --teryt 12 --year 2023 --root ./data # BDOO: voivodeship GML package; --layers selected classes
+kartograf landcover download --product data50 --bbox=... --bbox-crs EPSG:5514 --root ./data # Data50/Data250 CZ; --whole-country --horizontal-crs EPSG:5514|EPSG:3045
+kartograf boundaries download --product addresses --country pl --bbox ... --root ./data # PRG address points and streets; --teryt <4 digits>; --whole-country --format SHP|GML
+kartograf boundaries download --product special --country pl --bbox ... --root ./data # 44 kinds of PRG special boundaries (OGC API); --whole-country --format SHP|GML
+kartograf boundaries download --product geomorphology --country cz --level celek --bbox=... --bbox-crs EPSG:5514 --root ./data # CZ geomorphological units
+kartograf cadastre download --product prices --teryt 1261 --root ./data # RCN: export for a county (4 digits) or voivodeship (2 digits)
+kartograf cadastre download --product map --ku 623164 --format SHP --root ./data # CZ cadastral map (SHP|DXF|DGN|VFK); area: KU by RUIAN
+kartograf models3d download --product mesh --country pl --bbox ... --root ./data # city mesh (OBJ tiles); --product trees --teryt <code> (CityGML trees)
+kartograf names download --product geographic --country pl --bbox ... --root ./data # PRNG (CZ: Geonames); --product world; --whole-country --format
 kartograf names list-sources
-kartograf maps download --product topographic --country pl --sheet <sheet_code> --scale 1:10000 --format TIFF -o ./data # BDOT10k visualisations (CZ: ZTM)
+kartograf maps download --product topographic --country pl --sheet <sheet_code> --scale 1:10000 --format TIFF --root ./data # BDOT10k visualisations (CZ: ZTM)
 kartograf maps list-sources
-kartograf geodesy download --product control --country pl --network vertical --bbox ... -o ./data # control points; --teryt (county package), sheet archives
-kartograf geodesy download --product geoid --country pl --whole-country -o ./data # PL-geoid2021 (CZ: QGZU-2013)
+kartograf geodesy download --product control --country pl --network vertical --bbox ... --root ./data # control points; --teryt (county package), sheet archives
+kartograf geodesy download --product geoid --country pl --whole-country --root ./data # PL-geoid2021 (CZ: QGZU-2013)
 kartograf geodesy list-sources
-kartograf project init --output ~/dane/kartograf # project manifest with a shared store
+kartograf project init --root ~/dane/kartograf # project manifest with a shared store
 kartograf project add teren elevation download --product nmt --sheet <sheet_code> --resolution 1m --vertical-crs EVRF2007
 kartograf project download                 # pin task versions; --check-updates/--upgrade/--force
 kartograf project status                   # existence and size, without reading data
@@ -552,7 +552,7 @@ from kartograf import (
   latest local full flight (ADR-033); `list_files()` skips it,
   `delete()` removes both links
 - Land cover and HSG in segments `landcover/`, `soil/`, `hsg/` (spec 3.4,
-  ARCHITECTURE 3.3 rule 8); `--output` = store root
+  ARCHITECTURE 3.3 rule 8); `--root` = store root
 - Collections (ADR-042 D8, extension of rule 8):
   `<group>/<country>_<source>[_<tokens>]/{teryt/<T>|bbox/<coords>|country/<code>|ku/<code>|<sheet code hierarchy>|<zone>/<file>}<ext>`,
   versions in `<segment>/versions/<same hierarchy>/`. Tokens (`[a-z0-9.-]`)

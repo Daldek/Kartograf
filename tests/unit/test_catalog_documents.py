@@ -106,10 +106,10 @@ def _params() -> tuple[Param, ...]:
             description_pl="Wszystkie loty",
         ),
         Param(
-            "output_dir",
+            "root",
             "path",
             "Store directory.",
-            flag="--output",
+            flag="--root",
             short="-o",
             dest="output",
             required=True,
@@ -395,7 +395,7 @@ def test_an_option_has_an_argument_of_the_function_or_is_the_plan_option(synthet
         "format",
         "limit",
         "all_campaigns",
-        "output_dir",
+        "root",
         "check_updates",  # no function takes it, the command has a check
     }
     assert [p.name for p in declared_options(command)][-1] == "check_updates"
@@ -420,7 +420,7 @@ def test_the_options_of_a_command_are_typed_and_bounded(synthetic):
         "format",
         "limit",
         "all_campaigns",
-        "output_dir",
+        "root",
         "check_updates",
     ]
     assert (options["product"].type, options["product"].required) == ("string", True)
@@ -434,7 +434,7 @@ def test_the_options_of_a_command_are_typed_and_bounded(synthetic):
     assert (options["limit"].default, options["all_campaigns"].default) == (10, False)
     assert options["all_campaigns"].type == "boolean"
     assert options["sheet"].examples == ("N-34-130-D-d-2-4",)
-    assert options["output_dir"].path_role == "root"
+    assert options["root"].path_role == "root"
     assert options["product"].path_role is None
     assert options["check_updates"].type == "boolean"
     assert options["check_updates"].description == "Plan without effects."

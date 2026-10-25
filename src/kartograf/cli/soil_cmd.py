@@ -35,13 +35,13 @@ from kartograf.messages import message
 
 def cmd_soil_download(args: argparse.Namespace) -> int:
     """``soil download``: one SoilGrids layer (property, depth, stat) of an area."""
-    if args.output is None:
-        raise ValidationError(output_required("soil"), option="output_dir")
+    if args.root is None:
+        raise ValidationError(output_required("soil"), option="root")
     return run_with_plan_file(args, _soil_download)
 
 
 def _soil_download(args: argparse.Namespace) -> int:
-    arguments = {**library_arguments(args), "output_dir": Path(args.output)}
+    arguments = {**library_arguments(args), "root": Path(args.root)}
     on_notice = notice_printer(args)
     if args.check_updates:
         return _report_plan(args, check_soil(**arguments, on_notice=on_notice))
@@ -62,7 +62,7 @@ def _print_soil(
 
     It returns the exit code.
     """
-    out = Path(args.output)
+    out = Path(args.root)
     for item in report.files:
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
     for failure in report.failed:
@@ -85,10 +85,10 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
-    if args.output is None:
+    if args.root is None:
         raise ValidationError(
-            message("hydrology.output_required", hsg_output_files=HSG_OUTPUT_FILES),
-            option="output_dir",
+            message("hydrology.root_required", hsg_output_files=HSG_OUTPUT_FILES),
+            option="root",
         )
 
     selection = library_arguments(args)
@@ -97,7 +97,7 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
 
 def _hsg_task(args: argparse.Namespace, selection: dict[str, Any]) -> int:
     """One ``soil hsg`` request: plan or inputs plus the derived raster."""
-    arguments = {**selection, "output_dir": Path(args.output)}
+    arguments = {**selection, "root": Path(args.root)}
     on_notice = notice_printer(args)
     if args.check_updates:
         return _report_plan(args, check_hsg(**arguments, on_notice=on_notice))
@@ -120,7 +120,7 @@ def _print_hsg(
     The statistics of the raster (``--summary``) and the legend are for an HSG report;
     the exit code is returned.
     """
-    out = Path(args.output)
+    out = Path(args.root)
     for item in (*result.inputs, *result.files):
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
     for failure in result.failed:

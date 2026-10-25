@@ -477,7 +477,7 @@ def test_pl_sheet_series_by_parts(tmp_path, router, monkeypatch):
     for scale, parts, label in (("1:10000", 6, "1:25000"), ("1:100000", 3, "1:200000")):
         plan = check_collection(
             product="e0series",
-            output_dir=tmp_path,
+            root=tmp_path,
             country="pl",
             bbox=KRAKOW,
             scale=scale,
@@ -500,7 +500,7 @@ def test_sheet_code_of_a_series(tmp_path, router, monkeypatch):
     def units(sheet: str, scale: str) -> list[str]:
         plan = check_collection(
             product="e0series",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet=sheet,
             scale=scale,
             cache=False,
@@ -513,7 +513,7 @@ def test_sheet_code_of_a_series(tmp_path, router, monkeypatch):
     assert len(units("M-34-64-D", "1:10000")) == 16
     plan = check_collection(
         product="e0series",
-        output_dir=tmp_path,
+        root=tmp_path,
         sheet="M-34-64-D-d-1",
         scale="1:10000",
         cache=False,
@@ -527,7 +527,7 @@ def test_sheet_area_meaning_kept_for_c_products(tmp_path):
     """``sheet=`` of a plan C product stays the area of the sheet (ADR-039 D4):
     the EGiB objects of its EPSG:2180 extent, no sheet unit."""
     request = validate_collection_request(
-        product="map", output_dir=tmp_path, sheet="N-34-130-D"
+        product="map", root=tmp_path, sheet="N-34-130-D"
     )
     (part,) = request.parts
     extent = SheetParser("N-34-130-D").get_bbox(crs="EPSG:2180")
@@ -551,7 +551,7 @@ def test_map_links_record_gives_file_and_label(
 
     report = download_collection(
         product="e0maps",
-        output_dir=tmp_path,
+        root=tmp_path,
         sheet="M-34-064-D-d-1",
         scale="1:10000",
         format="TIFF",
@@ -601,7 +601,7 @@ def test_index_signal_check_downloads_nothing(
     router.add(pdf_url, file_answer("map10k_pdf", head_of("map10k_pdf")))
     choice = {
         "product": "e0maps",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "sheet": "M-34-64-D-d-1",
         "scale": "1:10000",
         "format": "PDF",
@@ -647,7 +647,7 @@ def test_sheet_without_record_is_not_a_unit(tmp_path, router, monkeypatch):
     with pytest.raises(NoCoverageError):
         check_collection(
             product="e0maps",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet="M-34-64-D-d-1",
             scale="1:10000",
             format="TIFF",
@@ -675,7 +675,7 @@ def test_cuzk_layer_sheet_units(tmp_path, router, monkeypatch):
         router.heads[_key(entry["url"])] = entry["headers"]
 
     plan = check_collection(
-        product="e0ztm", output_dir=tmp_path, country="cz", bbox=TESIN, cache=False
+        product="e0ztm", root=tmp_path, country="cz", bbox=TESIN, cache=False
     )
     assert [i.unit for i in plan.items] == ["0510-C-15", "0510-D-11"]
     assert {(i.segment, i.hierarchy) for i in plan.items} == {
@@ -685,20 +685,16 @@ def test_cuzk_layer_sheet_units(tmp_path, router, monkeypatch):
     assert plan.items[1].name == "0510-D-11.zip"
 
     (one,) = check_collection(
-        product="e0ztm", output_dir=tmp_path, sheet="0510-D-11", cache=False
+        product="e0ztm", root=tmp_path, sheet="0510-D-11", cache=False
     ).items
     assert one.unit == "0510-D-11"
 
     calls = len(router.calls)
     with pytest.raises(ValidationError):
-        check_collection(
-            product="e0ztm", output_dir=tmp_path, sheet="0510 D 11", cache=False
-        )
+        check_collection(product="e0ztm", root=tmp_path, sheet="0510 D 11", cache=False)
     assert len(router.calls) == calls  # bad characters: no request
     with pytest.raises(ValidationError):
-        check_collection(
-            product="e0ztm", output_dir=tmp_path, sheet="0000-Z-99", cache=False
-        )
+        check_collection(product="e0ztm", root=tmp_path, sheet="0000-Z-99", cache=False)
 
 
 # --- tiles ----------------------------------------------------------------------
@@ -730,7 +726,7 @@ def test_tile_units_from_index_records(tmp_path, router, monkeypatch, frozen_clo
     router.add(following, lambda: recorded(INDEX / "mesh_p2.xml"))
 
     plan = check_collection(
-        product="e0mesh", output_dir=tmp_path, country="pl", bbox=MESH_AREA, cache=False
+        product="e0mesh", root=tmp_path, country="pl", bbox=MESH_AREA, cache=False
     )
     tiles = ["74228_55480", "74228_55482", "74230_55480", "74230_55482"]
     assert [i.unit for i in plan.items] == [f"2000/7/{t}" for t in tiles]
@@ -740,7 +736,7 @@ def test_tile_units_from_index_records(tmp_path, router, monkeypatch, frozen_clo
     with pytest.raises(NoCoverageError) as missing:
         check_collection(
             product="e0mesh",
-            output_dir=tmp_path,
+            root=tmp_path,
             country="pl",
             bbox=MESH_AREA,
             year=2020,
@@ -771,7 +767,7 @@ def test_tile_units_from_index_records(tmp_path, router, monkeypatch, frozen_clo
         )
     report = download_collection(
         product="e0mesh",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         bbox=MESH_AREA,
         year=2021,
@@ -806,7 +802,7 @@ def test_ku_units_from_ruian(tmp_path, router, monkeypatch, frozen_clock):
         router.heads[_key(entry["url"])] = entry["headers"]
     plan = check_collection(
         product="e0km",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="cz",
         bbox=KU_AREA,
         format="SHP",
@@ -819,13 +815,13 @@ def test_ku_units_from_ruian(tmp_path, router, monkeypatch, frozen_clock):
     body = zip_bytes(entry["members"])
     router.add(entry["url"], file_answer("cz_km_shp_623164", body))
     first = download_collection(
-        product="e0km", output_dir=tmp_path, ku="623164", format="SHP", cache=False
+        product="e0km", root=tmp_path, ku="623164", format="SHP", cache=False
     )
     (item,) = first.files
     assert item.file.path == tmp_path / "cadastre/cz_test_km_shp/ku/623164.zip"
     assert _meta(item.file.version_path)["request"] == {"ku": "623164", "format": "SHP"}
     second = download_collection(
-        product="e0km", output_dir=tmp_path, ku="623164", format="SHP", cache=False
+        product="e0km", root=tmp_path, ku="623164", format="SHP", cache=False
     )
     assert second.files[0].file.status == "local"
     assert second.files[0].file.unverified == "unchecked"
@@ -846,7 +842,7 @@ def test_national_file_of_several_themes(tmp_path, router, monkeypatch, frozen_c
     notices = []
     report = download_collection(
         product="e0names",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         whole_country=True,
         format="GML",
@@ -873,14 +869,14 @@ def test_feature_channel_by_choice(tmp_path, router, monkeypatch, frozen_clock):
     _gravity_routes(router)
     with pytest.raises(ValidationError) as missing:
         validate_collection_request(
-            product="e0control", output_dir=tmp_path, country="pl", bbox=GRAV_AREA
+            product="e0control", root=tmp_path, country="pl", bbox=GRAV_AREA
         )
     assert "--network wymagane" in str(missing.value)
     assert "vertical, gravity" in str(missing.value)
 
     report = download_collection(
         product="e0control",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         bbox=GRAV_AREA,
         network="gravity",
@@ -929,7 +925,7 @@ def test_selection_key_names_several_layers(tmp_path, monkeypatch):
     )
     request = validate_collection_request(
         product="e0control",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="cz",
         bbox=TESIN,
         network="horizontal",
@@ -939,14 +935,14 @@ def test_selection_key_names_several_layers(tmp_path, monkeypatch):
     assert part.segment == "geodesy/cz_test_control_horizontal"
     with pytest.raises(ValidationError) as missing:
         validate_collection_request(
-            product="e0control", output_dir=tmp_path, country="cz", bbox=TESIN
+            product="e0control", root=tmp_path, country="cz", bbox=TESIN
         )
     assert "--network wymagane" in str(missing.value)
     assert "horizontal, vertical" in str(missing.value)
     with pytest.raises(ValidationError):  # the levels of other products do not apply
         validate_collection_request(
             product="e0control",
-            output_dir=tmp_path,
+            root=tmp_path,
             country="cz",
             bbox=TESIN,
             level="obec",
@@ -989,7 +985,7 @@ def test_new_selection_validated_before_network(
     ``ValidationError`` naming the allowed values, before any request."""
     install(monkeypatch, MAPS, ZTM, KM, CONTROL, PRNG)
     with pytest.raises(ValidationError) as error:
-        download_collection(product=product, output_dir=tmp_path, cache=False, **choice)
+        download_collection(product=product, root=tmp_path, cache=False, **choice)
     assert allowed in str(error.value)
     assert router.calls == []
 
@@ -1006,7 +1002,7 @@ def test_size_notice_before_get(tmp_path, router, monkeypatch, frozen_clock):
     seen: list[tuple[str, int]] = []
     report = download_collection(
         product="e0prices",
-        output_dir=tmp_path,
+        root=tmp_path,
         teryt="1261",
         cache=False,
         on_notice=lambda n: seen.append((n.code, router.gets(entry["url"]))),
@@ -1018,7 +1014,7 @@ def test_size_notice_before_get(tmp_path, router, monkeypatch, frozen_clock):
     )
 
     gets = router.gets()
-    check_collection(product="e0prices", output_dir=tmp_path, teryt="1261", cache=False)
+    check_collection(product="e0prices", root=tmp_path, teryt="1261", cache=False)
     assert router.gets() == gets
 
 
@@ -1038,7 +1034,7 @@ def test_channel_timeout_for_a_slow_service(
     _gravity_routes(router)
     download_collection(
         product="e0control",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         bbox=GRAV_AREA,
         network="gravity",

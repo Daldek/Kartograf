@@ -24,15 +24,14 @@ MESSAGES = {
         "inputs in <DIR>/soil/..., HSG in <DIR>/hsg/...",
         "wejscia w <KATALOG>/soil/..., HSG w <KATALOG>/hsg/...",
     ),
-    "output_required": Text(
-        "--output required: store directory ({hsg_output_files})",
-        "--output wymagane: katalog magazynu ({hsg_output_files})",
+    "root_required": Text(
+        "--root required: store directory ({hsg_output_files})",
+        "--root wymagane: katalog magazynu ({hsg_output_files})",
     ),
-    "output_is_store_dir": Text(
-        "--output is a store directory (since 0.8.0); for a file outside the store "
+    "root_is_store_dir": Text(
+        "--root is a store directory (since 0.8.0); for a file outside the store "
         "use hsg_from_rasters",
-        "--output to katalog magazynu (od 0.8.0); plik poza magazynem: "
-        "hsg_from_rasters",
+        "--root to katalog magazynu (od 0.8.0); plik poza magazynem: hsg_from_rasters",
     ),
     "exactly_one_selection": Text(
         "Give exactly one selection: --sheet, --bbox or --geometry",

@@ -435,7 +435,7 @@ class ForbiddenError(KartografError):
     Attributes
     ----------
     option : str, optional
-        Name of the argument that was refused (``output_dir``, ``update``).
+        Name of the argument that was refused (``root``, ``update``).
     path : Path, optional
         The resolved path that lies outside the allowed directories.
     allowed : tuple[str, ...], optional
@@ -444,8 +444,8 @@ class ForbiddenError(KartografError):
     Examples
     --------
     >>> raise ForbiddenError(
-    ...     "output_dir lies outside the allowed directories",
-    ...     option="output_dir",
+    ...     "root lies outside the allowed directories",
+    ...     option="root",
     ...     path=Path("/tmp/x"),
     ...     allowed=["/data"],
     ... )

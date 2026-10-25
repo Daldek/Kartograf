@@ -89,7 +89,7 @@ def test_prg_level_to_layer(tmp_path, monkeypatch, frozen_clock):
 
     report = download_collection(
         product="admin",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         level="obreb",
         bbox=PRG_BBOX,
@@ -137,7 +137,7 @@ def test_area_result_reused_without_requests(tmp_path, monkeypatch, frozen_clock
     service = serve_prg_obreby(monkeypatch)
     choice = {
         "product": "admin",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "country": "pl",
         "level": "obreb",
         "bbox": PRG_BBOX,
@@ -165,7 +165,7 @@ def test_egib_bbox_two_layers_without_data_field(tmp_path, monkeypatch, frozen_c
 
     report = download_collection(
         product="map",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         bbox=EGIB_RURAL_BBOX,
         cache=False,
@@ -200,7 +200,7 @@ def test_new_data_date_alone_is_not_a_new_version(tmp_path, monkeypatch, frozen_
     _serve(monkeypatch, FakeService(wfs("egib_capabilities.xml", EGIB_RURAL)))
     choice = {
         "product": "map",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "country": "pl",
         "bbox": EGIB_RURAL_BBOX,
         "cache": False,
@@ -414,7 +414,7 @@ def test_buildings_lod2_vertical_crs_in_sidecar(tmp_path, monkeypatch, frozen_cl
     monkeypatch.setattr(col, "_session", lambda: FakePackageSession({url: response}))
 
     report = download_collection(
-        product="buildings", output_dir=tmp_path, teryt="1261", lod=2, cache=False
+        product="buildings", root=tmp_path, teryt="1261", lod=2, cache=False
     )
 
     meta = _meta(report.files[0].file.version_path)

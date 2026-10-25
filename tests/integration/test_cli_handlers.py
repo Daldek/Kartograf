@@ -70,8 +70,8 @@ def test_schema_text_describes_one_command(capsys):
     assert "product" in row and "str" in row and "tak" in row
     product = next(p for p in command.params if p.name == "product")
     assert "Dozwolone wartosci: " + ", ".join(resolve(product.allowed) or ()) in text
-    output = next(line for line in text.splitlines() if "--output, -o" in line)
-    assert "output_dir" in output
+    output = next(line for line in text.splitlines() if "--root" in line)
+    assert "root" in output
     for constraint in command.constraints:
         assert constraint.message_pl in text
     for rule in command.rules_pl:

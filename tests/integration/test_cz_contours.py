@@ -136,7 +136,7 @@ def test_contours_sheet_zip_kept(tmp_path, openzu):
         product="contours",
         format="SHP",
         sheet="CTES96",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
 
@@ -159,7 +159,7 @@ def test_contours_sheet_zip_kept(tmp_path, openzu):
         product="contours",
         format="DGN",
         sheet="CTES96",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     (unit,) = dgn.files
@@ -177,7 +177,7 @@ def test_contours_area_expands_to_sm5(tmp_path, openzu):
         format="SHP",
         country="cz",
         bbox=AREA,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
         on_notice=notices.append,
     )
@@ -209,7 +209,7 @@ def test_contours_reject_grid_choices(tmp_path, openzu, choice):
             format="SHP",
             country="cz",
             bbox=AREA,
-            output_dir=tmp_path,
+            root=tmp_path,
             cache=False,
             **choice,
         )
@@ -220,18 +220,16 @@ def test_contours_format_and_height_system(tmp_path, openzu):
     """``--format`` is required (SHP, DGN); ``--vertical-crs`` may be omitted
     and takes only Bpv."""
     with pytest.raises(ValidationError, match="--format wymagane .*: SHP, DGN"):
-        download_data(product="contours", sheet="CTES96", output_dir=tmp_path)
+        download_data(product="contours", sheet="CTES96", root=tmp_path)
     with pytest.raises(ValidationError, match="dostepne: SHP, DGN"):
-        download_data(
-            product="contours", format="GPKG", sheet="CTES96", output_dir=tmp_path
-        )
+        download_data(product="contours", format="GPKG", sheet="CTES96", root=tmp_path)
     with pytest.raises(ValidationError, match="wysokosci Bpv"):
         download_data(
             product="contours",
             format="SHP",
             vertical_crs="EVRF2007",
             sheet="CTES96",
-            output_dir=tmp_path,
+            root=tmp_path,
         )
     assert openzu.calls == []
 
@@ -240,7 +238,7 @@ def test_contours_format_and_height_system(tmp_path, openzu):
         format="SHP",
         vertical_crs="Bpv",
         sheet="CTES96",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert report.ok
@@ -249,15 +247,13 @@ def test_contours_format_and_height_system(tmp_path, openzu):
 def test_contours_sheet_systems(tmp_path, openzu):
     """A TM33 tile and a PL sheet code are not contour sheets."""
     with pytest.raises(ValidationError, match="arkusze SM5"):
-        download_data(
-            product="contours", format="SHP", sheet="302_5550", output_dir=tmp_path
-        )
+        download_data(product="contours", format="SHP", sheet="302_5550", root=tmp_path)
     with pytest.raises(ValidationError, match="nie ma danych PL"):
         download_data(
             product="contours",
             format="SHP",
             sheet="M-33-58-B-c-3-1",
-            output_dir=tmp_path,
+            root=tmp_path,
         )
     assert openzu.calls == []
 
@@ -270,7 +266,7 @@ def test_contours_country_rules(tmp_path, openzu):
             format="SHP",
             country="pl",
             bbox=BORDER,
-            output_dir=tmp_path,
+            root=tmp_path,
         )
 
     notices = []
@@ -279,7 +275,7 @@ def test_contours_country_rules(tmp_path, openzu):
         format="SHP",
         country="auto",
         bbox=AREA,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
         on_notice=notices.append,
     )
@@ -295,7 +291,7 @@ def test_contours_http_signal(tmp_path, openzu):
         "product": "contours",
         "format": "SHP",
         "sheet": "CTES96",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "cache": False,
     }
     first = download_data(**selection).files[0].file
@@ -329,7 +325,7 @@ def test_contours_bad_package_commits_no_version(tmp_path, openzu):
         product="contours",
         format="SHP",
         sheet="CTES96",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert not report.ok and not report.files
@@ -339,7 +335,7 @@ def test_contours_bad_package_commits_no_version(tmp_path, openzu):
         product="contours",
         format="SHP",
         sheet="CTES96",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert "KladyMapovychListu" in report.failed[0].error

@@ -1137,19 +1137,19 @@ def store_files(directories: Iterable[str]) -> str:
 
     ``pliki w <KATALOG>/nmt|nmpt/...``: where a store command writes, by the
     top directories of its files (``nmt``, ``boundaries``; ``a|b`` values are
-    split) - one text for the ``--output`` help and its missing-value error.
+    split) - one text for the ``--root`` help and its missing-value error.
     """
     tops = dict.fromkeys(top for found in directories for top in found.split("|"))
     return f"pliki w <KATALOG>/{'|'.join(tops)}/..."
 
 
 def output_required(directory: str) -> str:
-    """Return the error text of a request without ``output_dir``.
+    """Return the error text of a request without ``root``.
 
-    Error text of a request without ``output_dir`` (every store command):
+    Error text of a request without ``root`` (every store command):
     ``directory`` = the top directory of its files (``nmt``, ``boundaries``).
     """
-    return f"--output wymagane: katalog magazynu ({store_files([directory])})"
+    return f"--root wymagane: katalog magazynu ({store_files([directory])})"
 
 
 def year_bounds(
@@ -1226,9 +1226,9 @@ def validate_request(task: SimpleNamespace) -> None:
             option="product",
             allowed=_PRODUCTS,
         )
-    if task.output_dir is None:
+    if task.root is None:
         raise ValidationError(
-            output_required(product_directory(task.product)), option="output_dir"
+            output_required(product_directory(task.product)), option="root"
         )
     if task.sheet is None and task.country is None:
         raise ValidationError(

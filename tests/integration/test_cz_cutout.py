@@ -65,9 +65,7 @@ COORDS = [B.min_x, B.min_y, B.max_x, B.max_y]
 
 
 def test_cz_cutout_version_and_link(tmp_path):
-    result = _run_cz_cutout(
-        _provider(300.0), B, output_dir=tmp_path, image_crs="EPSG:2180"
-    )
+    result = _run_cz_cutout(_provider(300.0), B, root=tmp_path, image_crs="EPSG:2180")
     assert isinstance(result, CzCutoutResult)
     assert result.file is not None
     assert result.file.status == "new" and not result.all_nodata
@@ -95,9 +93,7 @@ def test_cz_cutout_version_and_link(tmp_path):
 
 
 def test_all_nodata_is_flagged(tmp_path):
-    result = _run_cz_cutout(
-        _provider(-9999.0), B, output_dir=tmp_path, image_crs="EPSG:2180"
-    )
+    result = _run_cz_cutout(_provider(-9999.0), B, root=tmp_path, image_crs="EPSG:2180")
     assert result.all_nodata is True
     assert result.file is not None
     meta = json.loads(
@@ -109,11 +105,9 @@ def test_all_nodata_is_flagged(tmp_path):
 
 
 def test_cz_cutout_default_local_without_network(tmp_path):
-    first = _run_cz_cutout(
-        _provider(-9999.0), B, output_dir=tmp_path, image_crs="EPSG:2180"
-    )
+    first = _run_cz_cutout(_provider(-9999.0), B, root=tmp_path, image_crs="EPSG:2180")
     provider = _provider(300.0)
-    again = _run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    again = _run_cz_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
     assert first.file is not None and again.file is not None
     assert again.file.status == "local" and again.file.unverified == "none"
     assert again.file.version_path == first.file.version_path
@@ -131,7 +125,7 @@ def test_unreadable_result_is_not_flagged(tmp_path):
         return target
 
     provider.download_bbox.side_effect = write_garbage
-    result = _run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    result = _run_cz_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
     assert result.file is not None
     assert result.file.path.exists() and result.all_nodata is False
 
@@ -142,7 +136,7 @@ def test_cz_cutout_failure_leaves_no_version_and_no_empty_tree(tmp_path):
     provider = _provider(1.0)
     provider.download_bbox.side_effect = DownloadError("boom")
     with pytest.raises(DownloadError):
-        _run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+        _run_cz_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
     assert list(tmp_path.iterdir()) == []
 
 
@@ -151,7 +145,7 @@ def test_parent_request_in_sidecar(tmp_path):
     result = _run_cz_cutout(
         _provider(5.0),
         B,
-        output_dir=tmp_path,
+        root=tmp_path,
         image_crs="EPSG:2180",
         parent_request=parent,
     )
@@ -177,7 +171,7 @@ def test_download_cz_cutout_builds_provider(tmp_path, monkeypatch):
     monkeypatch.setattr("kartograf.providers.cuzk.create_cz_raster_provider", factory)
     result = cz_cutout.download_cz_cutout(
         bbox=B,
-        output_dir=tmp_path,
+        root=tmp_path,
         product="nmt",
         horizontal_crs="EPSG:2180",
         vertical_crs="EVRF2007",
@@ -207,7 +201,7 @@ def test_native_horizontal_crs_gives_native_provider(tmp_path, monkeypatch):
     native = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
     result = cz_cutout.download_cz_cutout(
         bbox=native,
-        output_dir=tmp_path,
+        root=tmp_path,
         product="nmt",
         horizontal_crs="EPSG:5514",
         vertical_crs="EVRF2007",
@@ -245,7 +239,7 @@ def test_check_cz_cutout_same_args_as_download(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "kartograf.providers.cuzk.create_cz_raster_provider", lambda **_kw: provider
     )
-    selection = {"output_dir": tmp_path, "cache": False, **SELECTION}
+    selection = {"root": tmp_path, "cache": False, **SELECTION}
     before = check_cz_cutout(bbox=B, **selection)
     result = download_cz_cutout(bbox=B, **selection)
     after = check_cz_cutout(bbox=B, **selection)
@@ -260,7 +254,7 @@ def test_download_cz_cutout_plan(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "kartograf.providers.cuzk.create_cz_raster_provider", lambda **_kw: provider
     )
-    selection = {"output_dir": tmp_path, "cache": False, **SELECTION}
+    selection = {"root": tmp_path, "cache": False, **SELECTION}
     plan = check_cz_cutout(bbox=B, **selection)
     changed = replace(plan.items[0], available_label="different")
     stale = download_cz_cutout(
@@ -276,9 +270,9 @@ def test_download_cz_cutout_plan(tmp_path, monkeypatch):
 
 def test_cz_cutout_force_same_content_unchanged(tmp_path):
     provider = _provider(15.0)
-    first = _run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    first = _run_cz_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
     again = _run_cz_cutout(
-        provider, B, output_dir=tmp_path, image_crs="EPSG:2180", update="force"
+        provider, B, root=tmp_path, image_crs="EPSG:2180", update="force"
     )
     assert first.file is not None and again.file is not None
     assert again.file.status == "unchanged"
@@ -293,7 +287,7 @@ def test_cz_cutout_force_same_content_unchanged(tmp_path):
 def test_cz_cutout_local_all_nodata_from_sidecar(tmp_path, monkeypatch):
     from kartograf.download import cz_cutout
 
-    _run_cz_cutout(_provider(-9999.0), B, output_dir=tmp_path, image_crs="EPSG:2180")
+    _run_cz_cutout(_provider(-9999.0), B, root=tmp_path, image_crs="EPSG:2180")
 
     def raster_read_is_forbidden(*args, **kwargs):
         raise AssertionError("local result must not read the raster")
@@ -301,7 +295,7 @@ def test_cz_cutout_local_all_nodata_from_sidecar(tmp_path, monkeypatch):
     monkeypatch.setattr(cz_cutout, "read_tif_nodata", raster_read_is_forbidden)
     monkeypatch.setattr(cz_cutout, "_all_nodata", raster_read_is_forbidden)
     provider = _provider(1.0)
-    local = _run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    local = _run_cz_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
     assert local.file is not None and local.file.status == "local"
     assert local.all_nodata is True
     provider.download_bbox.assert_not_called()
@@ -309,7 +303,7 @@ def test_cz_cutout_local_all_nodata_from_sidecar(tmp_path, monkeypatch):
 
 def test_check_cz_cutout_never_downloads(tmp_path):
     provider = _provider(1.0)
-    plan = _check_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    plan = _check_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
     assert plan.store == str(tmp_path.resolve())
     assert len(plan.items) == 1
     assert plan.items[0].track == "cz_cutout"
@@ -324,26 +318,26 @@ def test_check_cz_cutout_never_downloads(tmp_path):
     done = _run_cz_cutout(
         provider,
         B,
-        output_dir=tmp_path,
+        root=tmp_path,
         image_crs="EPSG:2180",
         update="upgrade",
         plan=plan,
     )
     assert done.file is not None and done.file.status == "new"
     assert done.stale == ()
-    current = _check_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    current = _check_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
     assert current.items[0].status == "unverifiable"
     provider.download_bbox.assert_called_once()
 
 
 def test_cz_cutout_upgrade_plan_excluded_missing_and_stale(tmp_path):
     provider = _provider(1.0)
-    plan = _check_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    plan = _check_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
     excluded = replace(plan, items=())
     missing = _run_cz_cutout(
         provider,
         B,
-        output_dir=tmp_path,
+        root=tmp_path,
         image_crs="EPSG:2180",
         update="upgrade",
         plan=excluded,
@@ -353,20 +347,20 @@ def test_cz_cutout_upgrade_plan_excluded_missing_and_stale(tmp_path):
     stale = _run_cz_cutout(
         provider,
         B,
-        output_dir=tmp_path,
+        root=tmp_path,
         image_crs="EPSG:2180",
         update="upgrade",
         plan=stale_plan,
     )
     assert stale.file is None and stale.stale == stale_plan.items
     provider.download_bbox.assert_not_called()
-    first = _run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    first = _run_cz_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
     assert first.file is not None
     provider.download_bbox.reset_mock()
     local = _run_cz_cutout(
         provider,
         B,
-        output_dir=tmp_path,
+        root=tmp_path,
         image_crs="EPSG:2180",
         update="upgrade",
         plan=stale_plan,
@@ -384,7 +378,7 @@ def test_cz_cutout_legacy_plain_file_replaced_by_link(tmp_path):
     legacy.parent.mkdir(parents=True)
     legacy.write_bytes(b"legacy")
     provider = _provider(15.0)
-    result = _run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    result = _run_cz_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
     assert result.file is not None and result.file.status == "new"
     assert legacy.read_bytes() != b"legacy"
     assert os.path.samefile(legacy, result.file.version_path)

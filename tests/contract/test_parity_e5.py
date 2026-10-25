@@ -66,7 +66,7 @@ def test_mesh_tiles_of_an_area(tmp_path, router, monkeypatch):
             "566100,244500,566300,244700",
         ],
         lambda out: download_collection(
-            product="mesh", country="pl", bbox=MESH_AREA, output_dir=out
+            product="mesh", country="pl", bbox=MESH_AREA, root=out
         ),
         tmp_path,
     )
@@ -82,7 +82,7 @@ def test_trees_package_of_a_powiat(tmp_path, router):
     router.heads[_key(entry["url"])] = entry["headers"]
     run = run_both(
         ["models3d", "download", "--product", "trees", "--teryt", "3063"],
-        lambda out: download_collection(product="trees", teryt="3063", output_dir=out),
+        lambda out: download_collection(product="trees", teryt="3063", root=out),
         tmp_path,
     )
     _same(run)
@@ -110,7 +110,7 @@ def test_pl_control_network_of_an_area(tmp_path, router, monkeypatch):
             country="pl",
             network="vertical",
             bbox=PL_AREAS["vertical"],
-            output_dir=out,
+            root=out,
         ),
         tmp_path,
     )
@@ -139,7 +139,7 @@ def test_cz_control_network_of_an_area(tmp_path, router):
             country="cz",
             network="vertical",
             bbox=TESIN,
-            output_dir=out,
+            root=out,
         ),
         tmp_path,
     )
@@ -165,7 +165,7 @@ def test_pl_quasigeoid_model(tmp_path, router):
             "--whole-country",
         ],
         lambda out: download_collection(
-            product="geoid", country="pl", whole_country=True, output_dir=out
+            product="geoid", country="pl", whole_country=True, root=out
         ),
         tmp_path,
     )
@@ -186,7 +186,7 @@ def test_cz_quasigeoid_model(tmp_path, router):
             "--whole-country",
         ],
         lambda out: download_collection(
-            product="geoid", country="cz", whole_country=True, output_dir=out
+            product="geoid", country="cz", whole_country=True, root=out
         ),
         tmp_path,
     )

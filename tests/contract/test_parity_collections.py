@@ -71,7 +71,7 @@ def test_prg_area_level(tmp_path, monkeypatch):
             "566000,244000,566400,244400",
         ],
         lambda out: download_collection(
-            product="admin", output_dir=out, country="pl", level="obreb", bbox=PRG_BBOX
+            product="admin", root=out, country="pl", level="obreb", bbox=PRG_BBOX
         ),
         tmp_path,
     )
@@ -93,7 +93,7 @@ def test_prg_whole_country_reports_size(tmp_path, monkeypatch):
             "--whole-country",
         ],
         lambda out: download_collection(
-            product="admin", output_dir=out, country="pl", whole_country=True
+            product="admin", root=out, country="pl", whole_country=True
         ),
         tmp_path,
     )
@@ -121,7 +121,7 @@ def test_ruian_area_level(tmp_path, monkeypatch):
         ],
         lambda out: download_collection(
             product="admin",
-            output_dir=out,
+            root=out,
             country="cz",
             level="obec",
             bbox=BBox(-455000, -1115000, -450000, -1110000, "EPSG:5514"),
@@ -153,7 +153,7 @@ def test_hynet_whole_country_reports_size(tmp_path, monkeypatch):
             "--whole-country",
         ],
         lambda out: download_collection(
-            product="network", output_dir=out, country="cz", whole_country=True
+            product="network", root=out, country="cz", whole_country=True
         ),
         tmp_path,
     )
@@ -167,7 +167,7 @@ def test_egib_teryt_export(tmp_path, monkeypatch):
     _serve(monkeypatch, package_route("egib_1261", content=b"SQLite format 3\x00"))
     run = run_both(
         ["cadastre", "download", "--product", "map", "--teryt", "1261"],
-        lambda out: download_collection(product="map", output_dir=out, teryt="1261"),
+        lambda out: download_collection(product="map", root=out, teryt="1261"),
         tmp_path,
     )
     _same(run, statuses=["new"])
@@ -189,7 +189,7 @@ def test_buildings_teryt(tmp_path, monkeypatch):
             "2024",
         ],
         lambda out: download_collection(
-            product="buildings", output_dir=out, teryt="1261", lod=1, year=2024
+            product="buildings", root=out, teryt="1261", lod=1, year=2024
         ),
         tmp_path,
     )
@@ -219,7 +219,7 @@ def test_buildings_area_with_missing_powiat(tmp_path, monkeypatch):
             "340000,290000,350000,300000",
         ],
         lambda out: download_collection(
-            product="buildings", output_dir=out, lod=2, country="pl", bbox=TWO_POWIATS
+            product="buildings", root=out, lod=2, country="pl", bbox=TWO_POWIATS
         ),
         tmp_path,
     )
@@ -247,7 +247,7 @@ def test_check_plan_upgrade(tmp_path, monkeypatch):
     plan_file = tmp_path / "plan.json"
     checked = run_both(
         [*argv, "--check-updates", "--plan", str(plan_file)],
-        lambda out: check_collection(output_dir=out, **choice),
+        lambda out: check_collection(root=out, **choice),
         tmp_path,
     )
     assert checked.cli_code == 0
@@ -257,7 +257,7 @@ def test_check_plan_upgrade(tmp_path, monkeypatch):
     upgraded = run_both(
         [*argv, "--upgrade", "--plan", str(plan_file)],
         lambda out: download_collection(
-            output_dir=out, **choice, update="upgrade", plan=api_plan
+            root=out, **choice, update="upgrade", plan=api_plan
         ),
         tmp_path,
     )
@@ -305,9 +305,7 @@ def test_check_plan_upgrade(tmp_path, monkeypatch):
 )
 def test_input_errors_same_type_and_text(tmp_path, monkeypatch, argv, kwargs):
     session = _serve(monkeypatch)
-    run = run_both(
-        argv, lambda out: download_collection(output_dir=out, **kwargs), tmp_path
-    )
+    run = run_both(argv, lambda out: download_collection(root=out, **kwargs), tmp_path)
     assert isinstance(run.api_error, ValidationError)
     assert run.cli_code == 2
     assert run.cli_text == f"Error: {run.api_error.localized('pl')}\n"

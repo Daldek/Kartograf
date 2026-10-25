@@ -91,7 +91,7 @@ def test_addresses_area_asks_north_east_and_writes_two_layers(tmp_path, kin):
     recorded hits 0); one GeoPackage with the address points and the
     streets crossing the area, in EPSG:2180."""
     report = download_collection(
-        product="addresses", country="pl", bbox=AREA, output_dir=tmp_path, cache=False
+        product="addresses", country="pl", bbox=AREA, root=tmp_path, cache=False
     )
 
     assert report.ok, report.failed
@@ -135,7 +135,7 @@ def test_addresses_powiat_package_is_stored_as_published(tmp_path, monkeypatch):
     request = {
         "product": "addresses",
         "teryt": "1261",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "cache": False,
     }
 
@@ -157,16 +157,14 @@ def test_addresses_selections_named_before_any_request(tmp_path):
     ``--teryt 12`` names the selections the product has; a national file
     needs ``--format``; ``--format`` belongs to the national file only."""
     with pytest.raises(ValidationError) as voivodeship:
-        validate_collection_request(
-            product="addresses", teryt="12", output_dir=tmp_path
-        )
+        validate_collection_request(product="addresses", teryt="12", root=tmp_path)
     assert str(voivodeship.value).startswith(
         "--teryt 12: addresses nie ma paczek wojewodztw; dostepne: "
     )
     assert "--teryt <4 cyfry> (paczka powiatu)" in str(voivodeship.value)
     with pytest.raises(ValidationError, match="--format required: SHP, GML$"):
         validate_collection_request(
-            product="addresses", country="pl", whole_country=True, output_dir=tmp_path
+            product="addresses", country="pl", whole_country=True, root=tmp_path
         )
     with pytest.raises(ValidationError, match="--format"):
         validate_collection_request(
@@ -174,7 +172,7 @@ def test_addresses_selections_named_before_any_request(tmp_path):
             country="pl",
             bbox=AREA,
             format="SHP",
-            output_dir=tmp_path,
+            root=tmp_path,
         )
 
 
@@ -200,7 +198,7 @@ def test_addresses_national_file_size_before_transfer(
         country="pl",
         whole_country=True,
         format=fmt,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
         on_notice=lambda notice: seen.append((notice.code, session.gets(url))),
     )

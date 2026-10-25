@@ -44,7 +44,7 @@ def test_describe_store_lists_segments_with_info(tmp_path):
         ("own/dir", False),
     ]
     body = overview.to_dict()
-    assert list(body) == ["schema", "output_dir", "segments"]
+    assert list(body) == ["schema", "root", "segments"]
     assert body["schema"] == "kartograf-store-overview/1"
     nmt = body["segments"][0]
     assert list(nmt) == [
@@ -59,7 +59,7 @@ def test_describe_store_lists_segments_with_info(tmp_path):
     assert body["segments"][1]["product"] is None
 
 
-def test_describe_store_missing_output_dir_is_oserror(tmp_path):
+def test_describe_store_missing_root_is_oserror(tmp_path):
     with pytest.raises(OSError):
         describe_store(tmp_path / "brak")
 
@@ -173,7 +173,7 @@ def test_entries_document_omits_raw_and_sidecar_document_keeps_it(tmp_path):
     first = entries["entries"][0]
     assert list(entries) == [
         "schema",
-        "output_dir",
+        "root",
         "segment",
         "units",
         "limit",
@@ -216,7 +216,7 @@ def test_bare_sidecar_without_schema_reads_with_schema_constant(tmp_path):
     assert body["raw"] == bare
 
 
-def test_paths_are_absolute_for_a_relative_output_dir(tmp_path, monkeypatch):
+def test_paths_are_absolute_for_a_relative_root(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _three_entries(tmp_path / "data")
 
@@ -225,7 +225,7 @@ def test_paths_are_absolute_for_a_relative_output_dir(tmp_path, monkeypatch):
     sidecar = read_store_sidecar(f"data/{SEGMENT}/{HIERARCHY}/{SHEET}.asc").to_dict()
 
     root = (tmp_path / "data").as_posix()
-    assert overview["output_dir"] == entries["output_dir"] == root
+    assert overview["root"] == entries["root"] == root
     assert all(
         os.path.isabs(e["path"]) and e["path"].startswith(root)
         for e in entries["entries"]

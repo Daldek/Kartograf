@@ -215,7 +215,7 @@ BASE = {
 )
 def test_orto_cutout_requires_variant(tmp_path, overrides, fragments):
     """Every rule of the orto cutout fails before any request or write."""
-    selection = {"output_dir": tmp_path / "data", **BASE, **overrides}
+    selection = {"root": tmp_path / "data", **BASE, **overrides}
     with (
         patch(SESSION_FACTORY) as factory,
         pytest.raises(ValidationError) as exc,
@@ -243,7 +243,7 @@ def test_download_image_cutout_rejects_choice_before_network(
         pytest.raises(ValidationError, match=fragment),
     ):
         download_image_cutout(
-            bbox=KRAKOW, output_dir=tmp_path, cache=False, **{**ORTO, **overrides}
+            bbox=KRAKOW, root=tmp_path, cache=False, **{**ORTO, **overrides}
         )
     factory.assert_not_called()
     assert not any(tmp_path.iterdir())
@@ -306,7 +306,7 @@ def test_orto_cutout_slot_and_sidecar(tmp_path, args, bbox, fixture, source):
     session = _session()
     with patch(SESSION_FACTORY, return_value=session):
         result = download_image_cutout(
-            bbox=bbox, product="orto", output_dir=tmp_path, cache=False, **args
+            bbox=bbox, product="orto", root=tmp_path, cache=False, **args
         )
 
     coords = "_".join(
@@ -354,7 +354,7 @@ def test_orto_cutout_grid_and_chunks(tmp_path):
     with patch(PROVIDER_FACTORY, return_value=provider):
         result = download_image_cutout(
             bbox=request,
-            output_dir=tmp_path,
+            root=tmp_path,
             cache=False,
             on_notice=seen.append,
             **ORTO,
@@ -429,26 +429,22 @@ def test_orto_cutout_exception_report_is_download_error(tmp_path, answer):
         patch(SESSION_FACTORY, return_value=session),
         pytest.raises(DownloadError),
     ):
-        download_image_cutout(bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
+        download_image_cutout(bbox=KRAKOW, root=tmp_path, cache=False, **ORTO)
     assert _left_behind(tmp_path) == []
-    plan = check_image_cutout(bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
+    plan = check_image_cutout(bbox=KRAKOW, root=tmp_path, cache=False, **ORTO)
     assert plan.items[0].status == "missing"
 
 
 def test_orto_cutout_local_reuse_and_force_unchanged(tmp_path):
     first_session = _session()
     with patch(SESSION_FACTORY, return_value=first_session):
-        first = download_image_cutout(
-            bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO
-        )
+        first = download_image_cutout(bbox=KRAKOW, root=tmp_path, cache=False, **ORTO)
     with patch(SESSION_FACTORY) as factory:
-        local = download_image_cutout(
-            bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO
-        )
+        local = download_image_cutout(bbox=KRAKOW, root=tmp_path, cache=False, **ORTO)
     forced_session = _session()
     with patch(SESSION_FACTORY, return_value=forced_session):
         forced = download_image_cutout(
-            bbox=KRAKOW, output_dir=tmp_path, cache=False, update="force", **ORTO
+            bbox=KRAKOW, root=tmp_path, cache=False, update="force", **ORTO
         )
 
     assert first.file.status == "new"
@@ -462,18 +458,12 @@ def test_orto_cutout_local_reuse_and_force_unchanged(tmp_path):
 
 def test_check_image_cutout_unverifiable(tmp_path):
     with patch(SESSION_FACTORY) as factory:
-        before = check_image_cutout(
-            bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO
-        )
+        before = check_image_cutout(bbox=KRAKOW, root=tmp_path, cache=False, **ORTO)
     factory.assert_not_called()
     with patch(SESSION_FACTORY, return_value=_session()):
-        result = download_image_cutout(
-            bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO
-        )
+        result = download_image_cutout(bbox=KRAKOW, root=tmp_path, cache=False, **ORTO)
     with patch(SESSION_FACTORY) as factory:
-        after = check_image_cutout(
-            bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO
-        )
+        after = check_image_cutout(bbox=KRAKOW, root=tmp_path, cache=False, **ORTO)
     factory.assert_not_called()
 
     (missing,) = before.items
@@ -499,7 +489,7 @@ def test_orto_cutout_all_black_is_no_coverage(tmp_path):
         patch(SESSION_FACTORY, return_value=_session()),
         pytest.raises(NoCoverageError, match="w calosci 0,0,0.*--coverage standard"),
     ):
-        download_image_cutout(bbox=bbox, output_dir=tmp_path, cache=False, **args)
+        download_image_cutout(bbox=bbox, root=tmp_path, cache=False, **args)
     assert _left_behind(tmp_path) == []
 
     with patch(SESSION_FACTORY, return_value=_session()):
@@ -507,7 +497,7 @@ def test_orto_cutout_all_black_is_no_coverage(tmp_path):
             country="pl",
             cutout=True,
             bbox=bbox,
-            output_dir=tmp_path,
+            root=tmp_path,
             cache=False,
             **args,
         )
@@ -541,8 +531,8 @@ def test_download_data_routes_orto_cutout(tmp_path, area):
         p.start()
     try:
         with patch(SESSION_FACTORY, return_value=_session()):
-            report = download_data(output_dir=output, cache=False, **selection)
-        plan = check_data(output_dir=output, cache=False, **selection)
+            report = download_data(root=output, cache=False, **selection)
+        plan = check_data(root=output, cache=False, **selection)
     finally:
         for p in patches:
             p.stop()
@@ -561,7 +551,7 @@ def test_download_data_orto_cutout_source_error_is_country_failure(tmp_path):
     with patch(SESSION_FACTORY, return_value=_session(_exception)):
         report = download_data(
             product="orto",
-            output_dir=tmp_path,
+            root=tmp_path,
             bbox=KRAKOW,
             country="pl",
             cutout=True,
@@ -579,7 +569,7 @@ def test_auto_narrows_orto_cutout_to_pl(tmp_path):
     seen: list[Notice] = []
     plan = check_data(
         product="orto",
-        output_dir=tmp_path,
+        root=tmp_path,
         bbox=BBox(18.60, 49.73, 18.66, 49.76, "EPSG:4326"),
         country="auto",
         cutout=True,

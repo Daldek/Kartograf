@@ -177,24 +177,24 @@ def _params() -> AtomFilesParams:
     return params
 
 
-def _slots(sheet: str, output_dir: str | Path) -> dict[str, FileSlot]:
+def _slots(sheet: str, root: str | Path) -> dict[str, FileSlot]:
     """Build the four store slots of a sheet in commit order.
 
     The four store slots of a sheet (commit order): one SM5 hierarchy,
     ``versions/<hierarchy>/<label>_<sha8>/`` per file.
     """
     storage = FileStorage(
-        output_dir,
+        root,
         resolution=None,
         vertical_crs=None,
         subdir=get_source(_KEY).storage_subdir,
     )
     base = storage.get_raw_versions_base(sheet)
-    root = storage.get_raw_versions_root(sheet)
+    versions_root = storage.get_raw_versions_root(sheet)
     slots = {}
     for suffix in _SUFFIXES:
         std = storage.get_raw_path(sheet, f"{sheet}{suffix}")
-        slots[suffix] = FileSlot(Path(output_dir), std, base, root, std.suffix)
+        slots[suffix] = FileSlot(Path(root), std, base, versions_root, std.suffix)
     return slots
 
 
@@ -397,7 +397,7 @@ def _run(
     metadata: MetadataCache | None,
     sheet: str,
     *,
-    output_dir: str | Path,
+    root: str | Path,
     update: UpdateMode | None,
     plan: UpdatePlan | None,
     parent_request: dict[str, Any] | None,
@@ -408,13 +408,13 @@ def _run(
     With a plan only its ``missing``/``newer`` positions of this sheet are
     stored; a position whose source changed since the check is ``stale``.
     """
-    slots = _slots(sheet, output_dir)
+    slots = _slots(sheet, root)
     release = _release_lookup(session, sheet, metadata, refresh=update == "upgrade")
     edition = _edition(release)
     outcome: dict[str, VersionedFile | None]
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
-        require_store(plan, store_id(output_dir))
+        require_store(plan, store_id(root))
         scoped = replace(
             plan,
             items=tuple(item for item in plan.items_for(_TRACK) if item.unit == sheet),
@@ -455,7 +455,7 @@ def _present(outcome: dict[str, VersionedFile | None]) -> tuple[VersionedFile, .
 def check_cz_orto_sheet(
     *,
     sheet: str,
-    output_dir: str | Path,
+    root: str | Path,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
@@ -477,14 +477,14 @@ def check_cz_orto_sheet(
     sink = NoticeSink(on_notice)
     with open_cache(cache, force=True, on_notice=sink.add) as metadata:
         release = _release_lookup(_session(), sheet, metadata, refresh=True)
-        items = _inspect(_slots(sheet, output_dir), sheet, _edition(release))
-    return new_plan(store_id(output_dir), items)
+        items = _inspect(_slots(sheet, root), sheet, _edition(release))
+    return new_plan(store_id(root), items)
 
 
 def download_cz_orto_sheet(
     *,
     sheet: str,
-    output_dir: str | Path,
+    root: str | Path,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     parent_request: dict[str, Any] | None = None,
@@ -531,7 +531,7 @@ def download_cz_orto_sheet(
             _session(),
             metadata,
             sheet,
-            output_dir=output_dir,
+            root=root,
             update=update,
             plan=plan,
             parent_request=parent_request,

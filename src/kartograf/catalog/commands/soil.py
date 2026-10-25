@@ -141,7 +141,7 @@ _DOWNLOAD_PARAMS = (
         ),
         accepts=PL_SHEETS,
     ),
-    shared.output_dir(lambda: store_files(["soil"])),
+    shared.root(lambda: store_files(["soil"])),
     *_update(
         "Z --check-updates: zapisz plan aktualizacji (kartograf-plan/1); "
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)"
@@ -160,7 +160,7 @@ _HSG_PARAMS = (
         ),
         accepts=PL_SHEETS,
     ),
-    shared.output_dir(lambda: HSG_OUTPUT_FILES),
+    shared.root(lambda: HSG_OUTPUT_FILES),
     *shared.update_params(
         check=(
             "Compares the clay, sand and silt inputs with the SoilGrids "

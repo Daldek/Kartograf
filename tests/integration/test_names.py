@@ -58,7 +58,7 @@ def test_prng_bbox_paging_to_one_geopackage(tmp_path, monkeypatch):
         product="geographic",
         country="pl",
         bbox=BBox(19.93, 50.055, 19.945, 50.065, "EPSG:4326"),
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert report.ok, report.failed
@@ -81,7 +81,7 @@ def test_prng_area_announces_slow_service(tmp_path, monkeypatch):
         product="geographic",
         country="pl",
         bbox=BBox(19.93, 50.055, 19.945, 50.065, "EPSG:4326"),
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
         on_notice=lambda n: seen.append((n.code, len(session.calls))),
     )
@@ -101,7 +101,7 @@ def test_prng_pl1992_bbox_uses_lonlat_query(tmp_path):
     """An EPSG:2180 area becomes the CRS84 service bbox."""
     area = BBox(565950, 243950, 566050, 244050, "EPSG:2180")
     request = validate_collection_request(
-        product="geographic", country="pl", bbox=area, output_dir=tmp_path
+        product="geographic", country="pl", bbox=area, root=tmp_path
     )
     part = request.parts[0]
     assert part.area is not None
@@ -131,7 +131,7 @@ def test_prng_whole_country_two_themes(tmp_path, monkeypatch):
         country="pl",
         whole_country=True,
         format="GML",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert report.ok, report.failed
@@ -146,7 +146,7 @@ def test_prng_whole_country_two_themes(tmp_path, monkeypatch):
     assert len([n for n in report.notices if n.code == WHOLE_COUNTRY_SIZE]) == 2
     assert [method for method, _ in session.calls] == ["HEAD", "GET"] * 2
     with pytest.raises(ValidationError, match="dokladnie jeden wybor"):
-        validate_collection_request(product="geographic", output_dir=tmp_path)
+        validate_collection_request(product="geographic", root=tmp_path)
 
 
 def test_world_bbox_outside_poland_and_national_file(tmp_path, monkeypatch):
@@ -168,7 +168,7 @@ def test_world_bbox_outside_poland_and_national_file(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(col, "_session", lambda: session)
     report = download_collection(
-        product="world", country="pl", bbox=bbox, output_dir=tmp_path, cache=False
+        product="world", country="pl", bbox=bbox, root=tmp_path, cache=False
     )
     assert report.ok, report.failed
     # the 80-95 s of a page was measured for the geographic names, not for these
@@ -183,13 +183,13 @@ def test_world_bbox_outside_poland_and_national_file(tmp_path, monkeypatch):
     assert meta["request"]["bbox_crs"] == "OGC:CRS84"
     assert session.gets(f"{url}/collections/PolskaNazwaGeograficznaSwiata/items") == 1
     with pytest.raises(ValidationError, match="tylko dla PL"):
-        check_collection(product="world", country="cz", bbox=bbox, output_dir=tmp_path)
+        check_collection(product="world", country="cz", bbox=bbox, root=tmp_path)
     national = validate_collection_request(
         product="world",
         country="pl",
         whole_country=True,
         format="SHP",
-        output_dir=tmp_path,
+        root=tmp_path,
     )
     assert national.parts[0].segment == "names/pl_prng_world_shp"
 
@@ -260,7 +260,7 @@ def test_geonames_area_rest_to_geopackage(tmp_path, monkeypatch):
         product="geographic",
         country="cz",
         bbox=CZ_BBOX,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert report.ok, report.failed
@@ -291,7 +291,7 @@ def test_geonames_missing_published_layer_fails_download(tmp_path, monkeypatch):
         product="geographic",
         country="cz",
         bbox=CZ_BBOX,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert report.files == ()
@@ -307,7 +307,7 @@ def test_geonames_atom_requires_crs_and_uses_published_edition(tmp_path, monkeyp
         "country": "cz",
         "whole_country": True,
         "format": "GPKG",
-        "output_dir": tmp_path,
+        "root": tmp_path,
     }
     with pytest.raises(ValidationError, match="EPSG:5514, EPSG:3045"):
         validate_collection_request(**options)

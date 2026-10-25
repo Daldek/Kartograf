@@ -57,7 +57,7 @@ def test_prng_rp_two_pages(tmp_path, monkeypatch):
             "EPSG:4326",
         ],
         lambda out: download_collection(
-            product="geographic", country="pl", bbox=area, output_dir=out
+            product="geographic", country="pl", bbox=area, root=out
         ),
         tmp_path,
     )
@@ -97,7 +97,7 @@ def test_prng_world_outside_europe(tmp_path, monkeypatch):
             product="world",
             country="pl",
             bbox=BBox(-74.02, 40.69, -73.92, 40.79, "EPSG:4326"),
-            output_dir=out,
+            root=out,
         ),
         tmp_path,
     )
@@ -123,7 +123,7 @@ def test_geonames_cz_bbox(tmp_path, monkeypatch):
             product="geographic",
             country="cz",
             bbox=CZ_BBOX,
-            output_dir=out,
+            root=out,
         ),
         tmp_path,
     )
@@ -158,7 +158,7 @@ def test_bdot10k_map_tiff(tmp_path, monkeypatch):
             sheet="M-34-064-D-d-1",
             scale="1:10000",
             format="TIFF",
-            output_dir=out,
+            root=out,
         ),
         tmp_path,
     )
@@ -200,7 +200,7 @@ def test_ztm_sjtsk_tiff_from_sheet(tmp_path, monkeypatch):
             sheet="0510-D-11",
             scale="1:10000",
             format="TIFF",
-            output_dir=out,
+            root=out,
         ),
         tmp_path,
     )

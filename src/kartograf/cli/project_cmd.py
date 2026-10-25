@@ -41,7 +41,7 @@ from kartograf.project.commands import project_command, task_command
 
 def cmd_project_init(args: argparse.Namespace) -> int:
     """Create a manifest and its store with the public API."""
-    project = init_project(args.project, output_dir=args.output)
+    project = init_project(args.project, root=args.root)
     if wants_json(args):
         return emit_result(command_id(args), project)
     print(
@@ -51,7 +51,7 @@ def cmd_project_init(args: argparse.Namespace) -> int:
             path=project.directory / "kartograf-project.json",
         )
     )
-    print(message("cli.project_store", lang=language(), output_dir=project.output_dir))
+    print(message("cli.project_store", lang=language(), root=project.root))
     print(
         message(
             "cli.project_add_task_hint",
@@ -68,7 +68,7 @@ def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
     """Parse a task, the options of a data command.
 
     The flags of a run (``--upgrade``, ``--workers``...) and of the output
-    (``--summary``, ``--quiet``, ``--json``, ``--output`` of another store) are an
+    (``--summary``, ``--quiet``, ``--json``, ``--root`` of another store) are an
     error, not a silently dropped value.
     """
     for flag, name in (
@@ -118,17 +118,17 @@ def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
             ),
             option="json",
         )
-    output = call.run.get("output_dir")
+    output = call.run.get("root")
     if output is not None:
-        store = open_project(args.project).output_dir
+        store = open_project(args.project).root
         if Path(str(output)).resolve() != store.resolve():
             raise ValidationError(
                 message(
-                    "cli.run_option_output",
+                    "cli.run_option_root",
                     store=store,
                     resolved_path=Path(str(output)).resolve(),
                 ),
-                option="output_dir",
+                option="root",
             )
 
 
@@ -247,7 +247,7 @@ def _render_check(report: ProjectCheck, *, quiet: bool, checking_updates: bool) 
             message(
                 "cli.project_store",
                 lang=language(),
-                output_dir=report.project.output_dir,
+                root=report.project.root,
             )
         )
         selected = {file.task for file in report.files} | set(report.not_downloaded)

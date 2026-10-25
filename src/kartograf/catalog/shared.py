@@ -143,16 +143,13 @@ LAYER = Param(
     task=True,
     section=SELECTION_TITLE,
 )
-OUTPUT_DIR = Param(
-    "output_dir",
+ROOT = Param(
+    "root",
     "path",
-    "Store directory (required): versions are written below it, one directory per "
+    "Store root (required): versions are written below it, one directory per "
     "product, never over existing ones.",
     description_pl="Katalog magazynu (wymagany)",
     path_role="root",
-    flag="--output",
-    short="-o",
-    dest="output",
     metavar="KATALOG",
     required=True,
     section=OUTPUT_TITLE,
@@ -322,17 +319,17 @@ def area(
     return tuple(replace(param, section=section) for param in params)
 
 
-def output_dir(files: Text) -> Param:
-    """``--output``/``-o``.
+def root(files: Text) -> Param:
+    """``--root``.
 
-    The store directory of a data command; ``files`` says where its files go (``pliki w
+    The store root of a data command; ``files`` says where its files go (``pliki w
     <KATALOG>/nmt/...``, Polish).
     """
 
     def description_pl() -> str:
         return f"Katalog magazynu (wymagany): {resolve(files)} (wersje w versions/)"
 
-    return replace(OUTPUT_DIR, description_pl=description_pl)
+    return replace(ROOT, description_pl=description_pl)
 
 
 def workers(description: Pair, default: int | None) -> Param:
@@ -456,7 +453,7 @@ def list_sources_command(group: str, products: Values) -> Command:
         summary_pl="Wypisz zrodla danych grupy (rejestr zrodel, bez sieci)",
         description_pl=f"Wypisz zrodla danych grupy {group} z rejestru zrodel "
         "(bez sieci): WYBOR = wymagane flagi wyboru zrodla w download (a|b - "
-        "jedna z wartosci), KATALOG = katalog plikow pod --output, KLUCZ = "
+        "jedna z wartosci), KATALOG = katalog plikow pod --root, KLUCZ = "
         "pole dataset w sidecarze pliku",
         rules=("Offline: nothing is fetched.",),
         rules_pl=("Bez sieci: nic nie jest pobierane.",),

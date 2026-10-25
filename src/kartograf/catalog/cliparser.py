@@ -41,8 +41,8 @@ ROOT_DESCRIPTION = (
 ROOT_EPILOG = (
     "Przyklady:\n"
     "  kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
-    "--resolution 1m --vertical-crs EVRF2007 -o ./data\n"
-    "  kartograf boundaries download --product admin --teryt 12 -o ./data\n"
+    "--resolution 1m --vertical-crs EVRF2007 --root ./data\n"
+    "  kartograf boundaries download --product admin --teryt 12 --root ./data\n"
     "  kartograf elevation list-sources\n"
     "Opcje komendy: kartograf <grupa> <komenda> --help"
 )
@@ -75,7 +75,7 @@ class _Parser(argparse.ArgumentParser):
     """``ArgumentParser`` without prefix abbreviations of long flags.
 
     A command line keeps its meaning when a group gains a flag (``--out`` is never read
-    as ``--output``, ``--lay`` is no ambiguous prefix). Every subparser of the CLI is of
+    as ``--root``, ``--lay`` is no ambiguous prefix). Every subparser of the CLI is of
     this class (``add_subparsers`` uses the class of its parser) and formats its help
     with ``_HelpFormatter`` (examples in ``epilog``).
 
@@ -349,7 +349,7 @@ def parsed_options(
     -------
     tuple of dict
         ``(options, run)``: the task options (``Param.task``) and the other flags
-        (``--output``, ``--workers``, ``--quiet``, ...), by parameter name, in the
+        (``--root``, ``--workers``, ``--quiet``, ...), by parameter name, in the
         JSON form: ``--bbox`` is four numbers with ``bbox_crs`` (the CRS of
         ``--bbox-crs``, else the default of the flag), a per-country value a text
         or a ``{"pl": ..., "cz": ...}`` mapping, a path a text, a list of codes a

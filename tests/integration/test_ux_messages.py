@@ -56,12 +56,12 @@ def test_layer_without_geometry_is_an_error_in_cli_api_and_project(tmp_path, cap
     err = _cli_error(
         capsys,
         "boundaries", "download", "--product", "admin", "--teryt", "14",
-        "--layer", "x", "-o", str(tmp_path),
+        "--layer", "x", "--root", str(tmp_path),
     )  # fmt: skip
     assert text in err
     with pytest.raises(ValidationError, match=text):
         validate_collection_request(
-            product="admin", output_dir=tmp_path, teryt="14", layer="x"
+            product="admin", root=tmp_path, teryt="14", layer="x"
         )
     with pytest.raises(ValidationError, match=f"{text}.*wybiera --layers"):
         LandCoverManager(tmp_path, "bdot10k").validate_request(
@@ -69,10 +69,10 @@ def test_layer_without_geometry_is_an_error_in_cli_api_and_project(tmp_path, cap
         )
     with pytest.raises(ValidationError, match=text):
         validate_data_request(
-            product="nmt", output_dir=tmp_path, sheet=SHEET, layer="x",
+            product="nmt", root=tmp_path, sheet=SHEET, layer="x",
             resolution="1m", vertical_crs="EVRF2007",
         )  # fmt: skip
-    assert main(["project", "init", "--project", str(tmp_path), "-o", "data"]) == 0
+    assert main(["project", "init", "--project", str(tmp_path), "--root", "data"]) == 0
     err = _cli_error(
         capsys,
         "project", "add", "--project", str(tmp_path), "t1", "boundaries",
@@ -97,7 +97,7 @@ def test_pl_laz_rejects_grid_and_sheet_flags(tmp_path, capsys, flags, text):
     err = _cli_error(
         capsys,
         "elevation", "download", "--product", "laz", "--sheet", SHEET,
-        "--vertical-crs", "EVRF2007", "-o", str(tmp_path), *flags,
+        "--vertical-crs", "EVRF2007", "--root", str(tmp_path), *flags,
     )  # fmt: skip
     assert text in err
 
@@ -106,7 +106,7 @@ def test_registry_keys_are_named_as_flags(tmp_path):
     # UX-03: messages named --sheet_system (a registry key, not a flag)
     with pytest.raises(ValidationError) as error:
         validate_collection_request(
-            product="topographic", output_dir=tmp_path, country="pl",
+            product="topographic", root=tmp_path, country="pl",
             bbox=BBox(565000, 242000, 566000, 243000, "EPSG:2180"),
             scale="1:10000", format="TIFF", sheet_system="1992",
         )  # fmt: skip
@@ -117,9 +117,7 @@ def test_registry_keys_are_named_as_flags(tmp_path):
 def test_missing_selection_names_only_the_selections_of_the_product(tmp_path):
     # UX-04: the text listed --teryt, --ku and --sheet for HY-NET (CZ)
     with pytest.raises(ValidationError) as error:
-        validate_collection_request(
-            product="network", output_dir=tmp_path, country="cz"
-        )
+        validate_collection_request(product="network", root=tmp_path, country="cz")
     assert str(error.value) == (
         "Podaj dokladnie jeden wybor dla --product network (CZ): --bbox/--geometry "
         "(obiekty obszaru), --whole-country (plik krajowy)"
@@ -130,7 +128,7 @@ def test_survey_control_hint_names_the_network_of_each_selection(tmp_path):
     # UX-14: the hint listed --bbox/--sheet/--geometry twice, without --network
     with pytest.raises(ValidationError) as error:
         validate_collection_request(
-            product="control", output_dir=tmp_path, country="pl",
+            product="control", root=tmp_path, country="pl",
             whole_country=True, network="horizontal",
         )  # fmt: skip
     text = str(error.value)
@@ -153,14 +151,14 @@ def test_area_outside_the_explicit_country_fails_before_network(tmp_path):
     # network; swapped EPSG:4326 axes as "no sheets"
     with pytest.raises(ValidationError) as error:
         validate_collection_request(
-            product="network", output_dir=tmp_path, country="cz",
+            product="network", root=tmp_path, country="cz",
             bbox=BBox(-600000, -1100000, -590000, -1090000, "EPSG:2180"),
         )  # fmt: skip
     assert str(error.value).startswith("--bbox (EPSG:2180) lies outside CZ")
     assert "--bbox-crs EPSG:5514" in str(error.value)
     with pytest.raises(ValidationError) as error:
         validate_data_request(
-            product="nmt", output_dir=tmp_path, country="pl", sheet_system="1992",
+            product="nmt", root=tmp_path, country="pl", sheet_system="1992",
             resolution="1m", vertical_crs="EVRF2007",
             bbox=BBox(50.05, 19.93, 50.06, 19.94, "EPSG:4326"),
         )  # fmt: skip
@@ -209,7 +207,7 @@ def test_negative_bbox_after_a_space_is_the_bbox_value(tmp_path, capsys):
     err = _cli_error(
         capsys,
         "hydro", "download", "--product", "network", "--country", "cz",
-        "--bbox", "-600000,-1100000,-590000,-1090000", "-o", str(tmp_path),
+        "--bbox", "-600000,-1100000,-590000,-1090000", "--root", str(tmp_path),
     )  # fmt: skip
     assert "lezy poza CZ" in err  # parsed as a bbox, checked by the library
 
@@ -232,17 +230,17 @@ def test_enumerated_values_are_taken_in_any_case(tmp_path, capsys):
     # epsg:2180 were errors; each flag had its own spelling
     def addresses(**case):
         return validate_collection_request(
-            product="addresses", output_dir=tmp_path, whole_country=True, **case
+            product="addresses", root=tmp_path, whole_country=True, **case
         )
 
     canonical = addresses(country="pl", format="SHP")
     assert addresses(country="PL", format="shp") == canonical
     gminy = BBox(565000, 242000, 566000, 243000, "EPSG:2180")
     assert validate_collection_request(
-        product="admin", output_dir=tmp_path, country="Pl", level="gmina",
+        product="admin", root=tmp_path, country="Pl", level="gmina",
         bbox=gminy._replace(crs="epsg:2180"),
     ) == validate_collection_request(
-        product="admin", output_dir=tmp_path, country="pl", level="gmina", bbox=gminy
+        product="admin", root=tmp_path, country="pl", level="gmina", bbox=gminy
     )  # fmt: skip
 
     from tests.integration.test_download_data import G, _pl_sheets
@@ -251,7 +249,7 @@ def test_enumerated_values_are_taken_in_any_case(tmp_path, capsys):
     def nmt_sheet(out, **case):
         with _pl_sheets(FakeCampaignProvider(C14)):
             report = download_data(
-                product="nmt", output_dir=out, sheet=G, resolution="1m", cache=False,
+                product="nmt", root=out, sheet=G, resolution="1m", cache=False,
                 **case,
             )  # fmt: skip
         file = report.files[0].file
@@ -265,7 +263,7 @@ def test_enumerated_values_are_taken_in_any_case(tmp_path, capsys):
     out = tmp_path / "store"
     assert main([
         "landcover", "download", "--product", "bdot10k", "--teryt", "1465",
-        "--format", "shp", "-o", str(out), "--check-updates",
+        "--format", "shp", "--root", str(out), "--check-updates",
     ]) == 0  # fmt: skip
     assert capsys.readouterr().out == (
         "landcover/pl_bdot10k_shp/teryt/1465.zip: do pobrania\n"
@@ -283,19 +281,19 @@ def test_pl_sheet_code_with_another_sheet_system_fails_before_network(tmp_path, 
         capsys,
         "elevation", "download", "--product", "nmt", "--sheet", SHEET,
         "--sheet-system", "2000", "--resolution", "1m", "--vertical-crs",
-        "EVRF2007", "-o", str(tmp_path),
+        "EVRF2007", "--root", str(tmp_path),
     )  # fmt: skip
     assert f"Error: {text}" in err
     with pytest.raises(ValidationError, match="nie zgadza sie z godlem 6.129.30.25.3"):
         validate_data_request(
-            product="orto", output_dir=tmp_path, sheet="6.129.30.25.3",
+            product="orto", root=tmp_path, sheet="6.129.30.25.3",
             sheet_system="1992",
         )  # fmt: skip
     # the system of the code itself stays a valid (redundant) choice
     assert (
         validate_data_request(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet=SHEET,
             sheet_system="1992",
             resolution="1m",
@@ -310,7 +308,7 @@ def test_option_of_the_other_country_source(tmp_path):
     # (PL) it was "nie dotyczy", and an auto area could never take it
     with pytest.raises(ValidationError) as error:
         validate_collection_request(
-            product="topographic", output_dir=tmp_path, country="pl",
+            product="topographic", root=tmp_path, country="pl",
             bbox=BBox(565000, 242000, 566000, 243000, "EPSG:2180"),
             scale="1:10000", format="TIFF", sheet_system="1992",
         )  # fmt: skip
@@ -319,7 +317,7 @@ def test_option_of_the_other_country_source(tmp_path):
         "dla PL pomin --sheet-system"
     )
     request = validate_collection_request(
-        product="topographic", output_dir=tmp_path, country="auto", bbox=BORDER,
+        product="topographic", root=tmp_path, country="auto", bbox=BORDER,
         scale="1:10000", format="TIFF", sheet_system="sjtsk",
     )  # fmt: skip
     choices = {part.country: part.choice for part in request.parts}
@@ -331,7 +329,7 @@ def test_survey_network_per_country(tmp_path):
     # UX-48: --level, --resolution and --vertical-crs took pl=...,cz=...;
     # --network had one value for both countries (different networks)
     request = validate_collection_request(
-        product="control", output_dir=tmp_path, country="auto", bbox=BORDER,
+        product="control", root=tmp_path, country="auto", bbox=BORDER,
         network={"pl": "horizontal", "cz": "gnss"},
     )  # fmt: skip
     assert {part.country: part.choice["network"] for part in request.parts} == {
@@ -340,7 +338,7 @@ def test_survey_network_per_country(tmp_path):
     }
     with pytest.raises(ValidationError) as error:
         validate_collection_request(
-            product="control", output_dir=tmp_path, country="auto", bbox=BORDER,
+            product="control", root=tmp_path, country="auto", bbox=BORDER,
             network="gnss",
         )  # fmt: skip
     assert "(zadanie PL+CZ: wartosc per kraj, np. --network pl=...,cz=..." in str(
@@ -352,7 +350,7 @@ def test_project_init_without_output_is_an_input_error(tmp_path, capsys):
     # UX-42: argparse "the following arguments are required" (code 2) instead
     # of the Error: of every other command
     err = _cli_error(capsys, "project", "init", "--project", str(tmp_path))
-    assert "Error: --output wymagane: katalog magazynu projektu" in err
+    assert "Error: --root wymagane: katalog magazynu projektu" in err
     assert not (tmp_path / "kartograf-project.json").exists()
 
 
@@ -362,7 +360,7 @@ def test_teryt_of_a_missing_voivodeship_says_so_and_lists_the_existing_ones(
 ):
     # E2E 0.8.0 D P3-6: a well-formed code of no voivodeship read as a format error
     with pytest.raises(ValidationError) as error:
-        validate_collection_request(product="admin", output_dir=tmp_path, teryt=teryt)
+        validate_collection_request(product="admin", root=tmp_path, teryt=teryt)
     text = str(error.value)
     assert f"nie ma wojewodztwa o kodzie {teryt[:2]}" in text
     assert "12 (malopolskie)" in text and "Nieprawidlowy" not in text
@@ -371,7 +369,7 @@ def test_teryt_of_a_missing_voivodeship_says_so_and_lists_the_existing_ones(
 
 def test_teryt_of_a_wrong_format_is_still_a_format_error(tmp_path):
     with pytest.raises(ValidationError, match="2 cyfry, np. 12") as error:
-        validate_collection_request(product="admin", output_dir=tmp_path, teryt="126")
+        validate_collection_request(product="admin", root=tmp_path, teryt="126")
     assert error.value.option == "teryt"
 
 
@@ -379,14 +377,14 @@ def test_whole_country_names_only_the_countries_of_the_product(tmp_path):
     # E2E 0.8.0 D P3-4: hydro (CZ only) asked for --country pl, which it rejects
     with pytest.raises(ValidationError) as hydro:
         validate_collection_request(
-            product="network", output_dir=tmp_path, whole_country=True
+            product="network", root=tmp_path, whole_country=True
         )
     assert "--country cz" in str(hydro.value)
     assert "--country pl" not in str(hydro.value)
     assert hydro.value.allowed == ("cz",)
     with pytest.raises(ValidationError) as admin:
         validate_collection_request(
-            product="admin", output_dir=tmp_path, whole_country=True, country="auto"
+            product="admin", root=tmp_path, whole_country=True, country="auto"
         )
     assert "--country pl albo --country cz" in str(admin.value)
     assert admin.value.allowed == ("pl", "cz")

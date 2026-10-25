@@ -36,7 +36,7 @@ def test_bdot10k_sheet_formats_have_independent_versions(tmp_path, monkeypatch):
         router.add(FILES[key]["url"], file_answer(key, head_of(key)))
     choices = {
         "product": "topographic",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "sheet": "M-34-064-D-d-1",
         "scale": "1:10000",
         "cache": False,
@@ -68,7 +68,7 @@ def test_ztm_system_inferred_and_crs_of_each_sheet(tmp_path):
     for sheet, system, fmt, crs, ext in cases:
         part = validate_collection_request(
             product="topographic",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet=sheet,
             scale="1:10000",
             format=fmt,
@@ -81,7 +81,7 @@ def test_ztm_system_inferred_and_crs_of_each_sheet(tmp_path):
     with pytest.raises(ValidationError, match="--sheet-system etrs89"):
         validate_collection_request(
             product="topographic",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet="0301-B-01",
             scale="1:10000",
             format="TIFF",
@@ -90,7 +90,7 @@ def test_ztm_system_inferred_and_crs_of_each_sheet(tmp_path):
     with pytest.raises(ValidationError, match="TIFF, PDF"):
         validate_collection_request(
             product="topographic",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet="NM-33-11-4-A-20",
             scale="1:10000",
             format="SHP",
@@ -98,7 +98,7 @@ def test_ztm_system_inferred_and_crs_of_each_sheet(tmp_path):
     with pytest.raises(ValidationError, match="1:5000"):
         validate_collection_request(
             product="topographic",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet="0301-B-01",
             scale="1:2000",
             format="TIFF",
@@ -114,7 +114,7 @@ def test_ztm_http_check_queries_selected_index_layer(tmp_path, monkeypatch):
     session.heads[_key(entry["url"])] = entry["headers"]
     plan = check_collection(
         product="topographic",
-        output_dir=tmp_path,
+        root=tmp_path,
         sheet="0510-D-11",
         scale="1:10000",
         format="TIFF",
@@ -135,7 +135,7 @@ def test_map_selection_requires_scale_and_format(tmp_path, options, missing):
     with pytest.raises(ValidationError, match=missing):
         validate_collection_request(
             product="topographic",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet="M-34-064-D-d-1",
             **options,
         )

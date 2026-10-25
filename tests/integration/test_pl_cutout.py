@@ -18,7 +18,7 @@ class TestPreparePlCutout:
         cut = _prepare_pl_cutout(
             bbox,
             "EPSG:2180",
-            output_dir=str(tmp_path),
+            root=str(tmp_path),
             vertical_crs="EVRF2007",
             product="nmt",
         )
@@ -39,7 +39,7 @@ class TestPreparePlCutout:
         cut = _prepare_pl_cutout(
             bbox,
             "EPSG:5514",
-            output_dir=str(tmp_path),
+            root=str(tmp_path),
             vertical_crs="EVRF2007",
             product="nmt",
         )
@@ -70,7 +70,7 @@ class TestPreparePlCutout:
         cut = _prepare_pl_cutout(
             bbox,
             "EPSG:5514",
-            output_dir=str(tmp_path),
+            root=str(tmp_path),
             vertical_crs="EVRF2007",
             product="nmt",
         )
@@ -87,7 +87,7 @@ class TestPreparePlCutout:
         cut = _prepare_pl_cutout(
             bbox,
             "EPSG:2180",
-            output_dir=str(tmp_path),
+            root=str(tmp_path),
             vertical_crs="KRON86",
             product="nmt",
         )
@@ -117,7 +117,7 @@ class TestPreparePlCutout:
         cut = _prepare_pl_cutout(
             BBox(18.0, 50.0, 20.0, 50.2, "EPSG:4326"),
             "EPSG:2180",
-            output_dir=str(tmp_path),
+            root=str(tmp_path),
             vertical_crs="EVRF2007",
             product="nmt",
         )
@@ -132,7 +132,7 @@ class TestPreparePlCutout:
         cut = _prepare_pl_cutout(
             BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
             "EPSG:3045",
-            output_dir=str(tmp_path),
+            root=str(tmp_path),
             vertical_crs="EVRF2007",
             product="nmt",
         )
@@ -146,7 +146,7 @@ class TestPreparePlCutout:
         cut = _prepare_pl_cutout(
             bbox,
             "EPSG:2180",
-            output_dir=str(tmp_path),
+            root=str(tmp_path),
             vertical_crs="EVRF2007",
             product="nmt",
         )
@@ -166,7 +166,7 @@ class TestPreparePlCutout:
             _prepare_pl_cutout(
                 bbox,
                 "EPSG:5514",
-                output_dir=str(tmp_path),
+                root=str(tmp_path),
                 vertical_crs="EVRF2007",
                 product="nmt",
             )
@@ -193,7 +193,7 @@ class TestPreparePlCutout:
             _prepare_pl_cutout(
                 BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
                 target,
-                output_dir=tmp_path,
+                root=tmp_path,
                 **params,
             )
 
@@ -210,7 +210,7 @@ class TestTargetCrsValidations:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -223,7 +223,7 @@ class TestTargetCrsValidations:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:2180",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -237,7 +237,7 @@ class TestTargetCrsValidations:
         with pytest.raises(ValidationError, match="--product nmt"):
             download_data(
                 product="laz",
-                output_dir=tmp_path,
+                root=tmp_path,
                 bbox=BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
                 country="pl",
                 cutout=True,
@@ -253,7 +253,7 @@ class TestTargetCrsValidations:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
+                "--root",
                 "./data",
                 "--country",
                 "auto",
@@ -267,7 +267,7 @@ class TestTargetCrsValidations:
                 "--cutout",
                 "--horizontal-crs",
                 "EPSG:2180",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )

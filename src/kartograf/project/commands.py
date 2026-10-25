@@ -75,7 +75,7 @@ from kartograf.serialization import Document
 # directory; ``per_country`` is a string or ``{"pl": ..., "cz": ...}``;
 # ``flag`` is ``true`` (``false`` is omitted).
 OptionKind = Kind
-# Library arguments of a task (without ``output_dir`` and run options).
+# Library arguments of a task (without ``root`` and run options).
 Options = dict[str, Any]
 
 
@@ -91,7 +91,7 @@ class TaskDownload(Protocol):
 
     def __call__(
         self,
-        output_dir: Path,
+        root: Path,
         options: Options,
         /,
         *,
@@ -103,7 +103,7 @@ class TaskDownload(Protocol):
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
     ) -> Document:
-        """Run the download of the task options into ``output_dir``."""
+        """Run the download of the task options into ``root``."""
         ...
 
 
@@ -112,14 +112,14 @@ class TaskCheck(Protocol):
 
     def __call__(
         self,
-        output_dir: Path,
+        root: Path,
         options: Options,
         /,
         *,
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
-        """Plan the update of the task options in ``output_dir``."""
+        """Plan the update of the task options in ``root``."""
         ...
 
 
@@ -146,7 +146,7 @@ class TaskCommand:
 
     ``options``: JSON keys of ``tasks[].options`` (the data flags of the
     CLI command) with their kinds, in the order of the manifest.
-    ``validate(output_dir, options)``: the checks of the download function
+    ``validate(root, options)``: the checks of the download function
     before its first request (no network; ``ValidationError``).
     ``download``/``check``: the library function and its ``check_*`` twin.
     ``files(result)``: the pinned files of a result and its full success.
@@ -268,12 +268,12 @@ def _options(name: str) -> Mapping[str, OptionKind]:
 def _data_command(name: str, products: tuple[str, ...]) -> TaskCommand:
     """``download_data``/``check_data`` limited to the products of a group."""
 
-    def validate(output_dir: Path, opts: Options) -> None:
+    def validate(root: Path, opts: Options) -> None:
         require_product(opts.get("product"), products)
-        validate_data_request(output_dir=output_dir, **opts)
+        validate_data_request(root=root, **opts)
 
     def download(
-        output_dir: Path,
+        root: Path,
         opts: Options,
         *,
         update: UpdateMode | None,
@@ -286,7 +286,7 @@ def _data_command(name: str, products: tuple[str, ...]) -> TaskCommand:
     ) -> Document:
         require_product(opts.get("product"), products)
         return download_data(
-            output_dir=output_dir,
+            root=root,
             update=update,
             plan=plan,
             cache=cache,
@@ -297,16 +297,14 @@ def _data_command(name: str, products: tuple[str, ...]) -> TaskCommand:
         )
 
     def check(
-        output_dir: Path,
+        root: Path,
         opts: Options,
         *,
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
         require_product(opts.get("product"), products)
-        return check_data(
-            output_dir=output_dir, cache=cache, on_notice=on_notice, **opts
-        )
+        return check_data(root=root, cache=cache, on_notice=on_notice, **opts)
 
     return TaskCommand(
         name, _options(name), validate, download, check, unit_report_files
@@ -322,14 +320,14 @@ def _landcover_command(name: str, product: str | None) -> TaskCommand:
             return opts
         return opts
 
-    def validate(output_dir: Path, opts: Options) -> None:
+    def validate(root: Path, opts: Options) -> None:
         if product is None:
-            validate_landcover_request(output_dir=output_dir, **request(opts))
+            validate_landcover_request(root=root, **request(opts))
         else:
-            validate_soil_request(output_dir=output_dir, **request(opts))
+            validate_soil_request(root=root, **request(opts))
 
     def download(
-        output_dir: Path,
+        root: Path,
         opts: Options,
         *,
         update: UpdateMode | None,
@@ -342,7 +340,7 @@ def _landcover_command(name: str, product: str | None) -> TaskCommand:
     ) -> Document:
         if product is None:
             return download_landcover(
-                output_dir=output_dir,
+                root=root,
                 **request(opts),
                 **_run_options(workers),
                 cache=cache,
@@ -352,7 +350,7 @@ def _landcover_command(name: str, product: str | None) -> TaskCommand:
                 on_progress=on_progress,
             )
         return download_soil(
-            output_dir=output_dir,
+            root=root,
             **request(opts),
             cache=cache,
             update=update,
@@ -361,7 +359,7 @@ def _landcover_command(name: str, product: str | None) -> TaskCommand:
         )
 
     def check(
-        output_dir: Path,
+        root: Path,
         opts: Options,
         *,
         cache: MetadataCache | bool,
@@ -369,11 +367,9 @@ def _landcover_command(name: str, product: str | None) -> TaskCommand:
     ) -> UpdatePlan:
         if product is None:
             return check_landcover(
-                output_dir=output_dir, **request(opts), cache=cache, on_notice=on_notice
+                root=root, **request(opts), cache=cache, on_notice=on_notice
             )
-        return check_soil(
-            output_dir=output_dir, **request(opts), cache=cache, on_notice=on_notice
-        )
+        return check_soil(root=root, **request(opts), cache=cache, on_notice=on_notice)
 
     return TaskCommand(
         name,
@@ -388,11 +384,11 @@ def _landcover_command(name: str, product: str | None) -> TaskCommand:
 def _hsg_command(name: str) -> TaskCommand:
     """Command-level ``calculate_hsg``/``check_hsg``."""
 
-    def validate(output_dir: Path, opts: Options) -> None:
-        validate_hsg_request(output_dir=output_dir, **opts)
+    def validate(root: Path, opts: Options) -> None:
+        validate_hsg_request(root=root, **opts)
 
     def download(
-        output_dir: Path,
+        root: Path,
         opts: Options,
         *,
         update: UpdateMode | None,
@@ -404,7 +400,7 @@ def _hsg_command(name: str) -> TaskCommand:
         on_notice: Callable[[Notice], None] | None,
     ) -> Document:
         return calculate_hsg(
-            output_dir=output_dir,
+            root=root,
             **opts,
             cache=cache,
             update=update,
@@ -414,15 +410,13 @@ def _hsg_command(name: str) -> TaskCommand:
         )
 
     def check(
-        output_dir: Path,
+        root: Path,
         opts: Options,
         *,
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
-        return check_hsg(
-            output_dir=output_dir, **opts, cache=cache, on_notice=on_notice
-        )
+        return check_hsg(root=root, **opts, cache=cache, on_notice=on_notice)
 
     return TaskCommand(name, _options(name), validate, download, check, _hsg_files)
 
@@ -435,12 +429,12 @@ def _collection_command(name: str, group: str) -> TaskCommand:
     the result family is ``CollectionReport`` (``unit_report_files``).
     """
 
-    def validate(output_dir: Path, opts: Options) -> None:
+    def validate(root: Path, opts: Options) -> None:
         require_collection_product(opts.get("product"), group)
-        validate_collection_request(output_dir=output_dir, **opts)
+        validate_collection_request(root=root, **opts)
 
     def download(
-        output_dir: Path,
+        root: Path,
         opts: Options,
         *,
         update: UpdateMode | None,
@@ -453,7 +447,7 @@ def _collection_command(name: str, group: str) -> TaskCommand:
     ) -> Document:
         require_collection_product(opts.get("product"), group)
         return download_collection(
-            output_dir=output_dir,
+            root=root,
             update=update,
             plan=plan,
             cache=cache,
@@ -464,16 +458,14 @@ def _collection_command(name: str, group: str) -> TaskCommand:
         )
 
     def check(
-        output_dir: Path,
+        root: Path,
         opts: Options,
         *,
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
         require_collection_product(opts.get("product"), group)
-        return check_collection(
-            output_dir=output_dir, cache=cache, on_notice=on_notice, **opts
-        )
+        return check_collection(root=root, cache=cache, on_notice=on_notice, **opts)
 
     return TaskCommand(
         name, _options(name), validate, download, check, unit_report_files

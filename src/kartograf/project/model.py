@@ -1,7 +1,7 @@
 """Types of a project manifest and of the project operations (ADR-040).
 
 A project (``kartograf-project.json``, schema ``kartograf-project/1``) is a
-store (``output_dir``) and tasks: a data command of a CLI group with its
+store (``root``) and tasks: a data command of a CLI group with its
 options and the store versions it pinned. Field meanings: spec
 ``docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`` 3.3, 4.3.
 
@@ -108,7 +108,7 @@ class ProjectTask:
 class Project(Document):
     """A project read from its manifest.
 
-    ``directory`` holds ``kartograf-project.json``, ``output_dir`` is the store (both
+    ``directory`` holds ``kartograf-project.json``, ``root`` is the store (both
     absolute).
 
     Document ``kartograf-project-state/1``; ``tasks[].options`` keep the form
@@ -118,12 +118,12 @@ class Project(Document):
     SCHEMA = "kartograf-project-state/1"
 
     directory: Path
-    output_dir: Path
+    root: Path
     tasks: tuple[ProjectTask, ...]
 
     def prepare_context(self, ctx: EncodeContext) -> None:
         """Set the store of the encoding context."""
-        ctx.store = self.output_dir
+        ctx.store = self.root
 
 
 @dataclass(frozen=True)
@@ -168,7 +168,7 @@ class ProjectReport(Document):
 
     def prepare_context(self, ctx: EncodeContext) -> None:
         """Set the store of the encoding context."""
-        ctx.store = self.project.output_dir
+        ctx.store = self.project.root
 
 
 @dataclass(frozen=True)
@@ -227,4 +227,4 @@ class ProjectCheck(Document):
 
     def prepare_context(self, ctx: EncodeContext) -> None:
         """Set the store of the encoding context."""
-        ctx.store = self.project.output_dir
+        ctx.store = self.project.root

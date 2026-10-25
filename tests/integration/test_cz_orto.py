@@ -218,7 +218,7 @@ def test_cz_orto_sheet_files_and_sidecars(tmp_path, cuzk):
     ``orto/cz_sjtsk/CTES/96``, world files committed before the image; every
     sidecar names its CRS, the release and the ZIP member."""
     report = download_data(
-        product="orto", country="cz", sheet="CTES96", output_dir=tmp_path, cache=False
+        product="orto", country="cz", sheet="CTES96", root=tmp_path, cache=False
     )
 
     assert report.ok and report.failed == ()
@@ -283,7 +283,7 @@ def test_cz_orto_world_files_committed_before_jpeg(tmp_path, cuzk, monkeypatch):
         "product": "orto",
         "country": "cz",
         "sheet": "CTES96",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "cache": False,
     }
     failed = download_data(**selection)
@@ -325,7 +325,7 @@ def test_cz_orto_metadata_signal(tmp_path, cuzk, cache):
         "product": "orto",
         "country": "cz",
         "sheet": "CTES96",
-        "output_dir": tmp_path / "dane",
+        "root": tmp_path / "dane",
         "cache": cache,
     }
     first = download_data(**selection)
@@ -379,7 +379,7 @@ def test_cz_orto_default_local_files_ask_no_feed(tmp_path, cuzk):
         "product": "orto",
         "country": "cz",
         "sheet": "CTES96",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "cache": False,
     }
     download_data(**selection)
@@ -405,7 +405,7 @@ def test_cz_orto_area_uses_sm5_index(tmp_path, cuzk, area):
     """An area is the SM5 sheets of the index, asked in EPSG:5514 (a bbox in
     another CRS through the pinned operation); four files per sheet."""
     report = download_data(
-        product="orto", country="cz", bbox=area, output_dir=tmp_path, cache=False
+        product="orto", country="cz", bbox=area, root=tmp_path, cache=False
     )
 
     assert report.ok
@@ -434,7 +434,7 @@ def test_cz_orto_area_plan_downloads_planned_sheets(tmp_path, cuzk):
         "product": "orto",
         "country": "cz",
         "bbox": AREA,
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "cache": False,
     }
     download_data(**{**selection, "bbox": None, "sheet": "CTES96", "country": None})
@@ -494,7 +494,7 @@ def test_cz_orto_pl_only_flags_rejected(tmp_path, cuzk, operation, choice, messa
         "product": "orto",
         "country": "cz",
         "sheet": "CTES96",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         **choice,
     }
     if operation is not validate_data_request:
@@ -517,7 +517,7 @@ def test_auto_orto_both_countries(tmp_path, cuzk):
             bbox=AREA,
             sheet_system="1992",
             all_campaigns=True,
-            output_dir=tmp_path,
+            root=tmp_path,
             cache=False,
         )
 
@@ -542,9 +542,7 @@ def test_auto_orto_both_countries(tmp_path, cuzk):
 
 def test_two_letter_sm5_sheet(tmp_path, cuzk):
     """As sheets (2 letters): the code alone selects CZ, the hierarchy is AS/91."""
-    report = download_data(
-        product="orto", sheet="AS91", output_dir=tmp_path, cache=False
-    )
+    report = download_data(product="orto", sheet="AS91", root=tmp_path, cache=False)
 
     assert report.ok
     folder = tmp_path / "orto" / "cz_sjtsk" / "AS" / "91"

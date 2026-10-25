@@ -45,7 +45,7 @@ def test_addresses_area(tmp_path, monkeypatch):
             "567100,244150,567150,244200",
         ],
         lambda out: download_collection(
-            product="addresses", country="pl", bbox=AREA, output_dir=out
+            product="addresses", country="pl", bbox=AREA, root=out
         ),
         tmp_path,
     )
@@ -68,7 +68,7 @@ def test_special_area(tmp_path, monkeypatch):
             "EPSG:4326",
         ],
         lambda out: download_collection(
-            product="special", country="pl", bbox=SPECIAL_AREA, output_dir=out
+            product="special", country="pl", bbox=SPECIAL_AREA, root=out
         ),
         tmp_path,
     )
@@ -99,7 +99,7 @@ def test_geomorphology_area_level(tmp_path, monkeypatch):
             country="cz",
             level="celek",
             bbox=TESIN,
-            output_dir=out,
+            root=out,
         ),
         tmp_path,
     )
@@ -111,7 +111,7 @@ def test_rcn_powiat_export(tmp_path, monkeypatch):
     monkeypatch.setattr(col, "_session", lambda: session)
     run = run_both(
         ["cadastre", "download", "--product", "prices", "--teryt", "1201"],
-        lambda out: download_collection(product="prices", teryt="1201", output_dir=out),
+        lambda out: download_collection(product="prices", teryt="1201", root=out),
         tmp_path,
     )
     _same(run)
@@ -134,7 +134,7 @@ def test_cz_cadastral_map_ku(tmp_path, monkeypatch):
             "DXF",
         ],
         lambda out: download_collection(
-            product="map", ku="623164", format="DXF", output_dir=out
+            product="map", ku="623164", format="DXF", root=out
         ),
         tmp_path,
     )

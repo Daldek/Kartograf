@@ -469,7 +469,7 @@ def _status_lines(
 def _status_line(unit: str, file: VersionedFile, update: UpdateMode | None) -> str:
     """Return the status line of one file.
 
-    ``unit`` is its path below ``--output``; a local version the default mode did not
+    ``unit`` is its path below ``--root``; a local version the default mode did not
     compare with the source (no cheap signal, or not asked: ADR-036 erratum 3) gets
     ``(not checked; --check-updates)``.
     """
@@ -493,17 +493,15 @@ def _report_file(
         print(_status_line(unit, file, update))
 
 
-def _unit_of(path: Path, output_dir: Path) -> str:
-    """Return the unit of a file in status lines: its path below ``--output``."""
+def _unit_of(path: Path, root: Path) -> str:
+    """Return the unit of a file in status lines: its path below ``--root``."""
     try:
-        return Path(path).relative_to(output_dir).as_posix()
+        return Path(path).relative_to(root).as_posix()
     except ValueError:
         return str(path)
 
 
-def _print_version_summary(
-    statuses: Sequence[str], failed: int, output_dir: Path
-) -> None:
+def _print_version_summary(statuses: Sequence[str], failed: int, root: Path) -> None:
     """Print the counters of the files of the request (spec 4.5).
 
     ``reused`` (HSG, D33) only when a derived file was reused.
@@ -524,7 +522,7 @@ def _print_version_summary(
             counts_local=counts["local"],
             reused=reused,
             failed=failed,
-            output_dir=output_dir,
+            root=root,
         )
     )
 
@@ -576,7 +574,7 @@ def _data_notices(args: argparse.Namespace) -> Callable[[Notice], None] | None:
 def _cmd_download(args: argparse.Namespace) -> int:
     """One ``download_data``/``check_data`` call after the plan file is read."""
     _cache_warnings_shown.clear()
-    arguments: dict[str, Any] = {**library_arguments(args), "output_dir": args.output}
+    arguments: dict[str, Any] = {**library_arguments(args), "root": args.root}
     on_notice = _data_notices(args)
     if getattr(args, "check_updates", False):
         return _report_plan(args, check_data(**arguments, on_notice=on_notice))
@@ -598,14 +596,14 @@ def _print_report(
 ) -> int:
     """Print status lines, summary, failures and stale positions of a report.
 
-    The status lines name the path of each file below ``--output``.
+    The status lines name the path of each file below ``--root``.
     """
     update = _update_mode(args)
     _end_progress(on_progress)
     if not args.quiet:
         if getattr(on_progress, "used", False):
             print()  # campaign lines: a blank line before the status lines
-        output = Path(args.output)
+        output = Path(args.root)
         for unit_file in report.files:
             print(
                 _status_line(
@@ -624,7 +622,7 @@ def _print_report(
             _print_version_summary(
                 [f.file.status for f in report.files],
                 sum(1 for f in report.failed if f.kind == "download"),
-                Path(args.output) / ("laz" if args.product == "laz" else ""),
+                Path(args.root) / ("laz" if args.product == "laz" else ""),
             )
     for failure in report.failed:
         print(f"Error: {failure.error}", file=sys.stderr)

@@ -44,18 +44,18 @@ def _session(fake):
 
 def _lc(tmp_path, *argv):
     """``landcover download`` (``argv`` with ``--product``) into ``<tmp>/out``."""
-    return main(["landcover", "download", *argv, "-o", str(tmp_path / "out")])
+    return main(["landcover", "download", *argv, "--root", str(tmp_path / "out")])
 
 
 def _soil(tmp_path, *argv):
     """``soil download`` (SoilGrids) into ``<tmp>/out``."""
-    return main(["soil", "download", *argv, "-o", str(tmp_path / "out")])
+    return main(["soil", "download", *argv, "--root", str(tmp_path / "out")])
 
 
 def _hsg(tmp_path, *argv):
     return main(
         ["soil", "hsg", "--bbox", BBOX_ARG, "--depth", "0-5cm"]
-        + ["-o", str(tmp_path / "out"), *argv]
+        + ["--root", str(tmp_path / "out"), *argv]
     )
 
 
@@ -74,7 +74,7 @@ def test_landcover_update_flags_exclusive(tmp_path, flags, capsys):
 
 @pytest.mark.parametrize("command", [["landcover", "download"], ["soil", "hsg"]])
 def test_plan_without_mode_is_error(tmp_path, command, capsys):
-    rc = main([*command, "--plan", str(tmp_path / "p.json"), "-o", str(tmp_path)])
+    rc = main([*command, "--plan", str(tmp_path / "p.json"), "--root", str(tmp_path)])
     assert rc == 2
     assert "Error: --plan wymaga --check-updates albo --upgrade" in (
         capsys.readouterr().err
@@ -245,7 +245,7 @@ def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
                 "XYZ",
                 "--depth",
                 "0-5cm",
-                "-o",
+                "--root",
                 str(tmp_path / "cli"),
             ]
         )
@@ -322,7 +322,7 @@ def test_invalid_hsg_bbox_matches_cli_and_api(
                 coordinates,
                 "--depth",
                 "0-5cm",
-                "-o",
+                "--root",
                 str(tmp_path / "cli"),
                 *flags,
             ]
@@ -360,7 +360,7 @@ def test_hsg_cli_output_tif_rejected(tmp_path, capsys):
     with _session(fake):
         rc = main(
             ["soil", "hsg", "--bbox", BBOX_ARG, "--depth", "0-5cm"]
-            + ["-o", str(tmp_path / "hsg.tif")]
+            + ["--root", str(tmp_path / "hsg.tif")]
         )
     assert rc == 2
     assert fake.capabilities == 0
@@ -489,7 +489,7 @@ def _bdot(tmp_path, *flags):
         "download",
         "--product",
         "bdot10k",
-        "-o",
+        "--root",
         str(tmp_path),
         *flags,
     ]
@@ -517,7 +517,7 @@ def test_bdot_only_flags_rejected_for_other_sources(tmp_path, capsys, flag):
         "2018",
         "--sheet",
         "N-34-130-D",
-        "-o",
+        "--root",
         str(tmp_path),
         flag,
         *(["SWRS"] if flag == "--layers" else []),
@@ -564,7 +564,7 @@ def test_landcover_quiet_drops_status_lines_keeps_notices(tmp_path, capsys):
         ):
             rc = main(
                 ["landcover", "download", "--product", "bdot10k", "--bbox", BBOX_ARG]
-                + ["-o", str(out), *flags]
+                + ["--root", str(out), *flags]
             )
         assert rc == 0
         return capsys.readouterr()
@@ -592,7 +592,7 @@ def test_hsg_bbox_crs_and_layer_reach_the_api(tmp_path):
         call.return_value = HsgReport((), (), (), (), (), True)
         argv = ["soil", "hsg", "--bbox", "18.6,49.7,18.7,49.8"]
         argv += ["--bbox-crs", "EPSG:4326", "--depth", "0-5cm", "--layer", "x"]
-        assert main([*argv, "-o", str(tmp_path / "out")]) == 0
+        assert main([*argv, "--root", str(tmp_path / "out")]) == 0
     assert call.call_args.kwargs["bbox"] == BBox(18.6, 49.7, 18.7, 49.8, "EPSG:4326")
     assert call.call_args.kwargs["layer"] == "x"
 

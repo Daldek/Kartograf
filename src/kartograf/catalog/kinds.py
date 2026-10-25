@@ -191,7 +191,7 @@ def options_to_json(
     ------
     ValidationError
         An option of another command or not a library argument (e.g.
-        ``output_dir``, ``update``, ``timeout``), or a value of a wrong type.
+        ``root``, ``update``, ``timeout``), or a value of a wrong type.
     """
     given = {
         name: value

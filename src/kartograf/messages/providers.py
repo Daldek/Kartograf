@@ -430,10 +430,10 @@ MESSAGES = {
     ),
     "area_multiple_counties": Text(
         "{what}: the area intersects {teryts_count} counties ({teryts}); use "
-        "download_landcover(product='bdot10k', bbox=..., output_dir=...) or download "
+        "download_landcover(product='bdot10k', bbox=..., root=...) or download "
         "each county via --teryt",
         "{what}: obszar przecina {teryts_count} powiaty ({teryts}); uzyj "
-        "download_landcover(product='bdot10k', bbox=..., output_dir=...) albo pobierz "
+        "download_landcover(product='bdot10k', bbox=..., root=...) albo pobierz "
         "kazdy powiat przez --teryt",
     ),
     "no_gpkg_in_zip": Text(

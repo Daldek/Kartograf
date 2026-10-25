@@ -1,6 +1,6 @@
 """CLI and public API produce identical versioned stores for the E4 sources
 (``landcover download --product bdoo|data50|data250`` =
-``download_landcover(product=..., output_dir=...)``): BDOO of a
+``download_landcover(product=..., root=...)``): BDOO of a
 voivodeship and of an area with ``--layers``, Data50 objects of an area,
 the Data250 national file, and the same input errors for invalid choices.
 """
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.usefixtures("frozen_clock")
 def _landcover(tmp_path, source: str, cli_args: list[str], **api_kwargs):
     return run_both(
         ["landcover", "download", "--product", source, *cli_args],
-        lambda out: download_landcover(product=source, output_dir=out, **api_kwargs),
+        lambda out: download_landcover(product=source, root=out, **api_kwargs),
         tmp_path,
     )
 

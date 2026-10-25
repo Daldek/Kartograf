@@ -8,7 +8,7 @@ The CLI only translates: ``library_arguments`` turns the flags of a group into
 library arguments (the same conversion for every data command, from the
 declaration of the command in the catalog), ``cmd_collection_download`` runs the
 plan file cycle and prints one status line per file (its path below
-``--output``), the failures and the data notices. Every data decision is in
+``--root``), the failures and the data notices. Every data decision is in
 ``kartograf.download.collections``.
 """
 
@@ -52,7 +52,7 @@ def cmd_collection_download(args: argparse.Namespace, group: str) -> int:
 
 
 def _collection_download(args: argparse.Namespace) -> int:
-    arguments = {**library_arguments(args), "output_dir": args.output}
+    arguments = {**library_arguments(args), "root": args.root}
     on_notice = notice_printer(args)
     if args.check_updates:
         return _report_plan(args, check_collection(**arguments, on_notice=on_notice))
@@ -84,7 +84,7 @@ def _print_collection(
     It returns the exit code.
     """
     _end_progress(on_progress)
-    output = Path(args.output)
+    output = Path(args.root)
     if not args.quiet:
         for item in report.files:
             print(_status_line(_unit_of(item.file.path, output), item.file, update))

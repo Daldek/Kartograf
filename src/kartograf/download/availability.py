@@ -263,7 +263,7 @@ class AvailabilityCombination:
     full sheets (``sheets_full``: a full record; ``sheets_partial``: only
     partial records). ``uncovered_m2``: land outside every sheet of the
     combination. ``download_hint``: commands to paste after ``kartograf ``
-    or ``kartograf project add NAME `` (without ``--output``).
+    or ``kartograf project add NAME `` (without ``--root``).
     ``sheets_missing`` and ``size_bytes`` are CZ fields (PL: empty/``None``).
 
     ``full_m2`` (KD-2): land in the frames of the full records, measured as
@@ -2045,7 +2045,7 @@ def _needs_full_sheet(rows: list[_Entry]) -> bool:
 def _cz_hint(request: _Request, file: _CzFile, sheets: list[str]) -> tuple[str, ...]:
     """Return the commands downloading the files ``sheets`` of a CZ combination.
 
-    (after ``kartograf ``, without ``--output``): a raster - one command per sheet
+    (after ``kartograf ``, without ``--root``): a raster - one command per sheet
     (``--sheet``, label, native height system); LAZ - one command for the area of
     the request (``--country cz``, ``--model``), a sheet request - one per sheet (a
     code reaches only its own sheet system).

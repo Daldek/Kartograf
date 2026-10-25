@@ -46,7 +46,7 @@ TASK_NAME_RULE = (
     "male litery, cyfry, '-' i '_', na poczatku litera albo cyfra, do 64 znakow"
 )
 _SHA256 = re.compile(r"[0-9a-f]{64}")
-_TOP_KEYS = ("schema", "output_dir", "tasks")
+_TOP_KEYS = ("schema", "root", "tasks")
 _TASK_KEYS = ("name", "command", "options", "pinned_at", "kartograf_version", "files")
 _FILE_KEYS = ("role", "unit", "path", "version", "label", "sha256", "size_bytes")
 _ROLES = ("output", "raw", "input")
@@ -133,7 +133,7 @@ def _load(directory: Path) -> dict[str, Any]:
     except FileNotFoundError:
         raise ValidationError(
             f"brak projektu w {directory} ({MANIFEST_NAME}); utworz: kartograf "
-            "project init --output KATALOG albo wskaz --project KATALOG"
+            "project init --root KATALOG albo wskaz --project KATALOG"
         ) from None
     except (OSError, UnicodeDecodeError) as e:
         raise ValidationError(f"{MANIFEST_NAME}: nie mozna odczytac {path}: {e}") from e
@@ -188,8 +188,8 @@ def _validate(doc: object) -> None:
             f"{PROJECT_SCHEMA}); zaktualizuj Kartografa",
         )
     _keys(doc, _TOP_KEYS, (), "")
-    if not isinstance(doc["output_dir"], str) or not doc["output_dir"]:
-        _fail("output_dir", "oczekiwano niepustej sciezki magazynu")
+    if not isinstance(doc["root"], str) or not doc["root"]:
+        _fail("root", "oczekiwano niepustej sciezki magazynu")
     tasks = doc["tasks"]
     if not isinstance(tasks, list):
         _fail("tasks", "oczekiwano listy zadan")
@@ -322,7 +322,7 @@ def pin_problem(pin: PinnedFile) -> str | None:
 def _project(directory: Path, doc: dict[str, Any]) -> Project:
     return Project(
         directory=directory,
-        output_dir=resolve_path(doc["output_dir"], directory),
+        root=resolve_path(doc["root"], directory),
         tasks=tuple(task_from_json(task) for task in doc["tasks"]),
     )
 
@@ -456,13 +456,13 @@ def _written(doc: dict[str, Any]) -> dict[str, Any]:
     """Return the written form: every task through ``task_to_json``."""
     return {
         "schema": PROJECT_SCHEMA,
-        "output_dir": doc["output_dir"],
+        "root": doc["root"],
         "tasks": [task_to_json(task_from_json(task)) for task in doc["tasks"]],
     }
 
 
-def create_manifest(project_dir: str | Path, output_dir: str) -> None:
-    """Write a new manifest with ``output_dir`` and no tasks (``init``).
+def create_manifest(project_dir: str | Path, root: str) -> None:
+    """Write a new manifest with ``root`` and no tasks (``init``).
 
     Raises
     ------
@@ -475,9 +475,7 @@ def create_manifest(project_dir: str | Path, output_dir: str) -> None:
         target = directory / MANIFEST_NAME
         if target.exists():
             raise ValidationError(f"projekt juz istnieje: {target}")
-        _write(
-            directory, {"schema": PROJECT_SCHEMA, "output_dir": output_dir, "tasks": []}
-        )
+        _write(directory, {"schema": PROJECT_SCHEMA, "root": root, "tasks": []})
 
 
 def commit_tasks(

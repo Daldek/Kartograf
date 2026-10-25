@@ -95,47 +95,47 @@ VALIDATION = {
     "elevation download": (
         PL_SHEET,
         {"product": "nmt", "sheet": G, "resolution": "1m"},
-        lambda out, o: download_data(output_dir=out, cache=False, **o),
+        lambda out, o: download_data(root=out, cache=False, **o),
     ),
     "imagery download": (
         {"product": "orto", "sheet": G},
         {"product": "orto", "sheet": G, "year": 2024, "min_year": 2020},
-        lambda out, o: download_data(output_dir=out, cache=False, **o),
+        lambda out, o: download_data(root=out, cache=False, **o),
     ),
     "landcover download": (
         {"product": "bdot10k", "teryt": "1465"},
         {"product": "corine", "bbox": _BBOX},
-        lambda out, o: download_landcover(output_dir=out, cache=False, **o),
+        lambda out, o: download_landcover(root=out, cache=False, **o),
     ),
     "soil download": (
         {"bbox": _BBOX, **CLAY},
         {"bbox": _BBOX, "property": "clay", "depth": "0-5cm"},
-        lambda out, o: download_soil(output_dir=out, cache=False, **o),
+        lambda out, o: download_soil(root=out, cache=False, **o),
     ),
     "soil hsg": (
         {"sheet": HSG_SHEET, "depth": "0-5cm"},
         {"sheet": HSG_SHEET},
-        lambda out, o: calculate_hsg(output_dir=out, cache=False, **o),
+        lambda out, o: calculate_hsg(root=out, cache=False, **o),
     ),
     "boundaries download": (
         {"product": "admin", "teryt": "12"},
         {"product": "admin", "teryt": "1261"},
-        lambda out, o: download_collection(output_dir=out, cache=False, **o),
+        lambda out, o: download_collection(root=out, cache=False, **o),
     ),
     "cadastre download": (
         {"product": "map", "country": "pl", "bbox": _BBOX},
         {"product": "map", "bbox": _BBOX},
-        lambda out, o: download_collection(output_dir=out, cache=False, **o),
+        lambda out, o: download_collection(root=out, cache=False, **o),
     ),
     "models3d download": (
         {"product": "buildings", "teryt": "1261", "lod": 2},
         {"product": "buildings", "teryt": "1261", "lod": 1},
-        lambda out, o: download_collection(output_dir=out, cache=False, **o),
+        lambda out, o: download_collection(root=out, cache=False, **o),
     ),
     "hydro download": (
         {"product": "network", "country": "cz", "whole_country": True},
         {"product": "network", "country": "pl", "whole_country": True},
-        lambda out, o: download_collection(output_dir=out, cache=False, **o),
+        lambda out, o: download_collection(root=out, cache=False, **o),
     ),
 }
 

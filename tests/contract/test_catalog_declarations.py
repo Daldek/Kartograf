@@ -86,13 +86,13 @@ def test_param_derives_flag_and_argument_from_name():
 def test_flag_none_is_api_only_and_argument_none_is_cli_only():
     api_only = Param("update", "str", flag=None)
     cli_only = Param("quiet", "flag", argument=None)
-    renamed = Param("output_dir", "path", flag="--output", short="-o", dest="output")
+    renamed = Param("root", "path", flag="--root", short="-o", dest="output")
 
     assert (api_only.cli_flag, api_only.api_argument) == (None, "update")
     assert (cli_only.cli_flag, cli_only.api_argument) == ("--quiet", None)
     assert (renamed.cli_flag, renamed.api_argument, renamed.cli_dest) == (
-        "--output",
-        "output_dir",
+        "--root",
+        "root",
         "output",
     )
 
@@ -420,8 +420,8 @@ def test_the_store_reads_require_what_the_spec_requires():
     }
 
     assert required == {
-        "store overview": {"output_dir"},
-        "store entries": {"output_dir", "segment", "limit"},
+        "store overview": {"root"},
+        "store entries": {"root", "segment", "limit"},
         "store sidecar": {"path"},
     }
 
@@ -732,15 +732,13 @@ def test_the_options_that_write_are_roots_or_outputs():
     }
 
     assert {name for (_, name) in roles} == {
-        "output_dir",
+        "root",
         "geometry",
         "project_dir",
         "path",
         "inject",
     }
-    assert {role for (_, name), role in roles.items() if name == "output_dir"} == {
-        "root"
-    }
+    assert {role for (_, name), role in roles.items() if name == "root"} == {"root"}
     assert roles["project init", "project_dir"] == "output"
     assert roles["project status", "project_dir"] == "input"
 
@@ -840,7 +838,7 @@ def test_arguments_match_the_signature_of_the_function(command):
         wanted = {
             argument: param
             for argument, param in arguments.items()
-            if name == command.function or param.task or argument == "output_dir"
+            if name == command.function or param.task or argument == "root"
         }
         for argument, param in wanted.items():
             assert argument in parameters, f"{name} has no argument {argument}"

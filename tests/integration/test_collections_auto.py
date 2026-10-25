@@ -88,7 +88,7 @@ def test_pl_only_area_downloads_pl_when_cz_has_no_cadastral_area(tmp_path, route
     ``no_coverage`` and the PL part was never asked."""
     _no_cadastral_area(router)
 
-    report = download_collection(**CADASTRAL_MAP, bbox=PL_ONLY, output_dir=tmp_path)
+    report = download_collection(**CADASTRAL_MAP, bbox=PL_ONLY, root=tmp_path)
 
     assert report.ok
     (item,) = report.files
@@ -109,7 +109,7 @@ def test_pl_only_area_downloads_pl_when_cz_has_no_cadastral_area(tmp_path, route
 def test_pl_only_area_check_plans_pl_and_warns_about_cz(tmp_path, router):
     _no_cadastral_area(router)
 
-    plan = check_collection(**CADASTRAL_MAP, bbox=PL_ONLY, output_dir=tmp_path)
+    plan = check_collection(**CADASTRAL_MAP, bbox=PL_ONLY, root=tmp_path)
 
     assert plan.ok
     assert {item.segment for item in plan.items} == {"cadastre/pl_egib"}
@@ -129,7 +129,7 @@ def test_cz_only_area_keeps_cz_when_the_pl_part_fails(tmp_path, monkeypatch):
     for code in AREA_KU:
         serve_package(router, f"cz_km_shp_{code}", [f"{code}/{m}" for m in SHP_MEMBERS])
 
-    report = download_collection(**CADASTRAL_MAP, bbox=CZ_ONLY, output_dir=tmp_path)
+    report = download_collection(**CADASTRAL_MAP, bbox=CZ_ONLY, root=tmp_path)
 
     assert report.ok
     assert [f.unit for f in report.files] == AREA_KU
@@ -145,7 +145,7 @@ def test_every_country_failing_is_a_failure(tmp_path, monkeypatch):
     _use_egib(monkeypatch, router, lambda url, params: _answer(400))
     _no_cadastral_area(router)
 
-    report = download_collection(**CADASTRAL_MAP, bbox=PL_ONLY, output_dir=tmp_path)
+    report = download_collection(**CADASTRAL_MAP, bbox=PL_ONLY, root=tmp_path)
 
     assert not report.ok and report.files == ()
     assert {(f.country, f.kind) for f in report.failed} == {
@@ -162,7 +162,7 @@ def test_explicit_country_without_units_stays_no_coverage(tmp_path, router):
 
     with pytest.raises(NoCoverageError, match="katastralniho uzemi"):
         download_collection(
-            **{**CADASTRAL_MAP, "country": "cz"}, bbox=CZ_ONLY, output_dir=tmp_path
+            **{**CADASTRAL_MAP, "country": "cz"}, bbox=CZ_ONLY, root=tmp_path
         )
 
 
@@ -182,7 +182,7 @@ def test_no_units_in_any_country_is_one_no_coverage_error(tmp_path, router):
             scale="1:10000",
             format="TIFF",
             sheet_system="sjtsk",
-            output_dir=tmp_path,
+            root=tmp_path,
             cache=False,
         )
 

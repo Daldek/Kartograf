@@ -6,7 +6,7 @@ WCS path (CLI ``--cutout`` and ``download_pl_cutout``, ADR-035/038):
 WCS on the 1 m sheet grid (chunks, ADR-034), the PL land mask from PRG (nodata
 -9999 outside ``A00 - W02 - W03``), then for EPSG:2180 the file as is, for
 another CRS a local warp with a FORCED pinned operation (ADR-024/027). The
-standard path ``<output_dir>/<segment>/bbox/<coords>.tif`` links to a version
+standard path ``<root>/<segment>/bbox/<coords>.tif`` links to a version
 in ``<segment>/versions/bbox/``. A local version needs no PRG or WCS request.
 
 Public pair (Z2): ``download_pl_cutout`` / ``check_pl_cutout`` with the same
@@ -21,7 +21,7 @@ Example::
     result = download_pl_cutout(
         bbox=BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
         horizontal_crs="EPSG:5514",
-        output_dir="./data", vertical_crs="EVRF2007", product="nmt",
+        root="./data", vertical_crs="EVRF2007", product="nmt",
     )
     print(result.file.path)
 """
@@ -113,14 +113,14 @@ class PlCutout:
 
     ``horizontal_crs`` is EPSG:2180 (native PL), EPSG:5514 or EPSG:3045
     (reprojected). ``vertical_crs`` is EVRF2007 (current heights) or KRON86
-    (legacy heights). ``output_dir`` is the explicit output base directory;
+    (legacy heights). ``root`` is the explicit output base directory;
     ``product`` is "nmt" (terrain heights) or "nmpt" (surface heights).
     Remaining fields contain the prepared extent, transform and result path.
     """
 
     horizontal_crs: str
     vertical_crs: str
-    output_dir: Path
+    root: Path
     bbox_2180: BBox
     bbox_source_2180: BBox
     bbox_target: BBox
@@ -170,7 +170,7 @@ def _prepare_pl_cutout(
     bbox: BBox,
     horizontal_crs: str,
     *,
-    output_dir: str | Path,
+    root: str | Path,
     vertical_crs: str,
     product: str,
 ) -> PlCutout:
@@ -178,7 +178,7 @@ def _prepare_pl_cutout(
 
     ``bbox`` is the requested extent in a supported CRS. ``horizontal_crs`` is
     "EPSG:2180" (native), "EPSG:5514" or "EPSG:3045" (pinned reprojection).
-    ``output_dir`` selects the result directory. ``vertical_crs`` is
+    ``root`` selects the result directory. ``vertical_crs`` is
     "EVRF2007" (current heights) or "KRON86" (legacy heights).
     ``product`` is "nmt" (terrain model) or "nmpt" (surface model);
     both are available only at 1m for WCS cutouts.
@@ -252,12 +252,12 @@ def _prepare_pl_cutout(
     return PlCutout(
         horizontal_crs=horizontal_crs,
         vertical_crs=vertical_crs,
-        output_dir=Path(output_dir),
+        root=Path(root),
         bbox_2180=bbox_2180,
         bbox_source_2180=bbox_source_2180,
         bbox_target=bbox_target,
         pinned=pinned,
-        target_path=bbox_cutout_path(output_dir, subdir, bbox_target, ".tif"),
+        target_path=bbox_cutout_path(root, subdir, bbox_target, ".tif"),
         product=product,
     )
 
@@ -406,7 +406,7 @@ def _pl_cutout_slot(cutout: PlCutout) -> FileSlot:
     subdir = get_source(
         _cutout_descriptor_key(cutout.product, cutout.vertical_crs)
     ).resolve_subdir(system="1992", vertical_crs=cutout.vertical_crs)
-    return bbox_slot(cutout.output_dir, subdir, cutout.bbox_target, ".tif")
+    return bbox_slot(cutout.root, subdir, cutout.bbox_target, ".tif")
 
 
 def _check_prepared(cutout: PlCutout) -> UpdatePlan:
@@ -421,14 +421,14 @@ def _check_prepared(cutout: PlCutout) -> UpdatePlan:
             TransportKind.WCS,
         ),
     )
-    return new_plan(store_id(cutout.output_dir), (item,))
+    return new_plan(store_id(cutout.root), (item,))
 
 
 def check_pl_cutout(
     *,
     bbox: BBox,
     horizontal_crs: str,
-    output_dir: str | Path,
+    root: str | Path,
     vertical_crs: str,
     product: str,
     cache: MetadataCache | bool = True,
@@ -447,7 +447,7 @@ def check_pl_cutout(
     cutout = _prepare_pl_cutout(
         bbox,
         horizontal_crs,
-        output_dir=output_dir,
+        root=root,
         vertical_crs=vertical_crs,
         product=product,
     )
@@ -508,7 +508,7 @@ def _run_pl_wcs_cutout(
     )
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
-        require_store(plan, store_id(cutout.output_dir))
+        require_store(plan, store_id(cutout.root))
         current = inspect_version(
             slot, track="pl_cutout", unit=slot.std.stem, signal=signal
         )
@@ -626,7 +626,7 @@ def download_pl_cutout(
     *,
     bbox: BBox,
     horizontal_crs: str,
-    output_dir: str | Path,
+    root: str | Path,
     vertical_crs: str,
     product: str,
     update: UpdateMode | None = None,
@@ -647,7 +647,7 @@ def download_pl_cutout(
     pass its envelope as ``bbox`` (e.g. via
     ``get_overall_bbox(path, target_crs="EPSG:2180")``).
 
-    ``output_dir`` selects the base directory; ``horizontal_crs`` is
+    ``root`` selects the base directory; ``horizontal_crs`` is
     "EPSG:2180", "EPSG:5514" or "EPSG:3045"; ``vertical_crs`` is
     "EVRF2007" (current heights) or "KRON86" (legacy heights), and
     ``product`` is "nmt" (terrain) or "nmpt" (surface). The only WCS cutout
@@ -682,7 +682,7 @@ def download_pl_cutout(
     cutout = _prepare_pl_cutout(
         bbox,
         horizontal_crs,
-        output_dir=output_dir,
+        root=root,
         vertical_crs=vertical_crs,
         product=product,
     )

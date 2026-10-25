@@ -108,14 +108,14 @@ class TestDownloadManagerIntegration:
     def test_manager_uses_provider_and_storage(self, test_data_dir):
         """Test that manager correctly coordinates provider and storage."""
         manager = DownloadManager(
-            output_dir=test_data_dir,
+            root=test_data_dir,
             provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
         )
 
         # Verify components are properly initialized
         assert isinstance(manager.provider, GugikProvider)
         assert isinstance(manager.storage, FileStorage)
-        assert manager.storage.output_dir == test_data_dir
+        assert manager.storage.root == test_data_dir
 
     def test_manager_skip_existing(self, test_data_dir, mock_tif_data):
         """Test that manager uses the local version without the provider."""
@@ -131,7 +131,7 @@ class TestDownloadManagerIntegration:
 
         mock_provider.download = Mock(side_effect=mock_download)
         manager = DownloadManager(
-            output_dir=test_data_dir,
+            root=test_data_dir,
             provider=mock_provider,
         )
         manager.download_sheet("N-34-130-D-d-2-4")
@@ -146,7 +146,7 @@ class TestDownloadManagerIntegration:
     def test_manager_hierarchy_counting(self, test_data_dir):
         """Test hierarchy sheet counting."""
         manager = DownloadManager(
-            output_dir=test_data_dir,
+            root=test_data_dir,
             provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
         )
 
@@ -169,7 +169,7 @@ class TestDownloadManagerIntegration:
             path.write_bytes(mock_tif_data)
 
         manager = DownloadManager(
-            output_dir=test_data_dir,
+            root=test_data_dir,
             provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
         )
         missing = manager.get_missing_sheets("N-34-130-D-d-2", "1:10000")
@@ -240,7 +240,7 @@ class TestProgressCallback:
 
         mock_provider.download = mock_download
 
-        manager = DownloadManager(output_dir=test_data_dir, provider=mock_provider)
+        manager = DownloadManager(root=test_data_dir, provider=mock_provider)
         # Pre-download one sheet to trigger skip
         manager.download_sheets(["N-34-130-D-d-2-1"])
 

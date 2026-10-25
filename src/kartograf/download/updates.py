@@ -13,7 +13,7 @@ def _where(manager: DownloadManager, sheet: str) -> tuple[str, str]:
     segment_root = storage.get_versions_base(sheet).parent
     std = storage.get_path(sheet, manager.provider.default_extension)
     return (
-        segment_root.relative_to(storage.output_dir).as_posix(),
+        segment_root.relative_to(storage.root).as_posix(),
         std.parent.relative_to(segment_root).as_posix(),
     )
 

@@ -114,7 +114,7 @@ class FileSlot:
     already stored there becomes a ``relabeled`` hardlink, not a copy.
     """
 
-    output_dir: Path
+    root: Path
     std: Path
     versions_base: Path
     versions_root: Path
@@ -129,7 +129,7 @@ class FileSlot:
     @property
     def segment(self) -> str:
         """Segment relative to the output directory (plan position)."""
-        return self.versions_base.parent.relative_to(self.output_dir).as_posix()
+        return self.versions_base.parent.relative_to(self.root).as_posix()
 
     @property
     def hierarchy(self) -> str:
@@ -201,7 +201,7 @@ def new_staging(slot: FileSlot) -> Path:
 def discard_staging(staged: Path, slot: FileSlot) -> None:
     """Remove a staging directory and the empty ``.incoming`` tree above it."""
     shutil.rmtree(staged.parent, ignore_errors=True)
-    _prune_empty(staged.parent.parent, slot.output_dir)
+    _prune_empty(staged.parent.parent, slot.root)
 
 
 def _signal_label(signal: dict[str, Any]) -> str:

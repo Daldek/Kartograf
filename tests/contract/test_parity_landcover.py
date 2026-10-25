@@ -85,9 +85,9 @@ def _landcover(tmp_path, source, cli_args, **api_kwargs):
     return run_both(
         [*_COMMAND[source], *cli_args],
         lambda out: (
-            download_soil(output_dir=out, **api_kwargs)
+            download_soil(root=out, **api_kwargs)
             if source == "soilgrids"
-            else download_landcover(product=source, output_dir=out, **api_kwargs)
+            else download_landcover(product=source, root=out, **api_kwargs)
         ),
         tmp_path,
     )
@@ -251,7 +251,7 @@ def _hsg(tmp_path, cli_args, **api_kwargs):
     with _providers(soilgrids=RasterSoilGrids):
         return run_both(
             ["soil", "hsg", "--depth", "0-5cm", "-q", *cli_args],
-            lambda out: calculate_hsg(output_dir=out, depth="0-5cm", **api_kwargs),
+            lambda out: calculate_hsg(root=out, depth="0-5cm", **api_kwargs),
             tmp_path,
         )
 
@@ -279,7 +279,7 @@ def test_check_plan_upgrade(tmp_path):
     with soil:
         checked = run_both(
             ["soil", "download", *args, "--check-updates", "--plan", str(plan_file)],
-            lambda out: check_soil(output_dir=out, bbox=BBOX, **CLAY),
+            lambda out: check_soil(root=out, bbox=BBOX, **CLAY),
             tmp_path,
         )
         api_plan = checked.api_result
@@ -288,7 +288,7 @@ def test_check_plan_upgrade(tmp_path):
         upgraded = run_both(
             ["soil", "download", *args, "--upgrade", "--plan", str(plan_file)],
             lambda out: download_soil(
-                output_dir=out, bbox=BBOX, update="upgrade", plan=api_plan, **CLAY
+                root=out, bbox=BBOX, update="upgrade", plan=api_plan, **CLAY
             ),
             tmp_path,
         )

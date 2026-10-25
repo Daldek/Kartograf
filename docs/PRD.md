@@ -129,7 +129,7 @@ area has.
   years, combinations of year × sheet system × resolution × vertical CRS ×
   format (also NMPT and LAZ tiles) with the number of full/incomplete sheets
   and completeness on PRG land (1 m grid), a download command hint
-  (without `--output`, also for `project add`), `--details`,
+  (without `--root`, also for `project add`), `--details`,
   `--json` (`kartograf-availability/1`; fields `full_m2`, `sheet_records`
   and `campaign_coverage`, ADR-047); without downloading data, metadata
   cache (`--force`). USAGE 1.7.
@@ -167,7 +167,7 @@ sheets = find_sheets_for_geometry(Path("area.shp"), "1:10000", sheet_system="199
 # Download by sheet code (ASC) — file in data/nmt/pl_1992_1m_evrf2007/...
 # = kartograf elevation download --product nmt --sheet ... (ADR-037)
 from kartograf import download_data
-report = download_data(product="nmt", output_dir="./data", sheet="N-34-130-D-d-2-4",
+report = download_data(product="nmt", root="./data", sheet="N-34-130-D-d-2-4",
                        resolution="1m", vertical_crs="EVRF2007")
 file = report.files[0].file  # VersionedFile: path, status, label, newer, unverified
 # lower level: DownloadManager(...).download_sheet(...) -> DownloadResult
@@ -200,23 +200,23 @@ print(complete[0].download_hint if complete else availability.to_json())
 ```bash
 kartograf sheet parse N-34-130-D-d-2-4
 kartograf sheet parse N-34-130-D --hierarchy
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --sheet N-34-130-D --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # coarser sheet code -> 1:10000 sheets (without --scale)
-kartograf elevation download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # PL-2000: GUGiK sheet scale (USAGE 1.6)
-kartograf elevation download --bbox 771000,509000,772000,510000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf elevation download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf elevation download --sheet N-34-130-D --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --sheet N-33-58-A-c-1-3 --product nmt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TBD --resolution 25m --vertical-crs KRON86 --year 2010 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --sheet N-34-130-D --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data # coarser sheet code -> 1:10000 sheets (without --scale)
+kartograf elevation download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data # PL-2000: GUGiK sheet scale (USAGE 1.6)
+kartograf elevation download --bbox 771000,509000,772000,510000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data
+kartograf elevation download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data
+kartograf elevation download --sheet N-34-130-D --resolution 5m --product nmt --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --sheet N-33-58-A-c-1-3 --product nmt --resolution 0.5m --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TBD --resolution 25m --vertical-crs KRON86 --year 2010 --root ./data
 kartograf elevation list-sources
 kartograf elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
-kartograf imagery download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 -o ./data
-kartograf elevation download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf elevation download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf elevation download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --resolution 1m --vertical-crs EVRF2007 --root ./data
+kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto --root ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 --root ./data
+kartograf imagery download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 --root ./data
+kartograf elevation download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data
+kartograf elevation download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data
+kartograf elevation download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --root ./data
 ```
 
 ---
@@ -254,9 +254,9 @@ provider.download_bbox(bbox, Path("./area.tif"))
 
 #### CLI Commands
 ```bash
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --sheet M-34-64-D-d-2-1 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --bbox 771000,509000,772000,510000 --product nmpt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --resolution 1m --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --sheet M-34-64-D-d-2-1 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --bbox 771000,509000,772000,510000 --product nmpt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data
 kartograf elevation availability --product nmpt --sheet M-34-64-D-d-2-1
 ```
 
@@ -289,12 +289,12 @@ provider.download_bbox(bbox, Path("./area.tif"), format="GTiff")
 
 #### CLI Commands
 ```bash
-kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
-kartograf imagery download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 -o ./data
+kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto --root ./data
+kartograf imagery download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 --root ./data
 # WCS cutout in the store (0.8.0, ADR-042 D14): variant and pixel explicit, EPSG:2180 only
-kartograf imagery download --bbox 566000,243000,566500,243500 --product orto --country pl --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m -o ./data
+kartograf imagery download --bbox 566000,243000,566500,243500 --product orto --country pl --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m --root ./data
 # CZ orthophoto (0.8.0, ADR-042 D13): SM5 sheet = JPEG + 3 JGW files, current vintage
-kartograf imagery download --sheet CTES96 --product orto -o ./data
+kartograf imagery download --sheet CTES96 --product orto --root ./data
 ```
 
 ---
@@ -314,7 +314,7 @@ from kartograf import BBox, GugikLazProvider, download_laz_area
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
 
 # Selecting and downloading tiles with sidecars (ADR-029) — a single call
-result = download_laz_area(bbox=bbox, output_dir="./data", vertical_crs="EVRF2007", min_density=12)
+result = download_laz_area(bbox=bbox, root="./data", vertical_crs="EVRF2007", min_density=12)
 result.files                        # VersionedFile per tile (status new/local/...), hard links in data/laz/pl_<crs>_<vcrs>/
 result.superseded                   # SupersededLazTile — older tiles covered by newer ones
 result.failed                       # LazTileFailure — failures of individual tiles
@@ -326,11 +326,11 @@ selection = provider.select_tiles(bbox, year=2024)  # LazTileSelection(tiles, su
 
 #### CLI Commands
 ```bash
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12 --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86 --country pl -o ./data
-kartograf elevation download --bbox 530000,382000,533000,386000 --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --geometry area.shp --product laz --country pl --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12 --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86 --country pl --root ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --product laz --all-campaigns --country pl --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --geometry area.shp --product laz --country pl --vertical-crs EVRF2007 --root ./data
 ```
 
 #### Notes
@@ -371,13 +371,13 @@ also works on network shares) or SHP (`.zip` archive).
 from kartograf import download_landcover
 
 # Download by TERYT -> landcover/pl_bdot10k_gpkg/teryt/1465.gpkg
-report = download_landcover(product="bdot10k", output_dir="./data", teryt="1465")
+report = download_landcover(product="bdot10k", root="./data", teryt="1465")
 for item in report.files:
     print(item.unit, item.file.path, item.file.status)
 print(report.ok, report.failed)  # failures of individual counties in failed
 
 # Every county in the area (sheet=, bbox= in any CRS, geometry=)
-download_landcover(product="bdot10k", output_dir="./data", sheet="N-34-130-D",
+download_landcover(product="bdot10k", root="./data", sheet="N-34-130-D",
                    layers=["PTWP", "SWRS"], workers=4)
 ```
 
@@ -415,8 +415,8 @@ cover and hydrography classes:
 
 #### CLI Commands
 ```bash
-kartograf landcover download --product bdot10k --teryt 1465 -o ./data
-kartograf landcover download --product bdot10k --sheet N-34-130-D -o ./data
+kartograf landcover download --product bdot10k --teryt 1465 --root ./data
+kartograf landcover download --product bdot10k --sheet N-34-130-D --root ./data
 kartograf landcover list-layers --product bdot10k
 ```
 
@@ -437,7 +437,7 @@ from kartograf import download_landcover
 # CLMS (CLMS_CREDENTIALS) -> landcover/eu_corine_2018/.../N-34-130-D.tif,
 # version with a release label (e.g. V2020_20u1); without credentials a preview
 # landcover/eu_corine_2018_preview/.../N-34-130-D.png (label = date)
-report = download_landcover(product="corine", output_dir="./data",
+report = download_landcover(product="corine", root="./data",
                             sheet="N-34-130-D", year=2018)
 ```
 
@@ -466,7 +466,7 @@ nor token. Without credentials — a PNG preview via WMS (sidecar
 
 #### CLI Commands
 ```bash
-kartograf landcover download --product corine --year 2018 --sheet N-34-130-D -o ./data
+kartograf landcover download --product corine --year 2018 --sheet N-34-130-D --root ./data
 kartograf landcover list-layers --product corine
 ```
 
@@ -488,14 +488,14 @@ from kartograf import download_soil
 # -> soil/global_soilgrids_soc_0-5cm_mean/N-34/130/D/N-34-130-D.tif,
 #    wersja z etykieta wydania SoilGrids (np. 2.0)
 report = download_soil(
-    output_dir="./data", sheet="N-34-130-D",
+    root="./data", sheet="N-34-130-D",
     property="soc", depth="0-5cm", stat="mean",
 )
 print(report.files[0].file.path, report.failed, report.ok)
 
 # Downloading clay content
 download_soil(
-    output_dir="./data", sheet="N-34-130-D",
+    root="./data", sheet="N-34-130-D",
     property="clay", depth="15-30cm", stat="mean",
 )
 ```
@@ -528,8 +528,8 @@ mean, Q0.05, Q0.5, Q0.95, uncertainty
 
 #### CLI Commands
 ```bash
-kartograf soil download --sheet N-34-130-D --property soc -o ./data --depth 0-5cm --stat mean
-kartograf soil download --sheet N-34-130-D --property clay --depth 15-30cm -o ./data --stat mean
+kartograf soil download --sheet N-34-130-D --property soc --root ./data --depth 0-5cm --stat mean
+kartograf soil download --sheet N-34-130-D --property clay --depth 15-30cm --root ./data --stat mean
 kartograf soil list-layers
 ```
 
@@ -551,7 +551,7 @@ store, the result is a version in `hsg/global_soilgrids_<depth>_<stat>/`
 from kartograf import calculate_hsg, hsg_statistics
 
 # Calculate HSG for a sheet code from stored or downloaded SoilGrids versions
-report = calculate_hsg(output_dir="./data", sheet="N-34-130-D", depth="0-5cm")
+report = calculate_hsg(root="./data", sheet="N-34-130-D", depth="0-5cm")
 if report.ok and report.files:
     stats = hsg_statistics(report.files[0].file.path)
     for group, data in stats.items():
@@ -582,11 +582,11 @@ paths and sha256 of the inputs).
 
 #### CLI Commands
 ```bash
-kartograf soil hsg --sheet N-34-130-D -o ./data --depth 0-5cm
-kartograf soil hsg --sheet N-34-130-D --summary -o ./data --depth 0-5cm
-kartograf soil hsg --bbox 450000,550000,460000,560000 -o ./data --depth 0-5cm
-kartograf soil hsg --geometry area.gpkg --layer catchments -o ./data --depth 0-5cm
-kartograf soil hsg --sheet N-34-130-D -o ./data --depth 0-5cm --check-updates --plan plan.json
+kartograf soil hsg --sheet N-34-130-D --root ./data --depth 0-5cm
+kartograf soil hsg --sheet N-34-130-D --summary --root ./data --depth 0-5cm
+kartograf soil hsg --bbox 450000,550000,460000,560000 --root ./data --depth 0-5cm
+kartograf soil hsg --geometry area.gpkg --layer catchments --root ./data --depth 0-5cm
+kartograf soil hsg --sheet N-34-130-D --root ./data --depth 0-5cm --check-updates --plan plan.json
 ```
 
 ---
@@ -665,21 +665,21 @@ provider_evrf.download_bbox(bbox, Path("./area.tif"))      # exportImage cutout
 dmp = create_cz_raster_provider("nmpt", "0.5m", vertical_crs="EVRF2007")  # DMP OK
 dmp.download("760_5518", Path("./760_5518.tif"))           # ETRS89 file 1:1
 
-clouds = download_cz_laz(model="dmr5g", vertical_crs="Bpv", output_dir="./data",
+clouds = download_cz_laz(model="dmr5g", vertical_crs="Bpv", root="./data",
                          sheet="CTES96")                   # CZ LAZ in the store
 ```
 
 #### CLI Commands
 ```bash
-kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data # DMR 5G (TM33), 2m, Bpv
-kartograf elevation download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (SM5, 5m only), country from sheet code
-kartograf elevation download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m -o ./data
-kartograf elevation download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data
-kartograf elevation download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data
-kartograf elevation download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 5m --product nmt --vertical-crs Bpv -o ./data
-kartograf elevation download --sheet CTES96 --product nmpt --vertical-crs Bpv -o ./data # DMP OK (SM5, 0.5m only)
-kartograf elevation download --sheet 760_5518 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 -o ./data # DMP OK, ETRS89 file
-kartograf elevation download --sheet CTES96 --product laz --model dmr5g --vertical-crs Bpv -o ./data # LAZ CZ
+kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv --root ./data # DMR 5G (TM33), 2m, Bpv
+kartograf elevation download --sheet CTES96 --product nmt --vertical-crs Bpv --root ./data # DMR 4G (SM5, 5m only), country from sheet code
+kartograf elevation download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m --root ./data
+kartograf elevation download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv --root ./data
+kartograf elevation download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv --root ./data
+kartograf elevation download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 5m --product nmt --vertical-crs Bpv --root ./data
+kartograf elevation download --sheet CTES96 --product nmpt --vertical-crs Bpv --root ./data # DMP OK (SM5, 0.5m only)
+kartograf elevation download --sheet 760_5518 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 --root ./data # DMP OK, ETRS89 file
+kartograf elevation download --sheet CTES96 --product laz --model dmr5g --vertical-crs Bpv --root ./data # LAZ CZ
 kartograf elevation availability --product nmpt --country cz "--bbox=-447000,-1114000,-446600,-1113600" --bbox-crs EPSG:5514
 ```
 
@@ -724,7 +724,7 @@ under `auto` PL and CZ are two files with a shared `extra.parent_request`.
 from kartograf import BBox, check_pl_cutout, download_pl_cutout
 
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
-selection = dict(horizontal_crs="EPSG:5514", output_dir="./data",
+selection = dict(horizontal_crs="EPSG:5514", root="./data",
                  vertical_crs="EVRF2007", product="nmpt")
 result = download_pl_cutout(bbox=bbox, **selection)
 result.file.path, result.masked_pixels, result.zero_pixels, result.all_nodata
@@ -733,8 +733,8 @@ plan = check_pl_cutout(bbox=bbox, **selection)   # without downloading
 
 #### CLI Commands
 ```bash
-kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --cutout --horizontal-crs EPSG:5514 --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmpt --cutout --horizontal-crs EPSG:2180 --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --cutout --horizontal-crs EPSG:5514 --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmpt --cutout --horizontal-crs EPSG:2180 --vertical-crs EVRF2007 --root ./data
 ```
 
 ---
@@ -803,10 +803,10 @@ result.without_full                # sheets without a full flight in scope
 
 #### CLI Commands
 ```bash
-kartograf elevation download --sheet N-34-130-D-d-2-4 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --sheet N-34-130-D-d-2-4 --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data
+kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data
 ```
 
 ---
@@ -873,19 +873,19 @@ from kartograf import BBox, download_collection
 # = kartograf boundaries download ... (ADR-037)
 report = download_collection(
     product="admin",
-    output_dir="./data",
+    root="./data",
     country="pl",
     bbox=BBox(550000, 220000, 590000, 270000, "EPSG:2180"),
     level="gmina",
 )  # CollectionReport: files (UnitFile), failed (UnitFailure), stale, notices, ok
-download_collection(product="admin", output_dir="./data", teryt="12")
+download_collection(product="admin", root="./data", teryt="12")
 ```
 
 #### CLI Commands
 ```bash
-kartograf boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000 -o ./data
-kartograf boundaries download --product admin --teryt 12 -o ./data
-kartograf boundaries download --product admin --country pl --whole-country -o ./data
+kartograf boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000 --root ./data
+kartograf boundaries download --product admin --teryt 12 --root ./data
+kartograf boundaries download --product admin --country pl --whole-country --root ./data
 kartograf boundaries list-sources
 ```
 
@@ -917,15 +917,15 @@ WFS service.
 ```python
 from kartograf import check_collection, download_collection
 
-report = download_collection(product="map", output_dir="./data", teryt="1261")
+report = download_collection(product="map", root="./data", teryt="1261")
 print([item.file.path for item in report.files], report.ok)
-plan = check_collection(product="map", output_dir="./data", teryt="1261")  # UpdatePlan
+plan = check_collection(product="map", root="./data", teryt="1261")  # UpdatePlan
 ```
 
 #### CLI Commands
 ```bash
-kartograf cadastre download --product map --teryt 1261 -o ./data
-kartograf cadastre download --product map --country pl --bbox 566000,244000,566400,244400 -o ./data
+kartograf cadastre download --product map --teryt 1261 --root ./data
+kartograf cadastre download --product map --country pl --bbox 566000,244000,566400,244400 --root ./data
 kartograf cadastre list-sources
 ```
 
@@ -957,14 +957,14 @@ ZIP package stored 1:1 in the version store, release chosen explicitly
 ```python
 from kartograf import download_collection
 
-download_collection(product="buildings", output_dir="./data", teryt="1261", lod=1, year=2024)
-download_collection(product="buildings", output_dir="./data", teryt="1261", lod=2)
+download_collection(product="buildings", root="./data", teryt="1261", lod=1, year=2024)
+download_collection(product="buildings", root="./data", teryt="1261", lod=2)
 ```
 
 #### CLI Commands
 ```bash
-kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data
-kartograf models3d download --product buildings --lod 2 --country pl --bbox 566000,244000,566400,244400 -o ./data
+kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 --root ./data
+kartograf models3d download --product buildings --lod 2 --country pl --bbox 566000,244000,566400,244400 --root ./data
 kartograf models3d list-sources
 ```
 
@@ -994,15 +994,15 @@ packages from section 3.5.
 ```python
 from kartograf import download_landcover
 
-report = download_landcover(product="bdot10k", output_dir="./data",
+report = download_landcover(product="bdot10k", root="./data",
                             teryt="1261", year=2024, format="SHP")
 # -> landcover/pl_bdot10k_shp_2024/teryt/1261.zip
 ```
 
 #### CLI Commands
 ```bash
-kartograf landcover download --product bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
-kartograf landcover download --product bdot10k --sheet N-34-130-D --year 2018 --format GML -o ./data
+kartograf landcover download --product bdot10k --teryt 1261 --year 2024 --format SHP --root ./data
+kartograf landcover download --product bdot10k --sheet N-34-130-D --year 2018 --format GML --root ./data
 ```
 
 ---
@@ -1034,18 +1034,18 @@ from WCS for a PL area, both in the version store.
 ```python
 from kartograf import BBox, download_cz_orto_sheet, download_image_cutout
 
-cz = download_cz_orto_sheet(sheet="CTES96", output_dir="./data")  # CzOrtoResult
+cz = download_cz_orto_sheet(sheet="CTES96", root="./data")  # CzOrtoResult
 cut = download_image_cutout(
     product="orto", bbox=BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
-    horizontal_crs="EPSG:2180", output_dir="./data",
+    horizontal_crs="EPSG:2180", root="./data",
     coverage="standard", resolution="0.25m",
 )  # ImageCutoutResult
 ```
 
 #### CLI Commands
 ```bash
-kartograf imagery download --sheet CTES96 --product orto -o ./data
-kartograf imagery download --bbox 566000,243000,566500,243500 --product orto --country pl --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m -o ./data
+kartograf imagery download --sheet CTES96 --product orto --root ./data
+kartograf imagery download --bbox 566000,243000,566500,243500 --product orto --country pl --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m --root ./data
 ```
 
 ---
@@ -1074,10 +1074,10 @@ versions, `--year`/`--all-campaigns`, signal `index`).
 
 #### CLI Commands
 ```bash
-kartograf imagery download --product intensity --sheet M-34-64-D-d-1-4 -o ./data
-kartograf imagery download --product true-orto --sheet N-34-50-A-c-3-2-3 -o ./data
-kartograf imagery download --product true-orto --country pl --bbox 470100,740100,470200,740200 --cutout --horizontal-crs EPSG:2180 --resolution 0.05m -o ./data
-kartograf imagery download --product oblique-orto --sheet 7.125.11.08 --direction n -o ./data
+kartograf imagery download --product intensity --sheet M-34-64-D-d-1-4 --root ./data
+kartograf imagery download --product true-orto --sheet N-34-50-A-c-3-2-3 --root ./data
+kartograf imagery download --product true-orto --country pl --bbox 470100,740100,470200,740200 --cutout --horizontal-crs EPSG:2180 --resolution 0.05m --root ./data
+kartograf imagery download --product oblique-orto --sheet 7.125.11.08 --direction n --root ./data
 ```
 
 ---
@@ -1106,8 +1106,8 @@ Two file products of the `elevation` group without a cutout: GUGiK NMT 100 m
 
 #### CLI Commands
 ```bash
-kartograf elevation download --product nmt --resolution 100m --country pl --bbox 564000,241000,570000,247000 -o ./data
-kartograf elevation download --product contours --format SHP --sheet CTES96 -o ./data
+kartograf elevation download --product nmt --resolution 100m --country pl --bbox 564000,241000,570000,247000 --root ./data
+kartograf elevation download --product contours --format SHP --sheet CTES96 --root ./data
 ```
 
 ---
@@ -1132,8 +1132,8 @@ per annual edition, stored 1:1 in the version store.
 
 #### CLI Commands
 ```bash
-kartograf landcover download --product bdoo --teryt 12 --year 2023 -o ./data
-kartograf landcover download --product bdoo --bbox 523000,253000,528000,258000 --year 2023 --layers KUIK,PTWP -o ./data
+kartograf landcover download --product bdoo --teryt 12 --year 2023 --root ./data
+kartograf landcover download --product bdoo --bbox 523000,253000,528000,258000 --year 2023 --layers KUIK,PTWP --root ./data
 ```
 
 ---
@@ -1167,11 +1167,11 @@ the transfer.
 
 #### CLI Commands
 ```bash
-kartograf landcover download --product zabaged "--bbox=-460000,-1120000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
-kartograf landcover download --product data50 --bbox 18.566,49.757,18.572,49.761 --bbox-crs EPSG:4326 -o ./data
-kartograf boundaries download --product admin --country cz --level obec "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o ./data
-kartograf boundaries download --product geomorphology --country cz --level celek "--bbox=-452000,-1112000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
-kartograf hydro download --product network --country cz --whole-country -o ./data
+kartograf landcover download --product zabaged "--bbox=-460000,-1120000,-450000,-1110000" --bbox-crs EPSG:5514 --root ./data
+kartograf landcover download --product data50 --bbox 18.566,49.757,18.572,49.761 --bbox-crs EPSG:4326 --root ./data
+kartograf boundaries download --product admin --country cz --level obec "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 --root ./data
+kartograf boundaries download --product geomorphology --country cz --level celek "--bbox=-452000,-1112000,-450000,-1110000" --bbox-crs EPSG:5514 --root ./data
+kartograf hydro download --product network --country cz --whole-country --root ./data
 ```
 
 ---
@@ -1203,10 +1203,10 @@ boundaries, and the real estate price register.
 
 #### CLI Commands
 ```bash
-kartograf boundaries download --product addresses --country pl --bbox 566000,243500,566500,244000 -o ./data
-kartograf boundaries download --product addresses --teryt 1261 -o ./data
-kartograf boundaries download --product special --country pl --bbox 21.0,52.22,21.01,52.23 --bbox-crs EPSG:4326 -o ./data
-kartograf cadastre download --product prices --teryt 1201 -o ./data
+kartograf boundaries download --product addresses --country pl --bbox 566000,243500,566500,244000 --root ./data
+kartograf boundaries download --product addresses --teryt 1261 --root ./data
+kartograf boundaries download --product special --country pl --bbox 21.0,52.22,21.01,52.23 --bbox-crs EPSG:4326 --root ./data
+kartograf cadastre download --product prices --teryt 1201 --root ./data
 ```
 
 ---
@@ -1229,8 +1229,8 @@ to the version store.
 
 #### CLI Commands
 ```bash
-kartograf cadastre download --product map --ku 623164 --format SHP -o ./data
-kartograf cadastre download --product map --country cz --format SHP "--bbox=-452000,-1112000,-450000,-1110500" --bbox-crs EPSG:5514 -o ./data
+kartograf cadastre download --product map --ku 623164 --format SHP --root ./data
+kartograf cadastre download --product map --country cz --format SHP "--bbox=-452000,-1112000,-450000,-1110500" --bbox-crs EPSG:5514 --root ./data
 ```
 
 ---
@@ -1261,8 +1261,8 @@ PL only.
 
 #### CLI Commands
 ```bash
-kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 -o ./data
-kartograf models3d download --product trees --teryt 3063 -o ./data
+kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 --root ./data
+kartograf models3d download --product trees --teryt 3063 --root ./data
 ```
 
 ---
@@ -1292,10 +1292,10 @@ GUGiK geographic names (PRNG RP and Polish names of the world) and CUZK
 
 #### CLI Commands
 ```bash
-kartograf names download --product geographic --country pl --bbox 19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 -o ./data
-kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 -o ./data
-kartograf maps download --product topographic --country pl --sheet M-34-064-D-d-1 --scale 1:10000 --format TIFF -o ./data
-kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF -o ./data
+kartograf names download --product geographic --country pl --bbox 19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 --root ./data
+kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 --root ./data
+kartograf maps download --product topographic --country pl --sheet M-34-064-D-d-1 --scale 1:10000 --format TIFF --root ./data
+kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF --root ./data
 ```
 
 ---
@@ -1323,9 +1323,9 @@ and CUZK (Bodove pole) and the PL-geoid2021 and QGZU-2013 quasi-geoid models.
 
 #### CLI Commands
 ```bash
-kartograf geodesy download --product control --country pl --network vertical --bbox 560000,240000,575000,250000 -o ./data
-kartograf geodesy download --product control --network horizontal --teryt 1201 -o ./data
-kartograf geodesy download --product geoid --country pl --whole-country -o ./data
+kartograf geodesy download --product control --country pl --network vertical --bbox 560000,240000,575000,250000 --root ./data
+kartograf geodesy download --product control --network horizontal --teryt 1201 --root ./data
+kartograf geodesy download --product geoid --country pl --whole-country --root ./data
 kartograf geodesy list-sources
 ```
 
@@ -1361,7 +1361,7 @@ fix an error without parsing text.
   `check_command` (KB-1..KB-5 of the Archiwista).
 - MCP server `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 39 tools 1:1
   with the commands (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope (`outputSchema`),
-  `is_error` only for an error, with no default values affecting data (`output_dir`
+  `is_error` only for an error, with no default values affecting data (`root`
   explicit and absolute, `bbox` with `bbox_crs`), progress through MCP notifications,
   `--tools`, `--allow-dir` and `--allow-writes` (without it the server only reads and plans).
 - `kartograf/py.typed` (PEP 561), the generated `AGENTS.md` and `llms.txt` (`kartograf commands

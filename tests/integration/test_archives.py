@@ -324,7 +324,7 @@ class TestDownloadArchive:
         session = _gugik_session(wfs_fixture(RECORDED), {TBD_URL: ARCHIVE})
         with patch(SESSION_FACTORY, return_value=session):
             report = download_data(
-                product="nmt", output_dir=tmp_path, sheet=sheet, cache=False, **TBD_25M
+                product="nmt", root=tmp_path, sheet=sheet, cache=False, **TBD_25M
             )
 
         assert report.ok
@@ -408,7 +408,7 @@ class TestDownloadArchive:
         with patch(SESSION_FACTORY, return_value=session):
             report = download_data(
                 product="nmt",
-                output_dir=tmp_path,
+                root=tmp_path,
                 sheet=sheet,
                 format=fmt,
                 resolution=resolution,
@@ -436,7 +436,7 @@ class TestDownloadArchive:
         with patch(SESSION_FACTORY, return_value=session):
             report = download_data(
                 product="nmt",
-                output_dir=tmp_path,
+                root=tmp_path,
                 bbox=bbox,
                 country="pl",
                 sheet_system="1992",
@@ -471,7 +471,7 @@ class TestDownloadArchive:
             patch(SESSION_FACTORY, return_value=session),
         ):
             report = download_data(
-                product="nmt", output_dir=tmp_path, sheet=SHEET, cache=False, **TBD_25M
+                product="nmt", root=tmp_path, sheet=SHEET, cache=False, **TBD_25M
             )
 
         assert report.ok
@@ -495,7 +495,7 @@ class TestDownloadArchive:
         with patch(SESSION_FACTORY, return_value=session):
             report = download_data(
                 product="nmt",
-                output_dir=tmp_path,
+                root=tmp_path,
                 sheet=SHEET,
                 format="TBD",
                 resolution=resolution,
@@ -524,7 +524,7 @@ class TestDownloadArchive:
         session = _gugik_session(wfs_fixture(RECORDED), {TBD_URL: ARCHIVE})
         with patch(SESSION_FACTORY, return_value=session):
             plan = check_data(
-                product="nmt", output_dir=tmp_path, sheet=SHEET, cache=False, **TBD_25M
+                product="nmt", root=tmp_path, sheet=SHEET, cache=False, **TBD_25M
             )
 
         (item,) = plan.items
@@ -566,7 +566,7 @@ class TestDownloadArchive:
                     "-q",
                 ],
                 lambda out: download_data(
-                    product="nmt", output_dir=out, sheet=SHEET, **TBD_25M
+                    product="nmt", root=out, sheet=SHEET, **TBD_25M
                 ),
                 tmp_path,
             )
@@ -659,7 +659,7 @@ def test_rejected_before_network_cli_equals_api(tmp_path, argv, selection, messa
     with patch(SESSION_FACTORY, return_value=session):
         run = run_both(
             ["elevation", "download", *argv],
-            lambda out: download_data(output_dir=out, cache=False, **selection),
+            lambda out: download_data(root=out, cache=False, **selection),
             tmp_path,
         )
 
@@ -676,7 +676,7 @@ def test_format_for_orto_is_validation_error(tmp_path):
     with pytest.raises(ValidationError) as caught:
         download_data(
             product="orto",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet=f"{SHEET}-1",
             format="TBD",
             cache=False,
@@ -694,7 +694,7 @@ def test_xyz_resolution_error_lists_the_registry(tmp_path):
     with pytest.raises(ValidationError) as caught:
         download_data(
             product="nmt",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet=SHEET,
             format="XYZ",
             resolution="0.5m",

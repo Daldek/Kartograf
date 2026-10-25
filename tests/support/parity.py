@@ -49,7 +49,7 @@ def run_both(
         monkeypatch.chdir(tmp_path)
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             try:
-                cli_code = main([*cli_argv, "-o", str(cli_store)])
+                cli_code = main([*cli_argv, "--root", str(cli_store)])
             except SystemExit as exc:
                 if not isinstance(exc.code, int):
                     raise

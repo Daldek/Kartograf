@@ -519,7 +519,7 @@ class DownloadManager:
 
     def __init__(
         self,
-        output_dir: str | Path,
+        root: str | Path,
         provider: BaseProvider,
         *,
         storage: FileStorage | None = None,
@@ -537,7 +537,7 @@ class DownloadManager:
 
         Parameters
         ----------
-        output_dir : str or Path
+        root : str or Path
             Base directory for downloads; the provider selects the segment.
         provider : BaseProvider
             Source of the downloaded data, its resolution and vertical CRS.
@@ -601,7 +601,7 @@ class DownloadManager:
         self._record_vertical_crs = vertical_crs
         if storage is None:
             storage = storage_for_provider(
-                output_dir, provider, resolution=resolution, vertical_crs=vertical_crs
+                root, provider, resolution=resolution, vertical_crs=vertical_crs
             )
         self._storage = storage
         self._vertical_crs = vertical_crs
@@ -1019,7 +1019,7 @@ class DownloadManager:
         if plan is not None and update != "upgrade":
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         if plan is not None:
-            require_store(plan, store_id(self._storage.output_dir))
+            require_store(plan, store_id(self._storage.root))
         leaves = self._leaves(sheets)
         self._drain_size_notices()  # a notice of an earlier failed call
         if plan is not None:
@@ -1152,7 +1152,7 @@ class DownloadManager:
             if inspection.sheet not in no_data
             for item in _items(self, inspection)
         ]
-        return new_plan(self._storage.output_dir, items)
+        return new_plan(self._storage.root, items)
 
     def _download_planned(
         self,
@@ -1306,7 +1306,7 @@ class DownloadManager:
         """
         std = self._storage.get_path(sheet, self._default_ext)
         slot = FileSlot(
-            output_dir=self._storage.output_dir,
+            root=self._storage.root,
             std=std,
             versions_base=self._storage.get_versions_base(sheet),
             versions_root=self._storage.get_versions_root(sheet),
@@ -2227,7 +2227,7 @@ class DownloadManager:
         """Return string representation."""
         return (
             f"DownloadManager(provider={self._provider.name}, "
-            f"output_dir='{self._storage.output_dir}', "
+            f"root='{self._storage.root}', "
             f"resolution='{self._resolution}', "
             f"workers={self._workers})"
         )

@@ -231,7 +231,7 @@ def test_download_laz_area_all_writes_campaigns_to_sidecars(tmp_path):
     )
     result = download_laz_area(
         bbox=W2_BBOX,
-        output_dir=tmp_path,
+        root=tmp_path,
         provider=provider,
         all_campaigns=True,
         min_year=2022,

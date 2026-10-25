@@ -129,7 +129,7 @@ class StoreEntry:
         ``full_sheet/`` for those kinds), e.g. ``N-34/130/D/d/2/4``,
         ``teryt``; ``""`` for a segment-level problem.
     name, path : str, Path
-        File (or problem directory) name and path, built from ``output_dir``
+        File (or problem directory) name and path, built from ``root``
         as given.
     version_path : Path or None
         The version a link points to according to its sidecar (lexically
@@ -820,16 +820,16 @@ def describe_segment(segment: str) -> SegmentInfo:
     )
 
 
-def list_segments(output_dir: str | Path) -> list[str]:
+def list_segments(root: str | Path) -> list[str]:
     """Segments of the store: every ``<product>/<variant>`` directory.
 
     Includes segments the registry does not know (``iter_store`` reports them
     as ``unknown_segment``); skips symlinks and names starting with ``.``.
-    Cost: one listing of ``output_dir`` and one of each product directory.
+    Cost: one listing of ``root`` and one of each product directory.
 
     Parameters
     ----------
-    output_dir : str or Path
+    root : str or Path
         The ``data/`` directory (not its parent).
 
     Returns
@@ -841,9 +841,9 @@ def list_segments(output_dir: str | Path) -> list[str]:
     Raises
     ------
     OSError
-        ``output_dir`` cannot be listed (missing, a disconnected share).
+        ``root`` cannot be listed (missing, a disconnected share).
     """
-    root = os.path.normpath(os.fspath(output_dir))
+    root = os.path.normpath(os.fspath(root))
     found: list[str] = []
     for product in _directories(root, required=True):
         found.extend(
@@ -1632,13 +1632,11 @@ def _scan_store(root: str, segments: list[str], skip: _Skip) -> Iterator[StoreEn
         yield from _segment_entries(base, segment, skip)
 
 
-def list_partitions(
-    output_dir: str | Path, segment: str, *, target: int = 32
-) -> list[str]:
+def list_partitions(root: str | Path, segment: str, *, target: int = 32) -> list[str]:
     """Disjoint parts of one segment for parallel ``iter_store`` calls.
 
-    The union of ``iter_store(output_dir, segment=segment, partition=key)``
-    over the returned keys is exactly ``iter_store(output_dir,
+    The union of ``iter_store(root, segment=segment, partition=key)``
+    over the returned keys is exactly ``iter_store(root,
     segment=segment)``: the same entries, none twice. A part covers the same
     hierarchy under the standard path, ``full_sheet/`` and ``versions/``.
     The first-level hierarchy directories are split level by level into
@@ -1649,7 +1647,7 @@ def list_partitions(
 
     Parameters
     ----------
-    output_dir : str or Path
+    root : str or Path
         The ``data/`` directory (not its parent).
     segment : str
         A ``<product>/<variant>`` segment (``list_segments``).
@@ -1674,9 +1672,9 @@ def list_partitions(
         A malformed segment or ``target``, a segment directory that is a
         symlink.
     OSError
-        ``output_dir`` cannot be read (missing, a disconnected share).
+        ``root`` cannot be read (missing, a disconnected share).
     """
-    root = os.path.normpath(os.fspath(output_dir))
+    root = os.path.normpath(os.fspath(root))
     _validated_segment(segment)
     if isinstance(target, bool) or not isinstance(target, int) or target < 1:
         raise ValidationError(
@@ -1719,7 +1717,7 @@ def list_partitions(
 
 
 def iter_store(
-    output_dir: str | Path,
+    root: str | Path,
     *,
     segment: str | None = None,
     units: Iterable[str] | None = None,
@@ -1739,7 +1737,7 @@ def iter_store(
 
     Parameters
     ----------
-    output_dir : str or Path
+    root : str or Path
         The ``data/`` directory (not its parent).
     segment : str, optional
         Only this ``<product>/<variant>`` segment (``list_segments``). Calls
@@ -1755,7 +1753,7 @@ def iter_store(
         problems are not reported.
     skip_versions : collection of str or mapping of str to names, optional
         Version directories already known to the caller, relative to
-        ``output_dir`` with ``/`` (``<segment>/versions/<hierarchy>/<label>_
+        ``root`` with ``/`` (``<segment>/versions/<hierarchy>/<label>_
         <sha8>``). Their files are yielded with ``skipped=True`` and
         ``sidecar=None`` without reading their sidecars: from the directory
         listing for a collection (pass a set for large ones), or - for a
@@ -1782,11 +1780,11 @@ def iter_store(
         name that is not a plain data file name (when its directory is
         reached).
     OSError
-        ``output_dir`` cannot be listed, or the store becomes unreadable
+        ``root`` cannot be listed, or the store becomes unreadable
         during the scan (e.g. a disconnected share) - a vanished file or
         directory is not an error.
     """
-    root = os.path.normpath(os.fspath(output_dir))
+    root = os.path.normpath(os.fspath(root))
     skip = _known_versions(skip_versions)
     if segment is None:
         if units is not None:

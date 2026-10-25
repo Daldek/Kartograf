@@ -242,7 +242,7 @@ def collection_commands(
         )
     if content is not None:
         params += [replace(p, section=PRODUCT_TITLE) for p in content(products)]
-    params.append(shared.output_dir(lambda: store_files([group])))
+    params.append(shared.root(lambda: store_files([group])))
     params += shared.update_params(
         check=check or CHECK_HELP,
         upgrade="Pobierz nowsza tresc, gdy sygnal zrodla ja wskazuje; pliki "

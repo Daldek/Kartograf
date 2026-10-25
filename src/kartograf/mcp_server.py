@@ -136,7 +136,7 @@ def build_instructions(
     schema = _tool("commands schema")
     flow = (
         "Kartograf downloads spatial data of Poland and Czechia (GUGiK, CUZK, "
-        "Copernicus, ISRIC) into a versioned store: the directory output_dir, one "
+        "Copernicus, ISRIC) into a versioned store: the directory root, one "
         "directory per product, files never overwritten. Order: discover, check, run, "
         f"read. Discover with {_tool('commands list')} (groups, products and commands) "
         f'and {schema}(command="elevation download") (the options of one command, '
@@ -147,7 +147,7 @@ def build_instructions(
         "licence."
     )
     shared = (
-        "Shared arguments. Paths (output_dir, project_dir, geometry, path) are "
+        "Shared arguments. Paths (root, project_dir, geometry, path) are "
         "absolute. Area: sheet (a sheet code, for example N-34-130-D-d-2-4), bbox "
         "([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no "
         "default) or geometry (a SHP or GPKG file; layer is its GPKG layer), exactly "
@@ -546,19 +546,17 @@ class _Toolbox:
         run = convert_arguments(
             run_kinds, {k: v for k, v in arguments.items() if k in run_kinds}
         )
-        output_dir = run["output_dir"]
+        root = run["root"]
 
         def validate() -> None:
-            validate_command(command, options, output_dir=output_dir)
+            validate_command(command, options, root=root)
 
         if check:
 
             def plan_call(
                 _on_progress: Callable[[DownloadProgress], None] | None,
             ) -> CommandResult[Any]:
-                return check_command(
-                    command, options, output_dir=output_dir, cache=self._cache
-                )
+                return check_command(command, options, root=root, cache=self._cache)
 
             return _Plan(validate, plan_call, False)
 
@@ -568,7 +566,7 @@ class _Toolbox:
             return run_command(
                 command,
                 options,
-                output_dir=output_dir,
+                root=root,
                 update=run.get("update"),
                 plan=run.get("plan"),
                 workers=run.get("workers"),

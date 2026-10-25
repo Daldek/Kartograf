@@ -112,7 +112,7 @@ def test_special_area_creates_versioned_gpkg(tmp_path, monkeypatch, frozen_clock
     monkeypatch.setattr(col, "_session", lambda: service)
     request = {
         "product": "special",
-        "output_dir": tmp_path,
+        "root": tmp_path,
         "country": "pl",
         "bbox": BBOX,
         "cache": False,
@@ -157,7 +157,7 @@ def test_special_area_leaves_out_census_districts(tmp_path, monkeypatch, frozen_
 
     report = download_collection(
         product="special",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         bbox=BBOX,
         cache=False,
@@ -183,18 +183,18 @@ def test_special_area_leaves_out_census_districts(tmp_path, monkeypatch, frozen_
 
 def test_special_requires_selection_and_explicit_country_format(tmp_path):
     with pytest.raises(ValidationError, match="--bbox"):
-        validate_collection_request(product="special", output_dir=tmp_path)
+        validate_collection_request(product="special", root=tmp_path)
     with pytest.raises(ValidationError, match="--format required.*SHP, GML"):
         validate_collection_request(
             product="special",
-            output_dir=tmp_path,
+            root=tmp_path,
             country="pl",
             whole_country=True,
         )
     with pytest.raises(ValidationError, match="--format"):
         validate_collection_request(
             product="special",
-            output_dir=tmp_path,
+            root=tmp_path,
             country="pl",
             bbox=BBOX,
             format="SHP",
@@ -230,7 +230,7 @@ def test_special_country_package(tmp_path, monkeypatch, frozen_clock, format, su
 
     report = download_collection(
         product="special",
-        output_dir=tmp_path,
+        root=tmp_path,
         country="pl",
         whole_country=True,
         format=format,

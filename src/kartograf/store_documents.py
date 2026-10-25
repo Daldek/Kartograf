@@ -18,7 +18,7 @@ Raises
 ValidationError
     A wrong argument (``option``: ``segment``, ``units``, ``limit``).
 OSError
-    ``output_dir`` is missing or cannot be listed (a missing store is not an
+    ``root`` is missing or cannot be listed (a missing store is not an
     empty one).
 InvalidSidecarError
     ``read_store_sidecar``: the sidecar is missing, unreadable or of another
@@ -51,7 +51,7 @@ class StoreOverview(Document):
 
     Attributes
     ----------
-    output_dir : Path
+    root : Path
         The ``data/`` directory that was listed (absolute in JSON).
     segments : tuple of SegmentInfo
         Every ``<product>/<variant>`` directory, sorted, with the registered
@@ -61,7 +61,7 @@ class StoreOverview(Document):
 
     SCHEMA = "kartograf-store-overview/1"
 
-    output_dir: Path
+    root: Path
     segments: tuple[SegmentInfo, ...]
 
 
@@ -71,7 +71,7 @@ class StoreEntries(Document):
 
     Attributes
     ----------
-    output_dir : Path
+    root : Path
         The ``data/`` directory that was read (absolute in JSON).
     segment : str
         The ``<product>/<variant>`` segment.
@@ -90,7 +90,7 @@ class StoreEntries(Document):
 
     SCHEMA = "kartograf-store-entries/1"
 
-    output_dir: Path
+    root: Path
     segment: str
     units: tuple[str, ...] | None
     limit: int
@@ -121,12 +121,12 @@ class StoreSidecar(Document):
     sidecar: Sidecar
 
 
-def describe_store(output_dir: str | Path) -> StoreOverview:
+def describe_store(root: str | Path) -> StoreOverview:
     """List the segments of the store with their registered sources.
 
     Parameters
     ----------
-    output_dir : str or Path
+    root : str or Path
         The ``data/`` directory (not its parent).
 
     Returns
@@ -137,14 +137,14 @@ def describe_store(output_dir: str | Path) -> StoreOverview:
     Raises
     ------
     OSError
-        ``output_dir`` cannot be listed.
+        ``root`` cannot be listed.
     """
-    segments = tuple(describe_segment(name) for name in list_segments(output_dir))
-    return StoreOverview(Path(output_dir), segments)
+    segments = tuple(describe_segment(name) for name in list_segments(root))
+    return StoreOverview(Path(root), segments)
 
 
 def list_store_entries(
-    output_dir: str | Path,
+    root: str | Path,
     *,
     segment: str,
     units: Iterable[str] | None = None,
@@ -154,7 +154,7 @@ def list_store_entries(
 
     Parameters
     ----------
-    output_dir : str or Path
+    root : str or Path
         The ``data/`` directory (not its parent).
     segment : str
         ``<product>/<variant>`` (``describe_store`` lists them); required.
@@ -177,7 +177,7 @@ def list_store_entries(
         ``segment`` not a ``<product>/<variant>`` string, ``units`` a string, a
         malformed or reserved unit, ``limit`` not an integer >= 1.
     OSError
-        ``output_dir`` cannot be listed.
+        ``root`` cannot be listed.
     """
     require_int(limit, "limit")
     if limit < 1:
@@ -191,11 +191,9 @@ def list_store_entries(
         )
     # A string is passed through unchanged: iter_store rejects it by name.
     scoped = units if units is None or isinstance(units, str) else tuple(units)
-    found = tuple(
-        islice(iter_store(output_dir, segment=segment, units=scoped), limit + 1)
-    )
+    found = tuple(islice(iter_store(root, segment=segment, units=scoped), limit + 1))
     return StoreEntries(
-        Path(output_dir),
+        Path(root),
         segment,
         None if scoped is None else tuple(scoped),
         limit,

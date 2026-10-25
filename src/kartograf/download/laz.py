@@ -20,7 +20,7 @@ Example::
 
     result = download_laz_area(
         bbox=BBox(637400, 487000, 637450, 487050, "EPSG:2180"),
-        output_dir="./data", vertical_crs="EVRF2007",
+        root="./data", vertical_crs="EVRF2007",
         workers=4,
     )
     for skipped in result.superseded:
@@ -146,7 +146,7 @@ def laz_slot(storage: FileStorage, tile: LazTile) -> FileSlot:
     """Return the standard path and version hierarchy in the tile's own system."""
     system = tile.system
     return FileSlot(
-        output_dir=storage.output_dir,
+        root=storage.root,
         std=storage.get_raw_path(tile.sheet, tile.filename, system=system),
         versions_base=storage.get_raw_versions_base(tile.sheet, system=system),
         versions_root=storage.get_raw_versions_root(tile.sheet, system=system),
@@ -232,11 +232,11 @@ def _check_selection(
     selection: LazTileSelection,
     *,
     provider: GugikLazProvider,
-    output_dir: str | Path,
+    root: str | Path,
 ) -> UpdatePlan:
     """Inspect selected WFS tiles without downloading any LAZ bytes."""
     storage = FileStorage(
-        output_dir, resolution=None, vertical_crs=provider.vertical_crs, product="laz"
+        root, resolution=None, vertical_crs=provider.vertical_crs, product="laz"
     )
     items = tuple(
         inspect_version(
@@ -251,7 +251,7 @@ def _check_selection(
         )
         for tile in selection.tiles
     )
-    return new_plan(store_id(output_dir), items)
+    return new_plan(store_id(root), items)
 
 
 def _run_laz_download(
@@ -259,7 +259,7 @@ def _run_laz_download(
     *,
     provider: GugikLazProvider,
     bbox: BBox,
-    output_dir: str | Path,
+    root: str | Path,
     year: int | None = None,
     min_density: int | None = None,
     all_campaigns: bool = False,
@@ -281,16 +281,14 @@ def _run_laz_download(
     """
     validate_update(update)
     if plan is not None:
-        require_store(plan, store_id(output_dir))
+        require_store(plan, store_id(root))
     storage = FileStorage(
-        output_dir, resolution=None, vertical_crs=provider.vertical_crs, product="laz"
+        root, resolution=None, vertical_crs=provider.vertical_crs, product="laz"
     )
     tiles = selection.tiles
     stale: tuple[PlanItem, ...] = ()
     if update == "upgrade" and plan is not None:
-        fresh = _check_selection(
-            selection, provider=provider, output_dir=output_dir
-        ).items
+        fresh = _check_selection(selection, provider=provider, root=root).items
         todo, excluded = select_planned(plan, list(fresh), "laz_tile")
         keys = {(item.segment, item.hierarchy, item.name) for item in todo}
         tiles = tuple(
@@ -507,7 +505,7 @@ def check_laz_area(
     *,
     bbox: BBox | None = None,
     sheet: str | None = None,
-    output_dir: str | Path,
+    root: str | Path,
     vertical_crs: str,
     year: int | None = None,
     min_year: int | None = None,
@@ -543,16 +541,14 @@ def check_laz_area(
         force=True,
         sink=sink,
     ) as (selected_provider, selection, _area):
-        return _check_selection(
-            selection, provider=selected_provider, output_dir=output_dir
-        )
+        return _check_selection(selection, provider=selected_provider, root=root)
 
 
 def download_laz_area(
     *,
     bbox: BBox | None = None,
     sheet: str | None = None,
-    output_dir: str | Path,
+    root: str | Path,
     vertical_crs: str,
     year: int | None = None,
     min_year: int | None = None,
@@ -582,7 +578,7 @@ def download_laz_area(
         Instead of ``bbox``: a PL-1992 or PL-2000 sheet code. The WFS is
         asked for the envelope of its frame, the tiles are those reaching
         into the frame itself (neighbouring sheets only touch it).
-    output_dir : str or Path
+    root : str or Path
         Explicit base directory for LAZ tiles and their sidecars.
     vertical_crs : str
         "EVRF2007" (current European heights) or "KRON86" (legacy
@@ -663,7 +659,7 @@ def download_laz_area(
             selection,
             provider=selected_provider,
             bbox=area,
-            output_dir=output_dir,
+            root=root,
             year=year,
             min_density=min_density,
             all_campaigns=all_campaigns,

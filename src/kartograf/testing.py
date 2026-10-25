@@ -251,7 +251,7 @@ class FixtureStore:
     Attributes
     ----------
     root : Path
-        The store root (``output_dir`` of the read API).
+        The store root (``root`` of the read API).
     variant : str
         The variant that was built.
     files : tuple of FixtureFile
@@ -403,7 +403,7 @@ def _cz_file(root: Path) -> FixtureFile:
     parts = path_parts(CZ_SHEET)
     base = root / CZ_SEGMENT / VERSIONS_DIR
     slot = FileSlot(
-        output_dir=root,
+        root=root,
         std=root.joinpath(CZ_SEGMENT, *parts, f"{CZ_SHEET}.tif"),
         versions_base=base,
         versions_root=base.joinpath(*parts),

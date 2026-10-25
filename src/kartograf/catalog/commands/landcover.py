@@ -227,7 +227,7 @@ _DOWNLOAD_PARAMS = (
             "EPSG:5514"
         ),
     ),
-    shared.output_dir(lambda: store_files(["landcover"])),
+    shared.root(lambda: store_files(["landcover"])),
     *shared.update_params(
         check=(
             "Signal: the release of CORINE (CLMS) and of the national "

@@ -30,7 +30,7 @@ pytestmark = pytest.mark.usefixtures("frozen_clock")
 
 def test_project_downloads_and_verifies_control_geoid_and_mesh(tmp_path, monkeypatch):
     project = tmp_path / "projekt"
-    init_project(project, output_dir=project / "data")
+    init_project(project, root=project / "data")
     tasks = {
         "osnowa": (
             "geodesy download",

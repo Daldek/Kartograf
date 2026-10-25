@@ -41,16 +41,16 @@ SHEET_REQUEST = {
 @pytest.mark.parametrize("call", [download_data, check_data])
 def test_download_data_rejects_wrong_types(tmp_path, call, argument, flag):
     with pytest.raises(ValidationError, match=flag):
-        call(**SHEET_REQUEST, output_dir=tmp_path, **argument)
+        call(**SHEET_REQUEST, root=tmp_path, **argument)
     assert not any(tmp_path.iterdir())
 
 
 def test_download_data_rejects_text_density_and_workers(tmp_path):
     laz = {"product": "laz", "sheet": SHEET, "vertical_crs": "EVRF2007"}
     with pytest.raises(ValidationError, match="--min-density .*'10'"):
-        download_data(**laz, output_dir=tmp_path, min_density="10")
+        download_data(**laz, root=tmp_path, min_density="10")
     with pytest.raises(ValidationError, match="--workers .*'4'"):
-        download_data(**SHEET_REQUEST, output_dir=tmp_path, workers="4")
+        download_data(**SHEET_REQUEST, root=tmp_path, workers="4")
 
 
 def test_layers_text_is_not_read_character_by_character(tmp_path):
@@ -106,13 +106,13 @@ def test_download_manager_rejects_wrong_types(tmp_path, argument, name):
 @pytest.mark.parametrize("call", [download_laz_area, check_laz_area])
 def test_laz_area_rejects_wrong_types_before_wfs(tmp_path, call, argument, name):
     with pytest.raises(ValidationError, match=name):
-        call(bbox=AREA, output_dir=tmp_path, vertical_crs="EVRF2007", **argument)
+        call(bbox=AREA, root=tmp_path, vertical_crs="EVRF2007", **argument)
 
 
 def test_laz_area_rejects_text_workers(tmp_path):
     with pytest.raises(ValidationError, match="workers"):
         download_laz_area(
-            bbox=AREA, output_dir=tmp_path, vertical_crs="EVRF2007", workers="2"
+            bbox=AREA, root=tmp_path, vertical_crs="EVRF2007", workers="2"
         )
 
 
@@ -121,7 +121,7 @@ def test_cz_laz_rejects_text_workers(tmp_path):
         download_cz_laz(
             model="dmr5g",
             vertical_crs="EVRF2007",
-            output_dir=tmp_path,
+            root=tmp_path,
             sheet="760_5518",
             workers="2",
         )
@@ -140,7 +140,7 @@ def test_cz_laz_rejects_text_workers(tmp_path):
 def test_collection_rejects_wrong_types(tmp_path, call, argument, flag):
     request = {"product": "buildings", "teryt": "1465", "lod": 1} | argument
     with pytest.raises(ValidationError, match=flag):
-        call(output_dir=tmp_path, cache=False, **request)
+        call(root=tmp_path, cache=False, **request)
     assert not any(tmp_path.iterdir())
 
 
@@ -148,7 +148,7 @@ def test_collection_rejects_text_workers(tmp_path):
     with pytest.raises(ValidationError, match="--workers .*'2'"):
         download_collection(
             product="buildings",
-            output_dir=tmp_path,
+            root=tmp_path,
             teryt="1465",
             lod=1,
             year=2021,

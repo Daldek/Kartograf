@@ -110,8 +110,8 @@ INVALID_DATA = {
 def test_validate_data_request_equals_download_error(tmp_path, monkeypatch, kwargs):
     monkeypatch.chdir(tmp_path)
     out = tmp_path / "out"
-    expected = _raised(lambda: download_data(output_dir=out, cache=False, **kwargs))
-    got = _raised(lambda: validate_data_request(output_dir=out, **kwargs))
+    expected = _raised(lambda: download_data(root=out, cache=False, **kwargs))
+    got = _raised(lambda: validate_data_request(root=out, **kwargs))
     assert type(got) is type(expected) and str(got) == str(expected)
     assert isinstance(got, ValidationError)
     assert not out.exists()
@@ -194,7 +194,7 @@ def test_validate_data_request_valid_stops_before_source(tmp_path, monkeypatch, 
     monkeypatch.chdir(tmp_path)
     _shapefile(tmp_path)
     out = tmp_path / "out"
-    assert validate_data_request(output_dir=out, **kwargs) is None
+    assert validate_data_request(root=out, **kwargs) is None
     assert sorted(p.name for p in tmp_path.iterdir()) == [
         "area.dbf",
         "area.prj",
@@ -243,8 +243,8 @@ def test_landcover_validate_request_equals_download_error(
         calls = {"download": download_landcover, "check": check_landcover}
         validate = validate_landcover_request
         choices = {"product": source, **kwargs}
-    expected = _raised(lambda: calls[method](output_dir=out, cache=False, **choices))
-    got = _raised(lambda: validate(output_dir=out, **choices))
+    expected = _raised(lambda: calls[method](root=out, cache=False, **choices))
+    got = _raised(lambda: validate(root=out, **choices))
     assert type(got) is type(expected) and str(got) == str(expected)
     assert isinstance(got, ValidationError)
     assert not out.exists()
@@ -259,20 +259,15 @@ def test_landcover_validate_request_valid_reads_only_geometry(tmp_path):
         ("soilgrids", {"property": "clay", "depth": "0-5cm", "stat": "mean"}),
     ):
         if source == "soilgrids":
-            assert (
-                validate_soil_request(output_dir=out, geometry=area, **options) is None
-            )
+            assert validate_soil_request(root=out, geometry=area, **options) is None
         else:
             assert (
                 validate_landcover_request(
-                    product=source, output_dir=out, geometry=area, **options
+                    product=source, root=out, geometry=area, **options
                 )
                 is None
             )
-    assert (
-        validate_landcover_request(product="bdot10k", output_dir=out, teryt="1465")
-        is None
-    )
+    assert validate_landcover_request(product="bdot10k", root=out, teryt="1465") is None
     assert not out.exists()
 
 
@@ -289,11 +284,11 @@ HSG_INVALID = {
 def test_hsg_validate_request_rejects_depth_and_selection(tmp_path, kwargs, method):
     out = tmp_path / "out"
     calls = {"calculate_hsg": calculate_hsg, "check_hsg": check_hsg}
-    expected = _raised(lambda: calls[method](output_dir=out, cache=False, **kwargs))
-    got = _raised(lambda: validate_hsg_request(output_dir=out, **kwargs))
+    expected = _raised(lambda: calls[method](root=out, cache=False, **kwargs))
+    got = _raised(lambda: validate_hsg_request(root=out, **kwargs))
     assert type(got) is type(expected) and str(got) == str(expected)
     assert isinstance(got, ValidationError)
-    assert validate_hsg_request(output_dir=out, bbox=BBOX_PL, depth="0-5cm") is None
+    assert validate_hsg_request(root=out, bbox=BBOX_PL, depth="0-5cm") is None
     assert not out.exists()
 
 
@@ -374,11 +369,9 @@ def test_a_point_geometry_is_refused_where_the_track_needs_an_area(
     area = _point_shapefile(tmp_path, point)
     out = tmp_path / "out"
     expected = _raised(
-        lambda: download_data(output_dir=out, geometry=area, cache=False, **kwargs)
+        lambda: download_data(root=out, geometry=area, cache=False, **kwargs)
     )
-    got = _raised(
-        lambda: validate_data_request(output_dir=out, geometry=area, **kwargs)
-    )
+    got = _raised(lambda: validate_data_request(root=out, geometry=area, **kwargs))
     assert type(got) is type(expected) and str(got) == str(expected)
     assert isinstance(got, ValidationError) and got.option == "geometry"
     assert "--geometry" in str(got)
@@ -389,16 +382,13 @@ def test_a_point_geometry_still_picks_the_sheet_it_lies_in(tmp_path):
     """Sheets, units and pixels are what a point lies in: no area needed."""
     area = _point_shapefile(tmp_path, PL_POINT)
     kwargs = {"product": "nmt", "country": "pl", "sheet_system": "1992", **PL_1M}
-    assert (
-        validate_data_request(output_dir=tmp_path / "out", geometry=area, **kwargs)
-        is None
-    )
+    assert validate_data_request(root=tmp_path / "out", geometry=area, **kwargs) is None
 
 
 def test_hsg_refuses_a_point_geometry(tmp_path):
     area = _point_shapefile(tmp_path, PL_POINT)
     out = tmp_path / "out"
-    kwargs = {"output_dir": out, "geometry": area, "depth": "0-5cm"}
+    kwargs = {"root": out, "geometry": area, "depth": "0-5cm"}
     got = _raised(lambda: validate_hsg_request(**kwargs))
     assert isinstance(got, ValidationError) and got.option == "geometry"
     for call in (calculate_hsg, check_hsg):

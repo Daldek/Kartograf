@@ -60,7 +60,7 @@ def test_flags_map_to_download_collection_kwargs(tmp_path):
                 "--workers",
                 "3",
                 "--force",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -70,7 +70,7 @@ def test_flags_map_to_download_collection_kwargs(tmp_path):
     assert (kwargs["product"], kwargs["country"]) == ("admin", "auto")
     assert kwargs["level"] == {"pl": "gmina"}
     assert (kwargs["workers"], kwargs["update"]) == (3, "force")
-    assert kwargs["output_dir"] == str(tmp_path)
+    assert kwargs["root"] == str(tmp_path)
     assert kwargs.get("teryt") is None and not kwargs.get("whole_country")
     with patch(_DOWNLOAD, return_value=_report()) as download:
         main(
@@ -85,7 +85,7 @@ def test_flags_map_to_download_collection_kwargs(tmp_path):
                 "1",
                 "--year",
                 "2024",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -109,7 +109,7 @@ def test_check_updates_calls_check_collection_and_writes_plan(tmp_path):
                 "--check-updates",
                 "--plan",
                 str(plan_file),
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )
@@ -122,7 +122,7 @@ def test_check_updates_calls_check_collection_and_writes_plan(tmp_path):
 
 def test_missing_product_names_only_the_group_products(tmp_path, capsys):
     with patch(_DOWNLOAD) as download:
-        rc = main(["models3d", "download", "--teryt", "1261", "-o", str(tmp_path)])
+        rc = main(["models3d", "download", "--teryt", "1261", "--root", str(tmp_path)])
     assert rc == 2
     download.assert_not_called()
     (line,) = without_error_document(capsys.readouterr().err).splitlines()
@@ -146,7 +146,7 @@ def test_failed_unit_is_error_line_and_exit_1(tmp_path, capsys):
                 "--bbox",
                 "340000,290000,350000,300000",
                 "-q",
-                "-o",
+                "--root",
                 str(tmp_path),
             ]
         )

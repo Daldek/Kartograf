@@ -102,7 +102,7 @@ def _synthetic_session(values) -> Mock:
 
 def _cutout(tmp_path, horizontal_crs="EPSG:2180", bbox=BBOX, **kwargs):
     kwargs = {"vertical_crs": "EVRF2007", "product": "nmt", **kwargs}
-    return _prepare_pl_cutout(bbox, horizontal_crs, output_dir=tmp_path, **kwargs)
+    return _prepare_pl_cutout(bbox, horizontal_crs, root=tmp_path, **kwargs)
 
 
 # Selection arguments shared by ``download_pl_cutout`` and ``check_pl_cutout``.
@@ -379,7 +379,7 @@ def test_check_pl_cutout_never_downloads(tmp_path):
         patch(MASK) as mask,
         patch("kartograf.providers.pl.create_nmt_provider") as factory,
     ):
-        missing = check_pl_cutout(bbox=BBOX, output_dir=tmp_path, **ARGS)
+        missing = check_pl_cutout(bbox=BBOX, root=tmp_path, **ARGS)
     assert missing.items[0].track == "pl_cutout"
     assert missing.items[0].unit == cut.target_path.stem
     assert missing.items[0].status == "missing"
@@ -399,7 +399,7 @@ def test_check_pl_cutout_never_downloads(tmp_path):
         patch(MASK) as mask,
         patch("kartograf.providers.pl.create_nmt_provider") as factory,
     ):
-        local = check_pl_cutout(bbox=BBOX, output_dir=tmp_path, **ARGS)
+        local = check_pl_cutout(bbox=BBOX, root=tmp_path, **ARGS)
     assert local.items[0].status == "unverifiable"
     assert local.items[0].local_sha256
     mask.assert_not_called()
@@ -408,7 +408,7 @@ def test_check_pl_cutout_never_downloads(tmp_path):
 
 def test_pl_cutout_plan_skips_missing_or_stale_without_fetch(tmp_path):
     cut = _cutout(tmp_path)
-    missing = check_pl_cutout(bbox=BBOX, output_dir=tmp_path, **ARGS)
+    missing = check_pl_cutout(bbox=BBOX, root=tmp_path, **ARGS)
     session = _recorded_session()
     provider = GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m")
     with patch(MASK) as mask:
@@ -635,7 +635,7 @@ def test_download_pl_cutout_writes_parent_request(tmp_path):
     ):
         result = download_pl_cutout(
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             parent_request={"p": 1},
             cache=False,
             **ARGS,
@@ -658,7 +658,7 @@ def _factory(session):
 
 def test_check_pl_cutout_same_args_as_download(tmp_path):
     """The check takes the download's selection and plans exactly its file."""
-    selection = {"output_dir": tmp_path, "cache": False, **ARGS}
+    selection = {"root": tmp_path, "cache": False, **ARGS}
     before = check_pl_cutout(bbox=BBOX, **selection)
     with _factory(_recorded_session()), patch(MASK, return_value=ALL_LAND):
         result = download_pl_cutout(bbox=BBOX, **selection)
@@ -671,13 +671,13 @@ def test_check_pl_cutout_same_args_as_download(tmp_path):
 
 
 def test_download_pl_cutout_plan_stale_no_download(tmp_path):
-    missing = check_pl_cutout(bbox=BBOX, output_dir=tmp_path, **ARGS)
+    missing = check_pl_cutout(bbox=BBOX, root=tmp_path, **ARGS)
     changed = replace(missing.items[0], available_label="different")
     session = _recorded_session()
     with _factory(session), patch(MASK) as mask:
         result = download_pl_cutout(
             bbox=BBOX,
-            output_dir=tmp_path,
+            root=tmp_path,
             update="upgrade",
             plan=replace(missing, items=(changed,)),
             cache=False,
@@ -709,7 +709,7 @@ def test_cutout_size_notice_before_first_wcs_request(tmp_path):
         pytest.raises(DownloadError),
     ):
         download_pl_cutout(
-            bbox=BBOX, output_dir=tmp_path, cache=False, on_notice=events.append, **ARGS
+            bbox=BBOX, root=tmp_path, cache=False, on_notice=events.append, **ARGS
         )
     assert events == [
         Notice(
@@ -724,7 +724,7 @@ def test_cutout_size_notice_before_first_wcs_request(tmp_path):
 
 def test_cutout_size_notice_absent_for_one_small_chunk(tmp_path):
     with _factory(_recorded_session()), patch(MASK, return_value=ALL_LAND):
-        result = download_pl_cutout(bbox=BBOX, output_dir=tmp_path, cache=False, **ARGS)
+        result = download_pl_cutout(bbox=BBOX, root=tmp_path, cache=False, **ARGS)
     assert result.file.status == "new"
     assert result.notices == ()
 
@@ -736,7 +736,7 @@ def test_all_nodata_notice(tmp_path):
     session = _synthetic_session(lambda xs, ys: np.full_like(xs + ys, -9999.0))
     with _factory(session), patch(MASK, return_value=ALL_LAND):
         result = download_pl_cutout(
-            bbox=BBOX, output_dir=tmp_path, cache=False, on_notice=seen.append, **ARGS
+            bbox=BBOX, root=tmp_path, cache=False, on_notice=seen.append, **ARGS
         )
     expected = Notice(
         "warning",
@@ -748,7 +748,7 @@ def test_all_nodata_notice(tmp_path):
     assert result.notices == (expected,)
     assert seen == [expected]
     with patch(MASK) as mask:
-        local = download_pl_cutout(bbox=BBOX, output_dir=tmp_path, cache=False, **ARGS)
+        local = download_pl_cutout(bbox=BBOX, root=tmp_path, cache=False, **ARGS)
     assert local.file.status == "local" and local.all_nodata
     assert local.notices == ()
     mask.assert_not_called()
@@ -807,7 +807,7 @@ class TestCli:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -820,7 +820,7 @@ class TestCli:
                     "--horizontal-crs",
                     "EPSG:2180",
                     *extra,
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                 ]
@@ -949,7 +949,7 @@ class TestCli:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -962,7 +962,7 @@ class TestCli:
                     "--horizontal-crs",
                     "EPSG:2180",
                 ]
-                + ["-o", str(tmp_path), "-q"]
+                + ["--root", str(tmp_path), "-q"]
             )
 
         assert rc == 11
@@ -1049,7 +1049,7 @@ class TestCli:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -1068,7 +1068,7 @@ class TestCli:
                     "--cutout",
                     "--horizontal-crs",
                     "EPSG:2180",
-                    "-o",
+                    "--root",
                     str(tmp_path),
                     "-q",
                 ]
@@ -1132,7 +1132,7 @@ class TestCli:
                     "download",
                     "--product",
                     "nmt",
-                    "-o",
+                    "--root",
                     "./data",
                     "--country",
                     "auto",
@@ -1152,7 +1152,7 @@ class TestCli:
                     "--horizontal-crs",
                     "EPSG:2180",
                 ]
-                + ["--vertical-crs", "EVRF2007", "-o", str(tmp_path), "-q"]
+                + ["--vertical-crs", "EVRF2007", "--root", str(tmp_path), "-q"]
             )
 
     def test_cli_auto_two_cutouts_shared_parent(self, tmp_path):

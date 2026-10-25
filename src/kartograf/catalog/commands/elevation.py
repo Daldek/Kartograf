@@ -438,7 +438,7 @@ _DOWNLOAD_PARAMS = (
         ),
         unit="points/m2",
     ),
-    shared.output_dir(_output_files),
+    shared.root(_output_files),
     *shared.update_params(
         check=(
             "Cheap signal: the ETag of SM5 sheets, TM33 DMR 4G and DMP OK "

@@ -69,8 +69,8 @@ Offline. The envelope names the command and holds the document of the command:
 Plan a download, then run it (network). `--check-updates` writes nothing:
 
 ```bash
-kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 --output ~/kartograf-data --check-updates --json
-kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 --output ~/kartograf-data --json
+kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 --root ~/kartograf-data --check-updates --json
+kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 --root ~/kartograf-data --json
 ```
 
 The plan is `"check": true` with `result.schema` `kartograf-plan/1` and one item per file (`status` `missing`, `newer`, `current`, `unverifiable` or `check_failed`). The run has `result.schema` `kartograf-download/1`:
@@ -113,7 +113,7 @@ choice = {
     "sheet": "N-34-139-C-a-3-1",
     "resolution": "1m",
     "vertical_crs": "EVRF2007",
-    "output_dir": Path.home() / "kartograf-data",
+    "root": Path.home() / "kartograf-data",
 }
 plan = check_data(**choice)  # reads the source, writes nothing
 report = download_data(**choice)
@@ -240,7 +240,7 @@ Sources, as in the [Nogat registry](https://github.com/Daldek/Nogat/blob/main/ec
 
 Every file has a sidecar `<file>.meta.json` (`kartograf-meta/1`) with the CRS, the source, the request, the SHA-256 and the licence with a ready-made attribution text; pass it on when you publish results.
 
-Files go to the directory of `--output` (`output_dir`), one directory per product: `<output>/<product>/<country>_<system>[_<variant>]/...`. A version is a file in `versions/<label>_<sha8>/`; the standard path and `full_sheet/` are hard links to the newest local version ([ARCHITECTURE.md](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md), section 3).
+Files go to the directory of `--root` (`root`), one directory per product: `<root>/<product>/<country>_<system>[_<variant>]/...`. A version is a file in `versions/<label>_<sha8>/`; the standard path and `full_sheet/` are hard links to the newest local version ([ARCHITECTURE.md](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md), section 3).
 
 ### Settings, directories and backup
 
@@ -248,7 +248,7 @@ Settings come from the first of: the command-line option, the variable `KARTOGRA
 
 | Variable | Key in `nogat.toml` | Meaning | Default |
 |---|---|---|---|
-| `KARTOGRAF_ROOT` | `[kartograf] root` | root of the store (reported by `config show`; the commands still take the store from `--output`) | `<data_dir>/kartograf` |
+| `KARTOGRAF_ROOT` | `[kartograf] root` | root of the store (reported by `config show`; the commands still take the store from `--root`) | `<data_dir>/kartograf` |
 | `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR` | `data_dir` | parent of the stores | user data directory of `nogat` (`~/.local/share/nogat`) |
 | `KARTOGRAF_CACHE_DIR`, `NOGAT_CACHE_DIR` | `cache_dir` | parent of the caches; the metadata cache is `<cache_dir>/kartograf/metadata.db` | user cache directory of `nogat` (`~/.cache/nogat`) |
 | `KARTOGRAF_LANG`, `NOGAT_LANG` | `lang` | language of human-readable output, `pl` or `en`; `--lang` overrides it; the `--json` output and the error line are English (the library texts move into the message catalog area by area) | `pl` |

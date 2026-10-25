@@ -80,7 +80,7 @@ def test_sheet_find_input_errors_are_validation_errors(capsys, argv, option):
 
 
 def test_store_overview_lists_the_segments(capsys, store):
-    code, out, err = run(capsys, "store", "overview", "-o", str(store))
+    code, out, err = run(capsys, "store", "overview", "--root", str(store))
 
     assert (code, err) == (0, "")
     assert out.splitlines()[0].endswith("(2 segmentow):")
@@ -88,14 +88,14 @@ def test_store_overview_lists_the_segments(capsys, store):
 
 
 def test_store_overview_of_an_empty_directory_says_so(capsys, tmp_path):
-    code, out, _ = run(capsys, "store", "overview", "-o", str(tmp_path))
+    code, out, _ = run(capsys, "store", "overview", "--root", str(tmp_path))
 
     assert code == 0
     assert "jest pusty" in out
 
 
 def test_store_overview_json_is_the_envelope_of_the_library_document(capsys, store):
-    code, out, _ = run(capsys, "store", "overview", "-o", str(store), "--json")
+    code, out, _ = run(capsys, "store", "overview", "--root", str(store), "--json")
 
     document = json.loads(out)
     assert code == 0
@@ -108,7 +108,7 @@ def test_store_overview_json_is_the_envelope_of_the_library_document(capsys, sto
 
 def test_store_entries_lists_the_first_entries_and_says_when_more_follow(capsys, store):
     code, out, err = run(
-        capsys, "store", "entries", "-o", str(store), "--segment", PL_SEGMENT,
+        capsys, "store", "entries", "--root", str(store), "--segment", PL_SEGMENT,
         "--limit", "2",
     )  # fmt: skip
 
@@ -120,7 +120,7 @@ def test_store_entries_lists_the_first_entries_and_says_when_more_follow(capsys,
 
 def test_store_entries_takes_the_units_as_a_comma_separated_list(capsys, store):
     code, out, _ = run(
-        capsys, "store", "entries", "-o", str(store), "--segment", PL_SEGMENT,
+        capsys, "store", "entries", "--root", str(store), "--segment", PL_SEGMENT,
         "--limit", "50", "--units", "N-34-130-D-d-2-4,N-34-130-D-d-2-3", "--json",
     )  # fmt: skip
 
@@ -142,7 +142,7 @@ def test_store_entries_takes_the_units_as_a_comma_separated_list(capsys, store):
 def test_store_entries_requires_its_segment_and_a_positive_limit(
     capsys, store, extra, option
 ):
-    code, out, err = run(capsys, "store", "entries", "-o", str(store), *extra)
+    code, out, err = run(capsys, "store", "entries", "--root", str(store), *extra)
 
     document = error_document(err)
     assert (code, out) == (2, "")
@@ -151,14 +151,14 @@ def test_store_entries_requires_its_segment_and_a_positive_limit(
 
 def test_the_store_commands_require_the_store_and_the_path(capsys):
     code, _, err = run(capsys, "store", "overview")
-    assert (code, error_document(err)["details"]["option"]) == (2, "output_dir")
+    assert (code, error_document(err)["details"]["option"]) == (2, "root")
 
     code, _, err = run(capsys, "store", "sidecar")
     assert (code, error_document(err)["details"]["option"]) == (2, "path")
 
 
 def test_a_missing_store_is_an_io_error(capsys, tmp_path):
-    code, out, err = run(capsys, "store", "overview", "-o", str(tmp_path / "none"))
+    code, out, err = run(capsys, "store", "overview", "--root", str(tmp_path / "none"))
 
     assert (code, out) == (9, "")
     assert error_document(err)["code"] == "io_error"

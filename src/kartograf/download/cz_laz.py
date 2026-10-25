@@ -14,7 +14,7 @@ Example::
     from kartograf import BBox, download_cz_laz
 
     result = download_cz_laz(
-        model="dmr5g", vertical_crs="Bpv", output_dir="./data",
+        model="dmr5g", vertical_crs="Bpv", root="./data",
         bbox=BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
     )
     for failure in result.failed:
@@ -103,13 +103,13 @@ class CzLazResult:
         return not self.failed
 
 
-def _slot(provider: CuzkLazProvider, sheet: str, output_dir: str | Path) -> FileSlot:
+def _slot(provider: CuzkLazProvider, sheet: str, root: str | Path) -> FileSlot:
     """``laz/cz_<model>_<vcrs>/<sheet hierarchy>/<sheet>.laz`` and its versions."""
     storage = storage_for_provider(
-        output_dir, provider, resolution=None, vertical_crs=provider.vertical_crs
+        root, provider, resolution=None, vertical_crs=provider.vertical_crs
     )
     return FileSlot(
-        Path(output_dir),
+        Path(root),
         storage.get_raw_path(sheet, f"{sheet}{provider.default_extension}"),
         storage.get_raw_versions_base(sheet),
         storage.get_raw_versions_root(sheet),
@@ -167,13 +167,13 @@ def _select(
 
 
 def _check(
-    provider: CuzkLazProvider, sheets: tuple[str, ...], output_dir: str | Path
+    provider: CuzkLazProvider, sheets: tuple[str, ...], root: str | Path
 ) -> UpdatePlan:
     """Plan positions of the sheets: one ``HEAD`` each, no file transfer."""
     signal = _signal(provider)
     items = tuple(
         inspect_version(
-            _slot(provider, sheet, output_dir),
+            _slot(provider, sheet, root),
             track="cz_laz",
             unit=sheet,
             signal=signal,
@@ -181,14 +181,14 @@ def _check(
         )
         for sheet in sheets
     )
-    return new_plan(store_id(output_dir), items)
+    return new_plan(store_id(root), items)
 
 
 def _fetch_sheet(
     provider: CuzkLazProvider,
     sheet: str,
     *,
-    output_dir: str | Path,
+    root: str | Path,
     update: UpdateMode | None,
     parent_request: dict[str, Any] | None,
     planned: dict[str, Any] | None,
@@ -198,7 +198,7 @@ def _fetch_sheet(
     ``planned``: the signal of a just-checked plan position - reused instead
     of a second ``HEAD`` before the download.
     """
-    slot = _slot(provider, sheet, output_dir)
+    slot = _slot(provider, sheet, root)
     received: dict[str, Any] | None = None
 
     def on_response(response: requests.Response) -> None:
@@ -264,7 +264,7 @@ def _run(
     provider: CuzkLazProvider,
     sheets: tuple[str, ...],
     *,
-    output_dir: str | Path,
+    root: str | Path,
     update: UpdateMode | None,
     plan: UpdatePlan | None,
     parent_request: dict[str, Any] | None,
@@ -276,8 +276,8 @@ def _run(
     planned: dict[str, dict[str, Any] | None] = {}
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
-        require_store(plan, store_id(output_dir))
-        fresh = _check(provider, sheets, output_dir).items
+        require_store(plan, store_id(root))
+        fresh = _check(provider, sheets, root).items
         todo, excluded = select_planned(plan, list(fresh), "cz_laz")
         planned = {item.unit: item.available_signal for item in todo}
         selected = tuple(sheet for sheet in sheets if sheet in planned)
@@ -289,7 +289,7 @@ def _run(
             file = _fetch_sheet(
                 provider,
                 sheet,
-                output_dir=output_dir,
+                root=root,
                 update=update,
                 parent_request=parent_request,
                 planned=planned.get(sheet),
@@ -335,7 +335,7 @@ def check_cz_laz(
     *,
     model: str,
     vertical_crs: str,
-    output_dir: str | Path,
+    root: str | Path,
     sheet: str | None = None,
     bbox: BBox | None = None,
     cache: MetadataCache | bool = True,
@@ -354,14 +354,14 @@ def check_cz_laz(
     sink = NoticeSink(on_notice)
     with open_cache(cache, force=True, on_notice=sink.add) as metadata:
         provider = _provider(model, vertical_crs, metadata)
-        return _check(provider, _select(provider, sheet, bbox), output_dir)
+        return _check(provider, _select(provider, sheet, bbox), root)
 
 
 def download_cz_laz(
     *,
     model: str,
     vertical_crs: str,
-    output_dir: str | Path,
+    root: str | Path,
     sheet: str | None = None,
     bbox: BBox | None = None,
     update: UpdateMode | None = None,
@@ -382,7 +382,7 @@ def download_cz_laz(
     vertical_crs : str
         ``"Bpv"`` (SM5 sheets, S-JTSK) or ``"EVRF2007"`` (TM33 tiles,
         ETRS89); the file is stored as published, never transformed.
-    output_dir : str or Path
+    root : str or Path
         Base directory: ``laz/cz_<model>_<vcrs>/<sheet hierarchy>/<sheet>.laz``.
     sheet, bbox
         Exactly one: a sheet code of the height system's sheet system, or
@@ -436,7 +436,7 @@ def download_cz_laz(
         result = _run(
             provider,
             _select(provider, sheet, bbox),
-            output_dir=output_dir,
+            root=root,
             update=update,
             plan=plan,
             parent_request=parent_request,

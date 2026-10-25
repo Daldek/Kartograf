@@ -136,7 +136,7 @@ def test_pl_control_bbox_networks(tmp_path, router, monkeypatch, network, layers
         country="pl",
         bbox=area,
         network=network,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert report.ok, report.failed
@@ -180,7 +180,7 @@ def test_pl_control_packages_and_archives(tmp_path, router):
             product="control",
             teryt="1201",
             network=network,
-            output_dir=tmp_path,
+            root=tmp_path,
             cache=False,
         )
         assert report.ok, report.failed
@@ -199,7 +199,7 @@ def test_pl_control_packages_and_archives(tmp_path, router):
             product="control",
             teryt="1201",
             network="gravity",
-            output_dir=tmp_path,
+            root=tmp_path,
             cache=False,
         )
     assert "--network gravity" in str(area_only.value)
@@ -217,7 +217,7 @@ def test_pl_control_packages_and_archives(tmp_path, router):
         product="control",
         sheet="M-34-064-D",
         network="archive-1942",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
         on_notice=lambda n: seen.append((n.code, router.gets(archive["url"]))),
     )
@@ -243,7 +243,7 @@ def test_archive_sheet_without_package_is_a_unit_failure(tmp_path, router):
         country="pl",
         bbox=PL_AREAS["horizontal"],
         network="archive-kronsztadt60",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert [item.unit for item in report.files] == ["M-34-64"]
@@ -270,7 +270,7 @@ def test_cz_control_layers(tmp_path, router):
         country="cz",
         bbox=TESIN,
         network="vertical",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert vertical.ok, vertical.failed
@@ -297,7 +297,7 @@ def test_cz_control_layers(tmp_path, router):
         country="cz",
         bbox=TESIN,
         network="horizontal",
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert horizontal.ok, horizontal.failed
@@ -317,7 +317,7 @@ def test_network_required_with_the_values_of_each_country(tmp_path, router):
     applies to every country of the request); nothing is asked."""
     with pytest.raises(ValidationError) as cz:
         validate_collection_request(
-            product="control", country="cz", bbox=TESIN, output_dir=tmp_path
+            product="control", country="cz", bbox=TESIN, root=tmp_path
         )
     assert "--network wymagane" in str(cz.value)
     assert (
@@ -326,7 +326,7 @@ def test_network_required_with_the_values_of_each_country(tmp_path, router):
     )
     with pytest.raises(ValidationError) as both:
         validate_collection_request(
-            product="control", country="auto", bbox=BORDER, output_dir=tmp_path
+            product="control", country="auto", bbox=BORDER, root=tmp_path
         )
     text = str(both.value)
     assert "PL: horizontal, vertical, gravity, magnetic, archive-1942" in text
@@ -337,7 +337,7 @@ def test_network_required_with_the_values_of_each_country(tmp_path, router):
         country="auto",
         bbox=BORDER,
         network="vertical",
-        output_dir=tmp_path,
+        root=tmp_path,
     )
     assert sorted(part.segment for part in request.parts) == [
         "geodesy/cz_control_vertical",
@@ -359,7 +359,7 @@ def test_geoid_whole_country_only(tmp_path, router):
             product="geoid",
             country="pl",
             bbox=PL_AREAS["vertical"],
-            output_dir=tmp_path,
+            root=tmp_path,
         )
     assert "--whole-country" in str(area.value)
 
@@ -383,7 +383,7 @@ def test_geoid_whole_country_only(tmp_path, router):
         product="geoid",
         country="pl",
         whole_country=True,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert pl.ok, pl.failed
@@ -400,7 +400,7 @@ def test_geoid_whole_country_only(tmp_path, router):
         product="geoid",
         country="pl",
         whole_country=True,
-        output_dir=tmp_path,
+        root=tmp_path,
         update="force",
         cache=False,
     )
@@ -414,7 +414,7 @@ def test_geoid_whole_country_only(tmp_path, router):
         product="geoid",
         country="cz",
         whole_country=True,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     )
     assert cz.ok, cz.failed
@@ -430,7 +430,7 @@ def test_geoid_whole_country_only(tmp_path, router):
         product="geoid",
         country="cz",
         whole_country=True,
-        output_dir=tmp_path,
+        root=tmp_path,
         cache=False,
     ).items
     assert (current.status, current.available_label) == ("current", "2021-02-22")

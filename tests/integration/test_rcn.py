@@ -73,7 +73,7 @@ def test_rcn_powiat_export_is_one_geopackage_of_three_layers(tmp_path, monkeypat
     url = FILES["rcn_1201"]["url"]
 
     report = download_collection(
-        product="prices", teryt="1201", output_dir=store, cache=False
+        product="prices", teryt="1201", root=store, cache=False
     )
 
     assert report.ok, report.failed
@@ -91,9 +91,7 @@ def test_rcn_powiat_export_is_one_geopackage_of_three_layers(tmp_path, monkeypat
     assert list(local.iterdir()) == []  # the working copy is gone
     assert fake.calls == [("HEAD", url), ("GET", url)]
 
-    again = download_collection(
-        product="prices", teryt="1201", output_dir=store, cache=False
-    )
+    again = download_collection(product="prices", teryt="1201", root=store, cache=False)
     assert again.files[0].file.status == "local"
     assert fake.gets() == 1
 
@@ -106,7 +104,7 @@ def test_rcn_export_without_a_layer_is_not_stored(tmp_path, monkeypatch):
     store = tmp_path / "store"
 
     report = download_collection(
-        product="prices", teryt="1201", output_dir=store, cache=False
+        product="prices", teryt="1201", root=store, cache=False
     )
 
     assert report.files == ()
@@ -129,7 +127,7 @@ def test_rcn_voivodeship_export_and_size_notice(tmp_path, monkeypatch):
     report = download_collection(
         product="prices",
         teryt="12",
-        output_dir=tmp_path / "store",
+        root=tmp_path / "store",
         cache=False,
         on_notice=lambda notice: seen.append((notice.code, fake.gets(url))),
     )
@@ -141,7 +139,7 @@ def test_rcn_voivodeship_export_and_size_notice(tmp_path, monkeypatch):
     assert seen == [(DOWNLOAD_SIZE, 0)]
     assert "604038367 B" in report.notices[0].message
     with pytest.raises(ValidationError, match="Nieprawidlowy kod TERYT"):
-        download_collection(product="prices", teryt="126", output_dir=tmp_path)
+        download_collection(product="prices", teryt="126", root=tmp_path)
     assert fake.calls == [("HEAD", url), ("GET", url)]
 
 
@@ -149,5 +147,5 @@ def test_rcn_has_no_national_file(tmp_path):
     """``--whole-country`` names the selections RCN has instead (K7)."""
     with pytest.raises(ValidationError, match="nie ma pliku krajowego.*--teryt"):
         download_collection(
-            product="prices", country="pl", whole_country=True, output_dir=tmp_path
+            product="prices", country="pl", whole_country=True, root=tmp_path
         )
