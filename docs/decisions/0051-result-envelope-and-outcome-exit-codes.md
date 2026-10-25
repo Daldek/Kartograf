@@ -1,7 +1,7 @@
 # ADR-051: Result envelope kartograf-result/1, outcome exit codes 10 and 11, error document on stderr
 
 **Date:** 2026-10-24
-**Status:** Accepted
+**Status:** Accepted — amended by ADR-054 (`files[]` and `skipped[]` of the download reports)
 
 **Context:** The Nogat standard 2.1 gives every tool one answer shape (AGI-4.2): the
 envelope `<tool>-result/1` with `status` (`ok`, `partial`, `failed`), the domain document
