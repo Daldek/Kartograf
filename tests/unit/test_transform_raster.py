@@ -253,7 +253,7 @@ class TestWarpToGrid:
         bbox = BBox(ax - 50, ay - 50, ax + 50, ay + 50, "EPSG:5514")
         dst = tmp_path / "dst.tif"
 
-        with pytest.raises(TransformError, match="Niespojna para ukladow"):
+        with pytest.raises(TransformError, match="Inconsistent pair of systems:"):
             warp_to_grid(
                 src, dst, bbox, 1.0, pinned, src_crs="EPSG:4326", nodata=_NODATA
             )
@@ -273,7 +273,7 @@ class TestWarpToGrid:
         )
         dst = tmp_path / "dst.tif"
 
-        with pytest.raises(TransformError, match="Niespojna para ukladow"):
+        with pytest.raises(TransformError, match="Inconsistent pair of systems:"):
             warp_to_grid(
                 src, dst, bbox, 1.0, pinned, src_crs="EPSG:2180", nodata=_NODATA
             )
@@ -294,7 +294,7 @@ class TestWarpToGrid:
         )
         bbox = BBox(0.0, 0.0, 100.0, 100.0, "EPSG:5514")
 
-        with pytest.raises(TransformError, match="wymaga znanej pary ukladow"):
+        with pytest.raises(TransformError, match="a known pair of"):
             warp_to_grid(
                 src,
                 tmp_path / "dst.tif",
@@ -401,7 +401,7 @@ class TestWarpToGrid:
         from kartograf.exceptions import ValidationError
 
         pinned = _pinned_2180_to("EPSG:5514")
-        with pytest.raises(ValidationError, match="brak rastrow"):
+        with pytest.raises(ValidationError, match="warp_to_grid: no input rasters"):
             warp_to_grid(
                 [],
                 tmp_path / "dst.tif",

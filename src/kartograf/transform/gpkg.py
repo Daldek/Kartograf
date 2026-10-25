@@ -68,6 +68,7 @@ import pyogrio.raw
 from pyogrio.errors import DataLayerError, DataSourceError
 
 from kartograf.exceptions import DownloadError
+from kartograf.messages import message, reason
 
 if TYPE_CHECKING:
     from kartograf.sources.descriptor import FeatureBBoxParams
@@ -170,9 +171,9 @@ def write_gpkg(
     """
     path = Path(path)
     if path.exists():
-        raise ValueError(f"Plik {path} juz istnieje")
+        raise ValueError(f"File {path} already exists")
     if not pages.layers:
-        raise ValueError("Brak warstw do zapisu")
+        raise ValueError("No layers to write")
     dropped: dict[str, set[str]] = {name: set() for name in params.drop_fields}
     features: dict[str, int] = {}
     try:
@@ -214,7 +215,12 @@ def _read_page(page: Path, context: str, **kwargs: Any) -> tuple[Any, ...]:
         return result
     except (DataSourceError, DataLayerError) as e:
         raise DownloadError(
-            f"{context}: GDAL nie odczytal strony {page.name}: {e}"
+            message(
+                "transform.gdal_did_not_read_page",
+                context=context,
+                name=page.name,
+                error=reason(e),
+            )
         ) from e
 
 
@@ -236,7 +242,7 @@ def _read_wfs(
     layer = layer_pages.layer
     context = f"WFS {layer.source}"
     if layer_pages.schema is None or not layer_pages.pages:
-        raise ValueError(f"Warstwa WFS {layer.source} wymaga schematu i stron")
+        raise ValueError(f"WFS layer {layer.source} needs a schema and pages")
     options = {"layer": layer.source.rsplit(":", 1)[-1], **_GML_OPEN_OPTIONS}
     if _declares_types(layer_pages.schema):
         options["XSD"] = str(layer_pages.schema)
@@ -248,7 +254,12 @@ def _read_wfs(
             except DataLayerError as e:
                 if layer_pages.matched:
                     raise DownloadError(
-                        f"{context}: GDAL nie odczytal strony {page.name}: {e}"
+                        message(
+                            "transform.gdal_did_not_read_page",
+                            context=context,
+                            name=page.name,
+                            error=reason(e),
+                        )
                     ) from e
                 return _new_table(
                     [layer.id_field],
@@ -261,7 +272,12 @@ def _read_wfs(
                 )
             except DataSourceError as e:
                 raise DownloadError(
-                    f"{context}: GDAL nie odczytal strony {page.name}: {e}"
+                    message(
+                        "transform.gdal_did_not_read_page",
+                        context=context,
+                        name=page.name,
+                        error=reason(e),
+                    )
                 ) from e
             names = [str(name) for name in meta["fields"]]
             dtypes = [np.dtype(dtype) for dtype in meta["dtypes"]]
@@ -327,8 +343,14 @@ def _merge_fields(
             known = table.dtypes[table.names.index(name)]
             if known != dtype:
                 raise DownloadError(
-                    f"{context}: pole {name} ma na stronie {page.name} typ {dtype}, "
-                    f"a na wczesniejszych {known}"
+                    message(
+                        "transform.field_has_type_page_earlier_ones",
+                        context=context,
+                        name=name,
+                        page_name=page.name,
+                        dtype=dtype,
+                        known=known,
+                    )
                 )
             continue
         table.names.append(name)
@@ -363,7 +385,12 @@ def _read_arcgis(
         features = json.loads(page.read_bytes())["features"]
         _, _, geometries, _ = _read_page(page, context, columns=[])
         if geometries is None or len(geometries) != len(features):
-            raise DownloadError(f"{context}: GDAL odczytal inna liczbe obiektow strony")
+            raise DownloadError(
+                message(
+                    "transform.gdal_read_different_number_features_page",
+                    context=context,
+                )
+            )
         for feature, wkb in zip(features, geometries, strict=True):
             properties = feature.get("properties") or {}
             row = tuple(
@@ -402,7 +429,11 @@ def _read_ogcapi(
         _, _, geometries, _ = _read_page(page, context, columns=[])
         if geometries is None or len(geometries) != len(rows):
             raise DownloadError(
-                f"{context}: GDAL odczytal inna liczbe obiektow strony {page.name}"
+                message(
+                    "transform.gdal_read_different_number_features_page_2",
+                    context=context,
+                    name=page.name,
+                )
             )
         for values, wkb in zip(rows, geometries, strict=True):
             row = tuple(
@@ -425,16 +456,23 @@ def _ogcapi_values(page: Path, id_field: str, context: str) -> list[dict[str, An
         properties = feature.get("properties")
         if properties is not None and not isinstance(properties, dict):
             raise DownloadError(
-                f"{context}: strona {page.name} ma obiekt z properties innym niz "
-                "slownik"
+                message(
+                    "transform.page_has_feature_whose_properties_not",
+                    context=context,
+                    name=page.name,
+                )
             )
         values = dict(properties or {})
         if id_field == _GEOJSON_ID:
             ident = feature.get("id")
             if values.get(_GEOJSON_ID, ident) != ident:
                 raise DownloadError(
-                    f"{context}: wlasciwosc id={values[_GEOJSON_ID]!r} rozna od "
-                    f"identyfikatora obiektu {ident!r}"
+                    message(
+                        "transform.property_id_differs_feature_identifier",
+                        context=context,
+                        id_value=values[_GEOJSON_ID],
+                        ident=ident,
+                    )
                 )
             values[_GEOJSON_ID] = ident
         rows.append(values)
@@ -497,7 +535,13 @@ def _new_table(
 ) -> _Table:
     """Empty table of a layer schema; the id field must be in the schema."""
     if id_field not in names:
-        raise DownloadError(f"{context}: schemat warstwy nie ma pola {id_field}")
+        raise DownloadError(
+            message(
+                "transform.layer_schema_has_no_field",
+                context=context,
+                id_field=id_field,
+            )
+        )
     return _Table(
         names=names,
         dtypes=dtypes,
@@ -532,7 +576,13 @@ def _esri_value(value: Any, esri: str, name: str, context: str) -> Any:
     if kind == "O":
         return value if isinstance(value, str) else json.dumps(value)
     raise DownloadError(
-        f"{context}: wartosc {value!r} pola {name} nie jest typu {esri}"
+        message(
+            "transform.value_field_not_type",
+            context=context,
+            value=value,
+            name=name,
+            esri=esri,
+        )
     )
 
 
@@ -572,7 +622,11 @@ def _add(
     ident = _canonical(row[table.key])
     if ident is None or ident == "":
         raise DownloadError(
-            f"{context}: obiekt bez identyfikatora {table.names[table.key]}"
+            message(
+                "transform.feature_without_identifier",
+                context=context,
+                id_field=table.names[table.key],
+            )
         )
     for index, name in enumerate(table.names):
         if name in dropped and not _is_null(row[index]):
@@ -588,16 +642,24 @@ def _add(
     )
     if not same:
         raise DownloadError(
-            f"{context}: obiekt {table.names[table.key]}={ident!r} wystepuje "
-            "dwa razy z inna trescia"
+            message(
+                "transform.feature_occurs_twice_different_content",
+                context=context,
+                id_field=table.names[table.key],
+                ident=ident,
+            )
         )
 
 
 def _check_complete(table: _Table, layer_pages: "LayerPages", context: str) -> None:
     if len(table.rows) != layer_pages.matched:
         raise DownloadError(
-            f"{context}: strony daja {len(table.rows)} roznych obiektow, "
-            f"oczekiwano {layer_pages.matched} (niepelna odpowiedz)"
+            message(
+                "transform.pages_give_different_features",
+                context=context,
+                rows_count=len(table.rows),
+                matched=layer_pages.matched,
+            )
         )
 
 
@@ -670,7 +732,11 @@ def _write_layer(
         ordered = [table.rows[key] for key in sorted(table.rows)]
     except TypeError as e:
         raise DownloadError(
-            f"{layer.source}: identyfikatory {layer.id_field} nie sa porownywalne"
+            message(
+                "transform.identifiers_not_comparable",
+                source=layer.source,
+                id_field=layer.id_field,
+            )
         ) from e
     kept = [i for i, name in enumerate(table.names) if name not in params.drop_fields]
     names = [table.names[i] for i in kept]

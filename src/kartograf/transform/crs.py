@@ -33,6 +33,7 @@ from pyproj.exceptions import CRSError
 from pyproj.transformer import TransformerGroup
 
 from kartograf.exceptions import KartografError
+from kartograf.messages import message
 
 # Coordinate arrays accepted by ``PinnedTransform.transform`` (any float dtype;
 # pyproj returns float64).
@@ -137,7 +138,10 @@ class PinnedTransform:
             result = self._transformer.transform(x, y, z)
         if not all(bool(np.all(np.isfinite(v))) for v in result):
             raise TransformError(
-                f"Transformacja zwrocila wartosc nieskonczona [{self.description}]"
+                message(
+                    "transform.transformation_returned_infinite_value",
+                    description=self.description,
+                )
             )
         return result
 
@@ -162,8 +166,10 @@ class PinnedTransform:
         """
         if self.src_crs is None or self.dst_crs is None:
             raise TransformError(
-                f"Operacja GDAL wymaga znanej pary ukladow "
-                f"[{self.description}] - PinnedTransform zbudowany bez nich"
+                message(
+                    "transform.gdal_operation_needs_known_pair_systems",
+                    description=self.description,
+                )
             )
         pipeline = str(self._transformer.definition).strip()
         if not pipeline.startswith("proj=pipeline"):
@@ -201,48 +207,50 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
         "EPSG:5514",
         "EPSG:2180",
         1.0,
-        "EPSG:1622 S-JTSK to ETRS89 (1), Czechy; pin DATUM_STEP_PINS - "
-        "EPSG:4829 (0,5 m) to operacja slowacka; reprojekcja tresci LOKALNA, "
-        "serwer CUZK gubi datum shift dla imageSR=2180 (ADR-024)",
+        "EPSG:1622 S-JTSK to ETRS89 (1), Czechia; pin DATUM_STEP_PINS - "
+        "EPSG:4829 (0.5 m) is the Slovak operation; the content is "
+        "reprojected LOCALLY, the CUZK server drops the datum shift for "
+        "imageSR=2180 (ADR-024)",
     ),
     KnownPath(
         "EPSG:2180",
         "EPSG:5514",
         1.0,
-        "wycinek PL --cutout (ADR-027, ADR-038); pin odwrotnej EPSG:1622: "
-        "Inverse of Poland CS92 + ETRF2000-PL to ETRS89 (1) "
-        "+ Inverse of S-JTSK to ETRS89 (1) + Krovak East North",
+        "PL --cutout (ADR-027, ADR-038); pin of the inverse EPSG:1622: "
+        "Inverse of Poland CS92 + ETRF2000-PL to ETRS89 (1) + Inverse of "
+        "S-JTSK to ETRS89 (1) + Krovak East North",
     ),
     KnownPath(
         "EPSG:5514",
         "EPSG:3045",
         1.0,
-        "kafel TM33; pin EPSG:1622 S-JTSK to ETRS89 (1), Czechy",
+        "TM33 tile; pin EPSG:1622 S-JTSK to ETRS89 (1), Czechia",
     ),
     KnownPath(
         "EPSG:5514",
         "EPSG:4326",
         1.0,
-        "lon/lat i obwiednie; pin EPSG:1623 S-JTSK to WGS 84 (1), Czechy; "
-        "te same parametry Helmerta co EPSG:1622",
+        "lon/lat and envelopes; pin EPSG:1623 S-JTSK to WGS 84 (1), Czechia; "
+        "the same Helmert parameters as EPSG:1622",
     ),
     KnownPath(
         "EPSG:2180",
         "EPSG:3045",
         0.0,
-        "wycinek PL --cutout (ADR-027, ADR-038) na siatke kafla TM33; zmierzone: "
-        "Inverse of Poland CS92 + ETRF2000-PL to ETRS89 (1) + UTM zone 33N",
+        "PL --cutout (ADR-027, ADR-038) onto the grid of a TM33 tile; "
+        "measured: Inverse of Poland CS92 + ETRF2000-PL to ETRS89 (1) + UTM "
+        "zone 33N",
     ),
-    KnownPath("EPSG:8353", "EPSG:2180", 0.001, "SK, bez siatek"),
-    KnownPath("EPSG:25833", "EPSG:2180", 0.0, "DE, jedyna operacja, bez siatek"),
-    KnownPath("EPSG:8357", "EPSG:5621", 0.1, "Bpv->EVRF2007; +0,11..+0,15 m"),
-    KnownPath("EPSG:7837", "EPSG:5621", 0.1, "DHHN2016; realnie 1-14 mm"),
+    KnownPath("EPSG:8353", "EPSG:2180", 0.001, "SK, no grids"),
+    KnownPath("EPSG:25833", "EPSG:2180", 0.0, "DE, the only operation, no grids"),
+    KnownPath("EPSG:8357", "EPSG:5621", 0.1, "Bpv->EVRF2007; +0.11..+0.15 m"),
+    KnownPath("EPSG:7837", "EPSG:5621", 0.1, "DHHN2016; in fact 1-14 mm"),
     KnownPath(
         "EPSG:4937",
         "EPSG:8357",
         0.03,
-        "siatka sk_gku_Slovakia_ETRS89h_to_Baltic1957; probe konieczny "
-        "(pierwsza operacja PROJ to siatka CZ)",
+        "grid sk_gku_Slovakia_ETRS89h_to_Baltic1957; the probe is needed (the "
+        "first PROJ operation is the CZ grid)",
     ),
 )
 
@@ -254,10 +262,7 @@ DATUM_STEP_PINS: dict[int, frozenset[str]] = {
     5514: frozenset({"EPSG:1622", "EPSG:1623"}),
 }
 
-_KRON86_EVRF_REMEDY = (
-    "Siatki pl86_2019/pl07_2019 nie sa publiczne - zainstaluj je recznie do "
-    "PROJ_DATA albo uzyj EVRF2007 (EPSG:5621)."
-)
+_KRON86_EVRF_REMEDY = message("transform.grids_pl86_2019_pl07_2019_not")
 
 # Remedy per TARGET CRS, attached to TransformUnavailableError.
 REMEDIES: dict[str, str] = {
@@ -358,13 +363,13 @@ def build_pinned_transform(
             if accuracy < 0 and identity:
                 accuracy = 0.0  # PROJ 9.8.1 calls a pure axis swap "unknown"
             if accuracy < 0:
-                rejected.append((description, "nieznana dokladnosc (accuracy < 0)"))
+                rejected.append((description, "unknown accuracy (accuracy < 0)"))
                 continue
             if accuracy > policy.min_accuracy_m:
                 rejected.append(
                     (
                         description,
-                        f"dokladnosc {accuracy} m > limit {policy.min_accuracy_m} m",
+                        f"accuracy {accuracy} m > limit {policy.min_accuracy_m} m",
                     )
                 )
                 continue
@@ -372,8 +377,8 @@ def build_pinned_transform(
                 rejected.append(
                     (
                         description,
-                        f"krok datum spoza przypietych {sorted(required)} "
-                        "(operacja innego kraju dla tego samego datum)",
+                        f"datum step outside the pinned {sorted(required)} (an "
+                        f"operation of another country for the same datum)",
                     )
                 )
                 continue
@@ -382,13 +387,14 @@ def build_pinned_transform(
                 try:
                     probe = transformer.transform(px, py)
                 except Exception as e:  # noqa: BLE001 — any probe error = rejection
-                    rejected.append((description, f"probe rzucil wyjatek: {e}"))
+                    rejected.append((description, f"probe raised an exception: {e}"))
                     continue
                 if not all(bool(np.all(np.isfinite(v))) for v in probe):
                     rejected.append(
                         (
                             description,
-                            "probe zwrocil inf/NaN (siatka nie pokrywa obszaru danych)",
+                            "probe returned inf/NaN (the grid does not cover "
+                            "the data area)",
                         )
                     )
                     continue
@@ -400,8 +406,13 @@ def build_pinned_transform(
 
     if not candidates:
         raise TransformUnavailableError(
-            f"Brak bezpiecznej operacji transformacji {src_crs} -> {dst_crs} "
-            f"(kandydatow: {len(group.transformers)}, odrzuconych: {len(rejected)})",
+            message(
+                "transform.no_safe_transformation_operation",
+                src_crs=src_crs,
+                dst_crs=dst_crs,
+                transformers_count=len(group.transformers),
+                rejected_count=len(rejected),
+            ),
             rejected=rejected,
             remedy=REMEDIES.get(dst_crs),
         )

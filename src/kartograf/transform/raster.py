@@ -25,6 +25,7 @@ from rasterio.warp import reproject
 
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.transform.crs import PinnedTransform, TransformError
 
 logger = logging.getLogger(__name__)
@@ -125,8 +126,11 @@ def _vrt_over(path: Path, *, crs_wkt: str, dtype: str) -> Iterator[str]:
     with rasterio.open(path) as src:
         if src.count != 1:
             raise ValidationError(
-                f"warp_to_grid: zrodlo {path.name} ma {src.count} pasm - "
-                "reprojekcja obsluguje tylko rastry jednopasmowe"
+                message(
+                    "transform.warp_grid_source_has_bands",
+                    name=path.name,
+                    count=src.count,
+                )
             )
         meta = {"transform": src.transform, "width": src.width, "height": src.height}
         nodata = src.nodata
@@ -181,9 +185,14 @@ def warp_to_grid(
         pinned.dst_crs is not None and not _same_crs(pinned.dst_crs, bbox.crs)
     ):
         raise TransformError(
-            f"Niespojna para ukladow: operacja przypieta to "
-            f"{pinned.src_crs} -> {pinned.dst_crs}, a zadana reprojekcja "
-            f"{src_crs} -> {bbox.crs} [{pinned.description}]"
+            message(
+                "transform.inconsistent_pair_systems",
+                src_crs=pinned.src_crs,
+                dst_crs=pinned.dst_crs,
+                want_src=src_crs,
+                want_dst=bbox.crs,
+                description=pinned.description,
+            )
         )
     paths = (
         [Path(sources)]
@@ -191,17 +200,17 @@ def warp_to_grid(
         else [Path(p) for p in sources]
     )
     if not paths:
-        raise ValidationError("warp_to_grid: brak rastrow wejsciowych")
+        raise ValidationError(message("transform.warp_grid_no_input_rasters"))
     width = max(1, round((bbox.max_x - bbox.min_x) / pixel_size))
     height = max(1, round((bbox.max_y - bbox.min_y) / pixel_size))
     dst_transform = from_origin(bbox.min_x, bbox.max_y, pixel_size, pixel_size)
     tmp_path = dst_path.with_name(
         f"{dst_path.name}.{os.getpid()}_{threading.get_ident()}.warp.tif"
     )
-    more = f" (+{len(paths) - 1} zrodel)" if len(paths) > 1 else ""
+    more = f" (+{len(paths) - 1} sources)" if len(paths) > 1 else ""
     logger.debug(
-        f"Reprojekcja lokalna {paths[0].name}{more} -> {bbox.crs}: "
-        f"{pinned.description} (dokladnosc {pinned.accuracy_m} m)"
+        f"Local reprojection {paths[0].name}{more} -> {bbox.crs}: "
+        f"{pinned.description} (accuracy {pinned.accuracy_m} m)"
     )
     profile = {
         "driver": "GTiff",
