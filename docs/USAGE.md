@@ -3901,10 +3901,10 @@ them with the meaning of every allowed value. The same task, run and then planne
   client cancels does not stop a running download (versions are committed atomically, the
   result is dropped); closing stdio ends the server process.
 - Cost for the context of the agent: `tools/list` is long, because every property has its
-  catalog description and every tool the 3,000-character `outputSchema`: about 207,000
-  characters of compact JSON for the 39 tools of a server that writes (87,000 without the
-  `outputSchema`), 188,000 (77,000) for the 36 tools of a server that does not, and 64,000
-  (34,000) for `--tools core`; the answer of `kartograf_commands_list` is about 11,000
+  catalog description and every tool the 3,000-character `outputSchema`: about 212,000
+  characters of compact JSON for the 40 tools of a server that writes (89,000 without the
+  `outputSchema`), 194,000 (80,000) for the 37 tools of a server that does not, and 66,000
+  (35,000) for `--tools core`; the answer of `kartograf_commands_list` is about 11,000
   characters, and `structuredContent` repeats `content`. Claude Code defers the definitions
   and loads only the names and the `alwaysLoad` tools; for a client that loads all of them,
   start with `--tools core` or fewer families. The limit of 30,000 characters of ADR-046 (D22)

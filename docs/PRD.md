@@ -1359,7 +1359,7 @@ fix an error without parsing text.
   project options and MCP tool schemas are generated from the declarations. Command layer:
   `parse_command`, `validate_command`, `format_command`, `run_command`,
   `check_command` (KB-1..KB-5 of the Archiwista).
-- MCP server `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 39 tools 1:1
+- MCP server `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 40 tools 1:1
   with the commands (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope (`outputSchema`),
   `is_error` only for an error, with no default values affecting data (a given `root`
   absolute, one left out the default store inside `--allow-dir`, `bbox` with `bbox_crs`),

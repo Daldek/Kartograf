@@ -21,7 +21,7 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   formats: ...`), of the cache, of a sidecar and of an I/O or internal error, and the messages
   `interrupted (Ctrl-C)` and `terminated (SIGTERM)`. The text mode of the CLI prints them in
   Polish by default (`--lang pl`); the last line of stderr is always English. The other
-  library texts follow area by area (ADR-053, PROGRESS Next 25); a client that matched the
+  library texts moved into the catalog area by area (ADR-053); a client that matched the
   Polish `hint` matches the English one or the `code` and `details`.
 - The library texts of the areas that moved into the message catalog are English by default and
   Polish with `--lang pl` (ADR-053), area by area: the sheet code parsers and geometry readers
@@ -173,8 +173,7 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   `Notice.localized(lang)`, `error_report(exc, lang=)`, `config.human_language` and the
   CLI-only option `--lang pl|en` of every command (after it `KARTOGRAF_LANG`, `NOGAT_LANG`,
   `nogat.toml`, then `pl`) follow it. `tests/unit/test_messages.py` checks every entry,
-  every `message(...)` call and the Polish literals that remain outside the catalog
-  (`_PENDING`, shrinking area by area).
+  every `message(...)` call and that no Polish literal remains outside the catalog.
 - `kartograf commands guide --format agents|llms|agents-md-block` (library: `agent_guide`,
   the document `AgentGuide` = `kartograf-guide/1` with `format` and `text`) renders the guide
   for AI agents of AGI section 8 from the command catalog, the error registry and the
