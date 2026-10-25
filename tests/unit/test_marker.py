@@ -95,6 +95,34 @@ def test_racing_first_writes_leave_one_whole_marker(tmp_path):
     assert [path.name for path in root.iterdir()] == [MARKER]
 
 
+def test_a_writer_that_loses_the_race_for_the_marker_does_not_see_a_layout_without_it(
+    tmp_path, monkeypatch
+):
+    from kartograf import marker as marker_module
+
+    root = tmp_path / "store"
+    root.mkdir()
+    real_contents = marker_module._contents
+    first_look = True
+
+    def contents_after_a_competing_first_write(path):
+        # the other writer marks the root and publishes its first version after this
+        # writer saw no marker and before it looks at the files
+        nonlocal first_look
+        if first_look:
+            first_look = False
+            prepare_store(path)
+            seed_layout(path)
+        return real_contents(path)
+
+    monkeypatch.setattr(
+        marker_module, "_contents", contents_after_a_competing_first_write
+    )
+
+    assert prepare_store(root) == root
+    assert marker_of(root)["schema"] == MARKER_SCHEMA
+
+
 def test_a_file_system_without_hard_links_gets_its_marker_too(tmp_path, monkeypatch):
     def no_link(*args, **kwargs):
         raise OSError(errno.EPERM, "Operation not permitted")
