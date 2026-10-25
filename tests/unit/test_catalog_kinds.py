@@ -44,7 +44,7 @@ KINDS: dict[str, Kind] = {
 
 def test_convert_arguments_by_kind(tmp_path):
     plan = UpdatePlan(
-        store="/data",
+        root="/data",
         checked_at="2026-10-18T10:00:00+00:00",
         kartograf_version="x",
         items=(),

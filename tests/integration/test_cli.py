@@ -66,6 +66,7 @@ def _version(path, version="2025-01-01_1_0a1b2c3d", status="new", **kwargs):
         version_path=Path(path).parent / "versions" / version / Path(path).name,
         label=version.rsplit("_", 1)[0],
         sha256=version.rsplit("_", 1)[-1],
+        size_bytes=48,
         status=status,
         **kwargs,
     )

@@ -101,6 +101,14 @@ class LocalVersion:
     sha256: str
     meta: dict[str, Any]
 
+    @property
+    def size_bytes(self) -> int:
+        """Size of the data file: ``size_bytes`` of the sidecar, else the file's."""
+        size = self.meta.get("size_bytes")
+        if isinstance(size, int) and not isinstance(size, bool) and size >= 0:
+            return size
+        return self.path.stat().st_size
+
 
 @dataclass(frozen=True)
 class VersionCommit:
@@ -113,6 +121,7 @@ class VersionCommit:
     status: CommitStatus
     path: Path
     sha256: str
+    size_bytes: int
     label: str
     same_as: str | None = None
 
@@ -436,7 +445,9 @@ def commit_version(
         if labelled:
             match = max(labelled, key=version_key)
             _discard(staged)
-            return VersionCommit("unchanged", match.path, digest.sha256, match.label)
+            return VersionCommit(
+                "unchanged", match.path, digest.sha256, digest.size_bytes, match.label
+            )
         identical = max(same, key=version_key)
         source, status, same_as = identical.path, "relabeled", identical.label
     else:
@@ -469,7 +480,9 @@ def commit_version(
             ) from None
         if _sidecar(target).exists():
             _discard(staged)
-            return VersionCommit("unchanged", target, digest.sha256, version.label)
+            return VersionCommit(
+                "unchanged", target, digest.sha256, digest.size_bytes, version.label
+            )
     except (OSError, NotImplementedError) as e:
         _discard(staged)
         with contextlib.suppress(OSError):
@@ -485,7 +498,9 @@ def commit_version(
     try:
         write_sidecar(target, version, digest)
     except FileExistsError:
-        return VersionCommit("unchanged", target, digest.sha256, version.label)
+        return VersionCommit(
+            "unchanged", target, digest.sha256, digest.size_bytes, version.label
+        )
     except Exception as e:  # noqa: BLE001 — any failure invalidates the version
         if created:
             target.unlink(missing_ok=True)
@@ -496,4 +511,6 @@ def commit_version(
         raise DownloadError(
             f"{target}: nie udalo sie zapisac sidecara wersji: {e}"
         ) from e
-    return VersionCommit(status, target, digest.sha256, version.label, same_as)
+    return VersionCommit(
+        status, target, digest.sha256, digest.size_bytes, version.label, same_as
+    )

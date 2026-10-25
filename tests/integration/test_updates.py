@@ -56,7 +56,7 @@ def test_check_sheets_plan_equals_old_check(tmp_path):
         "date": "2025-10-21",
         "pzgik_date": REC["84183"].dt_pzgik,
     }
-    assert plan.store == str(tmp_path.resolve()) and plan.schema == PLAN_SCHEMA
+    assert plan.root == str(tmp_path.resolve()) and plan.schema == PLAN_SCHEMA
 
 
 def test_check_current_and_newer(tmp_path):

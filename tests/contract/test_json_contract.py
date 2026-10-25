@@ -32,7 +32,7 @@ from kartograf.download.availability import (
     AvailabilityReport,
 )
 from kartograf.download.collections import CollectionReport
-from kartograf.download.data import DataReport, UnitFailure, UnitFile
+from kartograf.download.data import DataReport, SkippedUnit, UnitFailure, UnitFile
 from kartograf.download.fetch import VersionedFile
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.envelope import ResultItem, wrap
@@ -90,6 +90,7 @@ def _versioned_file() -> VersionedFile:
         status="new",
         label="2022-05-10_83233",
         sha256=SHA256,
+        size_bytes=48,
         version_path=STORE / SEGMENT / "versions" / f"{SHEET}.asc",
     )
 
@@ -114,6 +115,9 @@ def _plan_item() -> PlanItem:
         available_label="2025-04-02_99887",
         available_signal={"url": "https://example.test/a.asc", "date": "2025-04-02"},
         status="newer",
+        action="write",
+        path=STORE / f"{SHEET}.asc",
+        reason="output_exists",
     )
 
 
@@ -236,7 +240,7 @@ def _error_document() -> Document:
 
 def _plan() -> Document:
     return UpdatePlan(
-        store=STORE.as_posix(),
+        root=STORE.as_posix(),
         checked_at="2026-10-18T10:15:02+00:00",
         kartograf_version="0.8.0",
         items=(_plan_item(),),
@@ -270,6 +274,8 @@ def _data_report() -> Document:
         superseded=(_superseded(),),
         notices=(_notice(),),
         ok=False,
+        root=STORE,
+        skipped=(SkippedUnit(SHEET, "skipped_incomplete", "no full flight"),),
     )
 
 
@@ -280,6 +286,7 @@ def _collection_report() -> Document:
         stale=(_plan_item(),),
         notices=(_notice(),),
         ok=False,
+        output_dir=STORE,
     )
 
 
@@ -291,6 +298,7 @@ def _landcover_report() -> Document:
         stale=(_plan_item(),),
         notices=(_notice(),),
         ok=False,
+        root=STORE,
     )
 
 
@@ -301,6 +309,7 @@ def _soil_report() -> Document:
         stale=(_plan_item(),),
         notices=(_notice(),),
         ok=False,
+        root=STORE,
     )
 
 
@@ -313,6 +322,7 @@ def _hsg_report() -> Document:
         notices=(_notice(),),
         ok=False,
         summary={"A": {"count": 1}},
+        root=STORE,
     )
 
 
@@ -623,7 +633,9 @@ CONTRACT: dict[str, list[str]] = {
     ],
     "kartograf-plan/1": [
         "schema",
-        "store",
+        "mode",
+        "root",
+        "output_dir",
         "checked_at",
         "kartograf_version",
         "items",
@@ -642,10 +654,14 @@ CONTRACT: dict[str, list[str]] = {
     ],
     "kartograf-download/1": [
         "schema",
+        "mode",
+        "root",
+        "output_dir",
         "files",
         "raw",
         "inputs",
         "failed",
+        "skipped",
         "stale",
         "superseded",
         "summary",
@@ -746,13 +762,30 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "status",
             "label",
             "sha256",
+            "size_bytes",
             "version_path",
             "newer",
             "unverified",
             "same_as",
         ],
     ),
-    "UnitFile": (_unit_file, ["unit", "country", "file"]),
+    "UnitFile": (
+        _unit_file,
+        [
+            "unit",
+            "country",
+            "path",
+            "size_bytes",
+            "sha256",
+            "status",
+            "label",
+            "version_path",
+        ],
+    ),
+    "SkippedUnit": (
+        lambda: SkippedUnit(SHEET, "skipped_incomplete", "no full flight"),
+        ["id", "reason", "message"],
+    ),
     "UnitFailure": (_unit_failure, ["unit", "country", "error", "kind"]),
     "PlanItem": (
         _plan_item,
@@ -768,6 +801,9 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "available_signal",
             "status",
             "error",
+            "action",
+            "path",
+            "reason",
         ],
     ),
     "LazTile": (

@@ -367,6 +367,19 @@ changes and the migration guide ("Migration guide: data output") are written wit
   for size and SHA-256, `os.replace`, removed on success, error, SIGINT and SIGTERM, leftovers
   over 24 hours removed by the next run) and `FileResult`. `ValidationError` takes an instance
   `reason`.
+- The reports of `kartograf-download/1` list `files[]` as DEV-19.19 says (ADR-054 decision 10):
+  `{unit, country, path, size_bytes, sha256, status}`, in the store with `label` and
+  `version_path` (`path` stays the standard path) and with `newer`, `unverified`, `same_as` when
+  set, instead of `files[].file.{path, status, label, ...}`; the same for `raw[]` and `inputs[]`.
+  The status in the document is `new`, `unchanged` or `relabeled`: the file statuses `local` and
+  `reused` are `unchanged` there, and the Python attribute `VersionedFile.status` keeps both
+  words. `VersionedFile.size_bytes` is new (and `local_file`, `committed_file` build the
+  outcomes of the tracks). The reports also have `mode`, `root`, `output_dir` and `skipped[]`
+  (`{id, reason, message}`, filled by the plain mode of the next steps); `kartograf-plan/1` has
+  `mode`, `root`, `output_dir` (its key `store` is `root`: a plan file of 0.8.0-dev is not read,
+  make a new one) and its items `action`, `path`, `reason` (plain plans). The Python attributes
+  `item.file.path`, `.status`, `.label` are unchanged. Consumers: Hydrolog and Hydraulik read
+  `files[].path`, Archiwista and Retman the report of a download.
 
 ### Breaking changes
 

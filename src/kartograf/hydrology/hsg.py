@@ -31,6 +31,7 @@ from kartograf.download.data import (
     DOWNLOAD_SCHEMA,
     UnitFailure,
     UnitFile,
+    WriteTarget,
 )
 from kartograf.exceptions import ValidationError
 from kartograf.messages import message
@@ -419,7 +420,7 @@ HSG_OUTPUT_FILES = message("hydrology.hsg_output_files")
 
 
 @dataclass(frozen=True)
-class HsgReport(Document):
+class HsgReport(WriteTarget, Document):
     """Outcome of ``calculate_hsg`` (``soil hsg``; ``kartograf-download/1``).
 
     ``files``: the HSG raster (one ``UnitFile``, ``unit`` = bbox coordinates
@@ -439,7 +440,7 @@ class HsgReport(Document):
 
     SCHEMA = DOWNLOAD_SCHEMA
     JSON_KEYS = DOWNLOAD_KEYS
-    JSON_FILL = {key: DOWNLOAD_FILL[key] for key in ("raw", "superseded")}
+    JSON_FILL = {key: DOWNLOAD_FILL[key] for key in ("raw", "skipped", "superseded")}
 
     files: "tuple[UnitFile, ...]"
     inputs: "tuple[UnitFile, ...]"
@@ -448,6 +449,8 @@ class HsgReport(Document):
     notices: "tuple[Notice, ...]"
     ok: bool
     summary: "dict[str, Any] | None" = None
+    root: "Path | None" = None
+    output_dir: "Path | None" = None
 
 
 class HSGCalculator:
@@ -801,6 +804,7 @@ class HSGCalculator:
             stale=tuple(stale),
             notices=(),
             ok=not failed and not stale,
+            root=self._root,
         )
 
     def _reuse_or_compute(
@@ -821,9 +825,9 @@ class HSGCalculator:
         import rasterio
 
         from kartograf.download.fetch import (
-            VersionedFile,
             discard_staging,
             link_version,
+            local_file,
             new_staging,
             store_file,
         )
@@ -835,9 +839,7 @@ class HSGCalculator:
         if match is not None:
             link_version(slot.std, match, refresh=True)
             logger.info(f"HSG {slot.std}: version {match.label} reused")
-            return VersionedFile(
-                slot.std, "reused", match.label, match.sha256, match.path
-            )
+            return local_file(slot.std, match, status="reused")
 
         label = "+".join(sorted({f.label for f in files}))
         staged = new_staging(slot)
@@ -1379,10 +1381,10 @@ def _matching_version(slot: "FileSlot", shas: tuple[str, ...]) -> "LocalVersion 
 
 def _local_only(slot: "FileSlot") -> "VersionedFile | None":
     """Return the local version of a position left out of the plan."""
-    from kartograf.download.fetch import VersionedFile, link_version, local_version
+    from kartograf.download.fetch import link_version, local_file, local_version
 
     local = local_version(slot)
     if local is None:
         return None
     link_version(slot.std, local, refresh=False)
-    return VersionedFile(slot.std, "local", local.label, local.sha256, local.path)
+    return local_file(slot.std, local)

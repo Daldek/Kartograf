@@ -305,7 +305,7 @@ def test_cz_cutout_local_all_nodata_from_sidecar(tmp_path, monkeypatch):
 def test_check_cz_cutout_never_downloads(tmp_path):
     provider = _provider(1.0)
     plan = _check_cutout(provider, B, root=tmp_path, image_crs="EPSG:2180")
-    assert plan.store == str(tmp_path.resolve())
+    assert plan.root == str(tmp_path.resolve())
     assert len(plan.items) == 1
     assert plan.items[0].track == "cz_cutout"
     assert plan.items[0].status == "missing"

@@ -67,6 +67,7 @@ from kartograf.download.fetch import (
     fetch_version,
     inspect_version,
     link_version,
+    local_file,
     local_version,
     validate_update,
 )
@@ -478,7 +479,7 @@ def _run(
                 return ImageCutoutResult(None, stale=stale)
             link_version(slot.std, local, refresh=False)
             return ImageCutoutResult(
-                VersionedFile(slot.std, "local", local.label, local.sha256, local.path),
+                local_file(slot.std, local),
                 stale=stale,
             )
 

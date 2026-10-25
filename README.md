@@ -83,14 +83,14 @@ The plan is `"check": true` with `result.schema` `kartograf-plan/1` and one item
   "status": "ok",
   "result": {
     "schema": "kartograf-download/1",
-    "files": [{"unit": "N-34-139-C-a-3-1", "country": "PL", "file": {"status": "new"}}],
+    "files": [{"unit": "N-34-139-C-a-3-1", "country": "PL", "status": "new"}],
     "failed": [],
     "ok": true
   }
 }
 ```
 
-`result.files[].file.path` is the file below the store. An area, a country or another product is another option set: `kartograf commands schema --command "elevation download"`.
+`result.files[].path` is the file below the store, listed with its `size_bytes` and `sha256`. An area, a country or another product is another option set: `kartograf commands schema --command "elevation download"`.
 
 ### Python
 

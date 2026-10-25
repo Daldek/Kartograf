@@ -129,7 +129,7 @@ def test_check_writes_plan_file_and_upgrade_executes_it(tmp_path, capsys):
     assert _run(fake, out, "--sheet", G, "--check", "--plan", str(plan)) == 0
     payload = json.loads(plan.read_text(encoding="utf-8"))
     assert payload["schema"] == "kartograf-plan/1"
-    assert payload["store"] == str(out.resolve())
+    assert payload["root"] == str(out.resolve())
     assert [i["status"] for i in payload["items"]] == ["missing"]
     assert fake.downloads == []
     capsys.readouterr()
@@ -320,7 +320,7 @@ def test_check_auto_writes_merged_plan(tmp_path, capsys):
     captured = capsys.readouterr()
     assert rc == 0, captured.err
     payload = json.loads(plan.read_text(encoding="utf-8"))
-    assert payload["store"] == str(out.resolve())
+    assert payload["root"] == str(out.resolve())
     assert sorted(i["track"] for i in payload["items"]) == ["cz_cutout", "pl_cutout"]
     assert {i["status"] for i in payload["items"]} == {"missing"}
     assert captured.err.count("Info: zapisano plan aktualizacji") == 1

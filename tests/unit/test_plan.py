@@ -34,8 +34,8 @@ def _item(track="laz_tile", name="a.laz", status="missing", **kwargs) -> PlanIte
     return PlanItem(**fields)
 
 
-def _plan(*items: PlanItem, store="/magazyn") -> UpdatePlan:
-    return UpdatePlan(store, "2026-10-12T08:00:00+00:00", "0.8.0", tuple(items))
+def _plan(*items: PlanItem, root="/magazyn") -> UpdatePlan:
+    return UpdatePlan(root, "2026-10-12T08:00:00+00:00", "0.8.0", tuple(items))
 
 
 def test_store_path_is_the_position_below_the_store():
@@ -76,7 +76,9 @@ def test_plan_to_dict_schema_first():
 
     assert list(data) == [
         "schema",
-        "store",
+        "mode",
+        "root",
+        "output_dir",
         "checked_at",
         "kartograf_version",
         "items",
@@ -102,12 +104,13 @@ def test_plan_ok_is_false_with_check_failed():
     assert _plan().ok is True
 
 
-def test_plan_from_dict_reads_0_8_dev_plans():
-    """A plan file written before ``notices`` and ``ok`` existed (``schema`` was
-    the last key) still loads; ``ok`` is computed, never read."""
+def test_plan_from_dict_reads_a_plan_without_notices_and_ok():
+    """A plan file without ``notices`` and ``ok`` (``schema`` last) still loads;
+    ``ok`` is computed, never read."""
     plan = _plan(_item(), _item(name="b.laz", status="current", local_label="x"))
     old = {
-        "store": plan.store,
+        "root": plan.root,
+        "output_dir": None,
         "checked_at": plan.checked_at,
         "kartograf_version": plan.kartograf_version,
         "items": [dataclasses.asdict(item) for item in plan.items],
@@ -187,11 +190,11 @@ def test_merge_keeps_both_and_earliest_check():
 
 def test_merge_rejects_other_store():
     with pytest.raises(ValidationError, match="roznych magazynow"):
-        _plan(_item()).merge(_plan(_item(), store="/inny"))
+        _plan(_item()).merge(_plan(_item(), root="/inny"))
 
 
 def test_require_store_rejects_other_store(tmp_path):
-    plan = _plan(_item(), store=store_id(tmp_path))
+    plan = _plan(_item(), root=store_id(tmp_path))
     require_store(plan, store_id(tmp_path / "." / ""))
     with pytest.raises(ValidationError, match="innego magazynu") as caught:
         require_store(plan, store_id(tmp_path / "b"))
@@ -223,3 +226,55 @@ def test_select_planned_ignores_positions_not_to_do():
     unverifiable = _item(name="b.laz", status="unverifiable")
     todo, stale = select_planned(_plan(current, unverifiable), [], "laz_tile")
     assert (todo, stale) == ([], [])
+
+
+def test_a_plan_of_a_plain_write_names_its_directory_and_the_action_of_each_target(
+    tmp_path,
+):
+    item = _item(
+        segment="",
+        hierarchy="",
+        status="unverifiable",
+        action="conflict",
+        path=tmp_path / "a.laz",
+        reason="output_exists",
+    )
+    plan = UpdatePlan(
+        None,
+        "2026-10-12T08:00:00+00:00",
+        "0.8.0",
+        (item,),
+        output_dir=store_id(tmp_path),
+    )
+
+    data = plan.to_dict()
+
+    assert (data["mode"], data["root"], data["output_dir"]) == (
+        "plain",
+        None,
+        store_id(tmp_path),
+    )
+    assert data["items"][0]["action"] == "conflict"
+    assert data["items"][0]["reason"] == "output_exists"
+    assert item.store_path == "a.laz"
+    assert UpdatePlan.from_dict(data) == plan
+    assert _plan().mode == "store"
+
+
+def test_a_plan_of_0_8_dev_with_the_key_store_is_not_read():
+    old = {**_plan(_item()).to_dict(), "store": "/magazyn"}
+    del old["root"]
+
+    with pytest.raises(ValidationError, match="make a new plan") as caught:
+        UpdatePlan.from_dict(old)
+
+    assert caught.value.option == "plan"
+
+
+def test_plans_of_a_store_and_of_a_directory_do_not_merge(tmp_path):
+    plain = UpdatePlan(
+        None, "2026-10-12T08:00:00+00:00", "0.8.0", (), output_dir=store_id(tmp_path)
+    )
+
+    with pytest.raises(ValidationError, match="roznych magazynow"):
+        _plan(_item()).merge(plain)

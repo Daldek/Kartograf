@@ -367,7 +367,7 @@ def test_json_plan_file_feeds_the_upgrade(tmp_path):
         )
 
     document = _same_document(upgraded, "kartograf-download/1", "elevation download")
-    assert [f["file"]["status"] for f in document["files"]] == ["new"]
+    assert [f["status"] for f in document["files"]] == ["new"]
 
 
 @pytest.mark.usefixtures("frozen_clock")

@@ -24,6 +24,7 @@ from kartograf.download.fetch import (
     fetch_version,
     inspect_version,
     link_version,
+    local_file,
     local_version,
     refreshes_cache,
     validate_update,
@@ -242,7 +243,7 @@ def _run_cz_cutout(
                 return _result(None, stale)
             link_version(slot.std, local, refresh=False)
             return _result(
-                VersionedFile(slot.std, "local", local.label, local.sha256, local.path),
+                local_file(slot.std, local),
                 stale,
             )
 

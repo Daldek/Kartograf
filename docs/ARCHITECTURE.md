@@ -1828,8 +1828,8 @@ schema, and that every `result_schema` of the catalog is in the registry.
 
 | Schema | Library type | Module | Keys after `schema` |
 |---|---|---|---|
-| `kartograf-download/1` | `DataReport`, `CollectionReport`, `LandCoverReport`, `SoilReport`, `HsgReport` | `download.data`, `download.collections`, `landcover.manager`, `hydrology.hsg` | `files, raw, inputs, failed, stale, superseded, summary, notices, ok` |
-| `kartograf-plan/1` | `UpdatePlan` | `download.plan` | `store, checked_at, kartograf_version, items, notices, ok` |
+| `kartograf-download/1` | `DataReport`, `CollectionReport`, `LandCoverReport`, `SoilReport`, `HsgReport` | `download.data`, `download.collections`, `landcover.manager`, `hydrology.hsg` | `mode, root, output_dir, files, raw, inputs, failed, skipped, stale, superseded, summary, notices, ok` |
+| `kartograf-plan/1` | `UpdatePlan` | `download.plan` | `mode, root, output_dir, checked_at, kartograf_version, items, notices, ok` |
 | `kartograf-result/1` | `CommandResult` | `envelope` | `tool, version, command, check, status, result, items, notices` |
 | `kartograf-availability/1` | `AvailabilityReport` | `download.availability` | `request, checked_at, areas, combinations, failed, notices, ok` |
 | `kartograf-sheet/1` | `SheetInfo` | `sheet_info` | `sheet, system, country, sheet_system, scale, components, zone, crs, bounds, commands, hierarchy, children, descendants` |
@@ -1913,6 +1913,20 @@ makes the choice (`Target(mode, path)`); the default root comes from `kartograf.
   (`ConflictError`, `output_exists`). Leaving the block removes the staging directory on success,
   on an error, on SIGINT and on SIGTERM; `discard(staged)` removes the directory of one failed
   download. Threads of one run (`--workers`) stage and commit at the same time.
+
+**Results (DEV-19.19, DEV-19.10).** The five reports of `kartograf-download/1` say where they
+wrote: `mode` (`store` or `plain`, computed from `output_dir`), `root` (the store; `null` in plain
+mode) and `output_dir` (the plain directory; `null` in the store). `files[]` (and `raw[]`,
+`inputs[]`) lists `unit` and `country` of the request, then `path`, `size_bytes`, `sha256` and
+`status` of the file; an entry of the store also has `label` and `version_path` (`path` is the
+standard path, `version_path` the immutable version), and `newer`, `unverified` and `same_as` when
+the track found them. The status in the document is `new`, `unchanged` or `relabeled` in the
+store (the flow words `local` and `reused` of `VersionedFile.status` are `unchanged` there) and
+`written` or `replaced` in plain mode; `size_bytes` is the size the writer read once. `skipped[]`
+lists `{id, reason, message}` of units a plain write leaves out on purpose
+(`skipped_incomplete`). `kartograf-plan/1` has the same `mode`, `root` and `output_dir` (the key
+`store` of 0.8.0-dev is `root`; a plan file with `store` is not read, make a new one), and an item
+of a plain plan has `action` (`write`, `replace`, `conflict`), `path` and `reason`.
 
 ---
 
