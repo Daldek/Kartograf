@@ -69,14 +69,7 @@ PLURAL = re.compile(r"\{\w+:plural\([^|(){}]+(?:\|[^|(){}]+){1,2}\)\}")
 # Files that still hold Polish string literals outside the catalog. One comment line
 # names an area, so the commit that migrates an area touches only its own lines.
 # A file leaves the set as soon as its last Polish literal does (checked below).
-_PENDING = frozenset(
-    {
-        # Projects.
-        "project/commands.py",
-        "project/manifest.py",
-        "project/operations.py",
-    }
-)
+_PENDING: frozenset[str] = frozenset()
 
 
 def is_polish(value: str) -> bool:

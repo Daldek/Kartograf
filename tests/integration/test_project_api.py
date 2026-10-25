@@ -40,7 +40,7 @@ def test_init_creates_store_and_refuses_existing(tmp_path, monkeypatch):
     with pytest.raises(ValidationError) as caught:
         init_project("projekt", root="inny")
     assert str(caught.value) == (
-        f"projekt juz istnieje: {tmp_path / 'projekt' / MANIFEST_NAME}"
+        f"project already exists: {tmp_path / 'projekt' / MANIFEST_NAME}"
     )
     assert (tmp_path / "projekt" / MANIFEST_NAME).read_bytes() == before
     assert not (tmp_path / "inny").exists()
@@ -98,7 +98,7 @@ def test_missing_store_dir_is_error(tmp_path):
         with pytest.raises(ValidationError) as caught:
             operation()
         assert str(caught.value).startswith(
-            f"magazyn projektu nie istnieje: {tmp_path / 'magazyn'}; "
+            f"project store does not exist: {tmp_path / 'magazyn'}; "
         )
     assert open_project(tmp_path / "p").tasks == ()  # reading needs no store
 
@@ -182,8 +182,8 @@ def test_add_duplicate_name_keeps_first_task(tmp_path, monkeypatch):
         )
     # the hint works where it is printed: --project unless that is the project
     assert str(caught.value) == (
-        "zadanie teren juz istnieje; usun je (kartograf project remove --project "
-        f"{tmp_path / 'p'} teren) albo wybierz inna nazwe"
+        "task teren already exists; remove it (kartograf project remove --project "
+        f"{tmp_path / 'p'} teren) or choose another name"
     )
     monkeypatch.chdir(tmp_path / "p")
     with pytest.raises(ValidationError) as here:
@@ -229,5 +229,5 @@ def test_remove_unknown_task_names_the_tasks(tmp_path):
     )
     with pytest.raises(ValidationError) as caught:
         remove_project_task(tmp_path / "p", name="terne")
-    assert str(caught.value) == "nieznane zadanie 'terne'; zadania projektu: teren"
+    assert str(caught.value) == "unknown task 'terne'; project tasks: teren"
     assert remove_project_task(tmp_path / "p", name="teren").tasks == ()

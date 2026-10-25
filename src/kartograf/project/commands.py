@@ -65,6 +65,7 @@ from kartograf.landcover.manager import (
     validate_landcover_request,
     validate_soil_request,
 )
+from kartograf.messages import message
 from kartograf.notices import Notice
 from kartograf.project.model import PinRole
 from kartograf.serialization import Document
@@ -224,7 +225,10 @@ def _landcover_files(result: LandCoverReport) -> TaskFiles:
     return TaskFiles(
         complete=result.ok and not result.failed,
         files=tuple(files),
-        errors=tuple(f"{failure.unit}: {failure.error}" for failure in result.failed),
+        errors=tuple(
+            message("project.unit_problem", unit=failure.unit, problem=failure.error)
+            for failure in result.failed
+        ),
         code=code,
         reason=reason,
     )
@@ -244,7 +248,10 @@ def _hsg_files(result: HsgReport) -> TaskFiles:
             *(("output", item.unit, item.file) for item in result.files),
             *(("input", item.unit, item.file) for item in result.inputs),
         ),
-        errors=tuple(f"{failure.unit}: {failure.error}" for failure in result.failed),
+        errors=tuple(
+            message("project.unit_problem", unit=failure.unit, problem=failure.error)
+            for failure in result.failed
+        ),
         code=code,
         reason=reason,
     )
@@ -583,7 +590,9 @@ def task_command(name: str) -> TaskCommand:
     command = COMMANDS.get(name)
     if command is None:
         raise ValidationError(
-            f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}",
+            message(
+                "project.data_commands_allowed", data_commands_text=data_commands_text()
+            ),
             option="command",
             allowed=tuple(COMMANDS),
         )
