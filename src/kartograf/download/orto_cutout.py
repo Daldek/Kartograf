@@ -75,6 +75,7 @@ from kartograf.download.plan import (
     Track,
     UpdatePlan,
     new_plan,
+    refusal_plan,
     require_store,
     select_planned,
     store_id,
@@ -578,7 +579,7 @@ def check_image_cutout(
     when a Czech CRS has no safe pinned operation, exactly as the download.
     """
     del cache, on_notice  # same signature as the download (Z2); unused here
-    with writing(output_dir=output_dir, root=root) as store:
+    with writing(output_dir=output_dir, root=root, guard=False) as store:
         cutout = _prepare(
             bbox,
             key=_cutout_key(product),
@@ -587,6 +588,8 @@ def check_image_cutout(
             coverage=coverage,
             resolution=resolution,
         )
+        if (refused := refusal_plan(store)) is not None:
+            return refused
         slot = cutout.slot
         item = inspect_version(
             slot, track=_TRACK, unit=slot.std.stem, signal=cutout.channel.update_signal

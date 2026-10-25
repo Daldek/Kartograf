@@ -104,6 +104,7 @@ from kartograf.download.plan import (
     Track,
     UpdatePlan,
     new_plan,
+    plans,
     require_store,
     select_planned,
     store_id,
@@ -680,6 +681,11 @@ class LandCoverManager:
         view._output_dir = None
         return view
 
+    @property
+    def _store_root(self) -> Path:
+        """Return the store root (a handle root inside a plain write)."""
+        return self._root
+
     @staticmethod
     def _get_provider_by_name(
         name: str, cache: MetadataCache | None = None
@@ -933,7 +939,7 @@ class LandCoverManager:
                     found.append(UnitFile(outcome.unit, country, file))
         return _landcover_report(files, raw, failed, stale, sink, self._root)
 
-    @writes
+    @plans
     def check(
         self,
         *,

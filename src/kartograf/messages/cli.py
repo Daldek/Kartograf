@@ -320,6 +320,16 @@ MESSAGES = {
         "the directory is a store (use --root)",
         "katalog jest magazynem (uzyj --root)",
     ),
+    "plan_conflict_nested_store": Text(
+        "the store root is in, holds or has another store (a store does not nest)",
+        "korzen magazynu jest w innym magazynie, zawiera go albo ma go pod soba "
+        "(magazyn nie zagniezdza sie)",
+    ),
+    "plan_conflict_not_empty": Text(
+        "the store root is not empty and is no store (use a new or empty directory)",
+        "korzen magazynu nie jest pusty i nie jest magazynem (podaj nowy albo pusty "
+        "katalog)",
+    ),
     "upgrade_force_exclusive": Text(
         "--upgrade and --force exclude each other (--upgrade fetches newer content, "
         "--force fetches everything again)",
@@ -553,6 +563,10 @@ MESSAGES = {
         "brak przypietego pliku w magazynie",
     ),
     "status_check_failed": Text("check error", "blad sprawdzenia"),
+    "status_conflict": Text(
+        "the store root cannot be written (nothing was checked)",
+        "do korzenia magazynu nie mozna zapisac (nic nie sprawdzono)",
+    ),
     "status_corrupt": Text("corrupt pinned file", "uszkodzony przypiety plik"),
     "project_directory": Text("Project: {directory}", "Projekt: {directory}"),
     "task_pinned_line": Text(

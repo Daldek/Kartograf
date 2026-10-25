@@ -35,6 +35,7 @@ from kartograf.download.data import (
     UnitFile,
     WriteTarget,
 )
+from kartograf.download.plan import plans
 from kartograf.exceptions import ValidationError
 from kartograf.messages import message
 from kartograf.notices import ALL_NODATA, Notice, NoticeSink
@@ -536,6 +537,11 @@ class HSGCalculator:
         return view
 
     @property
+    def _store_root(self) -> Path:
+        """Return the store root (a handle root inside a plain write)."""
+        return self._root
+
+    @property
     def provider(self) -> "SoilGridsProvider":
         """Return the input provider without changing cache ownership."""
         if self._provider is not None:
@@ -571,7 +577,7 @@ class HSGCalculator:
         report = self._calculate(selection, depth, _HSG_STAT, update, plan, sink)
         return replace(report, notices=sink.notices)
 
-    @writes
+    @plans
     def check_hsg(
         self,
         *,

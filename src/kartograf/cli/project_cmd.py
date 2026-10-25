@@ -215,6 +215,7 @@ def _check_line(file: FileCheck, checking: bool) -> str:
                 "unverifiable": message("cli.status_unverifiable", lang=language()),
                 "missing": message("cli.status_missing", lang=language()),
                 "check_failed": message("cli.status_check_failed", lang=language()),
+                "conflict": message("cli.status_conflict", lang=language()),
             }.get(file.status, file.status)
     else:
         status = {
@@ -224,6 +225,8 @@ def _check_line(file: FileCheck, checking: bool) -> str:
         }.get(file.status, file.status)
     if file.detail and file.detail != status:
         status += f": {localized(file.detail)}"
+    if file.status == "conflict":  # the store root, not a file
+        return f"{file.task}: {status}"
     return f"{file.task}: {_unit_file(file.unit, file.path)}: {status}"
 
 

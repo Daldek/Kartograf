@@ -32,6 +32,7 @@ from kartograf.download.plan import (
     PlanItem,
     UpdatePlan,
     new_plan,
+    refusal_plan,
     require_store,
     select_planned,
     store_id,
@@ -362,7 +363,9 @@ def check_cz_cutout(
         resolution=resolution,
         cache=None,
     )
-    with writing(output_dir=output_dir, root=root) as store:
+    with writing(output_dir=output_dir, root=root, guard=False) as store:
+        if (refused := refusal_plan(store)) is not None:
+            return refused
         return _check_cutout(
             provider, bbox, root=store, image_crs=_image_crs(horizontal_crs)
         )

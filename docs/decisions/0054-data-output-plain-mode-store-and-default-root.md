@@ -106,7 +106,9 @@ changes land before the first release and no data is migrated (ECO-020).
    sub-path) a directory that holds `kartograf-store.json` or `imgw-store.json` is `conflict`,
    `details.reason` `output_in_store`, and the hint names `--root`. The check reads marker file names only;
    nothing is imported from IMGWTools. A directory with a store somewhere below it is a fine output (the
-   default store `<data_dir>/kartograf` lies below `<data_dir>`).
+   default store `<data_dir>/kartograf` lies below `<data_dir>`). The directory itself is judged before any
+   request (`kartograf.output.directory_refusal`, `details.paths` the directory, so no list of targets and
+   no index request is needed); a subdirectory that a unit would enter is judged with the list of targets.
 8. **Store marker (DEV-19.12 to DEV-19.14).** `kartograf-store.json`, schema `kartograf-store/1`, with
    `schema`, `tool` (`kartograf`), `created_at` (UTC, ISO 8601 with offset) and `producer_version`. The first
    write into a missing or empty root creates it (`kartograf.marker.prepare_store`, called by every store
@@ -118,9 +120,20 @@ changes land before the first release and no data is migrated (ECO-020).
    `kartograf store init --root <path>`; a root that is not empty and has neither is `conflict`,
    `not_empty`. A store never nests (DEV-19.14): before a write the command looks for `kartograf-store.json` and
    `imgw-store.json` in the ancestors of the root, at the root (the marker of the other tool) and below it
-   (the product trees of this store are not entered), and a nested store is `conflict`, `nested_store`. The
-   plan (`--check`) creates nothing; a root with the layout and no marker fails it with the same `no_marker`,
-   as the run it plans would. The read commands and the read API (`list_segments`, `iter_store`, ...) do not
+   (the product trees of this store are not entered), and a nested store is `conflict`, `nested_store`.
+   The refusal comes before any request or unit of work (erratum 2026-10-25: the first unit of a list
+   of sheets used to meet it, after the index had been asked, and a worker thread reported it as a
+   failed unit of the code `source_unavailable`, so the registry code and reason were lost): the
+   command looks at the root (`kartograf.output.guard_store`) and, for a plain write, at the
+   directory (`directory_refusal`, `output_in_store`, `details.paths` the directory), and the
+   refusal is its error, with its own code, reason and exit code, in every track and in
+   `project download`. The plan (`--check`) creates nothing and asks nothing: a root that is a
+   `conflict` (`nested_store`, `not_empty`) is listed as the one position of the track `store`
+   (`action` `conflict`, `reason`, the root as `path`, `status` `unverifiable`) and the plan is `ok`
+   (DEV-19.10; IMGWTools lists `nested_store` the same way), and `check_project` lists a `conflict`
+   entry of every selected task; a root with the layout and no marker (`store_unavailable`) or with an
+   unreadable marker (`data_error`) fails the plan with the same error as the run it plans would.
+   The read commands and the read API (`list_segments`, `iter_store`, ...) do not
    require the marker: the consumer decides what to do with an unmarked store (Archiwista's probe follows
    DEV-19.12 and DEV-19.13).
    `kartograf.testing` builds its stores with the marker.

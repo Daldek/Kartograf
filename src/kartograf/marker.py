@@ -55,6 +55,7 @@ __all__ = [
     "prepare_store",
     "store_around",
     "store_below",
+    "store_refusal",
 ]
 
 MARKER: Final = "kartograf-store.json"
@@ -457,6 +458,33 @@ def lenient_store(root: str | os.PathLike[str]) -> Path:
     if state == "foreign":
         raise _not_empty(path)
     return path
+
+
+def store_refusal(
+    root: str | os.PathLike[str],
+) -> ConflictError | StoreUnavailableError | InvalidLayoutError | None:
+    """
+    Return the error a write into the store at ``root`` is refused with, or None.
+
+    The checks of `lenient_store`, with the error returned instead of raised, so that
+    a caller can raise it (the run of a command) or list it (its plan, DEV-19.10).
+    Nothing is created.
+
+    Parameters
+    ----------
+    root : str or os.PathLike
+        Store root; it need not exist.
+
+    Returns
+    -------
+    ConflictError or StoreUnavailableError or InvalidLayoutError or None
+        The error of `lenient_store`, or None when a write may go on.
+    """
+    try:
+        lenient_store(root)
+    except (ConflictError, StoreUnavailableError, InvalidLayoutError) as refusal:
+        return refusal
+    return None
 
 
 def _verify_layout(path: Path) -> None:

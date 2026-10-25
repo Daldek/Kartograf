@@ -414,9 +414,11 @@ kartograf/
 ├── interrupt.py         # Interruption: run_parallel (pool with queue cancellation and a stop flag for
 │                        # running units), check_stop, Stopped/Terminated, sigterm_interrupts
 ├── marker.py            # The store marker kartograf-store.json (ADR-054): prepare_store, lenient_store,
-│                        # init_store (`store init`), store_around/store_below (stores of any tool by marker name)
+│                        # store_refusal (the error a write is refused with), init_store (`store init`),
+│                        # store_around/store_below (stores of any tool by marker name)
 ├── output.py            # Plain output (ADR-054, 3.7): Target/resolve_target, plan_plain, refuse, Staging
-│                        # (.kartograf-incoming/<host>_<pid>_<token>/), FileResult, digest_of
+│                        # (.kartograf-incoming/<host>_<pid>_<token>/), FileResult, digest_of; guard_store,
+│                        # directory_refusal (the target is refused before any request), writing, writes
 ├── core/                # Base logic, no network IO
 │   ├── bbox.py             # BBox, validate_bbox, transform_bbox (dense envelope: _DENSIFY
 │   │                       # points per edge, transformer cache, operation pinned
@@ -1902,6 +1904,25 @@ makes the choice (`Target(mode, path)`); the default root comes from `kartograf.
 - `refuse(entries)` raises `ConflictError` for a plan that lists a conflict: `details.reason` is
   the first reason in that order and `details.paths` lists every offending path of all reasons.
   A plan (`--check`) lists the conflicts and succeeds; only the run refuses.
+- The target is looked at before the first request (DEV-19.11, DEV-19.13, DEV-19.14). A store
+  root that a write would refuse, whatever the track, is the error of the command, with its own
+  registry code and `details.reason`, and not the failed unit of each sheet or tile:
+  `guard_store(root)` (= `marker.lenient_store`: `conflict` `nested_store` or `not_empty`,
+  `store_unavailable` `no_marker`, `data_error` for an unreadable marker) and, for an output
+  directory that is, or lies in, a store, `directory_refusal(directory)` (`conflict`
+  `output_in_store`, `details.paths` the directory: no list of targets, so no index request).
+  `writing(..., guard=True)` calls them for every function that opens a write, `wrapping`
+  (`writes`) for the public methods of `DownloadManager`, `LandCoverManager` and
+  `HSGCalculator` (each has `_store_root`), and `download_project` for the store of a project; a
+  new track needs nothing. `download_data` and `download_collection` judge the request first, so
+  an invalid request is a `validation_error` whatever its root (`guard=False`, then the refusal).
+  A check passes `guard=False` and plans the refusal itself (`download.plan.refusal_plan`, the
+  decorator `plans` for the check methods of the three classes): a root that is a `conflict`
+  is one position of the track `store` (`action` `conflict`, `reason` `nested_store` or
+  `not_empty`, `path` the root, `status` `unverifiable`) and the plan is `ok`, so `--check`
+  exits 0 and makes no request; a root without its marker fails the plan with
+  `store_unavailable`, as it fails the run (ADR-054 decision 8). `check_project` lists a
+  `conflict` `FileCheck` of every selected task.
 - `Staging(directory, force=)` is the context manager of one run: it creates
   `<directory>/.kartograf-incoming/<host>_<pid>_<token>/` (and the directory, when it is missing),
   removes leftovers older than 24 hours, and lets SIGTERM interrupt like Ctrl-C
@@ -1926,7 +1947,8 @@ store (the flow words `local` and `reused` of `VersionedFile.status` are `unchan
 lists `{id, reason, message}` of units a plain write leaves out on purpose
 (`skipped_incomplete`). `kartograf-plan/1` has the same `mode`, `root` and `output_dir` (the key
 `store` of 0.8.0-dev is `root`; a plan file with `store` is not read, make a new one), and an item
-of a plain plan has `action` (`write`, `replace`, `conflict`), `path` and `reason`.
+of a plain plan has `action` (`write`, `replace`, `conflict`), `path` and `reason`; the one
+position of a store root that is a conflict has the track `store` and the same three fields.
 
 **The target in the interfaces (ADR-054 decisions 1, 11, 13, 14).** The catalog declares the two
 targets once: `catalog/shared.py` `target(files, sheets=)` gives the two `Param`s (`output_dir`

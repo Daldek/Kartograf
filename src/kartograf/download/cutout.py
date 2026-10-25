@@ -55,6 +55,7 @@ from kartograf.download.plan import (
     PlanItem,
     UpdatePlan,
     new_plan,
+    refusal_plan,
     require_store,
     select_planned,
     store_id,
@@ -448,7 +449,7 @@ def check_pl_cutout(
     when no safe pinned reprojection exists, exactly as the download does.
     """
     del cache, on_notice  # same signature as the download (Z2); unused here
-    with writing(output_dir=output_dir, root=root) as store:
+    with writing(output_dir=output_dir, root=root, guard=False) as store:
         cutout = _prepare_pl_cutout(
             bbox,
             horizontal_crs,
@@ -456,6 +457,8 @@ def check_pl_cutout(
             vertical_crs=vertical_crs,
             product=product,
         )
+        if (refused := refusal_plan(store)) is not None:
+            return refused
         return _check_prepared(cutout)
 
 

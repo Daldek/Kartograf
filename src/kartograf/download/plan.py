@@ -7,7 +7,9 @@ track (``pl_sheet``, ``laz_tile``, ``cz_sheet``, ``cz_laz``, ``pl_cutout``,
 ``cz_cutout``, ``landcover``, ``hsg``, ``collection``, ``cz_orto``); ``unit``
 is the task unit of the track (sheet code, LAZ tile sheet, CZ sheet, CZ LAZ
 sheet, bbox coordinates, TERYT, country code of a national file, SM5 sheet of
-the CZ orthophoto - four positions: the JPEG and its three world files).
+the CZ orthophoto - four positions: the JPEG and its three world files). The
+store root that a write would refuse as a conflict has one position of its own,
+of the track ``store``, and the plan lists nothing else (`refusal_plan`).
 Executing a plan (``--upgrade --plan``) re-checks the signal:
 ``select_planned`` keeps only the planned positions
 whose fresh check is identical, the rest are ``stale``; positions removed
@@ -15,17 +17,18 @@ from the plan file are never executed.
 """
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal, cast, get_args
 
 from kartograf import _clock
 from kartograf._version import build_version
-from kartograf.exceptions import ValidationError
+from kartograf.exceptions import ConflictError, KartografError, ValidationError
+from kartograf.marker import store_refusal
 from kartograf.messages import message
 from kartograf.notices import Notice
-from kartograf.output import Action, Mode, Staging, plain_of
+from kartograf.output import Action, Mode, Staging, plain_of, wrapping
 from kartograf.serialization import Document
 
 PLAN_SCHEMA = "kartograf-plan/1"
@@ -41,6 +44,7 @@ Track = Literal[
     "hsg",
     "collection",
     "cz_orto",
+    "store",
 ]
 TRACKS: tuple[Track, ...] = get_args(Track)
 # Statuses a plan executes.
@@ -65,7 +69,10 @@ class PlanItem:
     ``conflict``), ``path`` is the target and ``reason`` names a conflict
     (``duplicate_output_name``, ``output_in_store``, ``output_exists``). The
     ``status`` is ``missing`` for ``write`` and ``unverifiable`` for the others. All
-    three are ``None`` in the store.
+    three are ``None`` in the store. The position of the track ``store`` is the root
+    of a store that a write would refuse (``nested_store``, ``not_empty``; DEV-19.14):
+    ``action`` is ``conflict``, ``path`` the root, ``reason`` why, ``error`` the text
+    of the refusal, and ``name`` and ``unit`` are the root too.
     """
 
     track: Track
@@ -294,6 +301,68 @@ def new_plan(
         kartograf_version=build_version(),
         items=tuple(items),
     )
+
+
+def conflict_plan(root: str | Path, refusal: KartografError) -> UpdatePlan:
+    """Return the plan that lists the refusal of a store root as its one conflict.
+
+    A write into a store root that is inside another store, holds one or is not
+    empty is refused with ``conflict`` (``nested_store``, ``not_empty``; DEV-19.14).
+    The plan of that write lists the refusal instead of raising it (DEV-19.10): one
+    position of the track ``store`` with the action ``conflict``, the root as
+    ``path`` and the ``reason``, status ``unverifiable``. The plan is ``ok``: only
+    the run fails with ``conflict``. Nothing else is looked at, so no request is made.
+
+    Raises
+    ------
+    KartografError
+        ``refusal`` itself when it is no ``conflict``: a root without its marker is
+        ``store_unavailable`` (``no_marker``) and an unreadable marker ``data_error``,
+        and the plan fails as the run does, before any request.
+    """
+    if not isinstance(refusal, ConflictError):
+        raise refusal
+    path = Path(store_id(root))
+    item = PlanItem(
+        track="store",
+        segment="",
+        hierarchy="",
+        name=str(path),
+        unit=str(path),
+        local_label=None,
+        local_sha256=None,
+        available_label=None,
+        available_signal=None,
+        status="unverifiable",
+        error=str(refusal),
+        action="conflict",
+        path=path,
+        reason=refusal.reason,
+    )
+    return new_plan(root, [item])
+
+
+def refusal_plan(root: str | Path) -> UpdatePlan | None:
+    """Plan the refusal of the store at ``root``, or return None when a write may go on.
+
+    The first step of every check of a store write (``check_*``, ``--check``): the
+    plan of a root that a write would refuse as a conflict is `conflict_plan`, a
+    refusal of another code is raised (the run raises every one of them, `guard_store`).
+    The handle root of a plain write is no store: None.
+    """
+    if plain_of(root) is not None:
+        return None
+    refusal = store_refusal(root)
+    return None if refusal is None else conflict_plan(root, refusal)
+
+
+def plans[F: Callable[..., UpdatePlan]](method: F) -> F:
+    """Wrap a check method of an object that writes plain files or a store.
+
+    Like `kartograf.output.writes`, and a store root that a write would refuse as a
+    conflict is the plan of that conflict (`refusal_plan`), not the error.
+    """
+    return wrapping(method, refusal=refusal_plan)
 
 
 def require_store(plan: UpdatePlan, store: str) -> None:
