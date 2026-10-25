@@ -346,6 +346,12 @@ changes and the migration guide ("Migration guide: data output") are written wit
   instance: `nested_store`, `not_empty`), `StoreUnavailableError` (`store_unavailable`, reason
   `no_marker`) and `InvalidLayoutError` (`data_error`, `invalid_layout`); `KartografError`
   takes `reason=` for the classes that have several.
+- `kartograf-meta/1` gains the optional `producer` (`kartograf`) and `producer_version`
+  (ADR-054 decision 9, DEV-19.16) beside `kartograf_version`, which stays; nothing is renamed.
+  Every sidecar the writers produce has them, the bare sidecar of a provider without a
+  descriptor too. The typed `Sidecar` of the read API has both fields; a sidecar written
+  earlier has neither key, and the view reports `kartograf` and the value of
+  `kartograf_version` (`raw` stays as it is).
 
 ### Breaking changes
 

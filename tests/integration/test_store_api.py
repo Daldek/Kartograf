@@ -174,6 +174,37 @@ def test_development_dataset_keys_are_explicitly_mapped(tmp_path, historical, cu
     assert (meta.dataset, meta.dataset_key) == (historical, current)
 
 
+def test_producer_of_an_older_sidecar_is_derived_and_a_written_one_is_kept(tmp_path):
+    """DEV-19.16: a sidecar without ``producer`` and ``producer_version`` reads as
+    written by kartograf at its ``kartograf_version``; ``raw`` stays as written."""
+    older = _data(tmp_path / "older.asc")
+    meta = older.with_name(older.name + ".meta.json")
+    document = json.loads(meta.read_text(encoding="utf-8"))
+    meta.write_text(
+        json.dumps({**document, "kartograf_version": "0.7.9"}), encoding="utf-8"
+    )
+    written = _data(tmp_path / "written.asc")
+    meta = written.with_name(written.name + ".meta.json")
+    document = json.loads(meta.read_text(encoding="utf-8"))
+    meta.write_text(
+        json.dumps(
+            {
+                **document,
+                "kartograf_version": "0.8.0",
+                "producer": "kartograf",
+                "producer_version": "0.8.1",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    first, second = read_sidecar(older), read_sidecar(written)
+
+    assert (first.producer, first.producer_version) == ("kartograf", "0.7.9")
+    assert "producer" not in first.raw and "producer_version" not in first.raw
+    assert (second.producer, second.producer_version) == ("kartograf", "0.8.1")
+
+
 def test_sparse_old_sidecar_does_not_infer_year_from_download(tmp_path):
     data = tmp_path / "old.tif"
     data.with_name(data.name + ".meta.json").write_text(

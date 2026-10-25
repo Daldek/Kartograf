@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from kartograf import _clock
-from kartograf._version import build_version
+from kartograf._version import PRODUCER, build_version
 from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.exceptions import DownloadError
 from kartograf.messages import message, reason
@@ -54,11 +54,13 @@ class ResultMetadata:
     license: dict[str, Any]  # {"id","attribution","url"}
     downloaded_at: str  # ISO 8601 UTC
     kartograf_version: str
+    producer_version: str  # DEV-19.16: the version of the package that wrote the file
     transform: dict[str, Any] | None = None  # stage 0: None
     extra: dict[str, Any] = field(default_factory=dict)
     sha256: str | None = None  # of the data file (A3, 0.7.1)
     size_bytes: int | None = None
     schema: str = "kartograf-meta/1"
+    producer: str = PRODUCER  # DEV-19.16: the package that wrote the file
 
 
 def read_asc_header(path: Path) -> dict[str, float]:
@@ -273,6 +275,7 @@ def build_metadata(
         size_bytes=size_bytes,
         downloaded_at=_now_iso(),
         kartograf_version=build_version(),
+        producer_version=build_version(),
     )
 
 
@@ -378,8 +381,9 @@ def emit_sidecar(
     PROPAGATES unchanged - another writer published the sidecar first.
     ``digest``/``version``/``product`` as in ``build_metadata``. A version
     must always have a sidecar, so without a descriptor a BARE one is written: only
-    ``request``, ``extra``, ``sha256``, ``size_bytes``, ``downloaded_at``
-    and ``kartograf_version`` (a stub or foreign provider; plan 1/3 decision 7).
+    ``request``, ``extra``, ``sha256``, ``size_bytes``, ``downloaded_at``,
+    ``kartograf_version``, ``producer`` and ``producer_version`` (a stub or
+    foreign provider; plan 1/3 decision 7).
 
     Returns
     -------
@@ -417,6 +421,8 @@ def emit_sidecar(
                 "size_bytes": size_bytes,
                 "downloaded_at": _now_iso(),
                 "kartograf_version": build_version(),
+                "producer": PRODUCER,
+                "producer_version": build_version(),
             }
             return write_sidecar(data_path, bare, exclusive=True)
         from kartograf.sources.registry import get_source

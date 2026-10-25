@@ -426,6 +426,8 @@ def _sidecar() -> Sidecar:
     raw = {"schema": "kartograf-meta/1", "dataset": "pl.gugik.nmt_1m", "sha256": SHA256}
     return Sidecar(
         schema="kartograf-meta/1",
+        producer="kartograf",
+        producer_version="0.8.0",
         dataset="pl.gugik.nmt_1m",
         dataset_key="pl.gugik.nmt_1m",
         country="PL",
@@ -906,6 +908,8 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
         _sidecar,
         [
             "schema",
+            "producer",
+            "producer_version",
             "dataset",
             "dataset_key",
             "country",

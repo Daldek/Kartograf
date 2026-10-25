@@ -17,6 +17,8 @@ _PATH = f"{_STORE}/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
 _SHA = "10be475e6b5c43d5..."
 _SIDECAR: Mapping[str, object] = {
     "schema": "kartograf-meta/1",
+    "producer": "kartograf",
+    "producer_version": "0.8.0",
     "dataset": "pl.gugik.nmt_1m",
     "country": "PL",
     "product": "nmt",

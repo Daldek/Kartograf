@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 GIT_TIMEOUT_S = 2.0
 
+PRODUCER = "kartograf"
+"""Import name of the package; the ``producer`` of every sidecar (DEV-19.16)."""
+
 
 def _git(pkg_dir: Path, *args: str) -> str:
     """Run ``git -C <pkg_dir> <args>`` and return stripped stdout."""

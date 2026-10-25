@@ -531,6 +531,26 @@ class TestEmitSidecar:
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["transform"] is None
 
+    @pytest.mark.parametrize("descriptor", ["cz.cuzk.dmr5g", None])
+    def test_every_sidecar_names_its_producer_and_version(self, tmp_path, descriptor):
+        """DEV-19.16: ``producer`` and ``producer_version`` also in the bare
+        sidecar of a provider without a descriptor; ``kartograf_version`` stays."""
+        from kartograf._version import build_version
+        from kartograf.sources.sidecar import emit_sidecar
+
+        data = self._data(tmp_path)
+        sidecar = emit_sidecar(
+            descriptor,
+            data,
+            request={"bbox": [0, 0, 1, 1], "bbox_crs": "EPSG:5514"},
+            exclusive=descriptor is None,
+        )
+        assert sidecar is not None
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["producer"] == "kartograf"
+        assert payload["producer_version"] == payload["kartograf_version"]
+        assert payload["producer_version"] == build_version()
+
 
 class TestDigest:
     """A3: every sidecar with a data file carries sha256 and size_bytes."""

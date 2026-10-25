@@ -26,6 +26,7 @@ from functools import lru_cache
 from pathlib import Path, PurePath
 from typing import Any, Literal
 
+from kartograf._version import PRODUCER
 from kartograf.core import parser_registry
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.campaigns import FULL_SHEET_DIR
@@ -79,9 +80,16 @@ class Sidecar:
 
     Not hashable (``request``/``extra``/``raw`` are dicts); compare with
     ``==`` or key by ``StoreEntry.path``.
+
+    ``producer`` and ``producer_version`` are the package that wrote the file
+    and its version (DEV-19.16). A sidecar written before they existed has
+    no such keys: the view then reports ``kartograf`` and the value of
+    ``kartograf_version``, and ``raw`` keeps the file as it is.
     """
 
     schema: str
+    producer: str | None
+    producer_version: str | None
     dataset: str | None
     dataset_key: str | None
     country: str | None
@@ -444,6 +452,10 @@ def _typed(raw: dict[str, Any], stem: str | None) -> Sidecar:
             break
     return Sidecar(
         schema=_SCHEMA,
+        producer=_text(raw.get("producer")) or PRODUCER,
+        producer_version=(
+            _text(raw.get("producer_version")) or _text(raw.get("kartograf_version"))
+        ),
         dataset=dataset,
         dataset_key=_dataset_key(dataset) if dataset else None,
         country=country,
