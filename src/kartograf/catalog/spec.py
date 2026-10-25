@@ -316,7 +316,11 @@ class Constraint:
     when ``param`` is given, none of ``params``; ``applies_to``: ``param`` only
     when ``when`` holds; ``required_when``: ``param`` is required when ``when``
     holds. ``when`` maps a parameter to ``True`` (given) or to the list of values
-    it has; several keys all hold.
+    it has; several keys all hold. A ``one_of`` is the mutual exclusion group
+    ``group`` of its ``params`` (the options of the catalog document name it; the
+    choice of the area is ``area``); with ``optional`` none of them is required
+    (the target of a write, ``target``: ``output_dir`` or ``root``, neither is the
+    default store).
     """
 
     type: ConstraintType
@@ -324,6 +328,8 @@ class Constraint:
     message_pl: str
     param: str | None = None
     when: Mapping[str, object] | None = None
+    group: str = "area"
+    optional: bool = False
 
     def __post_init__(self) -> None:
         """Check the constraint declaration."""

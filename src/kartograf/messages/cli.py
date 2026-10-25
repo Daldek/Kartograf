@@ -303,6 +303,29 @@ MESSAGES = {
     "status_unchanged": Text("unchanged", "bez zmian"),
     "status_local": Text("local version", "lokalna wersja"),
     "status_reused": Text("reused", "uzyta ponownie"),
+    "status_written": Text("written", "zapisano"),
+    "status_replaced": Text("replaced", "zastapiono"),
+    "plan_action_write": Text("to write", "do zapisania"),
+    "plan_action_replace": Text("to replace (--force)", "do zastapienia (--force)"),
+    "plan_conflict": Text("conflict: {reason}", "konflikt: {reason}"),
+    "plan_conflict_output_exists": Text(
+        "the file exists (--force replaces it)",
+        "plik istnieje (zastepuje go --force)",
+    ),
+    "plan_conflict_duplicate_output_name": Text(
+        "the same file name twice in one request",
+        "ta sama nazwa pliku w jednym zadaniu",
+    ),
+    "plan_conflict_output_in_store": Text(
+        "the directory is a store (use --root)",
+        "katalog jest magazynem (uzyj --root)",
+    ),
+    "upgrade_force_exclusive": Text(
+        "--upgrade and --force exclude each other (--upgrade fetches newer content, "
+        "--force fetches everything again)",
+        "--upgrade i --force wykluczaja sie (--upgrade pobiera nowsza tresc, "
+        "--force pobiera wszystko od nowa)",
+    ),
     "relabeled_same_as": Text(
         " (file identical to {same_as})",
         " (plik identyczny z {same_as})",
@@ -326,6 +349,12 @@ MESSAGES = {
         "({root})",
         "Nowe: {counts_new}, nowa etykieta: {counts_relabeled}, bez zmian: "
         "{counts_unchanged}, lokalne: {counts_local}, {reused}bledy: {failed} "
+        "({root})",
+    ),
+    "plain_summary": Text(
+        "Written: {counts_written}, replaced: {counts_replaced}, errors: {failed} "
+        "({root})",
+        "Zapisane: {counts_written}, zastapione: {counts_replaced}, bledy: {failed} "
         "({root})",
     ),
     # ``cli.layers_cmd``.

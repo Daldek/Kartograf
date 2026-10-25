@@ -586,12 +586,24 @@ def _violations(command: Command, constraint: Constraint):
         yield "outside", base, violation
 
 
+def _among_task_options(command: Command, constraint: Constraint) -> bool:
+    """Say whether a rule is among options of a task.
+
+    The target of a write (``output_dir``, ``root``) and what needs the store are
+    options of a run, which ``validate`` does not see: the library checks them when it
+    writes (``tests/integration/test_plain_output*.py``).
+    """
+    tasks = {param.name for param in command.params if param.task}
+    return {constraint.param, *constraint.params} - {None} <= tasks
+
+
 _CASES = [
     (command, constraint, label, base, violation)
     for command in _DECLARED.commands
     if command.project_task
     for constraint in command.constraints
     if constraint.type in ("one_of", "requires", "excludes", "applies_to")
+    if _among_task_options(command, constraint)
     for label, base, violation in _violations(command, constraint)
 ]
 

@@ -71,8 +71,10 @@ _PRINCIPLES: Final[tuple[str, ...]] = (
     "`{opt:bbox_crs}`, or `{opt:geometry}`, exactly one; `{opt:country}` goes with a "
     "bbox or a geometry. Nothing is guessed: a missing argument is an error with a "
     "hint.",
-    "**Absolute paths, outside the repository and /tmp:** `{opt:root}` (CLI "
-    "`--root`) is the store; a version is never overwritten, so a rerun is safe.",
+    "**Absolute paths, outside the repository and /tmp:** `{opt:output_dir}` (CLI "
+    "`-o`) writes plain files, `{opt:root}` (CLI `--root`) the versioned store, at "
+    "most one; neither: the default store. A store never overwrites a version; a "
+    "plain rerun is a `conflict` until `--force`.",
     "**Check, then run:** `--check` (MCP: `check`) plans without "
     "fetching; `--upgrade` fetches newer content, `--force` fetches again, and "
     "`--plan` runs a saved plan.",
@@ -95,8 +97,9 @@ _ERROR_ADVICE: Final[Mapping[str, str]] = {
     "store_unavailable": "the metadata cache is locked or unreadable: retry or "
     "`--no-cache`; a store root without its marker (`details.reason` `no_marker`): "
     "run `store init`",
-    "conflict": "the target cannot be written (`details.reason`): a store root "
-    "must be new or empty and never inside another store, see `hint`",
+    "conflict": "the target cannot be written (`details.reason`): `output_exists` "
+    "(add `--force` or change `output_dir`), `output_in_store` (use `root`), a store "
+    "root not new or empty or inside another store; see `hint`",
     "data_error": "a sidecar is unreadable or of another schema: see `details.path`; "
     "`invalid_layout`: see `details.problems`",
     "missing_dependency": "an extra is missing: install it as `hint` says",

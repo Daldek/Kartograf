@@ -47,9 +47,6 @@ from kartograf.catalog.spec import (
 from kartograf.exceptions import ValidationError
 
 TOOL = "kartograf"
-# The name of the mutually exclusive group of the options that choose the area: every
-# ``one_of`` constraint of the catalog is the choice of the area.
-ONE_OF_GROUP = "area"
 
 # The JSON type of a parameter kind (a ``per_country`` value is a text, or an object
 # with the keys ``pl`` and ``cz`` that the description of the option names).
@@ -89,22 +86,26 @@ def declared_options(command: Command) -> tuple[Param, ...]:
     return tuple(param for param in command.params if is_option(command, param))
 
 
-def one_of_constraint(command: Command) -> Constraint | None:
-    """Return the constraint that chooses the area of the command (``None``: none).
+def one_of_constraints(command: Command) -> tuple[Constraint, ...]:
+    """Return the mutual exclusion groups of the command (``one_of`` constraints).
 
     Raises
     ------
     ValueError
-        The command has several ``one_of`` constraints: the document names one group.
+        Two constraints name the same group, or one option is in two groups.
     """
-    found = [c for c in command.constraints if c.type == "one_of"]
-    if len(found) > 1:
-        raise ValueError(f"{command.id}: more than one one_of constraint")
-    return found[0] if found else None
+    found = tuple(c for c in command.constraints if c.type == "one_of")
+    groups = [c.group for c in found]
+    options = [name for c in found for name in c.params]
+    if len(set(groups)) != len(groups) or len(set(options)) != len(options):
+        raise ValueError(f"{command.id}: a one_of group or option is declared twice")
+    return found
 
 
 def _one_of_sentence(constraint: Constraint) -> str:
     names = ", ".join(f"`{name}`" for name in constraint.params)
+    if constraint.optional:
+        return f" Give at most one of {names}."
     return f" Give exactly one of {names}."
 
 
@@ -132,9 +133,10 @@ def _enum(param: Param, summaries: dict[str, str]) -> tuple[EnumValue, ...] | No
 
 def _option(command: Command, param: Param, summaries: dict[str, str]) -> OptionEntry:
     description = resolve(param.description)
-    group = one_of_constraint(command)
-    chosen = group is not None and param.name in group.params
-    if chosen and group is not None:
+    group = next(
+        (c for c in one_of_constraints(command) if param.name in c.params), None
+    )
+    if group is not None:
         description += _one_of_sentence(group)
     return OptionEntry(
         name=param.name,
@@ -148,7 +150,7 @@ def _option(command: Command, param: Param, summaries: dict[str, str]) -> Option
         minimum=param.minimum,
         maximum=param.maximum,
         examples=param.examples or None,
-        one_of=ONE_OF_GROUP if chosen else None,
+        one_of=group.group if group is not None else None,
         path_role=param.path_role,
     )
 
@@ -158,7 +160,8 @@ def effects(command: Command) -> EffectsEntry:
 
     The command is read only when it writes neither the store, a project, nor the
     cache; ``writes`` is ``delete`` for a command that removes data and ``add`` for
-    every other that writes (a store never overwrites a version).
+    every other that writes (a store never overwrites a version; a plain write
+    replaces a file only with ``update`` force, as IMGWTools declares its downloads).
     """
     read_only = not _WRITING & set(command.effects)
     writes = "delete" if command.destructive else "add"
@@ -197,7 +200,7 @@ def command_entry(command: Command, summaries: dict[str, str]) -> CommandEntry:
     ------
     ValueError
         A constraint or an example names a parameter the command does not have, or the
-        command has several ``one_of`` constraints.
+        command declares a ``one_of`` group or one of its options twice.
     KeyError
         An allowed value without a meaning (``kartograf.catalog.meanings``).
     """

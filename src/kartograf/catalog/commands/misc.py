@@ -798,8 +798,14 @@ COMMANDS = (
             "znacznikiem zostaje bez zmian. Kazde pobranie samo zapisuje "
             "znacznik w nowym katalogu; ta komenda jest dla magazynu 0.8.0-dev."
         ),
-        rules=("Run it once on a store that fails with `no_marker`.",),
-        rules_pl=("Uruchom raz na magazynie, ktory konczy sie bledem no_marker.",),
+        rules=(
+            "Run it once on a store that fails with `no_marker`.",
+            "Store only: only a store has a marker, so there is no `output_dir`.",
+        ),
+        rules_pl=(
+            "Uruchom raz na magazynie, ktory konczy sie bledem no_marker.",
+            "Tylko magazyn: znacznik ma tylko magazyn, wiec bez --output-dir.",
+        ),
         errors=(
             "validation_error",
             "conflict",

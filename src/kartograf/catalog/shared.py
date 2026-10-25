@@ -17,7 +17,15 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from typing import get_args
 
-from kartograf.catalog.spec import Command, Example, Param, Text, Values, resolve
+from kartograf.catalog.spec import (
+    Command,
+    Constraint,
+    Example,
+    Param,
+    Text,
+    Values,
+    resolve,
+)
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.options import BBOX_CRS_CHOICES
 
@@ -53,17 +61,31 @@ LAYER_HELP_PL = (
 CHECK_HELP = (
     "Plan without effects: compare the local versions with the source and return the "
     "plan (kartograf-plan/1: current, newer, to download, or cannot be checked "
-    "without downloading); nothing is fetched or written."
+    "without downloading); nothing is fetched or written. With `output_dir`: write, "
+    "replace or conflict per target."
 )
 UPDATE_HELP = (
     "Update mode. Omitted: keep the local versions and fetch the missing ones. "
-    "upgrade: fetch newer content when the source signals it. force: fetch every "
-    "file again (the same content is unchanged, other content is a new version; "
-    "nothing is overwritten). CLI: --upgrade, --force."
+    "upgrade: fetch newer content when the source signals it (store only). force: "
+    "fetch every file again (store: the same content is unchanged, other content is a "
+    "new version; `output_dir`: it replaces the files). CLI: --upgrade, --force."
 )
 PLAN_HELP = (
     "Update plan (the result of a check) to run with update=upgrade; a position "
-    "that changed since the plan stops the run. CLI: the file of --plan."
+    "that changed since the plan stops the run. Store only. CLI: the file of --plan."
+)
+# One sentence for the description of every data command (DEV-19.18): both targets.
+PLAIN_NOTE = "`output_dir` writes plain files, not the store."
+PLAIN_NOTE_PL = "--output-dir zapisuje zwykle pliki, nie magazyn."
+# The selection rule of the PL sheets in plain mode (ADR-054 decision 5, DEV-19.4).
+PLAIN_SHEETS_HELP = (
+    "PL sheets: the newest FULL flight, not the newest one; a sheet with none is "
+    "skipped (warning `skipped_incomplete`), all skipped is `no_data`."
+)
+PLAIN_SHEETS_HELP_PL = (
+    "Arkusze PL: najnowszy PELNY lot, nie najnowszy; arkusz bez pelnego lotu jest "
+    "pomijany (ostrzezenie skipped_incomplete), a gdy wszystkie - no_data; "
+    "--full-sheet nie dziala, --all-campaigns wymaga magazynu"
 )
 # Titles of the --help sections of every data command (UX-27).
 SELECTION_TITLE = "Produkt i obszar"
@@ -142,6 +164,20 @@ LAYER = Param(
     metavar="NAZWA",
     task=True,
     section=SELECTION_TITLE,
+)
+OUTPUT_DIR = Param(
+    "output_dir",
+    "path",
+    "Directory for plain files named as in the store (no sidecar, no versions). A "
+    "repeated name, a store or an existing file (without `update` force) is a "
+    "`conflict` and nothing is written. Store only: `update` upgrade and `plan`.",
+    description_pl="Katalog na zwykle pliki (nazwy jak w magazynie, bez sidecara i "
+    "wersji, tworzony; istniejacy plik to konflikt, --force go zastepuje; magazyn jest "
+    "odrzucony). Wyklucza sie z --root, --upgrade i --plan",
+    short="-o",
+    path_role="output",
+    metavar="KATALOG",
+    section=OUTPUT_TITLE,
 )
 ROOT = Param(
     "root",
@@ -320,11 +356,12 @@ def area(
     return tuple(replace(param, section=section) for param in params)
 
 
-def root(files: Text) -> Param:
-    """``--root``.
+def target(files: Text, *, sheets: bool = False) -> tuple[Param, Param]:
+    """``--output-dir`` and ``--root``: where a data command writes (DEV-19.1).
 
-    The store root of a data command; ``files`` says where its files go (``pliki w
-    <KATALOG>/nmt/...``, Polish).
+    ``files`` says where the files of the store go (``pliki w <KATALOG>/nmt/...``,
+    Polish); ``sheets``: the command has PL sheets, whose plain mode takes the newest
+    FULL flight (``PLAIN_SHEETS_HELP``).
     """
 
     def description_pl() -> str:
@@ -333,7 +370,41 @@ def root(files: Text) -> Param:
             "(wersje w versions/)"
         )
 
-    return replace(ROOT, description_pl=description_pl)
+    output = OUTPUT_DIR
+    if sheets:
+        output = replace(
+            OUTPUT_DIR,
+            description=f"{OUTPUT_DIR.description} {PLAIN_SHEETS_HELP}",
+            description_pl=f"{OUTPUT_DIR.description_pl}. {PLAIN_SHEETS_HELP_PL}",
+        )
+    return output, replace(ROOT, description_pl=description_pl)
+
+
+def target_constraints(*, campaigns: bool = False) -> tuple[Constraint, ...]:
+    """Return the rules of ``--output-dir`` and ``--root`` of a data command.
+
+    One mutual exclusion group, ``target`` (neither: the default store), and the
+    options that act on versions, which need the store.
+    """
+    names = ("upgrade", "plan", *(("all_campaigns",) if campaigns else ()))
+    flags = ", ".join("--" + name.replace("_", "-") for name in names)
+    return (
+        Constraint(
+            "one_of",
+            ("output_dir", "root"),
+            "Podaj najwyzej jedno z: --output-dir (zwykle pliki) albo --root "
+            "(magazyn); bez nich pliki trafiaja do magazynu domyslnego",
+            group="target",
+            optional=True,
+        ),
+        Constraint(
+            "excludes",
+            names,
+            f"--output-dir wyklucza {flags} (dzialaja na wersjach magazynu: uzyj "
+            "--root)",
+            "output_dir",
+        ),
+    )
 
 
 def workers(description: Pair, default: int | None) -> Param:
@@ -350,20 +421,37 @@ def workers(description: Pair, default: int | None) -> Param:
     )
 
 
+# What ``--force`` does with ``--output-dir`` (said after the text of the store).
+FORCE_PLAIN_PL = "; z --output-dir zastepuje istniejace pliki"
+
+
+def _then(text: Text, tail: str) -> Text:
+    """Return ``text`` followed by ``tail`` (a lazy text stays lazy)."""
+    if callable(text):
+        return lambda: f"{text()}{tail}"
+    return f"{text}{tail}"
+
+
 def update_params(
     *,
     check: Pair,
     upgrade: Text,
     force: Text,
     plan: Text | None = None,
+    plain: bool = True,
 ) -> tuple[Param, ...]:
-    """Update modes of a store command.
+    """Update modes of a command that writes.
 
-    The exclusive flags ``--check``, ``--upgrade`` and ``--force``, the API
-    argument ``update`` and, when ``plan`` is the Polish text of its description,
-    ``--plan``. ``check`` is ``(English, Polish)``: the English sentence says what
-    the source signals for this command and is added to the common text of the
-    option; ``upgrade`` and ``force`` are Polish, the flags only spell ``update``.
+    The flags ``--check``, ``--upgrade`` and ``--force``, the API argument ``update``
+    and, when ``plan`` is the Polish text of its description, ``--plan``. ``check`` is
+    ``(English, Polish)``: the English sentence says what the source signals for this
+    command and is added to the common text of the option; ``upgrade`` and ``force``
+    are Polish, the flags only spell ``update``.
+
+    ``--check`` and ``--upgrade`` exclude each other. ``--force`` too, unless the
+    command writes plain files (``plain``): ``--check --force`` is the plan that says
+    ``replace``, ``--upgrade --force`` is refused by the command, and the text of
+    ``--force`` says what it does with ``--output-dir``.
     """
     params = [
         replace(
@@ -372,7 +460,11 @@ def update_params(
             description_pl=check[1],
         ),
         replace(UPGRADE, description_pl=upgrade),
-        replace(FORCE, description_pl=force),
+        replace(
+            FORCE,
+            description_pl=_then(force, FORCE_PLAIN_PL) if plain else force,
+            exclusive=None if plain else "update",
+        ),
         UPDATE,
     ]
     if plan is not None:

@@ -7,8 +7,10 @@ from kartograf.cli import main
 from kartograf.download.manager import DownloadManager
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.testing import build_fixture_store
+from tests.integration.test_hsg import RasterSoilGrids
 from tests.integration.test_manager_campaigns import G, c14_fake
 from tests.integration.test_mcp_server import call, error_of, needs_mcp
+from tests.support.project_fixtures import HSG_SHEET, landcover_sources
 
 
 def run(capsys, *argv):
@@ -76,6 +78,7 @@ def test_an_mcp_call_without_a_root_needs_the_default_store_inside_allow_dir(
     refused = call("kartograf_store_overview", {}, allow_dirs=[allowed])
     report = error_of(refused, code="forbidden")
     assert report["details"]["option"] == "root"
+    assert report["details"]["reason"] == "outside_allowed_dirs"
     assert report["details"]["path"] == str(outside.resolve())
     assert report["details"]["allowed"] == [str(allowed.resolve())]
 
@@ -84,6 +87,27 @@ def test_an_mcp_call_without_a_root_needs_the_default_store_inside_allow_dir(
     allowed_call = call("kartograf_store_overview", {}, allow_dirs=[allowed])
     assert allowed_call.is_error is False
     assert allowed_call.structured_content["result"]["root"] == str(allowed / "store")
+
+
+@needs_mcp
+def test_an_mcp_call_with_an_output_dir_needs_no_default_store(monkeypatch, tmp_path):
+    """The target of the call is ``output_dir``: the default store is not involved."""
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    monkeypatch.setenv("KARTOGRAF_ROOT", str(tmp_path / "outside"))
+    arguments = {"sheet": HSG_SHEET, "depth": "0-5cm", "check": True}
+
+    with landcover_sources(soilgrids=RasterSoilGrids):
+        refused = call("kartograf_soil_hsg", arguments, allow_dirs=[allowed])
+        planned = call(
+            "kartograf_soil_hsg",
+            {**arguments, "output_dir": str(allowed / "out")},
+            allow_dirs=[allowed],
+        )
+
+    error_of(refused, code="forbidden", reason="outside_allowed_dirs")
+    assert planned.is_error is False
+    assert planned.structured_content["result"]["mode"] == "plain"
 
 
 @needs_mcp

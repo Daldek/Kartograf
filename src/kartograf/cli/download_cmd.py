@@ -18,9 +18,9 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-from kartograf.cli._args import library_arguments, store_dir
+from kartograf.cli._args import library_arguments, store_dir, target_arguments
 from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.cli._language import language, localized
 from kartograf.download.data import DataReport, check_data, download_data
@@ -32,6 +32,7 @@ from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
 from kartograf.messages import message, reason
 from kartograf.notices import CACHE_DISABLED, SHEET_LIST, Notice
+from kartograf.output import store_only
 from kartograf.serialization import Document
 
 
@@ -305,6 +306,8 @@ def run_with_plan_file(
     written first, the document printed after it and the ``Info:`` lines are not
     (the file is the same document as stdout).
     """
+    if getattr(args, "output_dir", None) is not None and getattr(args, "plan", None):
+        raise store_only("--plan")
     ctx = _PlanContext()
     args.plan_ctx = ctx
     plan_file = getattr(args, "plan", None)
@@ -366,10 +369,21 @@ def run_with_plan_file(
 
 
 def _update_mode(args: argparse.Namespace) -> UpdateMode | None:
-    """``update`` of a store command: ``--upgrade`` / ``--force``."""
-    if getattr(args, "upgrade", False):
+    """``update`` of a store command: ``--upgrade`` / ``--force``.
+
+    The two exclude each other; ``--check --force`` is a plan (it never gets here).
+    """
+    upgrade = getattr(args, "upgrade", False)
+    force = getattr(args, "force", False)
+    if upgrade and force:
+        raise ValidationError(
+            message("cli.upgrade_force_exclusive"),
+            option="force",
+            options=("upgrade", "force"),
+        )
+    if upgrade:
         return "upgrade"
-    return "force" if getattr(args, "force", False) else None
+    return "force" if force else None
 
 
 _PLAN_TEXT = {
@@ -377,10 +391,31 @@ _PLAN_TEXT = {
     "missing": message("cli.plan_text_missing"),
     "unverifiable": message("cli.plan_text_unverifiable"),
 }
+# The positions of a plain write (``--output-dir``): what the run would do with the
+# file and why it would refuse it.
+_ACTION_TEXT = {
+    "write": message("cli.plan_action_write"),
+    "replace": message("cli.plan_action_replace"),
+}
+_CONFLICT_TEXT = {
+    "output_exists": message("cli.plan_conflict_output_exists"),
+    "duplicate_output_name": message("cli.plan_conflict_duplicate_output_name"),
+    "output_in_store": message("cli.plan_conflict_output_in_store"),
+}
 
 
 def _plan_line(item: PlanItem) -> str:
     text: str
+    if item.action is not None:
+        if item.action in _ACTION_TEXT:
+            text = localized(_ACTION_TEXT[item.action])
+        else:
+            text = message(
+                "cli.plan_conflict",
+                lang=language(),
+                reason=_CONFLICT_TEXT.get(item.reason or "", item.reason),
+            )
+        return f"{item.store_path}: {text}"
     if item.status == "newer":
         signal = item.available_signal or {}
         available = (
@@ -439,6 +474,8 @@ _STATUS_TEXT = {
     "unchanged": message("cli.status_unchanged"),
     "local": message("cli.status_local"),
     "reused": message("cli.status_reused"),
+    "written": message("cli.status_written"),
+    "replaced": message("cli.status_replaced"),
 }
 
 
@@ -449,6 +486,9 @@ def _status_lines(
     lines = []
     for file in files:
         status = file.status
+        if status in ("written", "replaced"):  # a plain file has no version
+            lines.append(f"{sheet}: {localized(_STATUS_TEXT[status])}")
+            continue
         dirname = file.version_path.parent.name
         label = dirname.rsplit("_", 1)[0] if status != "new" else dirname
         text = f"{sheet}: {localized(_STATUS_TEXT.get(status, status))} {label}"
@@ -501,12 +541,51 @@ def _unit_of(path: Path, root: Path) -> str:
         return str(path)
 
 
-def _print_version_summary(statuses: Sequence[str], failed: int, root: Path) -> None:
+class _Written(Protocol):
+    """What a report says of where it wrote (``WriteTarget`` and the ``root`` field)."""
+
+    @property
+    def root(self) -> Path | None:
+        """Return the store root of a store report."""
+
+    @property
+    def output_dir(self) -> Path | None:
+        """Return the directory of a plain report."""
+
+
+def _written_to(args: argparse.Namespace, report: _Written) -> Path:
+    """Return what the status lines of a report name files below.
+
+    It is the output directory of a plain report and the store root of a store report;
+    a report built by hand names neither, and the store of the command stands in.
+    """
+    if report.output_dir is not None:
+        return report.output_dir
+    return report.root if report.root is not None else store_dir(args)
+
+
+def _print_version_summary(
+    statuses: Sequence[str], failed: int, root: Path, *, plain: bool = False
+) -> None:
     """Print the counters of the files of the request (spec 4.5).
 
-    ``reused`` (HSG, D33) only when a derived file was reused.
+    ``reused`` (HSG, D33) only when a derived file was reused; a plain write
+    (``plain``) counts the files it ``written`` and ``replaced``, since it has no
+    versions.
     """
     counts = Counter(statuses)
+    if plain:
+        print(
+            message(
+                "cli.plain_summary",
+                lang=language(),
+                counts_written=counts["written"],
+                counts_replaced=counts["replaced"],
+                failed=failed,
+                root=root,
+            )
+        )
+        return
     reused = (
         message("cli.summary_reused", lang=language(), counts_reused=counts["reused"])
         if counts["reused"]
@@ -574,10 +653,15 @@ def _data_notices(args: argparse.Namespace) -> Callable[[Notice], None] | None:
 def _cmd_download(args: argparse.Namespace) -> int:
     """One ``download_data``/``check_data`` call after the plan file is read."""
     _cache_warnings_shown.clear()
-    arguments: dict[str, Any] = {**library_arguments(args), "root": store_dir(args)}
+    arguments: dict[str, Any] = {**library_arguments(args), **target_arguments(args)}
     on_notice = _data_notices(args)
     if getattr(args, "check", False):
-        return _report_plan(args, check_data(**arguments, on_notice=on_notice))
+        return _report_plan(
+            args,
+            check_data(
+                **arguments, force=getattr(args, "force", False), on_notice=on_notice
+            ),
+        )
     workers = getattr(args, "workers", 4)
     on_progress = progress_printer(args, workers)
     report = download_data(
@@ -603,7 +687,7 @@ def _print_report(
     if not args.quiet:
         if getattr(on_progress, "used", False):
             print()  # campaign lines: a blank line before the status lines
-        output = store_dir(args)
+        output = _written_to(args, report)
         for unit_file in report.files:
             print(
                 _status_line(
@@ -622,7 +706,8 @@ def _print_report(
             _print_version_summary(
                 [f.file.status for f in report.files],
                 sum(1 for f in report.failed if f.kind == "download"),
-                store_dir(args) / ("laz" if args.product == "laz" else ""),
+                output / ("laz" if args.product == "laz" and report.root else ""),
+                plain=report.output_dir is not None,
             )
     for failure in report.failed:
         print(f"Error: {failure.error}", file=sys.stderr)

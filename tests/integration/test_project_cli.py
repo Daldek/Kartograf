@@ -73,6 +73,7 @@ def test_data_parser_options_cover_manifest_options(command):
     """A chosen data flag never disappears when stored as a project task."""
     parser = _parser_for(command)
     run_flags = {
+        "output_dir",
         "root",
         "check",
         "upgrade",

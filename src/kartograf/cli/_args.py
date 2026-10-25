@@ -45,11 +45,25 @@ def library_arguments(args: argparse.Namespace) -> dict[str, Any]:
     return convert_arguments(command.task_options, options)
 
 
+def target_arguments(args: argparse.Namespace) -> dict[str, Path | None]:
+    """Return the write target of a parsed command: ``output_dir`` and ``root``.
+
+    At most one of them is given (both is the ``validation_error`` the library
+    raises); neither is the default store, which the library resolves. The
+    handlers pass them to the library function as they are.
+    """
+    output_dir = getattr(args, "output_dir", None)
+    root = getattr(args, "root", None)
+    return {
+        "output_dir": None if output_dir is None else Path(output_dir),
+        "root": None if root is None else Path(root),
+    }
+
+
 def store_dir(args: argparse.Namespace) -> Path:
     """Return the store of a parsed command: ``--root``, else the default root.
 
     The default is the root of the settings (``kartograf.config.store_root()``,
-    DEV-19.2); the handlers resolve it once and pass it to the library function
-    and to the report of the files.
+    DEV-19.2); the commands that only read the store use it.
     """
     return resolve_root(args.root)

@@ -36,6 +36,7 @@ from kartograf.download.fetch import UpdateMode
 from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
 from kartograf.messages import message
+from kartograf.output import store_only
 from kartograf.project.commands import project_command, task_command
 
 
@@ -71,6 +72,8 @@ def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
     (``--summary``, ``--quiet``, ``--json``, ``--root`` of another store) are an
     error, not a silently dropped value.
     """
+    if "output_dir" in call.run:  # a project writes its store, never plain files
+        raise store_only("--output-dir")
     for flag, name in (
         ("--check", "check"),
         ("--upgrade", "upgrade"),

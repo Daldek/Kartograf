@@ -15,7 +15,7 @@ plan file cycle and prints one status line per file (its path below
 import argparse
 import sys
 
-from kartograf.cli._args import library_arguments, store_dir
+from kartograf.cli._args import library_arguments, target_arguments
 from kartograf.cli.download_cmd import (
     _end_progress,
     _plan_context,
@@ -26,6 +26,7 @@ from kartograf.cli.download_cmd import (
     _status_line,
     _unit_of,
     _update_mode,
+    _written_to,
     notice_printer,
     progress_printer,
     run_with_plan_file,
@@ -51,10 +52,15 @@ def cmd_collection_download(args: argparse.Namespace, group: str) -> int:
 
 
 def _collection_download(args: argparse.Namespace) -> int:
-    arguments = {**library_arguments(args), "root": store_dir(args)}
+    arguments = {**library_arguments(args), **target_arguments(args)}
     on_notice = notice_printer(args)
     if args.check:
-        return _report_plan(args, check_collection(**arguments, on_notice=on_notice))
+        return _report_plan(
+            args,
+            check_collection(
+                **arguments, force=getattr(args, "force", False), on_notice=on_notice
+            ),
+        )
     update = _update_mode(args)
     # a group whose request is always one file (hydro) has no --workers
     workers = getattr(args, "workers", 1)
@@ -83,7 +89,7 @@ def _print_collection(
     It returns the exit code.
     """
     _end_progress(on_progress)
-    output = store_dir(args)
+    output = _written_to(args, report)
     if not args.quiet:
         for item in report.files:
             print(_status_line(_unit_of(item.file.path, output), item.file, update))
@@ -92,6 +98,7 @@ def _print_collection(
                 [item.file.status for item in report.files],
                 len(report.failed),
                 output,
+                plain=report.output_dir is not None,
             )
     for failure in report.failed:
         print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)

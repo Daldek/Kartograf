@@ -43,19 +43,34 @@ def _run(fake, out, *argv):
         )
 
 
-@pytest.mark.parametrize(
-    "flags",
-    [
-        ("--check", "--upgrade"),
-        ("--check", "--force"),
-        ("--upgrade", "--force"),
-    ],
-)
-def test_flags_mutually_exclusive(tmp_path, flags, capsys):
+def test_check_and_upgrade_are_mutually_exclusive(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
-        _run(FakeCampaignProvider(C14), tmp_path, "--sheet", G, *flags)
+        _run(FakeCampaignProvider(C14), tmp_path, "--sheet", G, "--check", "--upgrade")
     assert exc.value.code == 2
     assert "not allowed with" in capsys.readouterr().err
+
+
+def test_upgrade_and_force_are_one_error_line(tmp_path, capsys):
+    fake = FakeCampaignProvider(C14)
+
+    rc = _run(fake, tmp_path, "--sheet", G, "--upgrade", "--force")
+
+    assert rc == 2
+    assert "Error: --upgrade i --force wykluczaja sie" in capsys.readouterr().err
+    assert fake.downloads == []
+
+
+def test_check_and_force_plan_a_store_like_check(tmp_path, capsys):
+    """``--force`` of a plan matters to a plain write only: a store plan is the same."""
+    fake = FakeCampaignProvider({"newest": [REC["83233"]]})
+    assert _run(fake, tmp_path, "--sheet", G, "-q") == 0
+    capsys.readouterr()
+
+    assert _run(fake, tmp_path, "--sheet", G, "--check") == 0
+    planned = capsys.readouterr().out
+    assert _run(fake, tmp_path, "--sheet", G, "--check", "--force") == 0
+
+    assert capsys.readouterr().out == planned
 
 
 def test_plan_requires_check_or_upgrade(tmp_path, capsys):

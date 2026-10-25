@@ -136,8 +136,9 @@ def build_instructions(
     schema = _tool("commands schema")
     flow = (
         "Kartograf downloads spatial data of Poland and Czechia (GUGiK, CUZK, "
-        "Copernicus, ISRIC) into a versioned store: the directory root, one "
-        "directory per product, files never overwritten. Order: discover, check, run, "
+        "Copernicus, ISRIC) into a versioned store (root: one directory per "
+        "product, versions never overwritten) or, with output_dir, as plain files "
+        "named as in the store. Order: discover, check, run, "
         f"read. Discover with {_tool('commands list')} (groups, products and commands) "
         f'and {schema}(command="elevation download") (the options of one command, '
         "its allowed values with their meanings, rules, examples and errors). What "
@@ -147,8 +148,10 @@ def build_instructions(
         "licence."
     )
     shared = (
-        "Shared arguments. Paths (root, project_dir, geometry, path) are "
-        "absolute. Area: sheet (a sheet code, for example N-34-130-D-d-2-4), bbox "
+        "Shared arguments. Target of a write: output_dir (plain files), root (the "
+        "store) or neither (the default store), never both. Paths (root, output_dir, "
+        "project_dir, geometry, path) are absolute. Area: sheet (a sheet code, for "
+        "example N-34-130-D-d-2-4), bbox "
         "([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no "
         "default) or geometry (a SHP or GPKG file; layer is its GPKG layer), exactly "
         "one; some commands also take teryt, ku or whole_country. country is pl, cz or "
@@ -158,10 +161,12 @@ def build_instructions(
     )
     updates = (
         "Updates. update omitted fetches what is missing, update=upgrade fetches newer "
-        "content when the source signals it, update=force fetches again; a version is "
-        "never overwritten. check=true plans without fetching: its plan (the "
-        "result of the envelope, kartograf-plan/1) runs later with update=upgrade and "
-        "plan."
+        "content when the source signals it (store only), update=force fetches again: "
+        "a store never overwrites a version, plain files are replaced and an existing "
+        "one is otherwise a conflict. check=true plans without fetching (with "
+        "output_dir each target is write, replace or conflict): a store plan "
+        "(the result of the envelope, kartograf-plan/1) runs later with "
+        "update=upgrade and plan."
     )
     directories = ", ".join(Path(directory).as_posix() for directory in allow_dirs)
     if allow_writes:
@@ -411,7 +416,13 @@ def _writes_disabled(spec: ToolSpec, option: str) -> ForbiddenError:
         f"{spec.name} only plans on this server: {option} is not available",
         option=option,
         hint=_WRITES_HINT,
+        reason="writes_disabled",
     )
+
+
+def _plans_forced(arguments: Mapping[str, Any]) -> bool:
+    """Say whether a call plans what a forced run would replace (``check`` + force)."""
+    return arguments.get(CHECK_OPTION) is True and arguments.get("update") == "force"
 
 
 class _Toolbox:
@@ -446,6 +457,7 @@ class _Toolbox:
         return ForbiddenError(
             f"{name} writes ({command}) and this server does not write",
             hint=_WRITES_HINT,
+            reason="writes_disabled",
         )
 
     def plan(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> _Plan:
@@ -524,18 +536,20 @@ class _Toolbox:
                     path=resolved,
                     allowed=directories,
                     hint=f"Allowed directories: {', '.join(directories)}.",
+                    reason="outside_allowed_dirs",
                 )
 
     def _check_default_root(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> None:
-        """Check the default store of a call that names no ``root`` (ADR-054, AGI-5.8).
+        """Check the default store of a call that names no target (ADR-054, AGI-5.8).
 
-        A tool with a store ``root`` that is given none works on the default root of
-        the settings; with ``--allow-dir`` that directory must lie inside one of them,
-        like every path of a call.
+        A tool that writes a store or plain files, given neither ``root`` nor
+        ``output_dir``, works on the default root of the settings; with ``--allow-dir``
+        that directory must lie inside one of them, like every path of a call.
         """
         if (
             spec.paths.get("root") != "root"
             or arguments.get("root") is not None
+            or arguments.get("output_dir") is not None
             or not self._allow_dirs
         ):
             return
@@ -549,7 +563,9 @@ class _Toolbox:
             option="root",
             path=default,
             allowed=directories,
-            hint=f"Give root inside an allowed directory: {', '.join(directories)}.",
+            hint=f"Give root or output_dir inside an allowed directory: "
+            f"{', '.join(directories)}.",
+            reason="outside_allowed_dirs",
         )
 
     @staticmethod
@@ -557,12 +573,15 @@ class _Toolbox:
         """Refuse an option of a run next to ``check``: it fetches nothing."""
         for name in RUN_OPTIONS:
             if name in arguments and _given(arguments[name]):
+                if name == "update" and _plans_forced(arguments):
+                    continue  # the plan of a forced plain write has no run option
                 raise ValidationError(
                     f"check plans without fetching: {name} belongs to a run",
                     option=name,
                     options=(CHECK_OPTION, name),
                     hint="Drop check to run, or drop update, plan, workers "
-                    "and summary to plan.",
+                    "and summary to plan (update=force with output_dir plans "
+                    "the replacement of existing files).",
                 )
 
     def _data_tool(
@@ -575,16 +594,24 @@ class _Toolbox:
             run_kinds, {k: v for k, v in arguments.items() if k in run_kinds}
         )
         root = run.get("root")
+        output_dir = run.get("output_dir")
 
         def validate() -> None:
-            validate_command(command, options, root=root)
+            validate_command(command, options, root=root, output_dir=output_dir)
 
         if check:
 
             def plan_call(
                 _on_progress: Callable[[DownloadProgress], None] | None,
             ) -> CommandResult[Any]:
-                return check_command(command, options, root=root, cache=self._cache)
+                return check_command(
+                    command,
+                    options,
+                    root=root,
+                    output_dir=output_dir,
+                    force=run.get("update") == "force",
+                    cache=self._cache,
+                )
 
             return _Plan(validate, plan_call, False)
 
@@ -595,6 +622,7 @@ class _Toolbox:
                 command,
                 options,
                 root=root,
+                output_dir=output_dir,
                 update=run.get("update"),
                 plan=run.get("plan"),
                 workers=run.get("workers"),

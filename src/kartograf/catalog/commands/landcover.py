@@ -227,7 +227,7 @@ _DOWNLOAD_PARAMS = (
             "EPSG:5514"
         ),
     ),
-    shared.root(lambda: store_files(["landcover"])),
+    *shared.target(lambda: store_files(["landcover"])),
     *shared.update_params(
         check=(
             "Signal: the release of CORINE (CLMS) and of the national "
@@ -291,6 +291,7 @@ _DOWNLOAD_CONSTRAINTS = (
         "whole_country",
         {"product": ["zabaged", "data50", "data250"]},
     ),
+    *shared.target_constraints(),
 )
 
 COMMANDS = (
@@ -306,8 +307,8 @@ COMMANDS = (
             " `bbox` or `geometry`): BDOT10k county packages or archive, "
             "BDOO voivodeship packages, CORINE, or the ZABAGED, Data50 and "
             "Data250 GeoPackage of the area or the national file (CZ). "
-            "Never overwrites: new content is a new version. Not for soil "
-            "(`soil download`)."
+            "Never overwrites: new content is a new version. "
+            f"{shared.PLAIN_NOTE} Not for soil (`soil download`)."
         ),
         effects=("network", "store_write"),
         project_task=True,
@@ -355,7 +356,7 @@ COMMANDS = (
             "wszystkie warstwy obiektowe; nazwy CUZK, bez przeliczenia na "
             "kody BDOT10k; lista: landcover list-layers), --whole-country ="
             " plik krajowy z feedu ATOM CUZK (ZABAGED: GPKG, "
-            "Data50/Data250: SHP; zapis 1:1)."
+            f"Data50/Data250: SHP; zapis 1:1). {shared.PLAIN_NOTE_PL}"
         ),
         rules=("`year` is required for CORINE and BDOO.",),
         rules_pl=("`year` jest wymagany dla CORINE i BDOO.",),

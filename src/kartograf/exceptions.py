@@ -482,8 +482,9 @@ class ForbiddenError(KartografError):
         path: Path | None = None,
         allowed: Sequence[str] | None = None,
         hint: str | None = None,
+        reason: str | None = None,
     ) -> None:
-        super().__init__(message, hint=hint)
+        super().__init__(message, hint=hint, reason=reason)
         self.option = option
         self.path = path
         self.allowed = _names(allowed, "allowed")

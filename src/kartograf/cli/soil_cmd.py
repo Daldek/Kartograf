@@ -9,7 +9,7 @@ import argparse
 import sys
 from typing import Any
 
-from kartograf.cli._args import library_arguments, store_dir
+from kartograf.cli._args import library_arguments, target_arguments
 from kartograf.cli._language import language, localized
 from kartograf.cli.download_cmd import (
     _plan_context,
@@ -19,6 +19,7 @@ from kartograf.cli.download_cmd import (
     _report_stale,
     _unit_of,
     _update_mode,
+    _written_to,
     notice_printer,
     run_with_plan_file,
 )
@@ -36,10 +37,15 @@ def cmd_soil_download(args: argparse.Namespace) -> int:
 
 
 def _soil_download(args: argparse.Namespace) -> int:
-    arguments = {**library_arguments(args), "root": store_dir(args)}
+    arguments = {**library_arguments(args), **target_arguments(args)}
     on_notice = notice_printer(args)
     if args.check:
-        return _report_plan(args, check_soil(**arguments, on_notice=on_notice))
+        return _report_plan(
+            args,
+            check_soil(
+                **arguments, force=getattr(args, "force", False), on_notice=on_notice
+            ),
+        )
     update = _update_mode(args)
     report = download_soil(
         **arguments,
@@ -57,7 +63,7 @@ def _print_soil(
 
     It returns the exit code.
     """
-    out = store_dir(args)
+    out = _written_to(args, report)
     for item in report.files:
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
     for failure in report.failed:
@@ -86,10 +92,15 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
 
 def _hsg_task(args: argparse.Namespace, selection: dict[str, Any]) -> int:
     """One ``soil hsg`` request: plan or inputs plus the derived raster."""
-    arguments = {**selection, "root": store_dir(args)}
+    arguments = {**selection, **target_arguments(args)}
     on_notice = notice_printer(args)
     if args.check:
-        return _report_plan(args, check_hsg(**arguments, on_notice=on_notice))
+        return _report_plan(
+            args,
+            check_hsg(
+                **arguments, force=getattr(args, "force", False), on_notice=on_notice
+            ),
+        )
     update = _update_mode(args)
     result = calculate_hsg(
         **arguments,
@@ -109,7 +120,7 @@ def _print_hsg(
     The statistics of the raster (``--summary``) and the legend are for an HSG report;
     the exit code is returned.
     """
-    out = store_dir(args)
+    out = _written_to(args, result)
     for item in (*result.inputs, *result.files):
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
     for failure in result.failed:

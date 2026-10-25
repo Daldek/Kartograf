@@ -82,19 +82,21 @@ Options = dict[str, Any]
 class TaskDownload(Protocol):
     """Download call of a command: the library function with the task options.
 
-    ``workers``: parallel transfers of the task's files (``None`` = the
-    default of the library function; HSG computes one raster from three
-    inputs and has no workers). ``plan``: the plan of ``update="upgrade"``
-    (a project passes ``None``). ``summary``: HSG statistics in the report
-    (``soil hsg`` only; the other commands ignore it).
+    ``root`` (the store, ``None``: the default store) and ``output_dir`` (plain files)
+    are the two targets: the library function takes at most one. ``workers``: parallel
+    transfers of the task's files (``None`` = the default of the library function; HSG
+    computes one raster from three inputs and has no workers). ``plan``: the plan of
+    ``update="upgrade"`` (a project passes ``None``). ``summary``: HSG statistics in
+    the report (``soil hsg`` only; the other commands ignore it).
     """
 
     def __call__(
         self,
-        root: Path,
+        root: Path | None,
         options: Options,
         /,
         *,
+        output_dir: Path | None = None,
         update: UpdateMode | None,
         plan: UpdatePlan | None,
         workers: int | None,
@@ -103,23 +105,29 @@ class TaskDownload(Protocol):
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
     ) -> Document:
-        """Run the download of the task options into ``root``."""
+        """Run the download of the task options into ``root`` or ``output_dir``."""
         ...
 
 
 class TaskCheck(Protocol):
-    """``check_*`` call of a command: the update plan of the task options."""
+    """``check_*`` call of a command: the update plan of the task options.
+
+    With ``output_dir`` the plan is that of a plain write; ``force`` makes an existing
+    file a ``replace`` there.
+    """
 
     def __call__(
         self,
-        root: Path,
+        root: Path | None,
         options: Options,
         /,
         *,
+        output_dir: Path | None = None,
+        force: bool = False,
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
-        """Plan the update of the task options in ``root``."""
+        """Plan the update of the task options in ``root`` or ``output_dir``."""
         ...
 
 
@@ -273,9 +281,10 @@ def _data_command(name: str, products: tuple[str, ...]) -> TaskCommand:
         validate_data_request(root=root, **opts)
 
     def download(
-        root: Path,
+        root: Path | None,
         opts: Options,
         *,
+        output_dir: Path | None = None,
         update: UpdateMode | None,
         plan: UpdatePlan | None,
         workers: int | None,
@@ -287,6 +296,7 @@ def _data_command(name: str, products: tuple[str, ...]) -> TaskCommand:
         require_product(opts.get("product"), products)
         return download_data(
             root=root,
+            output_dir=output_dir,
             update=update,
             plan=plan,
             cache=cache,
@@ -297,14 +307,23 @@ def _data_command(name: str, products: tuple[str, ...]) -> TaskCommand:
         )
 
     def check(
-        root: Path,
+        root: Path | None,
         opts: Options,
         *,
+        output_dir: Path | None = None,
+        force: bool = False,
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
         require_product(opts.get("product"), products)
-        return check_data(root=root, cache=cache, on_notice=on_notice, **opts)
+        return check_data(
+            root=root,
+            output_dir=output_dir,
+            force=force,
+            cache=cache,
+            on_notice=on_notice,
+            **opts,
+        )
 
     return TaskCommand(
         name, _options(name), validate, download, check, unit_report_files
@@ -327,9 +346,10 @@ def _landcover_command(name: str, product: str | None) -> TaskCommand:
             validate_soil_request(root=root, **request(opts))
 
     def download(
-        root: Path,
+        root: Path | None,
         opts: Options,
         *,
+        output_dir: Path | None = None,
         update: UpdateMode | None,
         plan: UpdatePlan | None,
         workers: int | None,
@@ -341,6 +361,7 @@ def _landcover_command(name: str, product: str | None) -> TaskCommand:
         if product is None:
             return download_landcover(
                 root=root,
+                output_dir=output_dir,
                 **request(opts),
                 **_run_options(workers),
                 cache=cache,
@@ -351,6 +372,7 @@ def _landcover_command(name: str, product: str | None) -> TaskCommand:
             )
         return download_soil(
             root=root,
+            output_dir=output_dir,
             **request(opts),
             cache=cache,
             update=update,
@@ -359,17 +381,31 @@ def _landcover_command(name: str, product: str | None) -> TaskCommand:
         )
 
     def check(
-        root: Path,
+        root: Path | None,
         opts: Options,
         *,
+        output_dir: Path | None = None,
+        force: bool = False,
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
         if product is None:
             return check_landcover(
-                root=root, **request(opts), cache=cache, on_notice=on_notice
+                root=root,
+                output_dir=output_dir,
+                force=force,
+                **request(opts),
+                cache=cache,
+                on_notice=on_notice,
             )
-        return check_soil(root=root, **request(opts), cache=cache, on_notice=on_notice)
+        return check_soil(
+            root=root,
+            output_dir=output_dir,
+            force=force,
+            **request(opts),
+            cache=cache,
+            on_notice=on_notice,
+        )
 
     return TaskCommand(
         name,
@@ -388,9 +424,10 @@ def _hsg_command(name: str) -> TaskCommand:
         validate_hsg_request(root=root, **opts)
 
     def download(
-        root: Path,
+        root: Path | None,
         opts: Options,
         *,
+        output_dir: Path | None = None,
         update: UpdateMode | None,
         plan: UpdatePlan | None,
         workers: int | None,
@@ -401,6 +438,7 @@ def _hsg_command(name: str) -> TaskCommand:
     ) -> Document:
         return calculate_hsg(
             root=root,
+            output_dir=output_dir,
             **opts,
             cache=cache,
             update=update,
@@ -410,13 +448,22 @@ def _hsg_command(name: str) -> TaskCommand:
         )
 
     def check(
-        root: Path,
+        root: Path | None,
         opts: Options,
         *,
+        output_dir: Path | None = None,
+        force: bool = False,
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
-        return check_hsg(root=root, **opts, cache=cache, on_notice=on_notice)
+        return check_hsg(
+            root=root,
+            output_dir=output_dir,
+            force=force,
+            **opts,
+            cache=cache,
+            on_notice=on_notice,
+        )
 
     return TaskCommand(name, _options(name), validate, download, check, _hsg_files)
 
@@ -434,9 +481,10 @@ def _collection_command(name: str, group: str) -> TaskCommand:
         validate_collection_request(root=root, **opts)
 
     def download(
-        root: Path,
+        root: Path | None,
         opts: Options,
         *,
+        output_dir: Path | None = None,
         update: UpdateMode | None,
         plan: UpdatePlan | None,
         workers: int | None,
@@ -448,6 +496,7 @@ def _collection_command(name: str, group: str) -> TaskCommand:
         require_collection_product(opts.get("product"), group)
         return download_collection(
             root=root,
+            output_dir=output_dir,
             update=update,
             plan=plan,
             cache=cache,
@@ -458,14 +507,23 @@ def _collection_command(name: str, group: str) -> TaskCommand:
         )
 
     def check(
-        root: Path,
+        root: Path | None,
         opts: Options,
         *,
+        output_dir: Path | None = None,
+        force: bool = False,
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
         require_collection_product(opts.get("product"), group)
-        return check_collection(root=root, cache=cache, on_notice=on_notice, **opts)
+        return check_collection(
+            root=root,
+            output_dir=output_dir,
+            force=force,
+            cache=cache,
+            on_notice=on_notice,
+            **opts,
+        )
 
     return TaskCommand(
         name, _options(name), validate, download, check, unit_report_files

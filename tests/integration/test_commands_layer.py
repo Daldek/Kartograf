@@ -24,7 +24,7 @@ from kartograf import (
 )
 from kartograf.catalog.commands import declared
 from kartograf.catalog.formatting import example_command_line
-from kartograf.exceptions import UsageError
+from kartograf.exceptions import ConflictError, UsageError
 from kartograf.project.commands import COMMANDS, data_commands_text
 from kartograf.serialization import encode
 from tests.integration.test_hsg import RasterSoilGrids
@@ -506,3 +506,88 @@ def test_run_and_check_need_the_store(tmp_path):
         with pytest.raises(ValidationError) as caught:
             call("elevation download", PL_SHEET, root="")
         assert caught.value.option == "root"
+
+
+def test_output_dir_is_a_flag_of_the_run_and_survives_the_round_trip():
+    call = parse_command(f"{NMT} --sheet {G} -o ./plain --force")
+
+    assert call.options == {"product": "nmt", "sheet": G}
+    assert call.run == {"output_dir": "./plain", "force": True}
+    line = format_command(call.command, call.options, run=call.run)
+    assert line.endswith("-o ./plain --force")
+    assert parse_command(line[len("kartograf ") :]) == call
+
+
+def test_both_targets_are_one_validation_error_in_every_function(tmp_path):
+    for call in (validate_command, run_command, check_command):
+        with pytest.raises(ValidationError) as caught:
+            call(
+                "elevation download",
+                PL_SHEET,
+                output_dir=tmp_path / "a",
+                root=tmp_path / "b",
+            )
+
+        error = caught.value
+        assert (error.reason, error.option) == ("exclusive_options", "root")
+        assert error.options == ("output_dir", "root")
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_run_command_with_output_dir_writes_plain_files_and_check_command_plans_them(
+    tmp_path,
+):
+    out = tmp_path / "out"
+    with pl_sheets() as fake:
+        called = run_command(
+            "elevation download", PL_SHEET, output_dir=out, cache=False
+        )
+        direct = download_data(**PL_SHEET, output_dir=tmp_path / "b", cache=False)
+
+    assert [f.file.status for f in called.result.files] == ["written"]  # type: ignore[attr-defined]
+    assert (called.status, called.result.mode) == ("ok", "plain")  # type: ignore[attr-defined]
+    assert _normal(called.result, out) == _normal(direct, tmp_path / "b")
+    assert fake.downloads == [REC["83233"].url] * 2  # the newest FULL flight
+    assert sorted(path.name for path in out.iterdir()) == [f"{G}.asc"]
+    with pl_sheets():
+        refused = check_command(
+            "elevation download", PL_SHEET, output_dir=out, cache=False
+        )
+        replaced = check_command(
+            "elevation download", PL_SHEET, output_dir=out, force=True, cache=False
+        )
+        with pytest.raises(ConflictError) as error:
+            run_command("elevation download", PL_SHEET, output_dir=out, cache=False)
+        forced = run_command(
+            "elevation download",
+            PL_SHEET,
+            output_dir=out,
+            update="force",
+            cache=False,
+        )
+
+    assert [(i.action, i.reason) for i in refused.result.items] == [  # type: ignore[attr-defined]
+        ("conflict", "output_exists")
+    ]
+    assert [i.action for i in replaced.result.items] == ["replace"]  # type: ignore[attr-defined]
+    assert refused.status == replaced.status == "ok"  # a plan with a conflict is ok
+    assert error.value.reason == "output_exists"
+    assert [f.file.status for f in forced.result.files] == ["replaced"]  # type: ignore[attr-defined]
+
+
+def test_run_command_with_output_dir_refuses_what_needs_a_store(tmp_path):
+    with pl_sheets() as fake, pytest.raises(ValidationError) as caught:
+        run_command(
+            "elevation download",
+            PL_SHEET,
+            output_dir=tmp_path / "out",
+            update="upgrade",
+            cache=False,
+        )
+
+    assert (caught.value.reason, caught.value.option) == (
+        "store_only_option",
+        "--upgrade",
+    )
+    assert fake.downloads == [] and not (tmp_path / "out").exists()

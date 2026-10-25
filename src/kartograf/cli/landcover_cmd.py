@@ -8,7 +8,7 @@ The CLI translates flags to ``download_landcover`` / ``check_landcover``.
 import argparse
 import sys
 
-from kartograf.cli._args import library_arguments, store_dir
+from kartograf.cli._args import library_arguments, target_arguments
 from kartograf.cli.download_cmd import (
     _end_progress,
     _plan_context,
@@ -19,6 +19,7 @@ from kartograf.cli.download_cmd import (
     _report_stale,
     _unit_of,
     _update_mode,
+    _written_to,
     notice_printer,
     progress_printer,
     run_with_plan_file,
@@ -44,10 +45,15 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
 
 def _landcover_task(args: argparse.Namespace) -> int:
     """Plan or download: the report as text or, with ``--json``, as a document."""
-    arguments = {**library_arguments(args), "root": store_dir(args)}
+    arguments = {**library_arguments(args), **target_arguments(args)}
     on_notice = notice_printer(args)
     if args.check:
-        return _report_plan(args, check_landcover(**arguments, on_notice=on_notice))
+        return _report_plan(
+            args,
+            check_landcover(
+                **arguments, force=getattr(args, "force", False), on_notice=on_notice
+            ),
+        )
     update = _update_mode(args)
     on_progress = progress_printer(args, args.workers)
     result = download_landcover(
@@ -74,7 +80,7 @@ def _print_landcover(
     It is for a land cover report and returns the exit code.
     """
     _end_progress(on_progress)
-    out = store_dir(args)
+    out = _written_to(args, result)
     statuses = []
     for item in (*result.files, *result.raw):
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
@@ -83,5 +89,7 @@ def _print_landcover(
         print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
     _report_stale(result.stale)
     if args.product in _UNIT_SOURCES and args.teryt is None and not args.quiet:
-        _print_version_summary(statuses, len(result.failed), out)
+        _print_version_summary(
+            statuses, len(result.failed), out, plain=result.output_dir is not None
+        )
     return exit_code_of(result)
