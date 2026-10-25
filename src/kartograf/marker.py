@@ -335,12 +335,14 @@ def _inspect(path: Path) -> str:
     if not path.is_dir():
         return "foreign"
     store, other = _contents(path)
+    # A competing writer writes the marker before its first file: when the files are
+    # seen, the marker is there, so it is looked for after the files, not before them.
+    if (path / MARKER).is_file():
+        return _inspect(path)
     if store:
         _check_nested(path, below=False)
         return "layout"
     _check_nested(path, below=True)
-    if (path / MARKER).is_file():  # a competing writer was first: the marker is whole
-        return _inspect(path)
     return "foreign" if other else "new"
 
 
