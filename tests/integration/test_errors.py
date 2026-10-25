@@ -2288,7 +2288,7 @@ STORE_OPTION_SCENARIOS = [
         "segment",
         None,
         None,
-        "Nieprawidlowy segment magazynu",
+        "Invalid store segment",
     ),
     _row(
         kartograf.iter_store,
@@ -2296,7 +2296,7 @@ STORE_OPTION_SCENARIOS = [
         "units",
         None,
         None,
-        "units wymaga segment",
+        "units needs segment",
     ),
     _row(
         kartograf.iter_store,
@@ -2308,7 +2308,7 @@ STORE_OPTION_SCENARIOS = [
         "units",
         None,
         None,
-        "Nieprawidlowa jednostka magazynu",
+        "Invalid store unit",
     ),
     _row(
         kartograf.iter_store,
@@ -2320,7 +2320,7 @@ STORE_OPTION_SCENARIOS = [
         "units",
         None,
         None,
-        "podaj kolekcje nazw jednostek",
+        "give a collection of unit names",
     ),
     _row(
         kartograf.iter_store,
@@ -2332,7 +2332,7 @@ STORE_OPTION_SCENARIOS = [
         "skip_versions",
         None,
         None,
-        "podaj kolekcje sciezek katalogow wersji",
+        "give a collection of version directory paths",
     ),
     _row(
         kartograf.iter_store,
@@ -2340,7 +2340,7 @@ STORE_OPTION_SCENARIOS = [
         "partition",
         None,
         None,
-        "partition wymaga segment",
+        "partition needs segment",
     ),
     _row(
         kartograf.iter_store,
@@ -2352,7 +2352,7 @@ STORE_OPTION_SCENARIOS = [
         "partition",
         None,
         None,
-        "Nieprawidlowa czesc segmentu",
+        "Invalid part of a segment",
     ),
     _row(
         kartograf.iter_store,
@@ -2365,7 +2365,7 @@ STORE_OPTION_SCENARIOS = [
         None,
         ("units", "partition"),
         None,
-        "units albo partition",
+        "units or partition",
     ),
     _row(
         kartograf.list_partitions,
@@ -2373,7 +2373,7 @@ STORE_OPTION_SCENARIOS = [
         "target",
         None,
         None,
-        "podaj dodatnia liczbe czesci",
+        "give a positive number of parts",
     ),
 ]
 

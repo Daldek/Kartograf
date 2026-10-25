@@ -586,6 +586,8 @@ MESSAGES = {
     "header_provider": Text("PROVIDER", "DOSTAWCA"),
     "header_key": Text("KEY", "KLUCZ"),
     "header_name": Text("NAME", "NAZWA"),
+    "directory_crs": Text("<crs>", "<uklad>"),
+    "directory_vertical_crs": Text("<vertical-crs>", "<uklad-wys>"),
     "list_sources_note": Text(
         "CHOICE: a|b = one of the values. DIRECTORY: under --output; <crs> and "
         "<vertical-crs> follow from the choice, variant choices (scale, format, "

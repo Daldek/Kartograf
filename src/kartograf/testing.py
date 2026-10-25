@@ -64,6 +64,7 @@ from kartograf.download.versions import (
     version_key,
 )
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.project.manifest import (
     MANIFEST_NAME,
     absolute,
@@ -519,15 +520,16 @@ def build_fixture_store(
     """
     if variant not in VARIANTS:
         raise ValidationError(
-            f"Nieznany wariant {variant!r} magazynu testowego "
-            f"(dozwolone: {', '.join(VARIANTS)})",
+            message(
+                "testing.unknown_variant", variant=variant, variants=", ".join(VARIANTS)
+            ),
             option="variant",
             allowed=VARIANTS,
         )
     base = Path(root)
     if base.exists() and (not base.is_dir() or any(base.iterdir())):
         raise ValidationError(
-            f"Magazyn testowy wymaga nieistniejacego albo pustego katalogu: {base}",
+            message("testing.empty_directory_needed", base=base),
             option="root",
         )
     base.mkdir(parents=True, exist_ok=True)
@@ -600,7 +602,7 @@ def build_project(
     """
     if pin not in ("newest", "oldest"):
         raise ValidationError(
-            f"Nieznana wartosc pin={pin!r} (dozwolone: 'newest', 'oldest')",
+            message("testing.unknown_pin", pin=pin),
             option="pin",
             allowed=("newest", "oldest"),
         )
@@ -630,7 +632,9 @@ def build_project(
         ),
     )
     if (directory / MANIFEST_NAME).exists():
-        raise ValidationError(f"projekt juz istnieje: {directory / MANIFEST_NAME}")
+        raise ValidationError(
+            message("testing.project_exists", path=directory / MANIFEST_NAME)
+        )
     with _fixed_clock(_PINNED_AT):
         create_manifest(directory, _relative(store.root, directory))
         for name, options, file, index in tasks:
@@ -661,7 +665,7 @@ def build_project(
                 (pinned,),
             )
             if commit_tasks(directory, {name: (before, task_to_json(task))}):
-                raise ValidationError(f"zadanie {name} zmienione w tym czasie")
+                raise ValidationError(message("testing.task_changed", name=name))
     open_project(directory)
     return directory
 

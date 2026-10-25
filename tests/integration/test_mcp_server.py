@@ -307,25 +307,6 @@ def test_create_server_refuses_what_it_cannot_serve(kwargs, option, tmp_path):
     assert not database.exists()
 
 
-def test_lang_is_validated_and_reported_and_changes_nothing(
-    tmp_path, monkeypatch, capsys
-):
-    assert main(["--lang", "xx", "--no-cache"]) == 2
-    assert "invalid choice: 'xx' (choose from pl, en)" in capsys.readouterr().err
-
-    capture_server(["--lang", "en", "--no-cache"], monkeypatch)
-    english = capsys.readouterr().err
-    capture_server(["--lang", "pl", "--no-cache"], monkeypatch)
-    polish = capsys.readouterr().err
-    capture_server(["--no-cache"], monkeypatch)
-    default = capsys.readouterr().err
-
-    assert english.strip().endswith("lang en")
-    assert polish.strip().endswith("lang pl")
-    assert default.strip().endswith("lang pl")  # the language of the settings
-    assert english.replace("lang en", "lang pl") == polish
-
-
 def test_the_start_line_says_how_the_server_started(tmp_path, monkeypatch, capsys):
     capture_server(
         [
@@ -341,7 +322,7 @@ def test_the_start_line_says_how_the_server_started(tmp_path, monkeypatch, capsy
 
     assert capsys.readouterr().err == (
         f"kartograf-mcp {kartograf.__version__}: stdio, writes on, "
-        f"allow-dir {tmp_path.resolve().as_posix()}, tools core,store, lang pl\n"
+        f"allow-dir {tmp_path.resolve().as_posix()}, tools core,store\n"
     )
 
 

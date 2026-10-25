@@ -71,6 +71,13 @@ def _choice(select: dict[str, SelectValue], metavars: dict[str, str]) -> str:
     return " ".join(parts)
 
 
+def _directory(path: str) -> str:
+    """Return the directory of a source, its placeholders in the line's language."""
+    return path.replace("<crs>", message("cli.directory_crs", lang=language())).replace(
+        "<vertical-crs>", message("cli.directory_vertical_crs", lang=language())
+    )
+
+
 def cmd_list_sources(args: argparse.Namespace, group: str) -> int:
     """Print the sources of ``group`` (``--json``: the document of ``list_sources``)."""
     sources = list_sources(group=group, product=args.product)
@@ -83,7 +90,7 @@ def cmd_list_sources(args: argparse.Namespace, group: str) -> int:
             _choice(source.select, metavars),
             source.country,
             source.provider,
-            source.directory,
+            _directory(source.directory),
             source.key,
             localized(source.name),
         )

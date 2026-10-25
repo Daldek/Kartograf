@@ -51,6 +51,7 @@ from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import UpdatePlan
 from kartograf.envelope import CommandResult, wrap
 from kartograf.exceptions import UsageError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.notices import Notice
 from kartograf.project.commands import data_commands_text, task_command
 from kartograf.serialization import Document
@@ -152,13 +153,16 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     try:
         tokens = shlex.split(argv) if isinstance(argv, str) else list(argv)
     except ValueError as error:
-        raise UsageError(f"nieprawidlowy zapis komendy: {error}") from error
+        raise UsageError(
+            message("commands.invalid_command_line", error=reason(error))
+        ) from error
     if tokens and tokens[0] == _PROGRAM:
         del tokens[0]  # a whole line, as ``format_command`` writes it
     if not tokens:
         raise UsageError(
-            f"podaj komende danych (grupa i komenda, np. elevation download): "
-            f"{data_commands_text()}"
+            message(
+                "commands.give_data_command", data_commands_text=data_commands_text()
+            )
         )
     removed = removed_command_error(tokens)
     if removed is not None:
@@ -166,8 +170,7 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     named = _words(tokens)
     if any(token in _EXITING_FLAGS for token in tokens):
         raise UsageError(
-            "--help i --version nie sa czescia komendy danych; opis komendy: "
-            'kartograf commands schema --command "<grupa> <komenda>"',
+            message("commands.help_version_not_data"),
             command=named,
         )
     if named is not None:
@@ -177,7 +180,11 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     if command is None:
         group = getattr(parsed, "command", tokens[0])
         raise UsageError(
-            f"{group}: podaj komende grupy (komendy danych: {data_commands_text()})"
+            message(
+                "commands.give_group_command",
+                group=group,
+                data_commands_text=data_commands_text(),
+            )
         )
     task_command(command)
     return _call(parsed)
@@ -261,11 +268,12 @@ def format_command(
     for name in (*options, *given_run):
         if name not in names:
             raise ValidationError(
-                f"opcja {name!r} nie nalezy do komendy {command}", option=name
+                message("commands.option_not_of_command", name=name, command=command),
+                option=name,
             )
     for name in sorted(set(options) & set(given_run)):
         raise ValidationError(
-            f"opcja {name!r} podana jako opcja zadania i jako flaga uruchomienia",
+            message("commands.option_given_twice", name=name),
             option=name,
         )
     convert_arguments(entry.options, options)
@@ -276,7 +284,7 @@ def format_command(
 def _store(output_dir: str | Path) -> Path:
     if output_dir is None or not str(output_dir):
         raise ValidationError(
-            "output_dir wymagane (katalog magazynu)", option="output_dir"
+            message("commands.output_dir_required"), option="output_dir"
         )
     return Path(output_dir)
 
@@ -335,7 +343,7 @@ def run_command(
     arguments = convert_arguments(entry.options, options)
     if summary and command != _SUMMARY_COMMAND:
         raise ValidationError(
-            f"summary dotyczy tylko komendy {_SUMMARY_COMMAND} (statystyki HSG)",
+            message("commands.summary_only_for_hsg", summary_command=_SUMMARY_COMMAND),
             option="summary",
         )
     store = _store(output_dir)

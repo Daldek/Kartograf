@@ -51,10 +51,10 @@ POLISH = re.compile(
     r"|(?-i:\bGodl[ao]\b)",
     re.IGNORECASE,
 )
-# Polish words that are data, not text: a header cell, the value of a flag (NIE = no)
-# and the names of the contour formats of the GUGiK sheet index, compared with what the
-# service sent.
-DOMAIN = frozenset({"god\u0142o", "NIE", "Warstwice DXF", "Warstwice DGN"})
+# Polish words that are data, not text: a header cell, the value of a flag (NIE = no),
+# the names of the contour formats of the GUGiK sheet index, compared with what the
+# service sent, and the field ``uklad`` of the sidecars written before ADR-031.
+DOMAIN = frozenset({"god\u0142o", "NIE", "Warstwice DXF", "Warstwice DGN", "uklad"})
 # A name or a path is data too: no space, and an underscore, a slash or a CamelCase
 # join (the layer, field and path names of the GUGiK services, ``zrodlo_danych``).
 NAME = re.compile(r"[\w./-]*(?:[_/]|[a-z][A-Z])[\w./-]*")
@@ -72,14 +72,7 @@ PLURAL = re.compile(r"\{\w+:plural\([^|(){}]+(?:\|[^|(){}]+){1,2}\)\}")
 _PENDING = frozenset(
     {
         # Root modules: documents, MCP server, store read API, notices.
-        "cache_info.py",
-        "commands.py",
-        "mcp_server.py",
         "notices.py",
-        "source_info.py",
-        "store.py",
-        "store_documents.py",
-        "testing.py",
         # Command catalog: the Polish texts of the declarations and of the parser.
         "catalog/build.py",
         "catalog/cliparser.py",

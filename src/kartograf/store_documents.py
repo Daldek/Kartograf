@@ -32,6 +32,7 @@ from pathlib import Path
 
 from kartograf.download.arguments import require_int
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.serialization import Document, EncodeContext
 from kartograf.store import (
     SegmentInfo,
@@ -180,11 +181,12 @@ def list_store_entries(
     """
     require_int(limit, "limit")
     if limit < 1:
-        raise ValidationError(f"limit musi byc >= 1, podano {limit}", option="limit")
+        raise ValidationError(
+            message("store.limit_at_least_one", limit=limit), option="limit"
+        )
     if not isinstance(segment, str):
         raise ValidationError(
-            f"segment jest wymagany: <produkt>/<wariant> (otrzymano {segment!r}); "
-            "segmenty magazynu: describe_store",
+            message("store.segment_required", segment=segment),
             option="segment",
         )
     # A string is passed through unchanged: iter_store rejects it by name.

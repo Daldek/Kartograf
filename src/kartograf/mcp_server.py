@@ -29,7 +29,7 @@ Claude Code::
 
 Other clients (``mcpServers``)::
 
-    {"command": "kartograf-mcp", "args": ["--allow-dir", "/home/ola/dane"]}
+    {"command": "kartograf-mcp", "args": ["--allow-dir", "/home/ola/data"]}
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ from kartograf.catalog.tools import (
     tool_specs,
 )
 from kartograf.commands import check_command, run_command, validate_command
-from kartograf.config import LANGUAGES, check_config, resolve
+from kartograf.config import check_config
 from kartograf.download.manager import DownloadProgress
 from kartograf.envelope import CommandResult, wrap
 from kartograf.error_report import ErrorReport, error_line, error_report
@@ -97,7 +97,7 @@ INSTRUCTIONS_MAX = 4096
 # conversations do not flood GUGiK and CUZK with parallel jobs.
 MAX_NETWORK_CALLS = 4
 
-_PATH_HINT = "Give an absolute path, for example /home/ola/dane/kartograf."
+_PATH_HINT = "Give an absolute path, for example /home/ola/data/kartograf."
 _WRITES_HINT = (
     "Start kartograf-mcp with --allow-writes and --allow-dir DIR to run and write; "
     "check_updates=true plans without writing."
@@ -830,7 +830,7 @@ def _allowed_directory(directory: str | Path) -> Path:
             f"--allow-dir needs an absolute path, got {str(directory)!r} (a relative "
             "one would depend on the working directory of the server)",
             option="allow_dirs",
-            hint="Give an absolute directory, for example --allow-dir /home/ola/dane.",
+            hint="Give an absolute directory, for example --allow-dir /home/ola/data.",
         )
     return path.resolve()
 
@@ -863,49 +863,44 @@ class _ServerParser(argparse.ArgumentParser):
 def _parser() -> argparse.ArgumentParser:
     parser = _ServerParser(
         prog="kartograf-mcp",
-        description="Serwer MCP (stdio): narzedzia Kartografa dla agentow AI - "
-        "katalog komend, godla, dostepnosc, pobieranie i sprawdzanie aktualnosci "
-        "danych oraz odczyt magazynu. Domyslnie serwer nie zapisuje.",
+        description="MCP server (stdio): the tools of Kartograf for AI agents - the "
+        "command catalog, sheet codes, availability, downloads and update "
+        "checks of the data, and reading the store. By default the server "
+        "does not write.",
         allow_abbrev=False,
     )
     parser.add_argument(
         "--tools",
         type=_argument(parse_families),
-        metavar="RODZINY",
-        help="rodziny narzedzi po przecinku: " + ", ".join(FAMILIES) + " (domyslnie "
-        "wszystkie; core to najwazniejsze zadania, dla klientow z limitem narzedzi)",
+        metavar="FAMILIES",
+        help=f"comma-separated tool families: {', '.join(FAMILIES)} (default: all; "
+        "core: the most important tasks, for clients with a tool limit)",
     )
     parser.add_argument(
         "--allow-dir",
         action="append",
         default=[],
         type=_argument(_allowed_directory),
-        metavar="KATALOG",
-        help="katalog bezwzgledny (albo z ~), w ktorym musza lezec sciezki narzedzi "
-        "(powtarzalna; sciezka poza nim to forbidden; bez tej flagi: dowolna sciezka "
-        "bezwzgledna do odczytu)",
+        metavar="DIRECTORY",
+        help="absolute directory (or starting with ~) that the paths of the tools "
+        "must lie in (repeatable; a path outside it is forbidden; without "
+        "this flag: any absolute path for reading)",
     )
     parser.add_argument(
         "--allow-writes",
         action="store_true",
-        help="narzedzia, ktore zapisuja, zapisuja (tylko w katalogach --allow-dir, "
-        "ktore jest wtedy wymagane); bez tej flagi planuja (check_updates)",
-    )
-    parser.add_argument(
-        "--lang",
-        choices=LANGUAGES,
-        help="jezyk tekstu dla czlowieka (pl albo en); serwer odpowiada zawsze po "
-        "angielsku, wartosc jest tylko sprawdzana i podana w linii startowej",
+        help="the tools that write do write (only in the --allow-dir directories, "
+        "which is then required); without this flag they plan (check_updates)",
     )
     caching = parser.add_mutually_exclusive_group()
     caching.add_argument(
         "--cache-file",
         type=Path,
-        metavar="PLIK",
-        help="plik cache metadanych (domyslnie <katalog cache uzytkownika>/"
-        "kartograf/metadata.db)",
+        metavar="FILE",
+        help="metadata cache file (default: <user cache "
+        "directory>/kartograf/metadata.db)",
     )
-    caching.add_argument("--no-cache", action="store_true", help="bez cache metadanych")
+    caching.add_argument("--no-cache", action="store_true", help="no metadata cache")
     parser.add_argument(
         "--version", action="version", version=f"kartograf-mcp {kartograf.__version__}"
     )
@@ -939,17 +934,12 @@ def _fail(error: KartografError) -> int:
 
 
 def _start_line(args: argparse.Namespace) -> str:
-    """Return the line that says on stderr how the server started.
-
-    The state the options chose, ``lang`` included: the language is validated and
-    reported and changes nothing, as everything the server says is English.
-    """
-    lang = args.lang or str(resolve("lang").value)
+    """Return the line that says on stderr how the server started."""
     return (
         f"kartograf-mcp {kartograf.__version__}: stdio, "
         f"writes {'on' if args.allow_writes else 'off'}, "
         f"allow-dir {', '.join(d.as_posix() for d in args.allow_dir) or 'none'}, "
-        f"tools {','.join(args.tools) if args.tools else 'all'}, lang {lang}"
+        f"tools {','.join(args.tools) if args.tools else 'all'}"
     )
 
 

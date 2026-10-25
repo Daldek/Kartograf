@@ -31,8 +31,11 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   Proxy (`transport`, `cache`, `auth`), the providers (`providers`: GUGiK, CUZK, CORINE and
   SoilGrids), the source registry, the hydrologic soil groups and the land cover orchestration
   (`sources`, `hydrology`, `landcover`) and the text the CLI prints for a person (`cli`: tables,
-  status lines and notes; `--lang en` prints English, the default stays Polish). A client that
-  matched the Polish text matches the English one or the `code` and `details`.
+  status lines and notes; `--lang en` prints English, the default stays Polish), the command
+  layer, the store read API with the names of its segments, the cache, source and layer documents
+  and the fixture builders (the root modules; the `directory` of a source is `<crs>` and
+  `<vertical-crs>`; `kartograf-mcp` says English only and has no `--lang`). A client that matched
+  the Polish text matches the English one or the `code` and `details`.
 - The package lives in `src/kartograf/` (ECO-011). Import paths do not change;
   repeat an editable install made before (`uv sync --locked --all-extras`).
 - `kartograf.__version__` is `0.8.0.dev0` on `develop` (REL-1.1); the release
@@ -206,11 +209,11 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   `MissingDependencyError` (`missing_dependency`, exit code 6: details `extra`, hint `uv add
   "kartograf[<extra>]"`), exported from `kartograf` and listed in the error table of USAGE 9.3
   (ERR §2, DEV-6.5). Only the MCP server raises them.
-- `kartograf-mcp --allow-writes` and `--lang pl|en` (validated and reported on stderr; the server
-  answers in English whatever its value, AGI-9.2); `scripts/generate_output_schema.py` and the
-  generated module `kartograf._output_schema`; the gate test of AGI-5.13 (the server over stdio
-  with the SDK client: names, annotations, schemas, budgets, cold start under 5 seconds, a
-  read-only call, a validation error with the code and the hint).
+- `kartograf-mcp --allow-writes` (the server says everything in English, AGI-9.2, so it has no
+  `--lang`); `scripts/generate_output_schema.py` and the generated module
+  `kartograf._output_schema`; the gate test of AGI-5.13 (the server over stdio with the SDK
+  client: names, annotations, schemas, budgets, cold start under 5 seconds, a read-only call, a
+  validation error with the code and the hint).
 - `UnitFailure.code` and `UnitFailure.reason` (the registry code and `details.reason` a
   failed unit stands for: `no_coverage` and `year_out_of_range` are `no_data`, `download`
   and `country` are `source_unavailable`; `kartograf.download.data.FAILURE_CODES`),

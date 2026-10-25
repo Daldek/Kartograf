@@ -189,7 +189,7 @@ def test_pl_footprint_comes_from_the_sheet_code_and_partitions_split_the_segment
 def test_build_refuses_a_non_empty_root_and_an_unknown_variant(tmp_path):
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "x").write_text("x")
-    with pytest.raises(ValidationError, match="pustego"):
+    with pytest.raises(ValidationError, match="does not exist or is empty"):
         build_fixture_store(tmp_path / "data")
     with pytest.raises(ValidationError) as unknown:
         build_fixture_store(tmp_path / "other", variant="nope")  # type: ignore[arg-type]
@@ -241,9 +241,9 @@ def test_every_variant_is_the_complete_store_plus_one_damaged_file(tmp_path, var
 @pytest.mark.parametrize(
     ("variant", "problem", "message"),
     [
-        ("unreadable_sidecar", "invalid_sidecar", "Nie mozna odczytac sidecara"),
-        ("unknown_schema", "invalid_sidecar", "Nieznany schemat sidecara"),
-        ("missing_sidecar", "missing_sidecar", "Nie mozna odczytac sidecara"),
+        ("unreadable_sidecar", "invalid_sidecar", "Cannot read the sidecar"),
+        ("unknown_schema", "invalid_sidecar", "Unknown sidecar schema"),
+        ("missing_sidecar", "missing_sidecar", "Cannot read the sidecar"),
     ],
 )
 def test_sidecar_variants_give_the_documented_problem_for_one_version(
@@ -390,7 +390,7 @@ def test_a_pinned_file_of_another_size_is_corrupt_for_status_too(tmp_path, store
 def test_build_project_refuses_an_existing_project_and_an_unknown_pin(tmp_path, store):
     directory = build_project(tmp_path / "projekt", store)
     before = (directory / "kartograf-project.json").read_bytes()
-    with pytest.raises(ValidationError, match="projekt juz istnieje"):
+    with pytest.raises(ValidationError, match="the project already exists"):
         build_project(directory, store)
     with pytest.raises(ValidationError) as unknown:
         build_project(tmp_path / "other", store, pin="middle")  # type: ignore[arg-type]

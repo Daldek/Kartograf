@@ -72,7 +72,7 @@ def test_parse_command_takes_the_whole_line_with_its_program_name():
 
 
 def test_parse_command_with_only_the_program_name_is_an_empty_line():
-    with pytest.raises(UsageError, match="podaj komende danych"):
+    with pytest.raises(UsageError, match="give a data command"):
         parse_command("kartograf")
 
 
