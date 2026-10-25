@@ -199,7 +199,7 @@ def _cz_sheet(code: str) -> SheetInfo | None:
         try:
             bounds = ParserTM33(code).get_bbox()
         except ParseError as error:
-            raise ParseError(str(error), option="sheet", hint=error.hint) from error
+            raise ParseError(reason(error), option="sheet", hint=error.hint) from error
         crs = bounds.crs
     elif system == "cz_sm5":
         crs = _SM5_CRS

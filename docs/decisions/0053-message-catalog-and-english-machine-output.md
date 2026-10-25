@@ -3,7 +3,8 @@
 **Date:** 2026-10-25
 **Status:** Accepted. The catalog, the language switch of the CLI and the error document
 (decisions 1 to 6) are implemented; erratum 1: the migration of decision 7 is complete and
-`_PENDING` of decision 6 is gone. Amends ADR-037 (Z5, S6: the language of messages).
+`_PENDING` of decision 6 is gone; erratum 2: every validation error is raised with a catalog
+message, checked by the guard. Amends ADR-037 (Z5, S6: the language of messages).
 
 **Context:** AGI-9.2 makes every machine output English (`--json`, the error document on
 the last line of stderr, MCP results, descriptions and instructions, `AGENTS.md`,
@@ -93,3 +94,20 @@ stay Polish", describes the state during the migration only. A sentence that wra
 error is a catalog message with a nested one (`reason(exc)`), so a problem keeps its language
 when composed; this includes a place in a project manifest, the label of a unit or task and the
 owner of a lock (`messages/project.py`).
+
+**Erratum 2 (2026-10-25, decisions 4 and 6):** A validation error of the command layer reached
+a Polish reader in English: `validate_command("elevation download", {..., "year": 1800})`
+raised the text of `year_bounds`, which renamed the bounds with `str(e).replace(...)`, so
+`localized("pl")` gave the English text; `--year` with `--min-year` was a Polish literal, also
+in English output. The guard gains two tests. The first,
+`test_a_validation_error_is_raised_with_a_catalog_message`, reads every module and refuses a
+literal, an f-string, `str()`, a `str` method or a name that the scope assigns such text, as
+the text or the `hint` of a `ValidationError`, `UsageError`, `ParseError` or `ConfigError`, or
+as the text a module function such as `option_error` passes to one. The second,
+`test_validate_command_refuses_every_broken_option_with_a_catalog_message`, breaks each option
+of each command in the first example of its catalog entry (a wrong form, out of bounds, not
+allowed) and asks for a catalog message in every `ValidationError`. A wrapped error keeps its
+message (`reason(exc)`), a function names the bounds of a year by the names its caller knows
+(`validate_year_bounds(names=...)`), and the settings errors of `check_config` are catalog
+messages too. The MCP server is outside the first test: everything it says is English
+(decision 4), so its texts stay plain English.

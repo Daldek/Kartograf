@@ -2151,6 +2151,16 @@ from the key `root`, and the MCP tool names.
 
 ### Fixed
 
+- A validation error reaches a Polish reader in Polish (ADR-053 erratum 2):
+  `validate_command("elevation download", {..., "year": 1800})` and the CLI with `--lang pl`
+  said `--year must be an integer 1900..2100, got 1800`, because the year bounds were renamed
+  with `str(e).replace(...)`; `--year` with `--min-year` was Polish in English output. The same
+  held for the plan document of a call, a TM33 tile, the per-country suffix of a PL option, the
+  settings errors of `check_config` (`nogat.toml`, `KARTOGRAF_LANG`), `--inject`, the tool
+  families, the guide format and `output_dir` with `storage`, and English output joined the
+  LAZ flags with the Polish `i`. Every text and hint of a `ValidationError` (and its
+  subclasses) is now a catalog message; `tests/unit/test_messages.py` refuses plain text there
+  and breaks each option of each catalog example to check the error of `validate_command`.
 - Every example of the catalog is the line `format_command` writes for its call, the order of
   the flags too (AGI-2.1), so a tool that exchanges command lines compares them as text
   (request of Archiwista). The second example of `project add` wrote the flags of its data

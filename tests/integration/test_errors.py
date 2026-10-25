@@ -1644,7 +1644,7 @@ OPTION_SCENARIOS = [
         None,
         ("year", "min_year"),
         None,
-        "--year wyklucza sie",
+        "--year excludes --min-year",
     ),
     _row(
         kartograf.download_data,

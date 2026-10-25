@@ -55,6 +55,7 @@ from kartograf.catalog.spec import (
 )
 from kartograf.catalog.spec import FAMILIES as COMMAND_FAMILIES
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 
 FAMILIES: Final[tuple[str, ...]] = (*COMMAND_FAMILIES, "core")
 """What ``--tools`` selects: the families of the commands and ``core`` (AGI-5.12)."""
@@ -175,12 +176,15 @@ def check_families(names: Sequence[str]) -> tuple[str, ...]:
     """
     unknown = [name for name in names if name not in FAMILIES]
     if not names or unknown:
-        shown = ", ".join(repr(name) for name in unknown) or "none given"
+        shown = ", ".join(repr(name) for name in unknown)
         raise ValidationError(
-            f"unknown tool family: {shown}",
+            message(
+                "catalog.unknown_tool_family",
+                shown=shown or message("catalog.no_tool_family"),
+            ),
             option="families",
             allowed=FAMILIES,
-            hint=f"Tool families: {', '.join(FAMILIES)}.",
+            hint=message("catalog.tool_families_hint", families=", ".join(FAMILIES)),
         )
     return tuple(names)
 

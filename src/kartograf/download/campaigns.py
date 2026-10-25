@@ -94,22 +94,39 @@ def campaign_id_from_url(url: str) -> str:
     return "u" + hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
 
 
-def validate_year_bounds(min_year: int | None, max_year: int | None) -> None:
-    """Validate inclusive acquisition-year bounds."""
-    for name, year in (("min_year", min_year), ("max_year", max_year)):
+def validate_year_bounds(
+    min_year: int | None,
+    max_year: int | None,
+    *,
+    names: tuple[str, str] = ("min_year", "max_year"),
+) -> None:
+    """Validate inclusive acquisition-year bounds.
+
+    ``names`` are the names of the two bounds in the message: the parameters, or the
+    flags of a command (``("--min-year", "--max-year")``); ``option`` and ``options``
+    of the error are the parameters.
+    """
+    for name, shown, year in (
+        ("min_year", names[0], min_year),
+        ("max_year", names[1], max_year),
+    ):
         if year is not None and (
             not isinstance(year, int)
             or isinstance(year, bool)
             or not 1900 <= year <= 2100
         ):
             raise ValidationError(
-                message("campaigns.year_not_integer", name=name, year=year),
+                message("campaigns.year_not_integer", name=shown, year=year),
                 option=name,
             )
     if min_year is not None and max_year is not None and min_year > max_year:
         raise ValidationError(
             message(
-                "campaigns.min_year_exceeds_max", min_year=min_year, max_year=max_year
+                "campaigns.min_year_exceeds_max",
+                min_name=names[0],
+                min_year=min_year,
+                max_name=names[1],
+                max_year=max_year,
             ),
             options=("min_year", "max_year"),
         )

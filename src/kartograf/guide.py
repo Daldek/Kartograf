@@ -45,6 +45,7 @@ from kartograf.catalog.model import CommandEntry
 from kartograf.commands import parse_command, validate_command
 from kartograf.error_report import ERROR_CODES
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.serialization import Document
 
 GUIDE_FORMATS: Final[tuple[str, ...]] = ("agents", "llms", "agents-md-block")
@@ -567,7 +568,7 @@ def agent_guide(*, format: str = "agents") -> AgentGuide:
     """
     if format not in GUIDE_FORMATS:
         raise ValidationError(
-            f"unknown guide format {format!r}",
+            message("catalog.unknown_guide_format", format=format),
             option="format",
             allowed=GUIDE_FORMATS,
         )

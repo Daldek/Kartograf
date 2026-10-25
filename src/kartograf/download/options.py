@@ -421,7 +421,7 @@ def _with_suffix(error: ValidationError, suffix: str) -> ValidationError:
     if not suffix:
         return error
     return ValidationError(
-        f"{error}{suffix}",
+        message("options.error_with_suffix", error=reason(error), suffix=suffix),
         option=error.option,
         options=error.options,
         allowed=error.allowed,
@@ -594,14 +594,17 @@ def pl_option_error(
             if value is not None
         ]
         if given:
-            shown = " i ".join(flag for flag, _ in given)
             verb = (
                 message("options.verb_plural")
                 if len(given) > 1
                 else message("options.verb_singular")
             )
             return option_error(
-                message("options.laz_crs_flags", shown=shown, verb=verb),
+                message(
+                    "options.laz_crs_flags",
+                    flags=[flag for flag, _ in given],
+                    verb=verb,
+                ),
                 *(name for _, name in given),
             )
         return None
@@ -1239,8 +1242,7 @@ def year_bounds(
     """
     if year is not None and (min_year is not None or max_year is not None):
         raise ValidationError(
-            "--year wyklucza sie z --min-year/--max-year "
-            "(--year Y to skrot --min-year Y --max-year Y)",
+            message("campaigns.year_excludes_bounds"),
             options=(
                 "year",
                 *(
@@ -1253,14 +1255,16 @@ def year_bounds(
     if year is not None:
         min_year = max_year = year
     try:
-        validate_year_bounds(min_year, max_year)
+        validate_year_bounds(
+            min_year,
+            max_year,
+            names=("--year" if year is not None else "--min-year", "--max-year"),
+        )
     except ValidationError as e:
         # ``year`` stands for both bounds: its error is about ``year``
         rename = {"min_year": "year"} if year is not None else {}
         raise ValidationError(
-            str(e)
-            .replace("min_year", "--year" if year is not None else "--min-year")
-            .replace("max_year", "--max-year"),
+            reason(e),
             option=rename.get(e.option, e.option) if e.option else None,
             options=tuple(rename.get(name, name) for name in e.options or ()) or None,
         ) from None

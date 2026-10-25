@@ -35,7 +35,7 @@ from kartograf.download.options import (
 )
 from kartograf.download.plan import UpdatePlan
 from kartograf.exceptions import ValidationError
-from kartograf.messages import message
+from kartograf.messages import message, reason
 
 
 def layer_codes(text: str) -> tuple[str, ...]:
@@ -399,7 +399,7 @@ def _plan(name: str, value: object) -> UpdatePlan:
     try:
         return UpdatePlan.from_dict(value)
     except ValidationError as error:
-        raise ValidationError(str(error), option=name) from error
+        raise ValidationError(reason(error), option=name) from error
 
 
 def options_from_json(

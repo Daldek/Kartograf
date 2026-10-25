@@ -44,7 +44,7 @@ import platformdirs
 
 from kartograf.exceptions import ConfigError, ValidationError
 from kartograf.marker import MARKER
-from kartograf.messages import Lang, message
+from kartograf.messages import Lang, Message, message
 from kartograf.serialization import Document
 
 __all__ = [
@@ -304,22 +304,26 @@ def config_file() -> ConfigFile:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         # A missing default file is the normal case; a named one is a mistake.
-        return unusable("the file does not exist" if explicit else None, exists=False)
+        missing = message("config.file_missing") if explicit else None
+        return unusable(missing, exists=False)
     except UnicodeDecodeError:
-        return unusable("the file is not UTF-8 text", exists=True)
+        return unusable(message("config.file_not_utf8"), exists=True)
     except OSError as error:
         return unusable(
-            f"the file cannot be read: {error.strerror or error}", exists=True
+            message("config.file_unreadable", error=error.strerror or str(error)),
+            exists=True,
         )
     try:
         document = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
-        return unusable(f"the file is not valid TOML: {error}", exists=True)
+        return unusable(
+            message("config.file_invalid_toml", error=str(error)), exists=True
+        )
     sections: dict[str, Mapping[str, Any]] = {}
     for name in (APP, TOOL):
         table = document.get(name, {})
         if not isinstance(table, dict):
-            return unusable(f"[{name}] is not a table", exists=True)
+            return unusable(message("config.section_not_table", name=name), exists=True)
         sections[name] = table
     return ConfigFile(path, source, True, sections, None)
 
@@ -365,16 +369,16 @@ def _flag(raw: object) -> bool:
     return str(raw).strip().lower() not in _FALSE_WORDS
 
 
-def _invalid(key: str, raw: object) -> str | None:
+def _invalid(key: str, raw: object) -> Message | None:
     """Return why ``raw`` is not a valid value of ``key`` (``None``: it is valid)."""
     if key in PATH_KEYS:
-        return None if isinstance(raw, str) else "a directory must be a text"
+        return None if isinstance(raw, str) else message("config.directory_not_text")
     if key == "lang":
         value = raw.strip().lower() if isinstance(raw, str) else raw
         if value not in LANGUAGES:
-            return f"the language must be one of {', '.join(LANGUAGES)}"
+            return message("config.lang_not_allowed", languages=", ".join(LANGUAGES))
     elif key == "debug" and not isinstance(raw, str | bool | int):
-        return "debug must be a flag: true, false, 1 or 0"
+        return message("config.debug_not_flag")
     return None
 
 
@@ -420,7 +424,8 @@ def resolve(key: str) -> Setting:
         return Setting(_default(key), "default", None)
     error = _invalid(key, found.value)
     if error is not None:
-        return Setting(_default(key), "default", None, f"{found.name} {key}: {error}")
+        error = message("config.setting_error", name=found.name, key=key, error=error)
+        return Setting(_default(key), "default", None, error)
     value: Path | str | bool
     if key in PATH_KEYS:
         value = Path(found.value).expanduser()
@@ -553,7 +558,7 @@ def check_config() -> None:
     file = config_file()
     if file.error is not None:
         raise ConfigError(
-            f"The settings file {file.path} cannot be used: {file.error}",
+            message("config.file_unusable", path=file.path, error=file.error),
             option=CONFIG_ENV if file.source == CONFIG_ENV else CONFIG_FILENAME,
             path=file.path,
         )
@@ -563,7 +568,7 @@ def check_config() -> None:
             found = lookup(key)
             assert found is not None
             raise ConfigError(
-                f"The setting is not valid: {setting.error}",
+                message("config.setting_invalid", error=setting.error),
                 option=found.name if found.source == "env" else f"{found.name} {key}",
                 value=str(found.value),
                 allowed=LANGUAGES if key == "lang" else None,

@@ -254,12 +254,10 @@ def cmd_commands_guide(args: argparse.Namespace) -> int:
     if args.inject is not None:
         if document.format != "agents-md-block":
             raise ValidationError(
-                "--inject puts the block into a file: it needs the format "
-                "agents-md-block",
+                message("cli.inject_needs_block"),
                 option="inject",
                 options=("format", "inject"),
-                hint="Run: kartograf commands guide --format agents-md-block "
-                "--inject AGENTS.md",
+                hint=message("cli.inject_needs_block_hint"),
             )
         path = Path(args.inject)
         existing = path.read_text(encoding="utf-8") if path.exists() else ""

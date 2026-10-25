@@ -4,7 +4,7 @@ import ast
 import copy
 import pickle
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import pytest
@@ -209,6 +209,171 @@ def test_polish_literals_stay_only_in_the_catalog():
         if any(is_polish(node.value) for node in string_values(tree))
     }
     assert found == set(), "a Polish text belongs in kartograf.messages"
+
+
+# The errors of an invalid input (``validation_error``): their text and hint reach a
+# person in the language of the CLI (``KartografError.localized``), so both are catalog
+# messages. The MCP server is English only (AGI-9.2): none of its texts is translated.
+VALIDATION_ERRORS = frozenset(
+    {"ValidationError", "UsageError", "ParseError", "ConfigError"}
+)
+ENGLISH_ONLY = frozenset({"mcp_server.py"})
+# Methods of ``str`` that return a new plain text (a `Message` operation gives a str).
+STR_METHODS = frozenset(
+    {"format", "join", "replace", "strip", "lstrip", "rstrip", "capitalize", "lower"}
+)
+
+
+def _plain_text(node: ast.expr, assigned: dict[str, list[ast.expr]]) -> bool:
+    """Whether an expression makes plain text: a literal, an f-string, ``str()``, ...
+
+    A name is plain text when the scope assigns it plain text.
+    """
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, str)
+    if isinstance(node, ast.JoinedStr | ast.BinOp):
+        return True
+    if isinstance(node, ast.IfExp):
+        return _plain_text(node.body, assigned) or _plain_text(node.orelse, assigned)
+    if isinstance(node, ast.Call):
+        func = node.func
+        if isinstance(func, ast.Name):
+            return func.id in {"str", "repr", "format"}
+        return isinstance(func, ast.Attribute) and func.attr in STR_METHODS
+    if isinstance(node, ast.Name):
+        return any(_plain_text(value, {}) for value in assigned.get(node.id, ()))
+    return False
+
+
+def _assigned(statements: Iterable[ast.AST]) -> dict[str, list[ast.expr]]:
+    """The values that statements assign to each plain name."""
+    assigned: dict[str, list[ast.expr]] = {}
+    for node in (n for statement in statements for n in ast.walk(statement)):
+        if isinstance(node, ast.Assign):
+            targets: list[ast.expr] = node.targets
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+            value = node.value
+        else:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                assigned.setdefault(target.id, []).append(value)
+    return assigned
+
+
+def _calls(
+    node: ast.AST, assigned: dict[str, list[ast.expr]]
+) -> Iterator[tuple[ast.Call, dict[str, list[ast.expr]]]]:
+    """Every call under ``node`` with the names its function and the module assign."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            yield from _calls(child, assigned | _assigned(child.body))
+            continue
+        if isinstance(child, ast.Call):
+            yield child, assigned
+        yield from _calls(child, assigned)
+
+
+def _callee(call: ast.Call) -> str | None:
+    func = call.func
+    if isinstance(func, ast.Name):
+        return func.id
+    return func.attr if isinstance(func, ast.Attribute) else None
+
+
+def _builders(trees: list[ast.Module]) -> dict[str, int]:
+    """Functions that raise a validation error with the text of a parameter.
+
+    The name of each module-level function whose validation error takes one of its
+    parameters as the text (``option_error(text, *names)``), with the position of
+    that parameter: its callers give the text.
+    """
+    builders: dict[str, int] = {}
+    for tree in trees:
+        for function in tree.body:
+            if not isinstance(function, ast.FunctionDef):
+                continue
+            params = [arg.arg for arg in function.args.args]
+            for node in ast.walk(function):
+                if (
+                    isinstance(node, ast.Call)
+                    and _callee(node) in VALIDATION_ERRORS
+                    and node.args
+                    and isinstance(node.args[0], ast.Name)
+                    and node.args[0].id in params
+                ):
+                    builders[function.name] = params.index(node.args[0].id)
+    return builders
+
+
+def test_a_validation_error_is_raised_with_a_catalog_message():
+    parsed = [(name, tree) for name, tree in sources() if name not in ENGLISH_ONLY]
+    texts = dict.fromkeys(VALIDATION_ERRORS, 0) | _builders([t for _, t in parsed])
+    problems = []
+    for name, tree in parsed:
+        module = [s for s in tree.body if isinstance(s, ast.Assign | ast.AnnAssign)]
+        for call, assigned in _calls(tree, _assigned(module)):
+            callee = str(_callee(call))
+            if callee not in texts:
+                continue
+            given = call.args[texts[callee] : texts[callee] + 1]
+            hints = [k.value for k in call.keywords if k.arg == "hint"]
+            if any(_plain_text(text, assigned) for text in (*given, *hints)):
+                problems.append(f"{name}:{call.lineno}: {callee}")
+    assert not problems, "plain text, not message(...):\n" + "\n".join(problems)
+
+
+# Values of a wrong form, outside the bounds or outside the allowed values, by kind.
+BROKEN: dict[str, tuple[object, ...]] = {
+    "int": ("x", 1800, -1, 10**6),
+    "str": (0, "bogus"),
+    "flag": ("x",),
+    "bbox": ("x", [1, 2]),
+    "bbox_crs": (0, "bogus"),
+    "path": (0,),
+    "str_list": (0, ["bogus"]),
+    "per_country": (0, "bogus"),
+    "options": (0,),
+    "plan": (0,),
+}
+
+
+def test_validate_command_refuses_every_broken_option_with_a_catalog_message():
+    """Each option of each command, broken in the first example of its catalog entry."""
+    from kartograf.catalog.build import command_entries
+    from kartograf.catalog.commands import declared
+    from kartograf.commands import parse_command, validate_command
+
+    examples = {entry.name: entry.examples[0].call for entry in command_entries()}
+    plain = []
+    for command in declared().commands:
+        call = parse_command(examples[command.id])
+        for param in command.call_options:
+            for value in BROKEN[param.kind]:
+                options = {**call.options, param.name: value}
+                try:
+                    validate_command(command.id, options)
+                except ValidationError as error:
+                    if not isinstance(error.args[0], Message):
+                        plain.append(f"{command.id} {param.name}={value!r}: {error}")
+    assert not plain, "\n".join(plain)
+
+
+def test_a_year_out_of_range_is_refused_in_the_language_of_the_reader():
+    from kartograf.commands import validate_command
+
+    call = {"product": "nmt", "sheet": "N-34-130-D", "year": 1800}
+    with pytest.raises(ValidationError) as caught:
+        validate_command("elevation download", call)
+
+    assert caught.value.option == "year"
+    assert str(caught.value) == "--year must be an integer 1900..2100, got 1800"
+    assert (
+        caught.value.localized("pl")
+        == "--year musi byc liczba calkowita 1900..2100, otrzymano 1800"
+    )
 
 
 # --------------------------------------------------------------------------
