@@ -406,7 +406,8 @@ _CONFLICT_TEXT = {
 }
 
 
-def _plan_line(item: PlanItem) -> str:
+def plan_line(item: PlanItem) -> str:
+    """Return the line of ``--check`` for one position of a plan."""
     text: str
     if item.action is not None:
         if item.action in _ACTION_TEXT:
@@ -449,7 +450,7 @@ def _report_plan(args: argparse.Namespace, plan: UpdatePlan) -> int:
 
     def render() -> int:
         for item in plan.items:
-            print(_plan_line(item))
+            print(plan_line(item))
         return exit_code_of(plan, check=True)
 
     return _present(args, plan, render)

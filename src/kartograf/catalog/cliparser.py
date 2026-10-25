@@ -336,12 +336,12 @@ def parsed_options(
     Returns
     -------
     tuple of dict
-        ``(options, run)``: the task options (``Param.task``) and the other flags
-        (``--root``, ``--workers``, ``--quiet``, ...), by parameter name, in the
-        JSON form: ``--bbox`` is four numbers with ``bbox_crs`` (the CRS of
-        ``--bbox-crs``, else the default of the flag), a per-country value a text
-        or a ``{"pl": ..., "cz": ...}`` mapping, a path a text, a list of codes a
-        list.
+        ``(options, run)``: the options of the call (``Command.call_options``; of a
+        project task, ``Param.task``) and the other flags (``--root``, ``--workers``,
+        ``--quiet``, ...), by parameter name, in the JSON form: ``--bbox`` is four
+        numbers with ``bbox_crs`` (the CRS of ``--bbox-crs``, else the default of the
+        flag), a per-country value a text or a ``{"pl": ..., "cz": ...}`` mapping, a
+        path a text, a list of codes a list.
 
     Raises
     ------
@@ -351,6 +351,7 @@ def parsed_options(
         ``--bbox`` (``option="bbox_crs"``).
     """
     crs = next((param for param in command.params if param.kind == "bbox_crs"), None)
+    named = {param.name for param in command.call_options}
     options: dict[str, object] = {}
     run: dict[str, object] = {}
     for param in command.params:
@@ -369,7 +370,8 @@ def parsed_options(
             options[param.name] = [box.min_x, box.min_y, box.max_x, box.max_y]
             options[crs.name] = box.crs
             continue
-        (options if param.task else run)[param.name] = _json_value(param, value)
+        target = options if param.name in named else run
+        target[param.name] = _json_value(param, value)
     if (
         given_only
         and crs is not None
@@ -382,7 +384,13 @@ def parsed_options(
             option=crs.name,
             options=(area.name, crs.name),
         )
-    return options, run
+    # a line that leaves a required option to the default of its flag (``--project``
+    # of a project command) gives it: the call needs it
+    for param in command.call_options:
+        if param.required and param.cli_default is not None:
+            options.setdefault(param.name, _json_value(param, param.cli_default))
+    order = [param.name for param in command.call_options]
+    return {name: options[name] for name in order if name in options}, run
 
 
 def _help(text: str, lang: Lang) -> str:

@@ -512,13 +512,29 @@ COMMANDS = (
         "manage",
         "init_store",
         "kartograf-store-init/1",
-        (_INIT_ROOT, shared.JSON),
+        (
+            _INIT_ROOT,
+            replace(
+                shared.CHECK,
+                description=message("catalog_misc.store_init_check_description"),
+                exclusive=None,
+                section=None,
+            ),
+            shared.JSON,
+        ),
         description=message("catalog_misc.store_init_description"),
         effects=("store_write",),
+        check_function="check_store",
+        check_result_schema="kartograf-plan/1",
         examples=(
             Example(
                 {},
                 title=message("catalog_misc.example_mark_store_data"),
+            ),
+            Example(
+                {},
+                title=message("catalog_misc.example_check_marker_store_data"),
+                run={"check": True},
             ),
         ),
         rules=(

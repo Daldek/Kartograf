@@ -2,8 +2,9 @@
 
 **Date:** 2026-10-24
 **Status:** Accepted — amended by ADR-054 (the options `output_dir` and `root`, `check` instead of
-`check_updates`, `store init`). The catalog documents (decisions 1 to 8), the MCP rebuild (decision 9)
-and the guide for agents (decision 10) are implemented.
+`check_updates`, `store init`); erratum 1: the command layer drives every command (AGI-2.1, decision 6).
+The catalog documents (decisions 1 to 8), the MCP rebuild (decision 9) and the guide for agents
+(decision 10) are implemented.
 
 **Context:** The Nogat standard 2.1 asks every tool for a command catalog as the document
 `<tool>-commands/1` (AGI-2.4), for `list_commands()` and `command_schema(command)` in the
@@ -173,3 +174,25 @@ options are its options except the run options `output_dir`, `update`, `plan`, `
 code table is read from the registry. `kartograf commands list` takes no argument. The
 repository files `AGENTS.md` and `llms.txt` change whenever the catalog, the error registry or
 a template does; the contract test says so until they are regenerated (USAGE 9.7).
+
+**Erratum 1 (2026-10-25, AGI-2.1; ADR-054, decision 14):** Decision 6, the gap to AGI-2.1, is closed
+in part. `parse_command`, `validate_command`, `format_command`, `run_command` and `check_command` take
+every command of the catalog (45), by its name or its `operation_id`, not the twelve data commands
+only, and know no command by name: the function, its arguments, the required options, the allowed
+values, the bounds, the rules among the options and the `check_*` twin come from the declaration
+(`Command.call_options`, `function`, `check_function`; `kartograf.catalog.arguments.check_call`). The
+twelve data commands keep the validation of their own function. A read-only command returns its
+document in the envelope, `store init` writes the marker, and `check_command("store init")` is its plan
+(`check_store`, `kartograf-plan/1`: the marker as one position of the track `store`; a root that is a
+`conflict` is listed and the plan is `ok`, as in a data command; any other refusal is raised): the
+command has a `check` now, so `kartograf_store_init` is a plan on a server that does not write (37
+tools). `project add` is the call with the options `command` and `options`, which `parse_command` reads
+from, and `format_command` writes as, the words after the task name. A command without a `check`
+answers `check_command` with `validation_error`, `details.reason` `no_check` (as Hydrolog and Retman
+do; the catalog says `check: null`). What stays as decided: the calling convention
+`(command, options, *, ...)`, with the targets (`root`, `output_dir`) and the options of a run
+(`update`, `plan`, `workers`, `summary`) by name and not `**options` (the options of a call are the
+JSON object of `tasks[].options` and of an MCP tool), and `validate_command` returns nothing and fills
+no default (the functions apply them). The MCP server keeps its own glue between a tool call and the
+functions; `tests/integration/test_commands_catalog.py` compares the layer with the envelope of the
+CLI for every command that runs offline.

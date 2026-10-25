@@ -37,11 +37,17 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from kartograf._output_schema import OUTPUT_SCHEMA
-from kartograf.catalog.build import command_entries, declared_options, effects
+from kartograf.catalog.build import (
+    allowed_values,
+    command_entries,
+    declared_options,
+    effects,
+)
 from kartograf.catalog.commands import declared
 from kartograf.catalog.model import CommandEntry, OptionEntry
 from kartograf.catalog.spec import (
     CHECK_OPTION,
+    RUN_OPTIONS,
     Command,
     Kind,
     Param,
@@ -52,9 +58,6 @@ from kartograf.exceptions import ValidationError
 
 FAMILIES: Final[tuple[str, ...]] = (*COMMAND_FAMILIES, "core")
 """What ``--tools`` selects: the families of the commands and ``core`` (AGI-5.12)."""
-
-RUN_OPTIONS: Final[tuple[str, ...]] = ("update", "plan", "workers", "summary")
-"""The options of a run: a plan (``check``) has none of them."""
 
 ALWAYS_LOAD_KEY: Final = "anthropic/alwaysLoad"
 """Key of ``_meta`` that tells Claude Code to load a tool's definition up front."""
@@ -67,11 +70,6 @@ DESCRIPTION_MAX: Final = 600
 PLAN_ONLY_NOTE: Final = "This server only plans: nothing is written."
 _PLAN_ONLY_DIRECTORY: Final = " This server only plans: nothing is written there."
 _PLAN_ONLY_CHECK: Final = " Always true here: this server only plans."
-
-# Options whose allowed values are not listed in the schema: they are the names of
-# the commands, which ``kartograf_commands_list`` has, and a second copy in every
-# ``tools/list`` is waste.
-_NO_ENUM: Final = {("commands schema", "command")}
 
 
 @dataclass(frozen=True)
@@ -200,13 +198,6 @@ def _plan_only(command: Command, allow_writes: bool) -> bool:
     return not allow_writes and not _read_only(command) and command.supports_check
 
 
-def _values(option: OptionEntry, command: Command) -> list[Any] | None:
-    """Return the allowed values of an option as they go in ``enum`` (``None``: any)."""
-    if not option.enum or (command.id, option.name) in _NO_ENUM:
-        return None
-    return [entry.value for entry in option.enum]
-
-
 def _string(values: list[Any] | None) -> dict[str, Any]:
     schema: dict[str, Any] = {"type": "string"}
     if values is not None:
@@ -216,7 +207,7 @@ def _string(values: list[Any] | None) -> dict[str, Any]:
 
 def _property(command: Command, param: Param, option: OptionEntry) -> dict[str, Any]:
     """Return the JSON Schema of one option (AGI-5.5)."""
-    values = _values(option, command)
+    values = allowed_values(command, option)
     schema: dict[str, Any]
     match param.kind:
         case "str" | "bbox_crs":

@@ -459,6 +459,38 @@ each; "Migration guide: data output" at the end of this section lists what a cal
   a process of its own): SIGINT ends it with exit 130 (`cancelled`) and SIGTERM with 143
   (`terminated`), the staging directory is gone and a target that existed with `--force` is
   whole; a plain write needs no hard link and no symlink.
+- The command layer drives every command of the catalog (AGI-2.1; ADR-052 erratum 1, which closes
+  the gap that decision 6 of ADR-052 and decision 14 of ADR-054 kept open): `parse_command`,
+  `validate_command`, `format_command`, `run_command` and `check_command` take any command of
+  `kartograf commands list`, by its name or its `operation_id`, not the twelve data commands
+  only. Nothing there knows a command by name: the function, its arguments, the required options,
+  the allowed values, the bounds of an integer, the rules among the options (`one_of`, `requires`,
+  `excludes`) and the `check_*` twin come from the declaration (`Command.call_options`,
+  `kartograf.catalog.arguments.check_call`); the twelve data commands keep the validation of
+  their own function. The options of a call are the keys of `kartograf commands schema`; `root`,
+  `output_dir`, `update`, `plan`, `workers` and `summary` are given by name beside them, and a
+  command that has no such option refuses it (`validation_error`, `details.option`; `output_dir`
+  for a command that works on a store only is `store_only_option`). A read-only command returns
+  its document in the envelope `kartograf-result/1` (the one the CLI `--json` prints, compared in
+  `tests/integration/test_commands_catalog.py` for every command that runs offline), `store init`
+  writes the marker, `project init`, `project add` and `project remove` change the manifest, and
+  `project download` takes the metadata cache like the data commands. `check_command` of a
+  command that has no check is `validation_error` (`details.reason` `no_check`, `details.option`
+  `check`), as in Hydrolog and Retman; it returns `CommandResult[UpdatePlan | ProjectCheck]`. An
+  unknown command is `validation_error` with `details.allowed` the 45 names. `project add` is one
+  call with the options `command` and `options` (what `command_schema` says): `parse_command`
+  reads the words after the task name into them, `format_command` writes them back, and a flag
+  of a run in that line is `validation_error`. A line that leaves a required option to the
+  default of its flag (`--project` of a project command) parses to it (`project_dir` `.`), so
+  every parsed line validates.
+- `store init --check` (`check_store`, `kartograf-plan/1`, MCP `check`; DEV-19.10): the plan of the
+  marker without writing it, one position of the track `store`: `missing` with the action `write`
+  where `init_store` would write it, `current` where the root has it. A root that `init_store`
+  refuses as a `conflict` (`nested_store`, `not_empty`) is the one conflict position and the plan
+  is `ok` (exit 0, as for a data command); every other refusal is raised (`data_error` for a
+  layout that fails the verification or a marker that is not `kartograf-store/1`). The tool
+  `kartograf_store_init` is offered as a plan on a server that does not write (37 tools instead
+  of 36).
 
 ### Migration guide: data output (ADR-054, DEV §19)
 

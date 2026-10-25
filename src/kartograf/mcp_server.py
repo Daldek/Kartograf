@@ -53,11 +53,10 @@ from kartograf.cache.defaults import default_cache_path
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.commands import declared_commands
 from kartograf.catalog.kinds import convert_arguments
-from kartograf.catalog.spec import CHECK_OPTION, PathRole
+from kartograf.catalog.spec import CHECK_OPTION, RUN_OPTIONS, PathRole
 from kartograf.catalog.tools import (
     ALWAYS_LOAD_KEY,
     FAMILIES,
-    RUN_OPTIONS,
     ToolSpec,
     check_families,
     hidden_tools,
@@ -176,8 +175,8 @@ def build_instructions(
             "This server does not write: a command that writes only plans "
             "(check is true; update, plan, workers and summary are "
             "forbidden), and "
-            f"{_tool('project init')}, {_tool('project add')}, "
-            f"{_tool('project remove')} and {_tool('store init')} are unavailable. "
+            f"{_tool('project init')}, {_tool('project add')} and "
+            f"{_tool('project remove')} are unavailable. "
             "Start kartograf-mcp with "
             "--allow-writes and --allow-dir DIR to download."
         )

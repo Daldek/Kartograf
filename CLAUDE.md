@@ -56,7 +56,8 @@ For agents of Hydrograf, Archiwista, Retman, IMGWTools and others that edit Kart
 __init__.py        public API (__all__): the only supported import surface (AGI-7.1)
 cli/               argparse front end; handlers translate flags to library calls
 catalog/           command declarations (commands/<group>.py), parser, documents, MCP tools
-commands.py        parse_command, validate_command, format_command, run_command, check_command
+commands.py        parse_command, validate_command, format_command, run_command, check_command of ANY
+                   catalog command (the call is read from its declaration: catalog/arguments.py)
 download/          data.py (download_data/check_data), collections.py, manager.py (sheets,
                    campaigns, versions), availability.py, laz.py, cutouts, cz_*.py, storage.py
 sources/           registry.py (source descriptors, channels, licences), variants.py

@@ -72,3 +72,6 @@ unchanged except for the notice key (`text` is `message`), `TaskResult.code` and
 and `failed` in `kartograf-availability/1`. `notices` are in the envelope and in the result
 (the same list). AGI-2.1 asks `run`, `check` and `validate` for every command; they stay
 data commands only (the twelve of `kartograf.commands`), a known gap for the catalog step.
+
+**Erratum 1 (2026-10-25, ADR-052 erratum 1):** the gap is closed in part: `run_command`, `check_command`
+and `validate_command` take every command of the catalog.

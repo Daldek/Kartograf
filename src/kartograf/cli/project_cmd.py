@@ -148,7 +148,7 @@ def cmd_project_add(args: argparse.Namespace) -> int:
     if any(arg in ("-h", "--help") for arg in command_args):
         # the help of the data command itself: argparse prints it and exits
         create_parser().parse_args(command_args)
-    call = parse_command(command_args)
+    call = parse_command(command_args, tasks=True)
     _reject_run_options(args, call)
     project = add_project_task(
         args.project,

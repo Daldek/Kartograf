@@ -16,15 +16,14 @@ import pytest
 import kartograf
 from kartograf._output_schema import OUTPUT_SCHEMA
 from kartograf.catalog import tools as tools_module
-from kartograf.catalog.build import command_entries, declared_options
+from kartograf.catalog.build import OPEN_VALUES, command_entries, declared_options
 from kartograf.catalog.commands import declared
-from kartograf.catalog.spec import CORE_MAX
+from kartograf.catalog.spec import CORE_MAX, RUN_OPTIONS
 from kartograf.catalog.tools import (
     ALWAYS_LOAD_COMMANDS,
     DESCRIPTION_MAX,
     FAMILIES,
     PLAN_ONLY_NOTE,
-    RUN_OPTIONS,
     check_families,
     hidden_tools,
     parse_families,
@@ -40,7 +39,7 @@ ENTRIES = {entry.name: entry for entry in command_entries()}
 TOOL_COMMANDS = [command for command in CATALOG.values() if command.family]
 DATA_COMMANDS = [command for command in CATALOG.values() if command.project_task]
 CHECKED = [command for command in TOOL_COMMANDS if command.supports_check]
-WRITING = {"project init", "project add", "project remove", "store init"}
+WRITING = {"project init", "project add", "project remove"}  # no check: not offered
 CORE = {
     "commands list",
     "commands schema",
@@ -181,7 +180,7 @@ def test_an_unknown_or_empty_family_is_a_validation_error(names):
 
 
 def test_a_server_without_writes_offers_plans_and_hides_the_writes_without_a_check():
-    assert len(PLANS) == 36
+    assert len(PLANS) == 37
     assert hidden_tools(allow_writes=False) == {
         _name(command): command for command in sorted(WRITING)
     }
@@ -193,20 +192,21 @@ def test_a_server_without_writes_offers_plans_and_hides_the_writes_without_a_che
     assert set(hidden_tools(("project",), allow_writes=False)) == {
         _name(command) for command in WRITING if command.startswith("project")
     }
-    assert set(hidden_tools(("store",), allow_writes=False)) == {"kartograf_store_init"}
+    assert hidden_tools(("store",), allow_writes=False) == {}  # store init is a plan
 
 
 def test_the_commands_that_write_and_have_a_check_are_plans_without_writes():
     plans = {name for name, spec in PLANS.items() if spec.plan_only}
 
     assert plans == {command.operation_id for command in CHECKED}
-    assert len(plans) == 13  # the twelve data commands and project download
+    assert len(plans) == 14  # the twelve data commands, project download, store init
     assert not any(spec.plan_only for spec in WRITES.values())
     for command in CHECKED:
         full, plan = WRITES[command.operation_id], PLANS[command.operation_id]
         options = set(full.input_schema["properties"])
         assert plan.refused == options & set(RUN_OPTIONS)
-        assert plan.refused  # every command with a check has an option of a run
+        # a data command and project download have options of a run; store init none
+        assert bool(plan.refused) == (command.id != "store init")
         assert set(plan.input_schema["properties"]) == options - plan.refused
         assert plan.input_schema["properties"]["check"]["const"] is True
         assert plan.input_schema["properties"]["check"]["default"] is True
@@ -287,11 +287,11 @@ def test_a_schema_has_the_options_of_the_command(command):
             assert prop["minimum"] == option.minimum
         if option.examples:
             assert prop["examples"] == list(option.examples)
-        if option.enum and (command.id, option.name) != ("commands schema", "command"):
+        if option.enum and (command.id, option.name) not in OPEN_VALUES:
             values = [e.value for e in option.enum]
             flat = json.dumps(prop)
             assert all(json.dumps(v) in flat for v in values), option.name
-    assert {("commands schema", "command")} == tools_module._NO_ENUM
+    assert frozenset({("commands schema", "command")}) == OPEN_VALUES
     assert (
         "enum"
         not in WRITES["kartograf_commands_schema"].input_schema["properties"]["command"]
