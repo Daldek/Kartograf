@@ -15,6 +15,7 @@ from kartograf.cli._parser import create_parser
 from kartograf.cli.catalog_cmd import cmd_commands_list, cmd_commands_schema
 from kartograf.envelope import wrap
 from kartograf.exceptions import ValidationError
+from kartograf.messages import localize
 
 
 def _list_text(capsys, **given) -> str:
@@ -40,12 +41,12 @@ def test_list_text_lists_groups_commands_summaries(capsys):
 
     for command in declared().commands:
         line = next(line for line in lines if line.lstrip().startswith(command.id))
-        assert command.kind in line and command.summary_pl in line
+        assert command.kind in line and localize(command.summary, "pl") in line
     for group in declared().groups:
         header = next(line for line in lines if line.startswith(f"{group.name}: "))
-        assert group.summary_pl in header
+        assert localize(group.summary, "pl") in header
         for name, summary in resolve(group.products):
-            assert f"{name} - {summary}" in flat
+            assert f"{name} - {localize(summary, 'pl')}" in flat
     assert "Parametry:" not in text  # the list has no parameters
     assert 'kartograf commands schema --command "<grupa> <komenda>"' in flat
 
@@ -61,7 +62,7 @@ def test_schema_text_describes_one_command(capsys):
     text = _schema_text(capsys, "elevation download")
     command = next(c for c in declared().commands if c.id == "elevation download")
 
-    assert text.startswith(f"elevation download: {command.summary_pl}\n")
+    assert text.startswith(f"elevation download: {localize(command.summary, 'pl')}\n")
     assert "FLAGA" in text and "ARGUMENT" in text and "WYMAGANY" in text
     # the table of parameters: flag, API argument, kind, required, values, text
     row = next(
@@ -73,12 +74,12 @@ def test_schema_text_describes_one_command(capsys):
     output = next(line for line in text.splitlines() if "--root" in line)
     assert "root" in output
     for constraint in command.constraints:
-        assert constraint.message_pl in text
-    for rule in command.rules_pl:
-        assert rule in text
+        assert localize(constraint.message, "pl") in text
+    for rule in command.rules:
+        assert localize(rule, "pl") in text
     for example in command.examples:
         assert example_command_line(command, example) in text
-        assert example.title_pl in text
+        assert localize(example.title, "pl") in text
     assert "download_data -> kartograf-download/1" in text
     assert "check_data -> kartograf-plan/1" in text
     assert "operation_id: kartograf_elevation_download" in text

@@ -29,23 +29,7 @@ from kartograf.catalog.formatting import example_command_line
 from kartograf.catalog.kinds import layer_codes, parse_bbox_arg, parse_per_country
 from kartograf.catalog.spec import Command, Group, Param, resolve, sorted_groups
 from kartograf.exceptions import UsageError, ValidationError
-
-ROOT_DESCRIPTION = (
-    "Pobieranie danych przestrzennych z GUGiK (PL), CUZK (CZ), Copernicus "
-    "i ISRIC. Komendy danych sa w grupach wg typu danych: grupa danych ma "
-    "download (pobranie do magazynu) i list-sources (zrodla z rejestru, "
-    "bez sieci), czesc grup takze list-layers, availability albo hsg. "
-    "project zarzadza zadaniami projektu, sheet rozpoznaje godla arkuszy, "
-    "commands opisuje komendy, cache - lokalny cache metadanych."
-)
-ROOT_EPILOG = (
-    "Przyklady:\n"
-    "  kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
-    "--resolution 1m --vertical-crs EVRF2007 --root ./data\n"
-    "  kartograf boundaries download --product admin --teryt 12 --root ./data\n"
-    "  kartograf elevation list-sources\n"
-    "Opcje komendy: kartograf <grupa> <komenda> --help"
-)
+from kartograf.messages import DEFAULT_LANG, Lang, Message, localize, message
 
 _NORMALIZERS: dict[str, Callable[[str], str]] = {
     "lower": str.lower,
@@ -82,15 +66,23 @@ class _Parser(argparse.ArgumentParser):
     ``usage_errors``: an error raises ``UsageError`` (the argparse message, and the
     id of the command whose parser found it) instead of printing the usage and
     exiting with 2. Otherwise the usage and the message are printed as argparse does
-    and the compact error document ``kartograf-error/1`` follows as the last line of
-    stderr (AGI-3.3) before the exit.
+    (a catalog message in ``lang``) and the compact error document
+    ``kartograf-error/1``, in English, follows as the last line of stderr (AGI-3.3)
+    before the exit.
     """
 
-    def __init__(self, *args: Any, usage_errors: bool = False, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        usage_errors: bool = False,
+        lang: Lang = DEFAULT_LANG,
+        **kwargs: Any,
+    ) -> None:
         kwargs.setdefault("allow_abbrev", False)
         kwargs.setdefault("formatter_class", _HelpFormatter)
         super().__init__(*args, **kwargs)
         self.usage_errors = usage_errors
+        self.lang = lang
 
     def error(self, message: str) -> NoReturn:
         # only the parser of a command knows its id: a group or the root parser
@@ -99,7 +91,7 @@ class _Parser(argparse.ArgumentParser):
         if self.usage_errors:
             raise error
         try:
-            super().error(message)
+            super().error(localize(message, self.lang))
         except SystemExit:
             from kartograf.error_report import error_line, error_report
 
@@ -134,10 +126,8 @@ class _LazyVersionAction(argparse.Action):
 # Commands removed in 0.8.0 (ADR-039): an input error naming the new command,
 # never a working alias.
 _REMOVED_COMMANDS = {
-    "download": "kartograf elevation download (--product nmt, nmpt, laz) "
-    "albo kartograf imagery download (--product orto)",
-    "soilgrids": "kartograf soil hsg (grupy HSG) albo kartograf soil download "
-    "(wlasciwosci SoilGrids)",
+    "download": message("catalog.removed_download_replacement"),
+    "soilgrids": message("catalog.removed_soilgrids_replacement"),
 }
 
 
@@ -155,7 +145,7 @@ def _product_value(argv: Sequence[str]) -> str | None:
     return None
 
 
-def removed_command_error(argv: Sequence[str]) -> str | None:
+def removed_command_error(argv: Sequence[str]) -> Message | None:
     """Error text for a command line of a command removed in 0.8.0.
 
     ``kartograf download``, ``kartograf soilgrids ...`` and ``kartograf
@@ -167,14 +157,13 @@ def removed_command_error(argv: Sequence[str]) -> str | None:
         return None
     command = argv[0]
     if command in _REMOVED_COMMANDS:
-        return (
-            f"komenda '{command}' usunieta w 0.8.0 - uzyj {_REMOVED_COMMANDS[command]}"
+        return message(
+            "catalog.removed_command",
+            command=command,
+            replacement=_REMOVED_COMMANDS[command],
         )
     if command == "landcover" and _product_value(argv[1:]) == "soilgrids":
-        return (
-            "SoilGrids jest w grupie soil od 0.8.0 - uzyj kartograf soil download "
-            "albo kartograf soil list-layers"
-        )
+        return message("catalog.soilgrids_moved")
     return None
 
 
@@ -183,26 +172,22 @@ def removed_command_error(argv: Sequence[str]) -> str | None:
 _BBOX_VALUE = re.compile(r"-?[0-9]+(\.[0-9]+)?(,-?[0-9]+(\.[0-9]+)?){3}")
 # Usual mix-ups of a command with a flag of another group (or a flag removed
 # in 0.8.0): the hint replaces the list of the commands having the flag.
-_LANDCOVER_PRODUCT_HINT = (
-    "od 0.8.0 produkt wybiera --product, np. --product bdot10k; lista: kartograf "
-    "landcover list-sources"
-)
+_LANDCOVER_PRODUCT_HINT = message("catalog.hint_landcover_product")
 _UNKNOWN_HINTS = {
     **{
         (f"kartograf landcover {command}", flag): _LANDCOVER_PRODUCT_HINT
         for command in ("download", "list-layers")
         for flag in ("--source", "-s")
     },
-    ("kartograf landcover download", "--country"): "kraj wynika z --product "
-    "(np. zabaged, data50, data250 = CZ)",
-    ("kartograf soil download", "--product"): "warstwe SoilGrids wybieraja "
-    "--property, --depth i --stat; lista: kartograf soil list-layers",
-    ("kartograf soil hsg", "--stats"): "od 0.8.0 statystyki HSG wypisuje --summary",
-    ("kartograf hydro download", "--sheet"): "obszar CZ: --bbox (np. z --bbox-crs "
-    "EPSG:5514) albo --geometry",
+    ("kartograf landcover download", "--country"): message(
+        "catalog.hint_landcover_country"
+    ),
+    ("kartograf soil download", "--product"): message("catalog.hint_soil_product"),
+    ("kartograf soil hsg", "--stats"): message("catalog.hint_hsg_stats"),
+    ("kartograf hydro download", "--sheet"): message("catalog.hint_hydro_sheet"),
 }
 _JSON_FLAG = "--json"
-_JSON_HINT = "podaj ja za komenda, np. kartograf elevation list-sources --json"
+_JSON_HINT = message("catalog.hint_json")
 
 
 def _join_bbox_values(argv: Sequence[str]) -> list[str]:
@@ -280,18 +265,21 @@ def _unknown_text(
     root: argparse.ArgumentParser, command: argparse.ArgumentParser, extras: list[str]
 ) -> str:
     """Return the input error of arguments a command does not have."""
-    options = f"Opcje: {command.prog} --help"
     first = extras[0]
     flag = first.partition("=")[0]
     if not flag.startswith("-"):
-        return f"nieznany argument {first}. {options}"
+        return message("catalog.unknown_argument", argument=first, prog=command.prog)
     hint = _UNKNOWN_HINTS.get((command.prog, flag))
     if hint is None and flag == _JSON_FLAG:
         hint = _JSON_HINT  # every command has it: the listing of owners says nothing
     if hint is None:
         owners = _flag_owners(root, flag)
-        hint = f"maja ja: {owners}" if owners else None
-    return f"nieznana opcja {flag}" + (f" ({hint})" if hint else "") + f". {options}"
+        hint = message("catalog.hint_owners", owners=owners) if owners else None
+    if hint is None:
+        return message("catalog.unknown_option", flag=flag, prog=command.prog)
+    return message(
+        "catalog.unknown_option_hint", flag=flag, hint=hint, prog=command.prog
+    )
 
 
 def parse_command_line(
@@ -390,28 +378,27 @@ def parsed_options(
     ):
         area = next(param for param in command.params if param.kind == "bbox")
         raise ValidationError(
-            f"{crs.cli_flag} wymaga {area.cli_flag} (uklad wspolrzednych "
-            f"prostokata podaje sie razem z nim)",
+            message("catalog.crs_needs_bbox", flag=crs.cli_flag, area=area.cli_flag),
             option=crs.name,
             options=(area.name, crs.name),
         )
     return options, run
 
 
-def _help(text: str) -> str:
-    """Text of an argparse ``help``: ``%`` starts a format of the parser."""
-    return text.replace("%", "%%")
+def _help(text: str, lang: Lang) -> str:
+    """Text of an argparse ``help`` in ``lang``: ``%`` starts a format of the parser."""
+    return localize(text, lang).replace("%", "%%")
 
 
-def _epilog(command: Command) -> str | None:
-    """Return ``Przyklady:`` and one command line per example.
+def _epilog(command: Command, lang: Lang) -> str | None:
+    """Return ``Examples:`` and one command line per example.
 
     The help formatter keeps them unwrapped, ready to copy.
     """
     if not command.examples:
         return None
     lines = (f"  {example_command_line(command, e)}" for e in command.examples)
-    return "Przyklady:\n" + "\n".join(lines)
+    return message("catalog.examples_header", lang=lang) + "\n" + "\n".join(lines)
 
 
 def _type(param: Param) -> Callable[[str], Any] | None:
@@ -429,13 +416,13 @@ def _type(param: Param) -> Callable[[str], Any] | None:
     return None
 
 
-def _argument_kwargs(param: Param, given_only: bool) -> dict[str, Any]:
+def _argument_kwargs(param: Param, given_only: bool, lang: Lang) -> dict[str, Any]:
     """Return the keyword arguments of ``add_argument`` of a parameter.
 
     With ``given_only`` there is no default, so the namespace has the flags of the line
     only.
     """
-    kwargs: dict[str, Any] = {"help": _help(resolve(param.description_pl))}
+    kwargs: dict[str, Any] = {"help": _help(resolve(param.description), lang)}
     if not param.positional:
         kwargs["dest"] = param.cli_dest
     if param.kind == "flag":
@@ -444,7 +431,7 @@ def _argument_kwargs(param: Param, given_only: bool) -> dict[str, Any]:
             kwargs["default"] = argparse.SUPPRESS
         return kwargs
     if param.metavar is not None:
-        kwargs["metavar"] = param.metavar
+        kwargs["metavar"] = localize(param.metavar, lang)
     default = param.cli_default if param.cli_default is not None else param.default
     if given_only:
         kwargs["default"] = argparse.SUPPRESS
@@ -463,7 +450,7 @@ def _argument_kwargs(param: Param, given_only: bool) -> dict[str, Any]:
 
 
 def _add_params(
-    parser: argparse.ArgumentParser, command: Command, given_only: bool
+    parser: argparse.ArgumentParser, command: Command, given_only: bool, lang: Lang
 ) -> None:
     """Return the flags and arguments of ``command`` in declaration order.
 
@@ -477,10 +464,11 @@ def _add_params(
             continue
         container: Any = parser
         if param.section is not None:
-            if param.section not in sections:
-                sections[param.section] = parser.add_argument_group(param.section)
-            container = sections[param.section]
-        kwargs = _argument_kwargs(param, given_only)
+            title = localize(param.section, lang)
+            if title not in sections:
+                sections[title] = parser.add_argument_group(title)
+            container = sections[title]
+        kwargs = _argument_kwargs(param, given_only, lang)
         if flag is None:
             container.add_argument(param.name, **kwargs)
             continue
@@ -497,16 +485,18 @@ def _add_command(
     command: Command,
     usage_errors: bool,
     given_only: bool,
+    lang: Lang,
 ) -> None:
     parser = subparsers.add_parser(
         command.name,
-        help=_help(command.summary_pl),
-        description=resolve(command.description_pl) or None,
-        epilog=_epilog(command),
+        help=_help(command.summary, lang),
+        description=localize(resolve(command.description), lang) or None,
+        epilog=_epilog(command, lang),
         usage_errors=usage_errors,
+        lang=lang,
     )
     parser.set_defaults(_command_id=command.id)
-    _add_params(parser, command, given_only)
+    _add_params(parser, command, given_only, lang)
 
 
 def build_parser(
@@ -516,6 +506,7 @@ def build_parser(
     prog: str = "kartograf",
     usage_errors: bool = False,
     given_only: bool = False,
+    lang: Lang = DEFAULT_LANG,
 ) -> argparse.ArgumentParser:
     """Return the parser of ``kartograf`` for the declared commands.
 
@@ -537,31 +528,40 @@ def build_parser(
         that was written and for no other (``parse_command`` tells a flag given
         with its default value from one that was not given). The help differs
         from the CLI's only in that it shows no defaults.
+    lang : {"en", "pl"}
+        The language of the help and of the usage errors a parser prints (the
+        error document stays English); English for the API.
     """
     parser = _Parser(
         prog=prog,
-        description=ROOT_DESCRIPTION,
-        epilog=ROOT_EPILOG,
+        description=localize(message("catalog.parser_description"), lang),
+        epilog=localize(message("catalog.parser_epilog"), lang),
         usage_errors=usage_errors,
+        lang=lang,
     )
     parser.add_argument(
         "--version",
         action=_LazyVersionAction,
-        help="pokaz wersje programu i zakoncz",
+        help=localize(message("catalog.version_help"), lang),
     )
-    subparsers = parser.add_subparsers(dest="command", help="Komendy")
+    subparsers = parser.add_subparsers(
+        dest="command", help=localize(message("catalog.commands_help"), lang)
+    )
     for group in sorted_groups(groups):
         group_parser = subparsers.add_parser(
             group.name,
-            help=_help(group.summary_pl),
-            description=group.description_pl,
+            help=_help(group.summary, lang),
+            description=localize(group.description, lang),
             usage_errors=usage_errors,
+            lang=lang,
         )
         group_parser.set_defaults(_group_parser=group_parser)
         group_commands = group_parser.add_subparsers(
-            dest=f"{group.name}_command", title="komendy", metavar="KOMENDA"
+            dest=f"{group.name}_command",
+            title=localize(message("catalog.commands_title"), lang),
+            metavar=localize(message("catalog.metavar_command"), lang),
         )
         for command in commands:
             if command.group == group.name:
-                _add_command(group_commands, command, usage_errors, given_only)
+                _add_command(group_commands, command, usage_errors, given_only, lang)
     return parser

@@ -7,11 +7,11 @@ A module of ``kartograf/catalog/commands/`` declares its commands as
 CLI parser, the catalog document and the tools of the MCP server; they are
 plain frozen data, built without side effects.
 
-The texts are authored in English (AGI-9.1): ``summary``, ``description``,
-``rules`` and the ``description`` of a parameter and the ``title`` of an example
-are what the catalog document and the MCP tools say. The Polish ones sit next to
-them in the fields ending in ``_pl`` (``i18n.pl`` of the document) and are what
-``--help`` and the text of the CLI say until the message catalogue.
+The texts are catalog messages (``kartograf.messages``, the areas ``catalog`` and
+``catalog_<module>``): English by default, which is what the catalog document and the
+MCP tools say (``summary``, ``description``, ``rules``, the ``description`` of a
+parameter, the ``title`` of an example), Polish for ``--help`` and the text of the
+CLI with ``--lang pl`` (``i18n.pl`` of the document is the Polish rendering).
 
 Two fields may be *providers* - functions without arguments returning the
 value (``Text``, ``Values``): the allowed values and texts that come from
@@ -130,7 +130,7 @@ class Param:
     """One parameter of a command: a CLI flag or argument, an API argument, or both.
 
     ``name``, ``kind``, ``description`` and the fields from ``required`` to
-    ``default`` and from ``description_pl`` on describe the option in every
+    ``default`` and from ``unit`` on describe the option in every
     interface (the catalog document, the MCP tool); ``flag``, ``short``,
     ``positional``, ``cli_default``, ``section``, ``dest``, ``metavar``,
     ``normalize``, ``exclusive``, ``choices`` and ``nargs`` are used by the CLI
@@ -174,7 +174,7 @@ class Param:
     dest : str, optional
         ``Namespace`` attribute of the flag (default: ``name``).
     metavar : str, optional
-        Placeholder of the value in ``--help`` (Polish).
+        Placeholder of the value in ``--help`` (a catalog message).
     normalize : {"lower", "upper", "strip"}, optional
         Applied by the parser to the text of the value.
     exclusive : str, optional
@@ -183,8 +183,6 @@ class Param:
         ``allowed`` are also the ``choices`` of the parser.
     nargs : {"*", "REMAINDER"}, optional
         Number of values of a positional argument.
-    description_pl : str or callable
-        The help text of the flag (Polish, ASCII): what ``--help`` says.
     unit : str, optional
         Unit of a physical value (``points/m2``).
     minimum, maximum : int, optional
@@ -220,7 +218,6 @@ class Param:
     exclusive: str | None = None
     choices: bool = False
     nargs: Nargs | None = None
-    description_pl: Text = ""
     unit: str | None = None
     minimum: int | None = None
     maximum: int | None = None
@@ -309,7 +306,7 @@ class Constraint:
 
     The rule is data: the catalog document derives the ``one_of`` group of the
     options and the sentence of the other rules in English from it (``kartograf.catalog.
-    rules``); ``message_pl`` is the Polish sentence of the text of the CLI.
+    build``); ``message`` is the sentence of the text of the CLI (a catalog message).
 
     ``one_of``: exactly one of ``params``; ``any_of``: at least one;
     ``requires``: when ``param`` is given, all ``params`` are; ``excludes``:
@@ -325,7 +322,7 @@ class Constraint:
 
     type: ConstraintType
     params: tuple[str, ...]
-    message_pl: str
+    message: str
     param: str | None = None
     when: Mapping[str, object] | None = None
     group: str = "area"
@@ -344,16 +341,14 @@ class Example:
     ``options`` are the project task options in the JSON form of the manifest (``bbox``
     as 4 numbers with ``bbox_crs``, a per-country value as a text or ``{"pl": ..., "cz":
     ...}``), ``run`` the other flags shown in the command line (the store directory is
-    added by the catalog). ``title`` says what the call does (English), ``title_pl``
-    the same in Polish; ``result`` is the excerpt of the result document this call
-    gives, when it differs from the excerpt of the schema of the command
-    (``kartograf.catalog.excerpts``).
+    added by the catalog). ``title`` says what the call does; ``result`` is the excerpt
+    of the result document this call gives, when it differs from the excerpt of the
+    schema of the command (``kartograf.catalog.excerpts``).
     """
 
     options: Mapping[str, object]
     title: str | None = None
     run: Mapping[str, object] = field(default_factory=dict)
-    title_pl: str | None = None
     result: Mapping[str, object] | None = None
 
 
@@ -392,10 +387,8 @@ class Command:
         The ``check_*`` twin and its result schema (both or neither).
     constraints, examples : tuple
         Rules among the parameters and example calls.
-    summary_pl, description_pl : str or callable
-        The Polish texts of the command (``--help``; ``i18n.pl`` of the document).
-    rules, rules_pl : tuple of str
-        Short imperative rules for an agent, English and Polish (AGI-2.2); they do
+    rules : tuple of str
+        Short imperative rules for an agent (AGI-2.2); they do
         not repeat what the options say.
     errors : tuple of str
         The registry codes the command can raise (ERR-1).
@@ -422,10 +415,7 @@ class Command:
     check_result_schema: str | None = None
     constraints: tuple[Constraint, ...] = ()
     examples: tuple[Example, ...] = ()
-    summary_pl: str = ""
-    description_pl: Text = ""
     rules: tuple[str, ...] = ()
-    rules_pl: tuple[str, ...] = ()
     errors: tuple[str, ...] = ()
     family: Family | None = None
     core: bool = False
@@ -510,9 +500,9 @@ class Command:
 class Group:
     """A CLI group: ``kartograf <name> <command>`` (spec 8.1).
 
-    ``summary`` and ``description`` are English (the catalog), ``summary_pl`` and
-    ``description_pl`` Polish (``--help``); ``products``: the ``(product, summary)``
-    pairs of the group (a provider reads them from the registry, Polish);
+    ``summary`` and ``description`` are catalog messages (English in the catalog, Polish
+    in ``--help`` with ``--lang pl``); ``products``: the ``(product, summary)``
+    pairs of the group (a provider reads them from the registry);
     ``position``: the place in the list of commands of ``kartograf --help`` and in the
     catalog - lower first, equal ones by name.
     """
@@ -522,8 +512,6 @@ class Group:
     description: str
     products: Products = ()
     position: int = 1
-    summary_pl: str = ""
-    description_pl: str = ""
 
     def __post_init__(self) -> None:
         """Check the group declaration."""

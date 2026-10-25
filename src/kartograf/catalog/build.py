@@ -45,6 +45,7 @@ from kartograf.catalog.spec import (
     sorted_groups,
 )
 from kartograf.exceptions import ValidationError
+from kartograf.messages import localize, message
 
 TOOL = "kartograf"
 
@@ -231,9 +232,9 @@ def command_entry(command: Command, summaries: dict[str, str]) -> CommandEntry:
         errors=command.errors,
         i18n=I18nEntry(
             PolishTexts(
-                summary=command.summary_pl,
-                description=resolve(command.description_pl),
-                rules=command.rules_pl,
+                summary=localize(command.summary, "pl"),
+                description=localize(resolve(command.description), "pl"),
+                rules=tuple(localize(rule, "pl") for rule in command.rules),
             )
         ),
     )
@@ -360,13 +361,12 @@ def command_schema(command: str) -> CommandCatalog:
         found = next((e for e in entries if command in (e.name, e.operation_id)), None)
     if found is None:
         names = tuple(entry.name for entry in entries)
-        given = (
-            "nie podano komendy" if command is None else f"nieznana komenda {command!r}"
-        )
         raise ValidationError(
-            f"{given}: podaj nazwe komendy z katalogu albo jej operation_id",
+            message("catalog.no_command")
+            if command is None
+            else message("catalog.unknown_command", command=command),
             option="command",
             allowed=names,
-            hint="Lista komend: kartograf commands list",
+            hint=message("catalog.commands_list_hint"),
         )
     return CommandCatalog(TOOL, _version(), (found,))

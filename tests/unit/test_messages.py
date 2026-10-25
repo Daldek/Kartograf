@@ -73,26 +73,6 @@ _PENDING = frozenset(
     {
         # Root modules: documents, MCP server, store read API, notices.
         "notices.py",
-        # Command catalog: the Polish texts of the declarations and of the parser.
-        "catalog/build.py",
-        "catalog/cliparser.py",
-        "catalog/commands/_collection.py",
-        "catalog/commands/boundaries.py",
-        "catalog/commands/cadastre.py",
-        "catalog/commands/config.py",
-        "catalog/commands/elevation.py",
-        "catalog/commands/geodesy.py",
-        "catalog/commands/hydro.py",
-        "catalog/commands/imagery.py",
-        "catalog/commands/landcover.py",
-        "catalog/commands/maps.py",
-        "catalog/commands/misc.py",
-        "catalog/commands/models3d.py",
-        "catalog/commands/names.py",
-        "catalog/commands/project.py",
-        "catalog/commands/soil.py",
-        "catalog/excerpts.py",
-        "catalog/shared.py",
         # Downloads.
         "download/area.py",
         "download/arguments.py",
@@ -400,6 +380,24 @@ def test_a_list_of_messages_is_joined_and_each_item_follows_the_language_of_the_
     )
     assert message("x.semi", items=tuple(items[:2])) == "interrupted (Ctrl-C); plain"
     assert placeholders("{items:join(; )} {n:plural(a|b)}") == {"items", "n"}
+
+
+def test_a_skipped_placeholder_is_given_but_only_the_other_language_prints_it(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        messages,
+        "_catalog",
+        lambda area: {"help": Text("Product.{choices:skip}", "Produkt: {choices}")},
+    )
+
+    english = message("x.help", choices="nmt, nmpt")
+
+    assert english == "Product."
+    assert english.localized("pl") == "Produkt: nmt, nmpt"
+    assert placeholders("Product.{choices:skip}") == {"choices"}
+    with pytest.raises(KeyError):
+        message("x.help")
 
 
 def test_the_error_document_is_english_unless_a_person_asks_for_polish():

@@ -20,13 +20,13 @@ from kartograf.catalog.kinds import parse_per_country
 from kartograf.catalog.shared import OUTPUT_TITLE, SELECTION_TITLE
 from kartograf.catalog.spec import Command, Example, Group, Param
 from kartograf.exceptions import UsageError, ValidationError
+from kartograf.messages import localize
 
 
 def _data(command_id: str, *params: Param, **fields) -> Command:
     values = {
         "id": command_id,
         "summary": f"Summary {command_id}",
-        "summary_pl": f"Podsumowanie {command_id}",
         "kind": "data",
         "function": "download_data",
         "result_schema": "kartograf-download/1",
@@ -44,7 +44,6 @@ _PARAMS = (
         choices=True,
         required=True,
         section=SELECTION_TITLE,
-        description_pl="Produkt (wymagany): nmt, nmpt",
     ),
     Param(
         "country",
@@ -54,7 +53,6 @@ _PARAMS = (
         choices=True,
         normalize="lower",
         section=SELECTION_TITLE,
-        description_pl="Kraj zrodla",
     ),
     Param(
         "sheet",
@@ -63,7 +61,6 @@ _PARAMS = (
         metavar="GODLO",
         normalize="strip",
         section=SELECTION_TITLE,
-        description_pl="Godlo arkusza",
     ),
     Param(
         "bbox",
@@ -71,7 +68,6 @@ _PARAMS = (
         "Prostokat",
         metavar="BBOX",
         section=SELECTION_TITLE,
-        description_pl="Prostokat",
     ),
     Param(
         "bbox_crs",
@@ -82,7 +78,6 @@ _PARAMS = (
         normalize="upper",
         cli_default="EPSG:2180",
         section=SELECTION_TITLE,
-        description_pl="Uklad --bbox (domyslnie EPSG:2180)",
     ),
     Param(
         "resolution",
@@ -91,7 +86,6 @@ _PARAMS = (
         short="-r",
         metavar="ROZDZIELCZOSC",
         section="Parametry produktu",
-        description_pl="Rozdzielczosc 100% siatki",
     ),
     Param(
         "layers",
@@ -99,7 +93,6 @@ _PARAMS = (
         "Kody po przecinku",
         metavar="KODY",
         section="Parametry produktu",
-        description_pl="Kody po przecinku",
     ),
     Param(
         "year",
@@ -107,14 +100,12 @@ _PARAMS = (
         "Rok",
         metavar="ROK",
         section="Parametry produktu",
-        description_pl="Rok",
     ),
     Param(
         "cutout",
         "flag",
         "Wycinek",
         section="Parametry produktu",
-        description_pl="Wycinek",
     ),
     Param(
         "root",
@@ -126,7 +117,6 @@ _PARAMS = (
         metavar="KATALOG",
         required=True,
         section=OUTPUT_TITLE,
-        description_pl="Katalog magazynu (wymagany)",
     ),
     Param(
         "check",
@@ -135,7 +125,6 @@ _PARAMS = (
         argument=None,
         exclusive="update",
         section=OUTPUT_TITLE,
-        description_pl="Sprawdz",
     ),
     Param(
         "upgrade",
@@ -144,7 +133,6 @@ _PARAMS = (
         argument=None,
         exclusive="update",
         section=OUTPUT_TITLE,
-        description_pl="Pobierz nowsze",
     ),
     Param(
         "force",
@@ -153,7 +141,6 @@ _PARAMS = (
         argument=None,
         exclusive="update",
         section=OUTPUT_TITLE,
-        description_pl="Pobierz ponownie",
     ),
     Param(
         "update",
@@ -161,7 +148,6 @@ _PARAMS = (
         "Tryb",
         flag=None,
         allowed=("upgrade", "force"),
-        description_pl="Tryb",
     ),
     Param(
         "plan",
@@ -169,7 +155,6 @@ _PARAMS = (
         "Plan",
         metavar="PLIK",
         section=OUTPUT_TITLE,
-        description_pl="Plan",
     ),
     Param(
         "workers",
@@ -179,7 +164,6 @@ _PARAMS = (
         metavar="N",
         default=4,
         section=OUTPUT_TITLE,
-        description_pl="Liczba pobran",
     ),
     Param(
         "quiet",
@@ -188,7 +172,6 @@ _PARAMS = (
         argument=None,
         short="-q",
         section=OUTPUT_TITLE,
-        description_pl="Cicho",
     ),
 )
 
@@ -199,12 +182,10 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
             "elevation download",
             *_PARAMS,
             description="Fetch the data into the versioned store",
-            description_pl="Pobierz dane do magazynu wersji",
             examples=(
                 Example(
                     {"product": "nmt", "sheet": "N-34-130-D-d-2-4", "year": 2020},
                     title="Arkusz",
-                    title_pl="Arkusz",
                 ),
                 Example({"product": "nmpt", "layers": ["A", "B"]}),
             ),
@@ -224,13 +205,11 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
                 "Godlo",
                 metavar="GODLO",
                 positional=True,
-                description_pl="Godlo",
             ),
             Param(
                 "hierarchy",
                 "flag",
                 "Pokaz hierarchie",
-                description_pl="Pokaz hierarchie",
             ),
             kind="query",
             function="describe_sheet",
@@ -255,7 +234,6 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
                 default=None,
                 cli_default=".",
                 metavar="KATALOG",
-                description_pl="Katalog",
             ),
             Param(
                 "name",
@@ -263,7 +241,6 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
                 "Nazwa",
                 metavar="NAZWA",
                 positional=True,
-                description_pl="Nazwa",
             ),
             Param(
                 "arguments",
@@ -272,7 +249,6 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
                 metavar="<grupa> <komenda> [opcje]",
                 positional=True,
                 nargs="REMAINDER",
-                description_pl="Komenda i opcje",
             ),
             kind="manage",
             function="add_project_task",
@@ -288,7 +264,6 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
                 metavar="NAZWA",
                 positional=True,
                 nargs="*",
-                description_pl="Zadania",
             ),
             kind="query",
             function="get_project_status",
@@ -304,7 +279,6 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
                 metavar="GRUPA",
                 positional=True,
                 nargs="?",
-                description_pl="Grupa",
             ),
             kind="query",
             function="list_commands",
@@ -317,38 +291,28 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
             "elevation",
             "Wysokosci",
             "Dane wysokosciowe",
-            summary_pl="Wysokosci",
-            description_pl="Dane wysokosciowe",
         ),
         Group(
             "project",
             "Projekt",
             "Manifest projektu",
-            summary_pl="Projekt",
-            description_pl="Manifest projektu",
         ),
         Group(
             "sheet",
             "Godla",
             "Godla arkuszy",
-            summary_pl="Godla",
-            description_pl="Godla arkuszy",
         ),
         Group(
             "cache",
             "Cache",
             "Cache metadanych",
             position=2,
-            summary_pl="Cache",
-            description_pl="Cache metadanych",
         ),
         Group(
             "commands",
             "Katalog",
             "Katalog komend",
             position=2,
-            summary_pl="Katalog",
-            description_pl="Katalog komend",
         ),
     )
     return commands, groups
@@ -356,7 +320,7 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
 
 def _parser(**options) -> argparse.ArgumentParser:
     commands, groups = _declarations()
-    return build_parser(commands, groups, **options)
+    return build_parser(commands, groups, **{"lang": "pl", **options})
 
 
 def _leaf(parser: argparse.ArgumentParser, *words: str) -> argparse.ArgumentParser:
@@ -482,7 +446,11 @@ def test_exclusive_group(capsys, monkeypatch):
 def test_sections_and_epilog_in_help():
     help_text = _leaf(_parser(), "elevation", "download").format_help()
 
-    titles = [SELECTION_TITLE, "Parametry produktu", OUTPUT_TITLE]
+    titles = [
+        localize(SELECTION_TITLE, "pl"),
+        "Parametry produktu",
+        localize(OUTPUT_TITLE, "pl"),
+    ]
     positions = [help_text.index(f"\n{title}:\n") for title in titles]
     assert positions == sorted(positions)
     assert "\nPrzyklady:\n" in help_text
@@ -493,7 +461,7 @@ def test_sections_and_epilog_in_help():
         "  kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
         "--year 2020 -o ./data\n"
     ) in help_text
-    assert "Pobierz dane do magazynu wersji" in help_text
+    assert "Fetch the data into the versioned store" in help_text
     # a command without examples has no epilog
     assert (
         "Przyklady" not in _leaf(_parser(), "elevation", "list-sources").format_help()
@@ -609,7 +577,7 @@ def test_group_without_command_name_lists_its_commands():
 
     assert "KOMENDA" in help_text
     assert "download" in help_text and "list-sources" in help_text
-    assert "Podsumowanie elevation download" in help_text
+    assert "Summary elevation download" in help_text
 
 
 def test_command_names_come_from_the_ids():
@@ -620,22 +588,22 @@ def test_command_names_come_from_the_ids():
 
 def test_removed_commands_name_their_replacement():
     elevation = (
-        "kartograf elevation download (--product nmt, nmpt, laz) albo kartograf "
+        "kartograf elevation download (--product nmt, nmpt, laz) or kartograf "
         "imagery download (--product orto)"
     )
     soil = (
-        "kartograf soil hsg (grupy HSG) albo kartograf soil download "
-        "(wlasciwosci SoilGrids)"
+        "kartograf soil hsg (HSG groups) or kartograf soil download "
+        "(SoilGrids properties)"
     )
     landcover = (
-        "SoilGrids jest w grupie soil od 0.8.0 - uzyj kartograf soil download "
-        "albo kartograf soil list-layers"
+        "SoilGrids has been in the soil group since 0.8.0 - use kartograf soil "
+        "download or kartograf soil list-layers"
     )
     expected = {
         (): None,
-        ("download",): f"komenda 'download' usunieta w 0.8.0 - uzyj {elevation}",
+        ("download",): f"command 'download' was removed in 0.8.0 - use {elevation}",
         ("soilgrids", "--property", "clay"): (
-            f"komenda 'soilgrids' usunieta w 0.8.0 - uzyj {soil}"
+            f"command 'soilgrids' was removed in 0.8.0 - use {soil}"
         ),
         ("landcover", "download", "--product", "soilgrids"): landcover,
         ("landcover", "download", "--source", "soilgrids"): landcover,
@@ -646,6 +614,12 @@ def test_removed_commands_name_their_replacement():
 
     for argv, text in expected.items():
         assert removed_command_error(list(argv)) == text
+    removed = removed_command_error(["soilgrids"])
+    assert removed is not None
+    assert removed.localized("pl") == (
+        "komenda 'soilgrids' usunieta w 0.8.0 - uzyj kartograf soil hsg (grupy HSG) "
+        "albo kartograf soil download (wlasciwosci SoilGrids)"
+    )
 
 
 @pytest.mark.parametrize(
@@ -675,7 +649,15 @@ def test_unknown_flag_owners_are_listed():
     with pytest.raises(UsageError) as error:
         parse_command_line(parser, ["project", "status", "--hierarchy"])
 
-    assert "nieznana opcja --hierarchy (maja ja: sheet parse)" in str(error.value)
+    text = error.value.args[0]
+    assert text == (
+        "unknown option --hierarchy (these have it: sheet parse). "
+        "Options: kartograf project status --help"
+    )
+    assert text.localized("pl") == (
+        "nieznana opcja --hierarchy (maja ja: sheet parse). "
+        "Opcje: kartograf project status --help"
+    )
 
 
 def test_version_action_prints_version(capsys):

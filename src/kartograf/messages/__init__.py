@@ -22,7 +22,9 @@ written ``{count} {count:plural(file|files)}`` (two forms: one and other) or
 needs them), so a text and its plural forms stay in one entry per language. A list of
 messages or names is written ``{items:join}`` (joined with ``", "``) or
 ``{items:join(; )}``; a `Message` among the items is rendered in the language of
-its parent, so a list of fragments stays translatable.
+its parent, so a list of fragments stays translatable. ``{name:skip}`` renders
+nothing: a language whose text does not use a value of the entry still names it, so
+both languages keep the same placeholders.
 
 Raise sites and notices call `message` with the key as a literal and one keyword
 per placeholder; ``tests/unit/test_messages.py`` checks every call against its
@@ -188,9 +190,18 @@ def plural_forms(count: object, forms: Sequence[str]) -> str:
 
 
 class _Formatter(string.Formatter):
-    """``str.format`` plus the specs ``plural(a|b)``, ``plural(a|b|c)`` and ``join``."""
+    """
+    ``str.format`` plus ``plural(a|b)``, ``plural(a|b|c)``, ``join`` and ``skip``.
+
+    ``{name:skip}`` renders nothing: the placeholder is given its value but the text of
+    this language does not use it (a Polish help text lists the choices of the registry,
+    the English one of the same entry does not), so both languages of an entry keep the
+    same placeholders.
+    """
 
     def format_field(self, value: Any, format_spec: str) -> str:
+        if format_spec == "skip":
+            return ""
         found = _PLURAL.fullmatch(format_spec)
         if found is not None:
             return plural_forms(value, found.group(1).split("|"))

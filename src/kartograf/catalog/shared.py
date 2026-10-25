@@ -8,9 +8,9 @@ display flags. A command includes it and may override ``description``,
 ``allowed``, ``required`` or ``section`` with ``dataclasses.replace``; the
 helpers below do that for the usual cases. The texts and the section titles are
 the ones of the ``--help`` of the CLI (the sheet, bbox and layer descriptions
-are common to every area command). Every text exists in English (``description``)
-and Polish (``description_pl``); where a helper takes a text of both languages it
-takes a ``Pair``: ``(English, Polish)``.
+are common to every area command). Every text is a catalog message of the area
+``catalog`` (``kartograf.messages.catalog``): English for the catalog document and
+the MCP tools, Polish for ``--help`` with ``--lang pl``.
 """
 
 from collections.abc import Callable, Sequence
@@ -28,77 +28,31 @@ from kartograf.catalog.spec import (
 )
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.options import BBOX_CRS_CHOICES
+from kartograf.messages import message
 
-# A text of both languages: ``(English, Polish)``.
-Pair = tuple[Text, Text]
-
-BBOX_HELP = (
-    "Area rectangle [min_x, min_y, max_x, max_y] in the CRS of bbox_crs, as numbers "
-    "(metres, or degrees for EPSG:4326)."
-)
-BBOX_HELP_PL = (
-    "Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: EPSG:2180; "
-    "wspolrzedne S-JTSK: --bbox-crs EPSG:5514, np. --bbox -447000,-1100000,"
-    "-437000,-1090000)"
-)
+BBOX_HELP = message("catalog.bbox_description")
 # Area groups (land cover, soil): a sheet code is an area like --bbox (ADR-039).
-SHEET_AREA_HELP = (
-    "Sheet code (for example N-34-130-D): the area is the extent of that sheet, "
-    "as bbox with its corners."
-)
-SHEET_AREA_HELP_PL = (
-    "Obszar = zasieg arkusza o tym godle (np. N-34-130-D), jak --bbox z jego "
-    "naroznikami"
-)
-GEOMETRY_HELP = (
-    "Vector file (SHP or GPKG) with the area: the extent of its features is the area."
-)
-GEOMETRY_HELP_PL = "Plik geometrii (SHP albo GPKG); obszar = obwiednia obiektow"
-LAYER_HELP = "GPKG layer of geometry (default: the first one)."
-LAYER_HELP_PL = (
-    "Warstwa GPKG (domyslnie pierwsza; przy wielu warstwach Info z lista pozostalych)"
-)
-CHECK_HELP = (
-    "Plan without effects: compare the local versions with the source and return the "
-    "plan (kartograf-plan/1: current, newer, to download, or cannot be checked "
-    "without downloading); nothing is fetched or written. With `output_dir`: write, "
-    "replace or conflict per target."
-)
-UPDATE_HELP = (
-    "Update mode. Omitted: keep the local versions and fetch the missing ones. "
-    "upgrade: fetch newer content when the source signals it (store only). force: "
-    "fetch every file again (store: the same content is unchanged, other content is a "
-    "new version; `output_dir`: it replaces the files). CLI: --upgrade, --force."
-)
-PLAN_HELP = (
-    "Update plan (the result of a check) to run with update=upgrade; a position "
-    "that changed since the plan stops the run. Store only. CLI: the file of --plan."
-)
+SHEET_AREA_HELP = message("catalog.sheet_area_description")
+GEOMETRY_HELP = message("catalog.geometry_description")
+LAYER_HELP = message("catalog.layer_description")
+CHECK_HELP = message("catalog.check_description")
+UPDATE_HELP = message("catalog.update_description")
+PLAN_HELP = message("catalog.plan_description")
 # One sentence for the description of every data command (DEV-19.18): both targets.
-PLAIN_NOTE = "`output_dir` writes plain files, not the store."
-PLAIN_NOTE_PL = "--output-dir zapisuje zwykle pliki, nie magazyn."
+PLAIN_NOTE = message("catalog.plain_note")
 # The selection rule of the PL sheets in plain mode (ADR-054 decision 5, DEV-19.4).
-PLAIN_SHEETS_HELP = (
-    "PL sheets: the newest FULL flight, not the newest one; a sheet with none is "
-    "skipped (warning `skipped_incomplete`), all skipped is `no_data`."
-)
-PLAIN_SHEETS_HELP_PL = (
-    "Arkusze PL: najnowszy PELNY lot, nie najnowszy; arkusz bez pelnego lotu jest "
-    "pomijany (ostrzezenie skipped_incomplete), a gdy wszystkie - no_data; "
-    "--full-sheet nie dziala, --all-campaigns wymaga magazynu"
-)
+PLAIN_SHEETS_HELP = message("catalog.plain_sheets_description")
 # Titles of the --help sections of every data command (UX-27).
-SELECTION_TITLE = "Produkt i obszar"
-PRODUCT_TITLE = "Parametry produktu"
-OUTPUT_TITLE = "Wynik i aktualizacja"
+SELECTION_TITLE = message("catalog.section_selection")
+PRODUCT_TITLE = message("catalog.section_product")
+OUTPUT_TITLE = message("catalog.section_output")
 # The sheet systems of the PL codes (``SheetParser`` reads both).
 PL_SHEETS = ("pl1992", "pl2000")
 
 PRODUCT = Param(
     "product",
     "str",
-    "Product.",
-    description_pl="Produkt (wymagany)",
+    message("catalog.product_description"),
     required=True,
     task=True,
     section=SELECTION_TITLE,
@@ -106,8 +60,7 @@ PRODUCT = Param(
 COUNTRY = Param(
     "country",
     "str",
-    "Country of the source: pl, cz or auto (split by the bounding boxes of PL and CZ).",
-    description_pl="Kraj zrodla danych",
+    message("catalog.country_description"),
     task=True,
     normalize="lower",
     section=SELECTION_TITLE,
@@ -115,9 +68,8 @@ COUNTRY = Param(
 SHEET = Param(
     "sheet",
     "str",
-    "Sheet code.",
-    description_pl="Godlo arkusza",
-    metavar="GODLO",
+    message("catalog.sheet_description"),
+    metavar=message("catalog.metavar_sheet"),
     # argparse does not strip whitespace; a sheet code with padding would
     # reach the system registry and the file name (parser review 2026-10-07, K5)
     normalize="strip",
@@ -128,7 +80,6 @@ BBOX = Param(
     "bbox",
     "bbox",
     BBOX_HELP,
-    description_pl=BBOX_HELP_PL,
     metavar="BBOX",
     examples=([565000, 242000, 566000, 243000],),
     task=True,
@@ -137,8 +88,7 @@ BBOX = Param(
 BBOX_CRS = Param(
     "bbox_crs",
     "bbox_crs",
-    "CRS of bbox, required with it (the CLI defaults to EPSG:2180).",
-    description_pl="Uklad wspolrzednych --bbox (domyslnie EPSG:2180)",
+    message("catalog.bbox_crs_description"),
     allowed=lambda: BBOX_CRS_CHOICES,
     choices=True,
     normalize="upper",
@@ -150,9 +100,8 @@ GEOMETRY = Param(
     "geometry",
     "path",
     GEOMETRY_HELP,
-    description_pl=GEOMETRY_HELP_PL,
     path_role="input",
-    metavar="PLIK",
+    metavar=message("catalog.metavar_file"),
     task=True,
     section=SELECTION_TITLE,
 )
@@ -160,42 +109,31 @@ LAYER = Param(
     "layer",
     "str",
     LAYER_HELP,
-    description_pl=LAYER_HELP_PL,
-    metavar="NAZWA",
+    metavar=message("catalog.metavar_name"),
     task=True,
     section=SELECTION_TITLE,
 )
 OUTPUT_DIR = Param(
     "output_dir",
     "path",
-    "Directory for plain files named as in the store (no sidecar, no versions). A "
-    "repeated name, a store or an existing file (without `update` force) is a "
-    "`conflict` and nothing is written. Store only: `update` upgrade and `plan`.",
-    description_pl="Katalog na zwykle pliki (nazwy jak w magazynie, bez sidecara i "
-    "wersji, tworzony; istniejacy plik to konflikt, --force go zastepuje; magazyn jest "
-    "odrzucony). Wyklucza sie z --root, --upgrade i --plan",
+    message("catalog.output_dir_description"),
     short="-o",
     path_role="output",
-    metavar="KATALOG",
+    metavar=message("catalog.metavar_directory"),
     section=OUTPUT_TITLE,
 )
 ROOT = Param(
     "root",
     "path",
-    "Store root: versions are written below it, one directory per product, never "
-    "over existing ones. Default: the store of the user data directory "
-    "(`KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml`, else "
-    "`<data_dir>/kartograf`).",
-    description_pl="Katalog magazynu (domyslnie magazyn w katalogu danych uzytkownika)",
+    message("catalog.root_description"),
     path_role="root",
-    metavar="KATALOG",
+    metavar=message("catalog.metavar_directory"),
     section=OUTPUT_TITLE,
 )
 WORKERS = Param(
     "workers",
     "int",
-    "Parallel transfers.",
-    description_pl="Liczba rownoleglych pobran",
+    message("catalog.workers_description"),
     minimum=1,
     short="-w",
     metavar="N",
@@ -204,8 +142,7 @@ WORKERS = Param(
 QUIET = Param(
     "quiet",
     "flag",
-    description_pl="Bez paska postepu i linii statusu na stdout (Info:, Warning: i "
-    "Error: na stderr zostaja)",
+    message("catalog.quiet_description"),
     argument=None,
     short="-q",
     section=OUTPUT_TITLE,
@@ -213,30 +150,23 @@ QUIET = Param(
 JSON = Param(
     "json",
     "flag",
-    description_pl="Wypisz wynik jako jeden dokument JSON na stdout (pole schema "
-    "nazywa jego typ), bez paska postepu i tekstu; blad jako kartograf-error/1",
+    message("catalog.json_description"),
     argument=None,
 )
 LANG = Param(
     "lang",
     "str",
-    "Language of the text for people: pl or en (default: KARTOGRAF_LANG, then "
-    "nogat.toml, then pl). The --json document, the error line and every notice "
-    "of the library stay English.",
-    description_pl="Jezyk tekstu dla czlowieka: pl albo en (domyslnie KARTOGRAF_LANG, "
-    "potem nogat.toml, potem pl); dokument --json, linia bledu i komunikaty "
-    "biblioteki zostaja po angielsku",
+    message("catalog.lang_description"),
     argument=None,
     allowed=("pl", "en"),
     choices=True,
     normalize="lower",
-    metavar="JEZYK",
+    metavar=message("catalog.metavar_lang"),
 )
 CHECK = Param(
     "check",
     "flag",
     CHECK_HELP,
-    description_pl="Sprawdz aktualnosc lokalnych wersji bez pobierania",
     argument=None,
     exclusive="update",
     section=OUTPUT_TITLE,
@@ -244,7 +174,7 @@ CHECK = Param(
 UPGRADE = Param(
     "upgrade",
     "flag",
-    description_pl="Pobierz nowsza tresc",
+    message("catalog.upgrade_description"),
     argument=None,
     exclusive="update",
     section=OUTPUT_TITLE,
@@ -252,7 +182,7 @@ UPGRADE = Param(
 FORCE = Param(
     "force",
     "flag",
-    description_pl="Pobierz ponownie",
+    message("catalog.force_description"),
     argument=None,
     exclusive="update",
     section=OUTPUT_TITLE,
@@ -261,8 +191,6 @@ UPDATE = Param(
     "update",
     "str",
     UPDATE_HELP,
-    description_pl="Tryb aktualizacji (pominiety: lokalne wersje, brakujace sa "
-    "pobierane)",
     flag=None,
     # ``check`` is the ``check_*`` twin of a command, not a mode of its function
     allowed=lambda: [mode for mode in get_args(UpdateMode) if mode != "check"],
@@ -272,8 +200,7 @@ PLAN = Param(
     "plan",
     "plan",
     PLAN_HELP,
-    description_pl="Plan aktualizacji",
-    metavar="PLIK",
+    metavar=message("catalog.metavar_file"),
     section=OUTPUT_TITLE,
 )
 
@@ -292,12 +219,15 @@ def product(
     ``kartograf.catalog.meanings``.
     """
 
-    def description_pl() -> str:
-        return f"Produkt (wymagany): {choices_text(tuple(resolve(products)))}"
+    def description() -> str:
+        return message(
+            "catalog.product_choices_description",
+            choices=choices_text(tuple(resolve(products))),
+        )
 
     return replace(
         PRODUCT,
-        description_pl=description_pl,
+        description=description,
         allowed=lambda: tuple(resolve(products)),
         choices=True,
         section=section,
@@ -305,18 +235,16 @@ def product(
 
 
 def country(
-    countries: Values, description: Pair, *, section: str = SELECTION_TITLE
+    countries: Values, description: Text, *, section: str = SELECTION_TITLE
 ) -> Param:
     """``--country`` of a command.
 
     ``countries`` are the allowed values and the parser choices; ``description`` is the
-    text of the command in English and Polish.
+    text of the command.
     """
-    english, polish = description
     return replace(
         COUNTRY,
-        description=english,
-        description_pl=polish,
+        description=description,
         allowed=lambda: tuple(resolve(countries)),
         choices=True,
         section=section,
@@ -325,32 +253,27 @@ def country(
 
 def area(
     *,
-    sheet: Pair | None,
+    sheet: Text | None,
     accepts: tuple[str, ...] | None = None,
-    bbox: Pair = (BBOX_HELP, BBOX_HELP_PL),
-    geometry: Pair = (GEOMETRY_HELP, GEOMETRY_HELP_PL),
+    bbox: Text = BBOX_HELP,
+    geometry: Text = GEOMETRY_HELP,
     section: str = SELECTION_TITLE,
 ) -> tuple[Param, ...]:
     """One area choice of a request.
 
-    ``sheet`` (when ``sheet`` is the text of its description in English and Polish;
-    ``accepts`` are the sheet systems it takes), ``bbox`` with ``bbox_crs``,
-    ``geometry`` with ``layer``. Exactly one is checked by the library (a ``one_of``
-    constraint of the command).
+    ``sheet`` (when ``sheet`` is the text of its description; ``accepts`` are the
+    sheet systems it takes), ``bbox`` with ``bbox_crs``, ``geometry`` with ``layer``.
+    Exactly one is checked by the library (a ``one_of`` constraint of the command).
     """
     params: list[Param] = []
     if sheet is not None:
         if accepts is None:
             raise ValueError("area: a sheet parameter declares the systems it accepts")
-        params.append(
-            replace(
-                SHEET, description=sheet[0], description_pl=sheet[1], accepts=accepts
-            )
-        )
+        params.append(replace(SHEET, description=sheet, accepts=accepts))
     params += [
-        replace(BBOX, description=bbox[0], description_pl=bbox[1]),
+        replace(BBOX, description=bbox),
         BBOX_CRS,
-        replace(GEOMETRY, description=geometry[0], description_pl=geometry[1]),
+        replace(GEOMETRY, description=geometry),
         LAYER,
     ]
     return tuple(replace(param, section=section) for param in params)
@@ -360,24 +283,28 @@ def target(files: Text, *, sheets: bool = False) -> tuple[Param, Param]:
     """``--output-dir`` and ``--root``: where a data command writes (DEV-19.1).
 
     ``files`` says where the files of the store go (``pliki w <KATALOG>/nmt/...``,
-    Polish); ``sheets``: the command has PL sheets, whose plain mode takes the newest
-    FULL flight (``PLAIN_SHEETS_HELP``).
+    in the Polish text); ``sheets``: the command has PL sheets, whose plain mode takes
+    the newest FULL flight (``PLAIN_SHEETS_HELP``).
     """
 
-    def description_pl() -> str:
-        return (
-            f"Katalog magazynu (domyslnie magazyn uzytkownika): {resolve(files)} "
-            "(wersje w versions/)"
+    def description() -> str:
+        return message(
+            "catalog.root_files_description",
+            root=ROOT.description,
+            files=resolve(files),
         )
 
     output = OUTPUT_DIR
     if sheets:
         output = replace(
             OUTPUT_DIR,
-            description=f"{OUTPUT_DIR.description} {PLAIN_SHEETS_HELP}",
-            description_pl=f"{OUTPUT_DIR.description_pl}. {PLAIN_SHEETS_HELP_PL}",
+            description=message(
+                "catalog.output_dir_sheets_description",
+                output_dir=OUTPUT_DIR.description,
+                sheets=PLAIN_SHEETS_HELP,
+            ),
         )
-    return output, replace(ROOT, description_pl=description_pl)
+    return output, replace(ROOT, description=description)
 
 
 def target_constraints(*, campaigns: bool = False) -> tuple[Constraint, ...]:
@@ -392,49 +319,41 @@ def target_constraints(*, campaigns: bool = False) -> tuple[Constraint, ...]:
         Constraint(
             "one_of",
             ("output_dir", "root"),
-            "Podaj najwyzej jedno z: --output-dir (zwykle pliki) albo --root "
-            "(magazyn); bez nich pliki trafiaja do magazynu domyslnego",
+            message("catalog.rule_target"),
             group="target",
             optional=True,
         ),
         Constraint(
             "excludes",
             names,
-            f"--output-dir wyklucza {flags} (dzialaja na wersjach magazynu: uzyj "
-            "--root)",
+            message("catalog.rule_output_dir_excludes", flags=flags),
             "output_dir",
         ),
     )
 
 
-def workers(description: Pair, default: int | None) -> Param:
+def workers(description: Text, default: int | None) -> Param:
     """``--workers``/``-w``.
 
-    Parallel transfers (``description``: English and Polish); ``default`` is the number
-    the library function uses (and the flag).
+    Parallel transfers (``description``: the text of the command); ``default`` is the
+    number the library function uses (and the flag).
     """
-    return replace(
-        WORKERS,
-        description=description[0],
-        description_pl=description[1],
-        default=default,
-    )
+    return replace(WORKERS, description=description, default=default)
 
 
-# What ``--force`` does with ``--output-dir`` (said after the text of the store).
-FORCE_PLAIN_PL = "; z --output-dir zastepuje istniejace pliki"
+def _force_plain(text: Text) -> Text:
+    """Return the text of ``--force`` and what it does with ``--output-dir``.
 
-
-def _then(text: Text, tail: str) -> Text:
-    """Return ``text`` followed by ``tail`` (a lazy text stays lazy)."""
+    A lazy text stays lazy.
+    """
     if callable(text):
-        return lambda: f"{text()}{tail}"
-    return f"{text}{tail}"
+        return lambda: message("catalog.force_plain_description", force=text())
+    return message("catalog.force_plain_description", force=text)
 
 
 def update_params(
     *,
-    check: Pair,
+    check: Text,
     upgrade: Text,
     force: Text,
     plan: Text | None = None,
@@ -443,10 +362,10 @@ def update_params(
     """Update modes of a command that writes.
 
     The flags ``--check``, ``--upgrade`` and ``--force``, the API argument ``update``
-    and, when ``plan`` is the Polish text of its description, ``--plan``. ``check`` is
-    ``(English, Polish)``: the English sentence says what the source signals for this
-    command and is added to the common text of the option; ``upgrade`` and ``force``
-    are Polish, the flags only spell ``update``.
+    and, when ``plan`` is the text of its description, ``--plan``. ``check`` says what
+    the source signals for this command: the English sentence is added to the common
+    text of the option, the Polish one is the whole help; ``upgrade`` and ``force``
+    are the help of the flags, which only spell ``update``.
 
     ``--check`` and ``--upgrade`` exclude each other. ``--force`` too, unless the
     command writes plain files (``plain``): ``--check --force`` is the plan that says
@@ -456,19 +375,20 @@ def update_params(
     params = [
         replace(
             CHECK,
-            description=f"{CHECK_HELP} {check[0]}".strip(),
-            description_pl=check[1],
+            description=message(
+                "catalog.check_source_description", common=CHECK_HELP, source=check
+            ),
         ),
-        replace(UPGRADE, description_pl=upgrade),
+        replace(UPGRADE, description=upgrade),
         replace(
             FORCE,
-            description_pl=_then(force, FORCE_PLAIN_PL) if plain else force,
+            description=_force_plain(force) if plain else force,
             exclusive=None if plain else "update",
         ),
         UPDATE,
     ]
     if plan is not None:
-        params.append(replace(PLAN, description_pl=plan))
+        params.append(replace(PLAN, description=plan))
     return tuple(params)
 
 
@@ -515,7 +435,7 @@ def list_sources_command(group: str, products: Values) -> Command:
     """
     return Command(
         f"{group} list-sources",
-        f"List the registered data sources of the {group} group (offline)",
+        message("catalog.list_sources_summary", group=group),
         "query",
         "list_sources",
         "kartograf-sources/1",
@@ -523,8 +443,7 @@ def list_sources_command(group: str, products: Values) -> Command:
             Param(
                 "group",
                 "str",
-                description_pl=f"Grupa komend (tu: {group}); list_sources obsluguje "
-                "wszystkie grupy",
+                message("catalog.list_sources_group_description", group=group),
                 flag=None,
                 required=True,
                 fixed=group,
@@ -532,35 +451,22 @@ def list_sources_command(group: str, products: Values) -> Command:
             Param(
                 "product",
                 "str",
-                "Only the sources of this product (default: every product of the "
-                "group).",
-                description_pl="Tylko zrodla tego produktu (domyslnie wszystkie "
-                "produkty grupy)",
-                metavar="PRODUKT",
+                message("catalog.list_sources_product_description"),
+                metavar=message("catalog.metavar_product"),
                 allowed=lambda: tuple(resolve(products)),
                 choices=True,
             ),
             JSON,
         ),
-        description=f"For each source of the {group} group: the options that select it "
-        f"in `{group} download`, its directory in the store and the `dataset` key of "
-        "its sidecar. Use it to see which variants exist; to see what exists for an "
-        "area use `elevation availability`.",
-        summary_pl="Wypisz zrodla danych grupy (rejestr zrodel, bez sieci)",
-        description_pl=f"Wypisz zrodla danych grupy {group} z rejestru zrodel "
-        "(bez sieci): WYBOR = wymagane flagi wyboru zrodla w download (a|b - "
-        "jedna z wartosci), KATALOG = katalog plikow pod --root, KLUCZ = "
-        "pole dataset w sidecarze pliku",
-        rules=("Offline: nothing is fetched.",),
-        rules_pl=("Bez sieci: nic nie jest pobierane.",),
+        description=message("catalog.list_sources_description", group=group),
+        rules=(message("catalog.list_sources_rule"),),
         errors=("validation_error",),
         family="discovery",
         cardinality="bounded",
         examples=(
             Example(
                 {},
-                title=f"The sources of the {group} group",
-                title_pl=f"Zrodla grupy {group}",
+                title=message("catalog.list_sources_example", group=group),
             ),
         ),
     )

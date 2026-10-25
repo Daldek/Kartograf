@@ -7,6 +7,7 @@ import json
 
 import pytest
 
+from kartograf import messages
 from kartograf.catalog import build
 from kartograf.catalog.build import (
     build_entries,
@@ -27,6 +28,7 @@ from kartograf.catalog.spec import (
     Param,
 )
 from kartograf.exceptions import ValidationError
+from kartograf.messages import Text, message
 from kartograf.serialization import SCHEMAS
 
 _PRODUCTS = ("nmt", "nmpt")
@@ -42,7 +44,6 @@ def _params() -> tuple[Param, ...]:
             choices=True,
             required=True,
             task=True,
-            description_pl=lambda: "Produkt (wymagany)",
         ),
         Param(
             "sheet",
@@ -52,7 +53,6 @@ def _params() -> tuple[Param, ...]:
             normalize="strip",
             task=True,
             accepts=("pl1992", "pl2000"),
-            description_pl="Godlo arkusza",
             examples=("N-34-130-D-d-2-4",),
         ),
         Param(
@@ -61,7 +61,6 @@ def _params() -> tuple[Param, ...]:
             "Area rectangle.",
             task=True,
             metavar="BBOX",
-            description_pl="Prostokat obszaru",
         ),
         Param(
             "bbox_crs",
@@ -70,7 +69,6 @@ def _params() -> tuple[Param, ...]:
             task=True,
             allowed=("EPSG:2180", "EPSG:4326"),
             cli_default="EPSG:2180",
-            description_pl="Uklad --bbox",
         ),
         Param(
             "resolution",
@@ -78,7 +76,6 @@ def _params() -> tuple[Param, ...]:
             "Grid resolution.",
             task=True,
             allowed=("1m", "5m"),
-            description_pl="Rozdzielczosc",
         ),
         Param(
             "format",
@@ -86,7 +83,6 @@ def _params() -> tuple[Param, ...]:
             "File formats.",
             task=True,
             allowed=("ASC", "XYZ"),
-            description_pl="Lata",
         ),
         Param(
             "limit",
@@ -96,14 +92,12 @@ def _params() -> tuple[Param, ...]:
             minimum=1,
             maximum=100,
             unit="entries",
-            description_pl="Limit",
         ),
         Param(
             "all_campaigns",
             "flag",
             "Every flight.",
             default=False,
-            description_pl="Wszystkie loty",
         ),
         Param(
             "root",
@@ -113,7 +107,6 @@ def _params() -> tuple[Param, ...]:
             short="-o",
             dest="output",
             required=True,
-            description_pl="Katalog magazynu",
             path_role="root",
         ),
         Param(
@@ -121,7 +114,6 @@ def _params() -> tuple[Param, ...]:
             "flag",
             "Plan without effects.",
             argument=None,
-            description_pl="Plan bez skutkow",
         ),
         Param(
             "group",
@@ -129,7 +121,6 @@ def _params() -> tuple[Param, ...]:
             "The group of the sources.",
             flag=None,
             fixed="elevation",
-            description_pl="Grupa",
         ),
         Param(
             "quiet",
@@ -137,7 +128,6 @@ def _params() -> tuple[Param, ...]:
             "No progress bar.",
             argument=None,
             short="-q",
-            description_pl="Bez paska postepu",
         ),
     )
 
@@ -172,10 +162,7 @@ def _commands() -> tuple[Command, ...]:
                     result={"schema": "kartograf-download/1", "ok": True},
                 ),
             ),
-            summary_pl="Pobierz NMT i NMPT",
-            description_pl="Pobierz dane do magazynu wersji",
             rules=("Check first.",),
-            rules_pl=("Najpierw sprawdz.",),
             errors=("validation_error", "io_error"),
             family="data",
             core=True,
@@ -187,9 +174,7 @@ def _commands() -> tuple[Command, ...]:
             "list_sources",
             "kartograf-sources/1",
             (_params()[10],),
-            summary_pl="Wypisz zrodla",
             description="The registered sources.",
-            description_pl="Zrodla z rejestru",
             examples=(Example({}, title="The sources"),),
             family="discovery",
             cardinality="bounded",
@@ -204,8 +189,6 @@ def _commands() -> tuple[Command, ...]:
             description="Delete the cache.",
             effects=("cache_delete",),
             destructive=True,
-            summary_pl="Usun cache",
-            description_pl="Usun wpisy cache",
             examples=(Example({}, title="Clear"),),
         ),
         Command(
@@ -221,12 +204,9 @@ def _commands() -> tuple[Command, ...]:
                     "Sheet code.",
                     positional=True,
                     required=True,
-                    description_pl="Godlo",
                 ),
             ),
             description="Offline.",
-            summary_pl="Rozpoznaj godlo",
-            description_pl="Bez sieci",
             examples=(Example({"sheet": "N-34-130-D"}, title="A sheet"),),
             family="discovery",
         ),
@@ -240,23 +220,17 @@ def _groups() -> tuple[Group, ...]:
             "Elevation",
             "NMT and NMPT",
             products=lambda: [("nmt", "Terrain model"), ("nmpt", "Surface model")],
-            summary_pl="Wysokosci",
-            description_pl="Dane wysokosciowe",
         ),
         Group(
             "sheet",
             "Sheet codes",
             "Sheet codes",
-            summary_pl="Godla",
-            description_pl="Godla arkuszy",
         ),
         Group(
             "cache",
             "Cache",
             "The metadata cache",
             position=2,
-            summary_pl="Cache",
-            description_pl="Cache metadanych",
         ),
     )
 
@@ -379,7 +353,7 @@ def test_command_schema_of_an_unknown_command_names_the_known_ones(synthetic, gi
         "sheet parse",
     )
     assert "kartograf commands list" in (error.hint or "")
-    assert ("nie podano" if given is None else repr(given)) in str(error)
+    assert ("no command given" if given is None else repr(given)) in str(error)
 
 
 def test_an_option_has_an_argument_of_the_function_or_is_the_plan_option(synthetic):
@@ -510,7 +484,6 @@ def test_the_commands_the_schema_names_say_themselves(synthetic):
                 "The command.",
                 allowed=lambda: [c.id for c in _commands()],
                 required=True,
-                description_pl="Komenda",
             ),
         ),
         examples=(Example({"command": "sheet parse"}, title="A command"),),
@@ -586,8 +559,24 @@ def test_the_examples_have_the_call_a_result_excerpt_and_the_title(synthetic):
     assert second.result == {"schema": "kartograf-download/1", "ok": True}
 
 
-def test_the_texts_are_english_with_the_polish_ones_in_i18n(synthetic):
-    entry = _entry("elevation download")
+def test_the_texts_are_english_with_the_polish_ones_in_i18n(synthetic, monkeypatch):
+    texts = {
+        "summary": Text("Download NMT and NMPT", "Pobierz NMT i NMPT"),
+        "description": Text(
+            "Download the data into a versioned store.",
+            "Pobierz dane do magazynu wersji",
+        ),
+        "rule": Text("Check first.", "Najpierw sprawdz."),
+    }
+    monkeypatch.setattr(messages, "_catalog", lambda area: texts)
+    command = dataclasses.replace(
+        _commands()[0],
+        summary=message("x.summary"),
+        description=message("x.description"),
+        rules=(message("x.rule"),),
+    )
+
+    entry = build.command_entry(command, {})
 
     assert (entry.summary, entry.description) == (
         "Download NMT and NMPT",

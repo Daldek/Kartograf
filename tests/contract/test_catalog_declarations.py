@@ -52,6 +52,7 @@ from kartograf.download.options import (
 )
 from kartograf.download.orto_cutout import ORTO_CUTOUT_CRS
 from kartograf.landcover.manager import LANDCOVER_PRODUCTS
+from kartograf.messages import LANGS, Message, localize
 from kartograf.project.commands import COMMANDS
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
@@ -639,46 +640,43 @@ def test_a_provider_reads_the_registry_when_it_is_called(monkeypatch):
 # =============================================================================
 
 _REGISTRY_CODES = {entry.code for entry in _errors.CODES if entry.exit_code is not None}
-_CHECK_ONLY = ("json", "quiet", "upgrade", "force", "details", "arguments")
 
 
-def _english(command: Command) -> list[str]:
-    texts = [command.summary, resolve(command.description), *command.rules]
+def _texts(command: Command) -> list[tuple[str, str]]:
+    """Every text of a command that a person reads, with where it is declared."""
+    texts = [
+        ("summary", command.summary),
+        ("description", resolve(command.description)),
+    ]
+    texts += [(f"rule {i}", rule) for i, rule in enumerate(command.rules)]
     for param in command.params:
-        texts.append(resolve(param.description))
-        texts += [str(example) for example in param.examples]
-    texts += [example.title or "" for example in command.examples]
-    return texts
-
-
-def _polish(command: Command) -> list[str]:
-    texts = [command.summary_pl, resolve(command.description_pl), *command.rules_pl]
-    for param in command.params:
-        texts += [
-            resolve(param.description_pl),
-            param.section or "",
-            param.metavar or "",
-        ]
-    texts += [constraint.message_pl for constraint in command.constraints]
-    texts += [example.title_pl or "" for example in command.examples]
+        texts.append((f"{param.name} description", resolve(param.description)))
+        texts.append((f"{param.name} section", param.section or ""))
+    texts += [(f"constraint {c.type}", c.message) for c in command.constraints]
+    texts += [(f"example {i}", e.title or "") for i, e in enumerate(command.examples)]
     return texts
 
 
 @pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
 def test_texts_are_ascii_in_both_languages(command):
-    for text in (*_english(command), *_polish(command)):
-        assert text.isascii(), text
+    for where, text in _texts(command):
+        for lang in LANGS:
+            assert localize(text, lang).isascii(), (where, lang)
+    for param in command.params:
+        for lang in LANGS:
+            assert localize(param.metavar or "", lang).isascii(), param.name
 
 
 @pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
-def test_a_command_has_its_texts_in_english_and_polish(command):
-    assert command.summary and command.summary_pl
-    assert resolve(command.description) and resolve(command.description_pl)
-    assert len(command.rules) == len(command.rules_pl)
+def test_every_text_of_a_command_is_a_catalog_message_so_both_languages_exist(command):
+    assert command.summary and resolve(command.description)
+    for where, text in _texts(command):
+        if where.endswith("section") and not text:
+            continue  # a flat help has no sections
+        assert isinstance(text, Message), (command.id, where)
     for example in command.examples:
-        assert example.title and example.title_pl, command.id
+        assert example.title, command.id
     for param in command.params:
-        assert resolve(param.description_pl), f"{command.id}.{param.name}: no Polish"
         if is_option(command, param):
             assert resolve(param.description), f"{command.id}.{param.name}: no English"
 
@@ -693,7 +691,7 @@ def test_the_tool_description_fits_its_budget(command):
 
     assert command.summary[0].isupper() and len(command.summary) <= 100
     assert len(description) <= 600, len(description)
-    assert len(command.summary_pl) <= 120
+    assert len(localize(command.summary, "pl")) <= 120
 
 
 @pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
@@ -779,17 +777,14 @@ def _has(command: Command, name: str) -> bool:
     return any(param.name == name for param in command.params)
 
 
-def test_group_texts_are_ascii_in_both_languages():
+def test_group_texts_are_catalog_messages_and_ascii_in_both_languages():
     for group in _DECLARED.groups:
-        for text in (
-            group.summary,
-            group.description,
-            group.summary_pl,
-            group.description_pl,
-        ):
-            assert text and text.isascii(), group.name
+        for text in (group.summary, group.description):
+            assert isinstance(text, Message), group.name
+            for lang in LANGS:
+                assert localize(text, lang).isascii(), group.name
         for name, summary in resolve(group.products):
-            assert name.isascii() and summary.isascii() and summary
+            assert name.isascii() and localize(summary, "pl").isascii() and summary
 
 
 @pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)

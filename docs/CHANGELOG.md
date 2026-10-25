@@ -32,6 +32,10 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   SoilGrids), the source registry, the hydrologic soil groups and the land cover orchestration
   (`sources`, `hydrology`, `landcover`) and the text the CLI prints for a person (`cli`: tables,
   status lines and notes; `--lang en` prints English, the default stays Polish), the command
+  catalog (the declarations of `catalog/commands/*`, the section titles and placeholders of
+  `--help`, the text of `commands list` and `commands schema` and the usage errors of the parser:
+  `<group> <command> --help --lang en` prints English; the message of a usage error and of the
+  unknown command of `command_schema` is English in the error document), the command
   layer, the store read API with the names of its segments, the cache, source and layer documents
   and the fixture builders (the root modules; the `directory` of a source is `<crs>` and
   `<vertical-crs>`; `kartograf-mcp` says English only and has no `--lang`). A client that matched

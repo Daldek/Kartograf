@@ -17,6 +17,8 @@ from kartograf.catalog.cliparser import (
     removed_command_error,
 )
 from kartograf.catalog.commands import declared
+from kartograf.cli._language import language
+from kartograf.messages import Lang
 
 __all__ = [
     "_subparsers",
@@ -26,7 +28,9 @@ __all__ = [
 ]
 
 
-def create_parser(*, usage_errors: bool = False) -> argparse.ArgumentParser:
+def create_parser(
+    *, usage_errors: bool = False, lang: Lang | None = None
+) -> argparse.ArgumentParser:
     """
     Create the argument parser of ``kartograf`` from the declared commands.
 
@@ -35,6 +39,9 @@ def create_parser(*, usage_errors: bool = False) -> argparse.ArgumentParser:
     usage_errors : bool
         Raise ``UsageError`` for a mistake of the command line instead of
         printing ``usage:`` and exiting with 2 (the ``--json`` mode).
+    lang : {"en", "pl"}, optional
+        The language of the help and of the printed usage errors (default: the
+        language of the running command line).
 
     Returns
     -------
@@ -43,5 +50,8 @@ def create_parser(*, usage_errors: bool = False) -> argparse.ArgumentParser:
     """
     declarations = declared()
     return build_parser(
-        declarations.commands, declarations.groups, usage_errors=usage_errors
+        declarations.commands,
+        declarations.groups,
+        usage_errors=usage_errors,
+        lang=language() if lang is None else lang,
     )

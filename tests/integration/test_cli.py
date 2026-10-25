@@ -2484,6 +2484,7 @@ class TestRegistryVariantsCli:
             )
 
     def test_help_cz_uses_variant_models(self, capsys):
+        from kartograf.messages import localize
         from kartograf.sources.variants import cz_model_text, cz_resolution_text
 
         with pytest.raises(SystemExit) as exc:
@@ -2492,7 +2493,7 @@ class TestRegistryVariantsCli:
         text = " ".join(capsys.readouterr().out.split())
         assert f"NMT: {cz_resolution_text('nmt')}" in text
         assert f"NMPT: {cz_resolution_text('nmpt')}" in text
-        assert cz_model_text() in text
+        assert localize(cz_model_text(), "pl") in text
 
 
 class TestPlCutoutOnly1m:
