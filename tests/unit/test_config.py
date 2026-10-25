@@ -97,6 +97,27 @@ def test_a_directory_expands_the_home_of_the_user(monkeypatch):
     assert environment.store_root() == Path.home() / "kartograf-store"
 
 
+def test_a_call_without_a_root_gets_the_default_root(user_environment):
+    # no variable and no file: <data_dir>/kartograf of the user directory
+    assert environment.resolve_root(None) == user_environment / "data" / "kartograf"
+
+
+def test_a_root_the_caller_names_is_kept_as_given(monkeypatch):
+    monkeypatch.setenv("KARTOGRAF_ROOT", "/default")
+
+    assert environment.resolve_root("data/store") == Path("data/store")
+    assert environment.resolve_root(Path("/abs")) == Path("/abs")
+
+
+def test_an_empty_root_is_a_validation_error_not_the_default(monkeypatch):
+    monkeypatch.setenv("KARTOGRAF_ROOT", "/default")
+
+    with pytest.raises(kartograf.ValidationError) as caught:
+        environment.resolve_root("")
+
+    assert caught.value.option == "root"
+
+
 def test_the_nogat_section_holds_only_the_shared_keys(tmp_path, monkeypatch):
     write_config(
         tmp_path,

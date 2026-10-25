@@ -183,7 +183,7 @@ def test_zabaged_whole_country_requires_crs(tmp_path, monkeypatch, frozen_clock)
     """The national GPKG exists in EPSG:5514 and EPSG:3045: the choice is
     required before any request; the size of the feed is announced before
     the transfer; the edition of the feed labels the version."""
-    manager = LandCoverManager(tmp_path, "zabaged", cache=False)
+    manager = LandCoverManager("zabaged", cache=False, root=tmp_path)
     with pytest.raises(ValidationError, match="EPSG:5514, EPSG:3045"):
         manager.download(whole_country=True)
     with pytest.raises(ValidationError, match="--teryt"):
@@ -248,7 +248,7 @@ def test_zabaged_whole_country_check_by_edition(tmp_path, monkeypatch, frozen_cl
     ``newer`` (labelled by the new date); the file itself is never fetched."""
     events: list[str] = []
     feeds = _zabaged_country(monkeypatch, zip_bytes(["ZABAGED_RESULTS.gpkg"]), events)
-    manager = LandCoverManager(tmp_path, "zabaged", cache=False)
+    manager = LandCoverManager("zabaged", cache=False, root=tmp_path)
     choice = {"whole_country": True, "horizontal_crs": "EPSG:5514"}
     assert [i.status for i in manager.check(**choice).items] == ["missing"]
     manager.download(**choice)
@@ -282,7 +282,7 @@ def test_zabaged_bbox_gpkg(tmp_path, monkeypatch, frozen_clock):
     the service layer and its id; an area has no cheap update signal
     (``unverifiable`` without a request)."""
     fake = serve_zabaged(monkeypatch)
-    manager = LandCoverManager(tmp_path, "zabaged", cache=False)
+    manager = LandCoverManager("zabaged", cache=False, root=tmp_path)
 
     notices: list = []
     area = manager.download(bbox=AREA, on_notice=notices.append)

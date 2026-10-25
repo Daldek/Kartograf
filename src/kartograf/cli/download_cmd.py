@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from kartograf.cli._args import library_arguments
+from kartograf.cli._args import library_arguments, store_dir
 from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.cli._language import language, localized
 from kartograf.download.data import DataReport, check_data, download_data
@@ -574,7 +574,7 @@ def _data_notices(args: argparse.Namespace) -> Callable[[Notice], None] | None:
 def _cmd_download(args: argparse.Namespace) -> int:
     """One ``download_data``/``check_data`` call after the plan file is read."""
     _cache_warnings_shown.clear()
-    arguments: dict[str, Any] = {**library_arguments(args), "root": args.root}
+    arguments: dict[str, Any] = {**library_arguments(args), "root": store_dir(args)}
     on_notice = _data_notices(args)
     if getattr(args, "check_updates", False):
         return _report_plan(args, check_data(**arguments, on_notice=on_notice))
@@ -603,7 +603,7 @@ def _print_report(
     if not args.quiet:
         if getattr(on_progress, "used", False):
             print()  # campaign lines: a blank line before the status lines
-        output = Path(args.root)
+        output = store_dir(args)
         for unit_file in report.files:
             print(
                 _status_line(
@@ -622,7 +622,7 @@ def _print_report(
             _print_version_summary(
                 [f.file.status for f in report.files],
                 sum(1 for f in report.failed if f.kind == "download"),
-                Path(args.root) / ("laz" if args.product == "laz" else ""),
+                store_dir(args) / ("laz" if args.product == "laz" else ""),
             )
     for failure in report.failed:
         print(f"Error: {failure.error}", file=sys.stderr)

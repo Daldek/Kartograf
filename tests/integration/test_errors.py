@@ -632,14 +632,6 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "buildings", "root": None, "teryt": "1261", "lod": 2},
-        "root",
-        None,
-        None,
-        "--root wymagane",
-    ),
-    _row(
-        kartograf.download_collection,
         {"product": "buildings", "root": _STORE, "lod": 1, "year": 2024},
         None,
         ("teryt", *_AREA_NAMES),
@@ -1046,14 +1038,6 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_landcover,
-        {"product": "bdot10k", "root": None, "teryt": "1465"},
-        "root",
-        None,
-        None,
-        "--root wymagane",
-    ),
-    _row(
-        kartograf.download_landcover,
         {"product": "bdot10k", "root": _STORE},
         None,
         ("teryt", *_AREA_NAMES),
@@ -1215,20 +1199,6 @@ LANDCOVER_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_soil,
-        {
-            "root": None,
-            "sheet": _SHEET,
-            "property": "clay",
-            "depth": "0-5cm",
-            "stat": "mean",
-        },
-        "root",
-        None,
-        None,
-        "--root wymagane",
-    ),
-    _row(
-        kartograf.download_soil,
         {"root": _STORE, "sheet": _SHEET, "depth": "0-5cm", "stat": "mean"},
         "property",
         None,
@@ -1307,14 +1277,6 @@ LANDCOVER_OPTION_SCENARIOS = [
         _AREA_NAMES,
         None,
         "Give exactly one selection",
-    ),
-    _row(
-        kartograf.calculate_hsg,
-        {"root": None, "sheet": _SHEET, "depth": "0-5cm"},
-        "root",
-        None,
-        None,
-        "--root required",
     ),
     _row(
         kartograf.calculate_hsg,
@@ -1473,14 +1435,6 @@ OPTION_SCENARIOS = [
         None,
         ("nmt", "nmpt"),
         "nieznana wartosc",
-    ),
-    _row(
-        kartograf.download_data,
-        {**_NMT, "root": None},
-        "root",
-        None,
-        None,
-        "--root wymagane",
     ),
     _row(
         kartograf.download_data,

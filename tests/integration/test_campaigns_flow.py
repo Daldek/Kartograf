@@ -95,11 +95,11 @@ def test_end_to_end_all_on_recorded_wfs_answer(tmp_path):
     delivery and the other resolutions/formats are never downloaded."""
     session = recorded_session(G)
     m = DownloadManager(
-        tmp_path,
         provider=GugikProvider(
             session=session, vertical_crs="EVRF2007", resolution="1m"
         ),
         all_campaigns=True,
+        root=tmp_path,
     )
     m.download_sheet(G)
 
@@ -122,10 +122,10 @@ def test_end_to_end_all_on_recorded_wfs_answer(tmp_path):
 
 def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
     m = DownloadManager(
-        tmp_path,
         provider=GugikProvider(
             session=recorded_session(G), vertical_crs="EVRF2007", resolution="1m"
         ),
+        root=tmp_path,
     )
     result = m.download_sheet(G)
     (path,) = result.succeeded
@@ -154,11 +154,11 @@ def test_end_to_end_all_keeps_grid_published_under_xyz_name(tmp_path):
     ``.asc`` beside the four ``.asc`` flights; the newest is linked."""
     session = recorded_session(G2)
     m = DownloadManager(
-        tmp_path,
         provider=GugikProvider(
             session=session, vertical_crs="EVRF2007", resolution="1m"
         ),
         all_campaigns=True,
+        root=tmp_path,
     )
     m.download_sheet(G2)
 
@@ -184,10 +184,10 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
     from unittest.mock import patch
 
     m = DownloadManager(
-        tmp_path,
         provider=GugikProvider(
             session=recorded_session(G), vertical_crs="EVRF2007", resolution="1m"
         ),
+        root=tmp_path,
     )
     std = m.download_sheet(G).succeeded[0]
     before = str(linked_version(std))
@@ -196,10 +196,10 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
     offline = Mock(spec=requests.Session)
     offline.get = Mock(side_effect=requests.ConnectionError("GUGiK lezy"))
     m2 = DownloadManager(
-        tmp_path,
         provider=GugikProvider(
             session=offline, vertical_crs="EVRF2007", resolution="1m"
         ),
+        root=tmp_path,
     )
     with patch("kartograf.transport.http.time.sleep"):
         result = m2.download_sheet(G)

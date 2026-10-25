@@ -32,6 +32,7 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import detect_system
 from kartograf.download.fetch import (
@@ -455,7 +456,7 @@ def _present(outcome: dict[str, VersionedFile | None]) -> tuple[VersionedFile, .
 def check_cz_orto_sheet(
     *,
     sheet: str,
-    root: str | Path,
+    root: str | Path | None = None,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
@@ -473,6 +474,7 @@ def check_cz_orto_sheet(
     ValidationError
         Not an SM5 sheet code (TM33 tiles are NMT only).
     """
+    root = resolve_root(root)
     sheet = cz_orto_sheet(sheet)
     sink = NoticeSink(on_notice)
     with open_cache(cache, force=True, on_notice=sink.add) as metadata:
@@ -484,7 +486,7 @@ def check_cz_orto_sheet(
 def download_cz_orto_sheet(
     *,
     sheet: str,
-    root: str | Path,
+    root: str | Path | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     parent_request: dict[str, Any] | None = None,
@@ -519,6 +521,7 @@ def download_cz_orto_sheet(
         Feed, transfer or store failure; files committed before the failure
         (world files before the JPEG) stay, the failed one has no version.
     """
+    root = resolve_root(root)
     sheet = cz_orto_sheet(sheet)
     validate_update(update, check="check_cz_orto_sheet")
     if plan is not None and update != "upgrade":

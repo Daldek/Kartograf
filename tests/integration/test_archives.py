@@ -541,7 +541,7 @@ class TestDownloadArchive:
         """``DownloadManager.download_sheet`` with an archive provider keeps
         the 1:25000 code (a grid variant expands it to 1:10000)."""
         session = _gugik_session(wfs_fixture(RECORDED), {TBD_URL: ARCHIVE})
-        manager = DownloadManager(tmp_path, _tbd_25m(session))
+        manager = DownloadManager(_tbd_25m(session), root=tmp_path)
 
         result = manager.download_sheet(SHEET)
 

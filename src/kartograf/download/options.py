@@ -1143,15 +1143,6 @@ def store_files(directories: Iterable[str]) -> str:
     return f"pliki w <KATALOG>/{'|'.join(tops)}/..."
 
 
-def output_required(directory: str) -> str:
-    """Return the error text of a request without ``root``.
-
-    Error text of a request without ``root`` (every store command):
-    ``directory`` = the top directory of its files (``nmt``, ``boundaries``).
-    """
-    return f"--root wymagane: katalog magazynu ({store_files([directory])})"
-
-
 def year_bounds(
     year: int | None, min_year: int | None, max_year: int | None
 ) -> tuple[int | None, int | None]:
@@ -1225,10 +1216,6 @@ def validate_request(task: SimpleNamespace) -> None:
             f"{PRODUCT_CHOICES}",
             option="product",
             allowed=_PRODUCTS,
-        )
-    if task.root is None:
-        raise ValidationError(
-            output_required(product_directory(task.product)), option="root"
         )
     if task.sheet is None and task.country is None:
         raise ValidationError(

@@ -237,7 +237,7 @@ class TestParallelDownloadHierarchy:
     def test_workers_below_1_rejected(self, tmp_path, mock_provider, count):
         """A worker count below 1 is an input error (not silently one worker)."""
         with pytest.raises(ValidationError, match="workers musi byc >= 1") as error:
-            DownloadManager(tmp_path, provider=mock_provider, workers=count)
+            DownloadManager(provider=mock_provider, workers=count, root=tmp_path)
         assert error.value.option == "workers"
 
 
@@ -461,7 +461,7 @@ class TestLandCoverParallelDownload:
             patch.object(provider, "download_package", side_effect=package),
             patch.object(provider, "teryts_for_area", return_value=self.TERYTS),
         )
-        return LandCoverManager(tmp_path, provider), calls, state, patchers
+        return LandCoverManager(provider, root=tmp_path), calls, state, patchers
 
     @pytest.mark.parametrize("workers", [1, 2])
     def test_workers_parallel_counties(self, tmp_path, workers):
@@ -558,7 +558,7 @@ class TestLandCoverParallelDownload:
             patch.object(provider, "teryts_for_area", return_value=teryts),
             pytest.raises(KeyboardInterrupt),
         ):
-            LandCoverManager(tmp_path, provider).download(
+            LandCoverManager(provider, root=tmp_path).download(
                 bbox=self.BBOX, workers=2, on_progress=ctrl_c_when_a_powiat_ended
             )
 

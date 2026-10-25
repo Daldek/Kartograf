@@ -149,10 +149,7 @@ def test_store_entries_requires_its_segment_and_a_positive_limit(
     assert document["details"]["option"] == option
 
 
-def test_the_store_commands_require_the_store_and_the_path(capsys):
-    code, _, err = run(capsys, "store", "overview")
-    assert (code, error_document(err)["details"]["option"]) == (2, "root")
-
+def test_the_sidecar_command_requires_the_path(capsys):
     code, _, err = run(capsys, "store", "sidecar")
     assert (code, error_document(err)["details"]["option"]) == (2, "path")
 

@@ -91,7 +91,7 @@ def _members(data: bytes) -> list[zipfile.ZipInfo]:
 
 @pytest.fixture
 def bdoo(tmp_path) -> LandCoverManager:
-    return LandCoverManager(tmp_path, "bdoo", cache=False)
+    return LandCoverManager("bdoo", cache=False, root=tmp_path)
 
 
 # --- registry ------------------------------------------------------------------

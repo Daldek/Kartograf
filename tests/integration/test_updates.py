@@ -39,7 +39,7 @@ G2 = "N-34-139-C-a-3-2"
 
 
 def _manager(tmp_path, fake, **kwargs):
-    return DownloadManager(tmp_path, provider=fake, **kwargs)
+    return DownloadManager(provider=fake, root=tmp_path, **kwargs)
 
 
 def test_check_sheets_plan_equals_old_check_updates(tmp_path):

@@ -146,12 +146,13 @@ LAYER = Param(
 ROOT = Param(
     "root",
     "path",
-    "Store root (required): versions are written below it, one directory per "
-    "product, never over existing ones.",
-    description_pl="Katalog magazynu (wymagany)",
+    "Store root: versions are written below it, one directory per product, never "
+    "over existing ones. Default: the store of the user data directory "
+    "(`KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml`, else "
+    "`<data_dir>/kartograf`).",
+    description_pl="Katalog magazynu (domyslnie magazyn w katalogu danych uzytkownika)",
     path_role="root",
     metavar="KATALOG",
-    required=True,
     section=OUTPUT_TITLE,
 )
 WORKERS = Param(
@@ -327,7 +328,10 @@ def root(files: Text) -> Param:
     """
 
     def description_pl() -> str:
-        return f"Katalog magazynu (wymagany): {resolve(files)} (wersje w versions/)"
+        return (
+            f"Katalog magazynu (domyslnie magazyn uzytkownika): {resolve(files)} "
+            "(wersje w versions/)"
+        )
 
     return replace(ROOT, description_pl=description_pl)
 

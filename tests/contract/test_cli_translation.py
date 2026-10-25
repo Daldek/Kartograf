@@ -78,7 +78,7 @@ def test_flags_map_to_download_data_kwargs(tmp_path):
     )
     assert (kwargs["min_year"], kwargs["all_campaigns"]) == (2019, True)
     assert (kwargs["workers"], kwargs["update"]) == (3, "force")
-    assert kwargs["root"] == str(tmp_path)
+    assert kwargs["root"] == tmp_path
     with patch(_DOWNLOAD, return_value=_report()) as download:
         main(
             [
@@ -407,7 +407,7 @@ def test_cli_imports_no_data_logic():
     assert offenders == []
 
 
-@pytest.mark.parametrize("flag", ["--product", "--root", "--vertical-crs"])
+@pytest.mark.parametrize("flag", ["--product", "--vertical-crs"])
 def test_missing_choice_is_error_before_network(flag, tmp_path, capsys):
     argv = {
         "--product": ["--product", "nmt"],

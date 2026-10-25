@@ -19,6 +19,7 @@ from typing import Any, Literal, Protocol, cast
 
 import requests
 
+from kartograf.config import resolve_root
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.arguments import require_bool, require_workers
 from kartograf.download.campaigns import (
@@ -511,7 +512,9 @@ class DownloadManager:
     Examples
     --------
     >>> from kartograf.providers.pl import create_nmt_provider
-    >>> manager = DownloadManager("./data", create_nmt_provider("EVRF2007", "1m"))
+    >>> manager = DownloadManager(
+    ...     create_nmt_provider("EVRF2007", "1m"), root="./data"
+    ... )
     >>> result = manager.download_sheet("N-34-130-D-d-2-4")
     >>> result.files["N-34-130-D-d-2-4"][0].status
     'new'
@@ -519,9 +522,9 @@ class DownloadManager:
 
     def __init__(
         self,
-        root: str | Path,
         provider: BaseProvider,
         *,
+        root: str | Path | None = None,
         storage: FileStorage | None = None,
         workers: int = 1,
         sidecar_extra: dict[str, Any] | None = None,
@@ -537,13 +540,14 @@ class DownloadManager:
 
         Parameters
         ----------
-        root : str or Path
-            Base directory for downloads; the provider selects the segment.
         provider : BaseProvider
             Source of the downloaded data, its resolution and vertical CRS.
             PL NMT supports 1m (EVRF2007 or KRON86) or 5m (EVRF2007 only);
             NMPT supports 1m (EVRF2007 or KRON86); orthophotos select RGB,
             CIR or B/W in the provider. No provider is created implicitly.
+        root : str or Path, optional
+            The store root; the provider selects the segment. Default: the
+            store root of the settings (``store_root()``, DEV-19.2).
         storage : FileStorage, optional
             Explicit storage manager (default: storage from the provider's
             descriptor, resolution, vertical CRS and optional variant).
@@ -601,7 +605,10 @@ class DownloadManager:
         self._record_vertical_crs = vertical_crs
         if storage is None:
             storage = storage_for_provider(
-                root, provider, resolution=resolution, vertical_crs=vertical_crs
+                resolve_root(root),
+                provider,
+                resolution=resolution,
+                vertical_crs=vertical_crs,
             )
         self._storage = storage
         self._vertical_crs = vertical_crs

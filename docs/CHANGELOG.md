@@ -310,6 +310,18 @@ changes and the migration guide ("Migration guide: data output") are written wit
   Archiwista (`Project.root`, the read API names, the manifest key), Retman (`root=` in
   `validate_command`, `run_command`, `check_command` and `DownloadManager(output_dir=...)`),
   Hydrograf (`DownloadManager(output_dir=...)` in `backend/scripts/download_dem.py`).
+- `DownloadManager(provider, *, root=None, ...)`, `LandCoverManager(provider, *, root=None,
+  cache=True)` and `HSGCalculator(provider=None, *, root=None, cache=True)` take the provider
+  first and the store as the keyword `root` (ADR-054 decision 1, DEV-19.1: the target options are
+  keyword-only): `DownloadManager(tmp, provider)` is now `DownloadManager(provider, root=tmp)`.
+- A call without a store works on the default store (ADR-054 decision 2, DEV-19.2): `root` is
+  optional in every function, command, `kartograf-project/1` (`project init`) and tool, and `--root`
+  in every command. The default is `KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml`, else
+  `<data_dir>/kartograf` (`kartograf.config.resolve_root`); a command that used to fail with
+  "`--root` required" now writes there. `project init` writes the default root, as an absolute
+  path, into the manifest. The MCP server accepts a call without `root` only when the default
+  store lies inside `--allow-dir` (`forbidden` otherwise). An empty `root` is a
+  `validation_error` (`option` `root`), not the default.
 
 ### Breaking changes
 

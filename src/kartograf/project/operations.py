@@ -23,6 +23,7 @@ from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.kinds import options_from_json, options_to_json
+from kartograf.config import resolve_root
 from kartograf.download.arguments import require_workers
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
@@ -120,29 +121,26 @@ def _select(
     return tuple(selected)
 
 
-def init_project(project_dir: str | Path, *, root: str | Path | None) -> Project:
+def init_project(project_dir: str | Path, *, root: str | Path | None = None) -> Project:
     """Create a project: ``kartograf-project.json`` with the store ``root``.
 
     The project directory and the store directory are created when missing.
     ``root`` given relatively (to the current directory) is written
-    relative to the project directory, an absolute one as it is (spec 3.2).
+    relative to the project directory, an absolute one as it is (spec 3.2);
+    without ``root`` the manifest gets the default store root, an absolute path
+    (DEV-19.2, ADR-054).
 
     Raises
     ------
     ValidationError
-        The manifest exists already (nothing is changed), no or an empty
-        ``root`` or a store that cannot be created.
+        The manifest exists already (nothing is changed), an empty ``root`` or
+        a store that cannot be created.
     """
     directory = absolute(project_dir)
     target = directory / MANIFEST_NAME
     if target.exists():
         raise ValidationError(f"projekt juz istnieje: {target}")
-    if root is None or not str(root):
-        raise ValidationError(
-            "--root wymagane: katalog magazynu projektu (np. data albo wspolny "
-            "magazyn zespolu)"
-        )
-    saved = _saved_path(root, directory)
+    saved = _saved_path(resolve_root(root), directory)
     store = resolve_path(saved, directory)
     try:
         store.mkdir(parents=True, exist_ok=True)

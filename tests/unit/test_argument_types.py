@@ -54,7 +54,7 @@ def test_download_data_rejects_text_density_and_workers(tmp_path):
 
 
 def test_layers_text_is_not_read_character_by_character(tmp_path):
-    manager = LandCoverManager(tmp_path, "bdot10k", cache=False)
+    manager = LandCoverManager("bdot10k", cache=False, root=tmp_path)
     with pytest.raises(ValidationError, match="--layers: podaj liste kodow"):
         manager.download(teryt="1465", layers="SWRS,PTWP")
     with pytest.raises(ValidationError, match="--layers: podaj liste kodow"):
@@ -70,14 +70,14 @@ def test_layers_text_is_not_read_character_by_character(tmp_path):
     ],
 )
 def test_landcover_rejects_wrong_option_types(tmp_path, source, options, match):
-    manager = LandCoverManager(tmp_path, source, cache=False)
+    manager = LandCoverManager(source, cache=False, root=tmp_path)
     selection = {"teryt": "1465"} if source == "bdot10k" else {"bbox": AREA}
     with pytest.raises(ValidationError, match=match):
         manager.download(**selection, **options)
 
 
 def test_landcover_rejects_text_workers(tmp_path):
-    manager = LandCoverManager(tmp_path, "bdot10k", cache=False)
+    manager = LandCoverManager("bdot10k", cache=False, root=tmp_path)
     with pytest.raises(ValidationError, match="--workers"):
         manager.download(teryt="1465", workers="2")
 
@@ -92,7 +92,7 @@ def test_landcover_rejects_text_workers(tmp_path):
 )
 def test_download_manager_rejects_wrong_types(tmp_path, argument, name):
     with pytest.raises(ValidationError, match=name):
-        DownloadManager(tmp_path, Mock(), **argument)
+        DownloadManager(Mock(), root=tmp_path, **argument)
 
 
 @pytest.mark.parametrize(
@@ -168,6 +168,6 @@ def test_availability_rejects_wrong_types(argument, flag):
 
 
 def test_bdot10k_archive_rejects_float_year(tmp_path):
-    manager = LandCoverManager(tmp_path, "bdot10k", cache=False)
+    manager = LandCoverManager("bdot10k", cache=False, root=tmp_path)
     with pytest.raises(ValidationError, match="--year .*2020.0"):
         manager.download(teryt="1465", year=2020.0, format="SHP")

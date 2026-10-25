@@ -46,6 +46,7 @@ from kartograf.catalog.commands import declared, declared_commands
 from kartograf.catalog.formatting import format_command_line
 from kartograf.catalog.kinds import convert_arguments
 from kartograf.catalog.spec import Command, Kind
+from kartograf.config import resolve_root
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import UpdatePlan
@@ -248,7 +249,7 @@ def format_command(
 
     The flags follow the order of the parameters of the command; ``--bbox-crs`` is
     left out when it is the default of the flag; ``run`` adds the other flags
-    (``root`` as ``-o``): ``root`` and ``plan`` are paths, ``workers``
+    (``root`` as ``--root``): ``root`` and ``plan`` are paths, ``workers``
     a whole number, ``upgrade``, ``force``, ``check_updates``, ``quiet``, ``json``
     and ``summary`` are ``True`` (or left out). ``parse_command`` reads the line
     back into the same command, options and run.
@@ -281,17 +282,11 @@ def format_command(
     return format_command_line(declaration, options, given_run)
 
 
-def _store(root: str | Path) -> Path:
-    if root is None or not str(root):
-        raise ValidationError(message("commands.root_required"), option="root")
-    return Path(root)
-
-
 def run_command(
     command: str,
     options: Mapping[str, object],
     *,
-    root: str | Path,
+    root: str | Path | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     workers: int | None = None,
@@ -315,8 +310,8 @@ def run_command(
         A data command (``elevation download``).
     options : Mapping
         The task options in the JSON form.
-    root : str or Path
-        The store.
+    root : str or Path, optional
+        The store (default: the store root of the settings, DEV-19.2).
     update : {"upgrade", "force"}, optional
         The update mode of the function (``None``: local versions are kept).
     plan : UpdatePlan, optional
@@ -344,7 +339,7 @@ def run_command(
             message("commands.summary_only_for_hsg", summary_command=_SUMMARY_COMMAND),
             option="summary",
         )
-    store = _store(root)
+    store = resolve_root(root)
     entry.validate(store, arguments)
     report = entry.download(
         store,
@@ -364,7 +359,7 @@ def check_command(
     command: str,
     options: Mapping[str, object],
     *,
-    root: str | Path,
+    root: str | Path | None = None,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> CommandResult[UpdatePlan]:
@@ -387,7 +382,7 @@ def check_command(
     """
     entry = task_command(command)
     arguments = convert_arguments(entry.options, options)
-    store = _store(root)
+    store = resolve_root(root)
     entry.validate(store, arguments)
     plan = entry.check(store, arguments, cache=cache, on_notice=on_notice)
     return wrap(command, plan, check=True)

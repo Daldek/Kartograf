@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from kartograf.config import resolve_root
 from kartograf.download.data import (
     DOWNLOAD_FILL,
     DOWNLOAD_KEYS,
@@ -415,7 +416,6 @@ _HSG_PRODUCT = "hsg"
 # Where ``calculate_hsg`` writes (the ``--root`` help of ``soil hsg`` and
 # the error of a call without a store).
 HSG_OUTPUT_FILES = message("hydrology.hsg_output_files")
-_OUTPUT_REQUIRED = message("hydrology.root_required", hsg_output_files=HSG_OUTPUT_FILES)
 
 
 @dataclass(frozen=True)
@@ -470,8 +470,9 @@ class HSGCalculator:
 
     def __init__(
         self,
-        root: str | Path,
         provider: "SoilGridsProvider | None" = None,
+        *,
+        root: str | Path | None = None,
         cache: "MetadataCache | bool" = True,
     ) -> None:
         """
@@ -479,16 +480,17 @@ class HSGCalculator:
 
         Parameters
         ----------
-        root : str or Path
-            Store root (``--root``); created only when a file is written.
         provider : SoilGridsProvider, optional
             Provider of the inputs (keeps its own cache). Default: a
             SoilGrids provider using ``cache``.
+        root : str or Path, optional
+            Store root (``--root``); created only when a file is written.
+            Default: the store root of the settings (``store_root()``).
         cache : MetadataCache or bool
             ``True`` = default metadata cache in the current directory, a
             ``MetadataCache`` = that cache, ``False`` = none (default provider).
         """
-        self._root = Path(root)
+        self._root = resolve_root(root)
         if self._root.suffix.lower() in (".tif", ".tiff"):
             raise ValidationError(
                 message("hydrology.root_is_store_dir"),
@@ -632,8 +634,8 @@ class HSGCalculator:
         from kartograf.landcover.manager import LandCoverManager
 
         if self._provider is None:  # by name: the manager attaches the cache
-            return LandCoverManager(self._root, "soilgrids", cache=self._cache)
-        return LandCoverManager(self._root, self._provider)
+            return LandCoverManager("soilgrids", cache=self._cache, root=self._root)
+        return LandCoverManager(self._provider, root=self._root)
 
     def _slot(self, selection: dict[str, Any], depth: str, stat: str) -> "FileSlot":
         from kartograf.download.storage import unit_slot
@@ -920,15 +922,13 @@ class HSGCalculator:
 def _calculator(
     root: str | Path | None, cache: "MetadataCache | bool"
 ) -> HSGCalculator:
-    """Return the calculator of the store ``root`` (checked first)."""
-    if root is None:
-        raise ValidationError(_OUTPUT_REQUIRED, option="root")
-    return HSGCalculator(root, cache=cache)
+    """Return the calculator of the store ``root`` (the default store without it)."""
+    return HSGCalculator(root=root, cache=cache)
 
 
 def calculate_hsg(
     *,
-    root: str | Path | None,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: "BBox | None" = None,
     geometry: str | Path | None = None,
@@ -1006,7 +1006,7 @@ def calculate_hsg(
 
 def check_hsg(
     *,
-    root: str | Path | None,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: "BBox | None" = None,
     geometry: str | Path | None = None,
@@ -1040,7 +1040,7 @@ def check_hsg(
 
 def validate_hsg_request(
     *,
-    root: str | Path | None,
+    root: str | Path | None = None,
     sheet: str | None = None,
     bbox: "BBox | None" = None,
     geometry: str | Path | None = None,

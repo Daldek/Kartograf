@@ -228,8 +228,11 @@ _FIND_SHEETS_PARAMS = (
 
 _ROOT = replace(
     shared.ROOT,
-    description="Store directory (required): the one that holds the product segments.",
-    description_pl="Katalog magazynu (wymagany): katalog z segmentami produktow",
+    description="Store directory: the one that holds the product segments. Default: "
+    "the store of the user data directory (`KARTOGRAF_ROOT`, `[kartograf] root` of "
+    "`nogat.toml`, else `<data_dir>/kartograf`).",
+    description_pl="Katalog magazynu: katalog z segmentami produktow (domyslnie "
+    "magazyn w katalogu danych uzytkownika)",
     section=None,
 )
 

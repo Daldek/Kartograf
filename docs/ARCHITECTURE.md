@@ -3036,8 +3036,8 @@ and a raster of only zeros (apart from `cfvo`) `extra.all_nodata` and a `Warning
 `all_nodata`; `ocs` exists only for `0-30cm` (`SoilGridsProvider.check_layer`),
 a window smaller than a pixel is extended to one pixel (250 m).
 
-**ZABAGED (CZ, ADR-042 D15, plan D).** `LandCoverManager(root,
-"zabaged")` has no provider class (`COLLECTION_SOURCES`): the options are checked by
+**ZABAGED (CZ, ADR-042 D15, plan D).** `LandCoverManager("zabaged",
+root=root)` has no provider class (`COLLECTION_SOURCES`): the options are checked by
 `_collection_request`, and the selection and download are done by the functions
 of `download/collections.py` (`landcover_request`, `run_request`,
 `plan_request`; the same unit tasks as the collections, section 4.10) on the
@@ -3058,7 +3058,7 @@ per request: a download error goes to `LandCoverReport.failed` (`ok=False`).
 The internal `get_available_layers()` returns the 22 layer names of the area result,
 `get_supported_formats()` - `["GPKG"]`.
 
-**BDOO (PL, plan E4, ADR-043).** `LandCoverManager(root, "bdoo")`
+**BDOO (PL, plan E4, ADR-043).** `LandCoverManager("bdoo", root=root)`
 follows the same path as ZABAGED (`COLLECTION_SOURCES`, `landcover_request`
 with `teryt`, `year` and `layers`). GUGiK publishes BDOO only as a GML package
 of a voivodeship per vintage (`opendata/bdoo/<R>/PL.PZGiK.201.<woj>.zip`; 2015,

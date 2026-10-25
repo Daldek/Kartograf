@@ -171,7 +171,7 @@ report = download_data(product="nmt", root="./data", sheet="N-34-130-D-d-2-4",
                        resolution="1m", vertical_crs="EVRF2007")
 file = report.files[0].file  # VersionedFile: path, status, label, newer, unverified
 # lower level: DownloadManager(...).download_sheet(...) -> DownloadResult
-manager = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m"))
+manager = DownloadManager(GugikProvider(vertical_crs="EVRF2007", resolution="1m"), root="./data")
 result = manager.download_sheet("N-34-130-D-d-2-4")
 
 # Raw WCS NMT 1m outside the versioned store: KRON86 from TIFF, EVRF2007 from ASC
@@ -182,7 +182,7 @@ bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
 path = kron.download_bbox(bbox, Path("area.tif"))
 
 # Other resolutions from the registry (e.g. 0.5m; 5m, 0.15m, 0.6m, 10m EVRF2007 only)
-manager_05 = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="0.5m"))
+manager_05 = DownloadManager(GugikProvider(vertical_crs="EVRF2007", resolution="0.5m"), root="./data")
 result_05 = manager_05.download_sheet("N-33-58-A-c-1-3")  # DownloadResult
 
 # GUGiK archive as a source file (format=; segment nmt/pl_<crs>_tbd_25m_kron86)
@@ -793,7 +793,7 @@ marks which one is "current".
 from kartograf import DownloadManager, GugikProvider
 
 provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
-manager = DownloadManager("./data", provider, min_year=2022, full_sheet=True)
+manager = DownloadManager(provider, root="./data", min_year=2022, full_sheet=True)
 result = manager.download_sheet("N-34-139-C-a-3-1")  # DownloadResult
 result.campaign_files              # sheet code -> campaign files (downloaded and used)
 result.full_links                  # sheet code -> full_sheet/ path
@@ -1361,8 +1361,9 @@ fix an error without parsing text.
   `check_command` (KB-1..KB-5 of the Archiwista).
 - MCP server `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 39 tools 1:1
   with the commands (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope (`outputSchema`),
-  `is_error` only for an error, with no default values affecting data (`root`
-  explicit and absolute, `bbox` with `bbox_crs`), progress through MCP notifications,
+  `is_error` only for an error, with no default values affecting data (a given `root`
+  absolute, one left out the default store inside `--allow-dir`, `bbox` with `bbox_crs`),
+  progress through MCP notifications,
   `--tools`, `--allow-dir` and `--allow-writes` (without it the server only reads and plans).
 - `kartograf/py.typed` (PEP 561), the generated `AGENTS.md` and `llms.txt` (`kartograf commands
   guide`), `scripts/gate.sh`, `python -m kartograf`; a rule for agents from other repositories

@@ -57,6 +57,7 @@ import rasterio
 from rasterio.errors import RasterioError
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.download.area import bbox_to_2180
 from kartograf.download.fetch import (
@@ -554,7 +555,7 @@ def check_image_cutout(
     product: str,
     bbox: BBox,
     horizontal_crs: str,
-    root: str | Path,
+    root: str | Path | None = None,
     resolution: str,
     coverage: str | None = None,
     cache: MetadataCache | bool = True,
@@ -571,6 +572,7 @@ def check_image_cutout(
     Raises ``ValidationError`` for an invalid choice and ``TransformError``
     when a Czech CRS has no safe pinned operation, exactly as the download.
     """
+    root = resolve_root(root)
     del cache, on_notice  # same signature as the download (Z2); unused here
     cutout = _prepare(
         bbox,
@@ -592,7 +594,7 @@ def download_image_cutout(
     product: str,
     bbox: BBox,
     horizontal_crs: str,
-    root: str | Path,
+    root: str | Path | None = None,
     resolution: str,
     coverage: str | None = None,
     update: UpdateMode | None = None,
@@ -643,6 +645,7 @@ def download_image_cutout(
         WCS failure, an error document or a raster off the requested grid;
         no version is committed.
     """
+    root = resolve_root(root)
     validate_update(update, check="check_image_cutout")
     cutout = _prepare(
         bbox,

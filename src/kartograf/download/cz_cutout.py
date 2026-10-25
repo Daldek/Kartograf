@@ -15,6 +15,7 @@ from typing import Any, cast
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.download.fetch import (
     FileSlot,
@@ -318,7 +319,7 @@ def _cz_provider(
 def check_cz_cutout(
     *,
     bbox: BBox,
-    root: str | Path,
+    root: str | Path | None = None,
     product: str,
     horizontal_crs: str,
     vertical_crs: str,
@@ -333,6 +334,7 @@ def check_cz_cutout(
     are accepted for symmetry with the download. Invalid choices raise the
     same ``ValidationError``/``TransformError`` as the download.
     """
+    root = resolve_root(root)
     from kartograf.download.options import validate_request_bbox
 
     bbox = validate_request_bbox(bbox)
@@ -352,7 +354,7 @@ def check_cz_cutout(
 def download_cz_cutout(
     *,
     bbox: BBox,
-    root: str | Path,
+    root: str | Path | None = None,
     product: str,
     horizontal_crs: str,
     vertical_crs: str,
@@ -388,6 +390,7 @@ def download_cz_cutout(
     DownloadError
         CUZK service failure.
     """
+    root = resolve_root(root)
     from kartograf.download.options import validate_request_bbox
 
     bbox = validate_request_bbox(bbox)

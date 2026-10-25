@@ -42,8 +42,8 @@ from typing import Any, ClassVar, Final, Literal
 
 import platformdirs
 
-from kartograf.exceptions import ConfigError
-from kartograf.messages import Lang
+from kartograf.exceptions import ConfigError, ValidationError
+from kartograf.messages import Lang, message
 from kartograf.serialization import Document
 
 __all__ = [
@@ -59,6 +59,7 @@ __all__ = [
     "get_config",
     "human_language",
     "resolve",
+    "resolve_root",
     "store_root",
 ]
 
@@ -420,6 +421,44 @@ def cache_dir() -> Path:
 def store_root() -> Path:
     """Return the store root: ``root``, else ``<data_dir>/kartograf`` (DEV-19.2)."""
     return _path("root")
+
+
+def resolve_root(root: str | os.PathLike[str] | None) -> Path:
+    """
+    Return the store root of a call: the one it names, else the default root.
+
+    The default is ``store_root()`` (DEV-19.2): ``KARTOGRAF_ROOT``, ``[kartograf]
+    root`` of ``nogat.toml``, else ``<data_dir>/kartograf``. Every entry point
+    that writes or reads the store resolves its ``root`` here, so a call without
+    one never fails for the lack of it.
+
+    Parameters
+    ----------
+    root : str or os.PathLike or None
+        The store the caller names (``--root``, the argument ``root``); None for
+        none.
+
+    Returns
+    -------
+    pathlib.Path
+        ``root`` as given (a relative path stays relative to the working
+        directory), or the default root (absolute).
+
+    Raises
+    ------
+    ValidationError
+        ``root`` is an empty string (``details.option`` is ``root``).
+
+    Examples
+    --------
+    >>> resolve_root("data").as_posix()
+    'data'
+    """
+    if root is None:
+        return store_root()
+    if not os.fspath(root):
+        raise ValidationError(message("config.empty_root"), option="root")
+    return Path(root)
 
 
 def debug() -> bool:

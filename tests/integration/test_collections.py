@@ -93,14 +93,12 @@ def test_exactly_one_selection(tmp_path, session, selection):
     assert session.calls == []
 
 
-def test_product_and_output_are_required(tmp_path, session):
+def test_product_is_required(tmp_path, session):
     with pytest.raises(ValidationError) as missing:
         download_collection(product=None, root=tmp_path, teryt="1261")
     assert "admin" in str(missing.value) and "buildings" in str(missing.value)
     with pytest.raises(ValidationError):
         download_collection(product="landcover", root=tmp_path, teryt="1261")
-    with pytest.raises(ValidationError):
-        download_collection(product="buildings", root=None, teryt="1261", lod=2)
     assert session.calls == []
 
 

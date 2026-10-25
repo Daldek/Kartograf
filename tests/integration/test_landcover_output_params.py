@@ -43,11 +43,12 @@ def _first_pixel(path: Path) -> int:
 
 
 def _soil(tmp_path, session: FakeSoilGrids) -> LandCoverManager:
-    return LandCoverManager(tmp_path, SoilGridsProvider(session=session))  # type: ignore[arg-type]
+    return LandCoverManager(SoilGridsProvider(session=session), root=tmp_path)  # type: ignore[arg-type]
 
 
 def _corine(tmp_path, session: FakeCorine) -> LandCoverManager:
-    return LandCoverManager(tmp_path, CorineProvider(session=session, use_proxy=False))  # type: ignore[arg-type]
+    provider = CorineProvider(session=session, use_proxy=False)  # type: ignore[arg-type]
+    return LandCoverManager(provider, root=tmp_path)
 
 
 # --- SoilGrids --------------------------------------------------------------
@@ -324,7 +325,7 @@ class TestCorineStore:
     ],
 )
 def test_manager_has_no_output_path(tmp_path, source, kwargs):
-    manager = LandCoverManager(tmp_path, source)
+    manager = LandCoverManager(source, root=tmp_path)
     with pytest.raises(TypeError, match="output_path"):
         manager.download(bbox=BBOX, output_path=tmp_path / "x", **kwargs)
     assert list(tmp_path.iterdir()) == []
@@ -332,7 +333,7 @@ def test_manager_has_no_output_path(tmp_path, source, kwargs):
 
 def test_no_dir_created_on_init(tmp_path):
     for source in ("bdot10k", "corine", "soilgrids"):
-        LandCoverManager(tmp_path / "a" / "b", source)
+        LandCoverManager(source, root=tmp_path / "a" / "b")
     assert list(tmp_path.iterdir()) == []
 
 
@@ -361,7 +362,7 @@ def test_no_dir_created_on_init(tmp_path):
 def test_missing_required_option_is_validation_error(
     tmp_path, source, options, missing, method
 ):
-    manager = LandCoverManager(tmp_path, source)
+    manager = LandCoverManager(source, root=tmp_path)
     with pytest.raises(ValidationError) as caught:
         getattr(manager, method)(bbox=BBOX, **options)
     assert str(caught.value).startswith(missing)
@@ -409,7 +410,7 @@ def _bdot(tmp_path, packages: FakePackages, teryts=("1465",)):
     provider = Bdot10kProvider()
     patch.object(provider, "download_package", side_effect=packages).start()
     patch.object(provider, "teryts_for_area", return_value=list(teryts)).start()
-    return LandCoverManager(tmp_path, provider)
+    return LandCoverManager(provider, root=tmp_path)
 
 
 class TestBdot10kStore:

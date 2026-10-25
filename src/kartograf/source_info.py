@@ -477,7 +477,7 @@ def _release_years(key: str) -> tuple[int, ...]:
 
 def _landcover_layers(product: str) -> LayerList:
     # the catalogue of the product (no network, nothing written)
-    manager = LandCoverManager(".", product, cache=False)
+    manager = LandCoverManager(product, cache=False, root=".")
     source = manager.provider_name
     if product in COLLECTION_SOURCES:
         key = COLLECTION_SOURCES[product]
@@ -523,7 +523,7 @@ def _release_classes(key: str) -> dict[str, tuple[str, ...]]:
 
 def _soil_layers() -> LayerList:
     # the catalogue of the source (no network, nothing written)
-    provider = LandCoverManager(".", "soilgrids", cache=False).provider
+    provider = LandCoverManager("soilgrids", cache=False, root=".").provider
     assert isinstance(provider, SoilGridsProvider)
     choices = soil_choices()
     return LayerList(

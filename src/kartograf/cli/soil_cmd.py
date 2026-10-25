@@ -7,10 +7,9 @@ The CLI translates flags to the corresponding command-level API functions.
 
 import argparse
 import sys
-from pathlib import Path
 from typing import Any
 
-from kartograf.cli._args import library_arguments
+from kartograf.cli._args import library_arguments, store_dir
 from kartograf.cli._language import language, localized
 from kartograf.cli.download_cmd import (
     _plan_context,
@@ -24,24 +23,20 @@ from kartograf.cli.download_cmd import (
     run_with_plan_file,
 )
 from kartograf.download.fetch import UpdateMode
-from kartograf.download.options import output_required
 from kartograf.envelope import exit_code_of
-from kartograf.exceptions import ValidationError
 from kartograf.hydrology import calculate_hsg, check_hsg
-from kartograf.hydrology.hsg import HSG_OUTPUT_FILES, HsgReport
+from kartograf.hydrology.hsg import HsgReport
 from kartograf.landcover.manager import SoilReport, check_soil, download_soil
 from kartograf.messages import message
 
 
 def cmd_soil_download(args: argparse.Namespace) -> int:
     """``soil download``: one SoilGrids layer (property, depth, stat) of an area."""
-    if args.root is None:
-        raise ValidationError(output_required("soil"), option="root")
     return run_with_plan_file(args, _soil_download)
 
 
 def _soil_download(args: argparse.Namespace) -> int:
-    arguments = {**library_arguments(args), "root": Path(args.root)}
+    arguments = {**library_arguments(args), "root": store_dir(args)}
     on_notice = notice_printer(args)
     if args.check_updates:
         return _report_plan(args, check_soil(**arguments, on_notice=on_notice))
@@ -62,7 +57,7 @@ def _print_soil(
 
     It returns the exit code.
     """
-    out = Path(args.root)
+    out = store_dir(args)
     for item in report.files:
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
     for failure in report.failed:
@@ -85,19 +80,13 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
-    if args.root is None:
-        raise ValidationError(
-            message("hydrology.root_required", hsg_output_files=HSG_OUTPUT_FILES),
-            option="root",
-        )
-
     selection = library_arguments(args)
     return run_with_plan_file(args, lambda a: _hsg_task(a, selection))
 
 
 def _hsg_task(args: argparse.Namespace, selection: dict[str, Any]) -> int:
     """One ``soil hsg`` request: plan or inputs plus the derived raster."""
-    arguments = {**selection, "root": Path(args.root)}
+    arguments = {**selection, "root": store_dir(args)}
     on_notice = notice_printer(args)
     if args.check_updates:
         return _report_plan(args, check_hsg(**arguments, on_notice=on_notice))
@@ -120,7 +109,7 @@ def _print_hsg(
     The statistics of the raster (``--summary``) and the legend are for an HSG report;
     the exit code is returned.
     """
-    out = Path(args.root)
+    out = store_dir(args)
     for item in (*result.inputs, *result.files):
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
     for failure in result.failed:

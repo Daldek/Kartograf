@@ -14,9 +14,8 @@ plan file cycle and prints one status line per file (its path below
 
 import argparse
 import sys
-from pathlib import Path
 
-from kartograf.cli._args import library_arguments
+from kartograf.cli._args import library_arguments, store_dir
 from kartograf.cli.download_cmd import (
     _end_progress,
     _plan_context,
@@ -52,7 +51,7 @@ def cmd_collection_download(args: argparse.Namespace, group: str) -> int:
 
 
 def _collection_download(args: argparse.Namespace) -> int:
-    arguments = {**library_arguments(args), "root": args.root}
+    arguments = {**library_arguments(args), "root": store_dir(args)}
     on_notice = notice_printer(args)
     if args.check_updates:
         return _report_plan(args, check_collection(**arguments, on_notice=on_notice))
@@ -84,7 +83,7 @@ def _print_collection(
     It returns the exit code.
     """
     _end_progress(on_progress)
-    output = Path(args.root)
+    output = store_dir(args)
     if not args.quiet:
         for item in report.files:
             print(_status_line(_unit_of(item.file.path, output), item.file, update))

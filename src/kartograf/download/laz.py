@@ -37,6 +37,7 @@ from typing import Any
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.core.coverage import Polygon
 from kartograf.core.sheet_parser import SheetParser
@@ -505,7 +506,7 @@ def check_laz_area(
     *,
     bbox: BBox | None = None,
     sheet: str | None = None,
-    root: str | Path,
+    root: str | Path | None = None,
     vertical_crs: str,
     year: int | None = None,
     min_year: int | None = None,
@@ -524,6 +525,7 @@ def check_laz_area(
     The source is always asked (``--check-updates``): the metadata cache is
     refreshed, never read.
     """
+    root = resolve_root(root)
     bbox = _validate_area(bbox, sheet)
     sink = NoticeSink(on_notice)
     with _selected(
@@ -548,7 +550,7 @@ def download_laz_area(
     *,
     bbox: BBox | None = None,
     sheet: str | None = None,
-    root: str | Path,
+    root: str | Path | None = None,
     vertical_crs: str,
     year: int | None = None,
     min_year: int | None = None,
@@ -636,6 +638,7 @@ def download_laz_area(
     NoCoverageError
         (a ``DownloadError`` subclass) no tiles in any year for the area.
     """
+    root = resolve_root(root)
     bbox = _validate_area(bbox, sheet)
     validate_update(update, check="check_laz_area")
     require_workers(workers, "workers")
