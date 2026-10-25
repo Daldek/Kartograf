@@ -45,6 +45,11 @@ _TASKS = Param(
 )
 _STATE = "kartograf-project-state/1"
 _CHECK = "kartograf-project-check/1"
+# A project is bound to a store: no `output_dir` (DEV-19.18).
+_STORE_ONLY = "Store only: a project is bound to a store, so there is no `output_dir`."
+_STORE_ONLY_PL = (
+    "Tylko magazyn: projekt jest zwiazany z magazynem, wiec bez --output-dir."
+)
 
 
 def _data_commands() -> list[str]:
@@ -150,6 +155,7 @@ _UPDATE = tuple(
             ),
             upgrade="Pobierz nowsze wersje i przepnij cale zadania",
             force="Pobierz ponownie i przepnij cale zadania",
+            plain=False,
         )
     )
 )
@@ -209,8 +215,8 @@ COMMANDS = (
             "ktorych nie ma. Jeden projekt = jeden magazyn; wiele projektow"
             " moze dzielic magazyn."
         ),
-        rules=("Without `root` the manifest points at the default store.",),
-        rules_pl=("Bez `root` manifest wskazuje domyslny magazyn.",),
+        rules=("Without `root` the manifest points at the default store.", _STORE_ONLY),
+        rules_pl=("Bez `root` manifest wskazuje domyslny magazyn.", _STORE_ONLY_PL),
         errors=(
             "validation_error",
             "io_error",
@@ -227,7 +233,7 @@ COMMANDS = (
         _ADD_PARAMS,
         description=(
             "Adds a named task: a data command with its options (without "
-            "`root` and the update options). The choices are checked "
+            "`root`, `output_dir` and the update options). The choices are checked "
             "offline and nothing is downloaded. Fetch the tasks with "
             "`project download`."
         ),
@@ -273,13 +279,17 @@ COMMANDS = (
         description_pl=(
             "Dodaj zadanie: NAZWA <grupa> <komenda> [opcje komendy]. "
             "--project podaj przed NAZWA; opcje po NAZWA naleza do komendy "
-            "danych (bez --root i trybow aktualizacji). Wybory sprawdzane"
+            "danych (bez --root, --output-dir i trybow aktualizacji). Wybory sprawdzane"
             " bez sieci, nic nie jest pobierane."
         ),
         rules=(
-            ("`options` are the options of the data command; see `commands schema`."),
+            "`options` are the options of the data command; see `commands schema`.",
+            _STORE_ONLY,
         ),
-        rules_pl=("`options` to opcje komendy danych; zobacz `commands schema`.",),
+        rules_pl=(
+            "`options` to opcje komendy danych; zobacz `commands schema`.",
+            _STORE_ONLY_PL,
+        ),
         errors=(
             "validation_error",
             "io_error",
@@ -305,8 +315,8 @@ COMMANDS = (
         description_pl=(
             "Usun zadanie i jego przypiecia z manifestu; pliki w magazynie zostaja."
         ),
-        rules=(),
-        rules_pl=(),
+        rules=(_STORE_ONLY,),
+        rules_pl=(_STORE_ONLY_PL,),
         errors=(
             "validation_error",
             "io_error",
@@ -365,8 +375,8 @@ COMMANDS = (
             "tylko przy zgodnej SHA-256. Zmiana przypiec: --upgrade albo "
             "--force."
         ),
-        rules=("Check first with `check`: it changes no pin.",),
-        rules_pl=("Najpierw `check`: nie zmienia przypiec.",),
+        rules=("Check first with `check`: it changes no pin.", _STORE_ONLY),
+        rules_pl=("Najpierw `check`: nie zmienia przypiec.", _STORE_ONLY_PL),
         errors=(
             "validation_error",
             "source_unavailable",
@@ -399,8 +409,8 @@ COMMANDS = (
             " bez zmian. Kod 1, gdy ktores zadanie nie jest pobrane albo "
             "brakuje przypietego pliku."
         ),
-        rules=(),
-        rules_pl=(),
+        rules=(_STORE_ONLY,),
+        rules_pl=(_STORE_ONLY_PL,),
         errors=(
             "validation_error",
             "io_error",
@@ -433,8 +443,8 @@ COMMANDS = (
             " porownuje SHA-256 oraz sidecary wersji; manifest bez zmian. "
             "Kod 1 przy niezgodnosci."
         ),
-        rules=(),
-        rules_pl=(),
+        rules=(_STORE_ONLY,),
+        rules_pl=(_STORE_ONLY_PL,),
         errors=(
             "validation_error",
             "data_error",

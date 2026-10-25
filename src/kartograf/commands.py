@@ -46,7 +46,6 @@ from kartograf.catalog.commands import declared, declared_commands
 from kartograf.catalog.formatting import format_command_line
 from kartograf.catalog.kinds import convert_arguments
 from kartograf.catalog.spec import Command, Kind
-from kartograf.config import resolve_root
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import UpdatePlan
@@ -54,6 +53,7 @@ from kartograf.envelope import CommandResult, wrap
 from kartograf.exceptions import UsageError, ValidationError
 from kartograf.messages import message, reason
 from kartograf.notices import Notice
+from kartograf.output import resolve_target
 from kartograf.project.commands import data_commands_text, task_command
 from kartograf.serialization import Document
 
@@ -76,9 +76,9 @@ class CommandCall:
         The task options that the line gave, in the JSON form, in the order of the
         parameters of the command; ``bbox`` always comes with ``bbox_crs``.
     run : dict
-        The other flags the line gave, by parameter name (``root``,
-        ``upgrade``, ``force``, ``check``, ``plan``, ``workers``,
-        ``quiet``, ``json``, ``summary``): a text, a number or ``True``.
+        The other flags the line gave, by parameter name (``output_dir``, ``root``,
+        ``upgrade``, ``force``, ``check``, ``plan``, ``workers``, ``quiet``,
+        ``json``, ``summary``): a text, a number or ``True``.
     """
 
     command: str
@@ -195,6 +195,7 @@ def validate_command(
     command: str,
     options: Mapping[str, object],
     *,
+    output_dir: str | Path | None = None,
     root: str | Path | None = None,
 ) -> None:
     """Run the checks of the library function of a data command.
@@ -208,18 +209,21 @@ def validate_command(
         A data command (``elevation download``).
     options : Mapping
         The task options in the JSON form.
-    root : str or Path, optional
-        The store; without it the current directory stands in (the checks do not
-        open the store). A geometry file is read, as the function reads it.
+    output_dir, root : str or Path, optional
+        Where the command would write, plain files or the store (at most one: both
+        are ``validation_error``, ``details.reason`` ``exclusive_options``); the
+        checks do not open either, and without a store the current directory stands
+        in. A geometry file is read, as the function reads it.
 
     Raises
     ------
     ValidationError
-        An unknown command or option, a value of a wrong form, or a rule of the
-        command (``option`` names the option; ``allowed`` its values).
+        An unknown command or option, a value of a wrong form, both targets, or a
+        rule of the command (``option`` names the option; ``allowed`` its values).
     """
     entry = task_command(command)
-    store = Path(".") if root is None else Path(root)
+    resolve_target(output_dir=output_dir, root=root)
+    store = Path(root) if root is not None and output_dir is None else Path(".")
     entry.validate(store, convert_arguments(entry.options, options))
 
 
@@ -286,6 +290,7 @@ def run_command(
     command: str,
     options: Mapping[str, object],
     *,
+    output_dir: str | Path | None = None,
     root: str | Path | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
@@ -310,8 +315,13 @@ def run_command(
         A data command (``elevation download``).
     options : Mapping
         The task options in the JSON form.
+    output_dir : str or Path, optional
+        Write plain files, named as in the store, into this directory (no sidecar,
+        no version; ``update="force"`` replaces existing files). Excludes ``root``,
+        ``update="upgrade"`` and ``plan`` (``store_only_option``).
     root : str or Path, optional
-        The store (default: the store root of the settings, DEV-19.2).
+        The store (default, when ``output_dir`` is not given either: the store root
+        of the settings, DEV-19.2).
     update : {"upgrade", "force"}, optional
         The update mode of the function (``None``: local versions are kept).
     plan : UpdatePlan, optional
@@ -331,6 +341,9 @@ def run_command(
     ValidationError
         As ``validate_command``; ``summary`` for another command than
         ``soil hsg`` (``option="summary"``); and the errors of the function.
+    ConflictError
+        A plain target that exists without ``update="force"``, a name two files
+        share, or a store as ``output_dir``: before the first byte.
     """
     entry = task_command(command)
     arguments = convert_arguments(entry.options, options)
@@ -339,11 +352,12 @@ def run_command(
             message("commands.summary_only_for_hsg", summary_command=_SUMMARY_COMMAND),
             option="summary",
         )
-    store = resolve_root(root)
-    entry.validate(store, arguments)
+    target = resolve_target(output_dir=output_dir, root=root)
+    entry.validate(target.path if target.mode == "store" else Path("."), arguments)
     report = entry.download(
-        store,
+        None if root is None else Path(root),
         arguments,
+        output_dir=None if output_dir is None else Path(output_dir),
         update=update,
         plan=plan,
         workers=workers,
@@ -359,14 +373,18 @@ def check_command(
     command: str,
     options: Mapping[str, object],
     *,
+    output_dir: str | Path | None = None,
     root: str | Path | None = None,
+    force: bool = False,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> CommandResult[UpdatePlan]:
     """Check whether the local versions of a data command are up to date.
 
     Nothing is downloaded: ``check_data``, ``check_collection``,
-    ``check_landcover``, ``check_soil`` or ``check_hsg`` runs with the options.
+    ``check_landcover``, ``check_soil`` or ``check_hsg`` runs with the options. With
+    ``output_dir`` the plan lists the targets of a plain write (``write``, ``replace``
+    with ``force``, ``conflict``); ``force`` does nothing for a store.
 
     Returns
     -------
@@ -382,7 +400,14 @@ def check_command(
     """
     entry = task_command(command)
     arguments = convert_arguments(entry.options, options)
-    store = resolve_root(root)
-    entry.validate(store, arguments)
-    plan = entry.check(store, arguments, cache=cache, on_notice=on_notice)
+    target = resolve_target(output_dir=output_dir, root=root)
+    entry.validate(target.path if target.mode == "store" else Path("."), arguments)
+    plan = entry.check(
+        None if root is None else Path(root),
+        arguments,
+        output_dir=None if output_dir is None else Path(output_dir),
+        force=force,
+        cache=cache,
+        on_notice=on_notice,
+    )
     return wrap(command, plan, check=True)

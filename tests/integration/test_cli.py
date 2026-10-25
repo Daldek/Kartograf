@@ -628,7 +628,7 @@ class TestCommandGroups:
     def test_hydro_group_registered(self):
         """``hydro download`` has only the flags of the group (ADR-039): the
         CZ network has no PL selections (``--teryt``, ``--sheet``) and no
-        content flags; the area, the national file and the store flags."""
+        content flags; the area, the national file and the write target."""
         parser = create_parser()
         group = next(
             action
@@ -651,6 +651,8 @@ class TestCommandGroups:
             "--geometry",
             "--layer",
             "--whole-country",
+            "--output-dir",
+            "-o",
             "--root",
             "--check",
             "--upgrade",

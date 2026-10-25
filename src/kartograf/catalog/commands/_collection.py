@@ -242,7 +242,7 @@ def collection_commands(
         )
     if content is not None:
         params += [replace(p, section=PRODUCT_TITLE) for p in content(products)]
-    params.append(shared.root(lambda: store_files([group])))
+    params += shared.target(lambda: store_files([group]))
     params += shared.update_params(
         check=check or CHECK_HELP,
         upgrade="Pobierz nowsza tresc, gdy sygnal zrodla ja wskazuje; pliki "
@@ -290,15 +290,15 @@ def collection_commands(
         "download_collection",
         "kartograf-download/1",
         tuple(params),
-        description=description[0],
+        description=f"{description[0]} {shared.PLAIN_NOTE}",
         effects=("network", "store_write"),
         project_task=True,
         check_function="check_collection",
         check_result_schema="kartograf-plan/1",
-        constraints=(*declared, *constraints),
+        constraints=(*declared, *constraints, *shared.target_constraints()),
         examples=tuple(examples),
         summary_pl=str(summary[1]),
-        description_pl=description[1],
+        description_pl=f"{description[1]} {shared.PLAIN_NOTE_PL}",
         rules=rules[0],
         rules_pl=rules[1],
         errors=DATA_ERRORS,

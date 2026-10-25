@@ -62,12 +62,18 @@ def _hsg(tmp_path, *argv):
 # --- landcover download and soil download ---------------------------------------
 
 
-@pytest.mark.parametrize("flags", [["--check", "--upgrade"], ["--upgrade", "--force"]])
-def test_landcover_update_flags_exclusive(tmp_path, flags, capsys):
+def test_landcover_check_and_upgrade_are_exclusive(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
-        _soil(tmp_path, *SOIL, *flags)
+        _soil(tmp_path, *SOIL, "--check", "--upgrade")
     assert exc.value.code == 2
     assert "not allowed with" in capsys.readouterr().err
+
+
+def test_landcover_upgrade_and_force_are_an_error_line(tmp_path, capsys):
+    rc = _soil(tmp_path, *SOIL, "--upgrade", "--force")
+
+    assert rc == 2
+    assert "Error: --upgrade i --force wykluczaja sie" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("command", [["landcover", "download"], ["soil", "hsg"]])

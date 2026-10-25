@@ -141,7 +141,7 @@ _DOWNLOAD_PARAMS = (
         ),
         accepts=PL_SHEETS,
     ),
-    shared.root(lambda: store_files(["soil"])),
+    *shared.target(lambda: store_files(["soil"])),
     *_update(
         "Z --check: zapisz plan aktualizacji (kartograf-plan/1); "
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)"
@@ -160,7 +160,7 @@ _HSG_PARAMS = (
         ),
         accepts=PL_SHEETS,
     ),
-    shared.root(lambda: HSG_OUTPUT_FILES),
+    *shared.target(lambda: HSG_OUTPUT_FILES),
     *shared.update_params(
         check=(
             "Compares the clay, sand and silt inputs with the SoilGrids "
@@ -206,13 +206,13 @@ COMMANDS = (
             "Fetches one SoilGrids layer (ISRIC, 250 m) for an area given "
             "by `sheet`, `bbox` or `geometry`; values keep the SoilGrids "
             "units. For hydrologic soil groups use `soil hsg`. Never "
-            "overwrites: new content is a new version."
+            f"overwrites: new content is a new version. {shared.PLAIN_NOTE}"
         ),
         effects=("network", "store_write"),
         project_task=True,
         check_function="check_soil",
         check_result_schema="kartograf-plan/1",
-        constraints=(_AREA_RULE,),
+        constraints=(_AREA_RULE, *shared.target_constraints()),
         examples=(
             Example(
                 {
@@ -240,7 +240,7 @@ COMMANDS = (
         description_pl=(
             "Pobierz jedna warstwe SoilGrids (--property, --depth, --stat; "
             "lista: kartograf soil list-layers) dla jednego obszaru: "
-            "--sheet, --bbox albo --geometry."
+            f"--sheet, --bbox albo --geometry. {shared.PLAIN_NOTE_PL}"
         ),
         rules=("Take `property`, `depth` and `stat` from `soil list-layers`.",),
         rules_pl=("Wez `property`, `depth` i `stat` z `soil list-layers`.",),
@@ -260,13 +260,14 @@ COMMANDS = (
             "one depth for an area and computes the groups A-D for the "
             "SCS-CN method. Inputs and the HSG raster are stored as "
             "versions; the HSG is recomputed only when the inputs change. "
+            "With `output_dir` only the HSG raster is written, as a plain file. "
             "For one SoilGrids layer use `soil download`."
         ),
         effects=("network", "store_write"),
         project_task=True,
         check_function="check_hsg",
         check_result_schema="kartograf-plan/1",
-        constraints=(_AREA_RULE,),
+        constraints=(_AREA_RULE, *shared.target_constraints()),
         examples=(
             Example(
                 {
@@ -283,7 +284,8 @@ COMMANDS = (
         description_pl=(
             "Pobierz clay (il), sand (piasek), silt (pyl) z SoilGrids dla "
             "wybranej glebokosci; uzyj statystyki mean (srednia) i oblicz "
-            "grupy hydrologiczne HSG dla metody SCS-CN."
+            "grupy hydrologiczne HSG dla metody SCS-CN. Z --output-dir zapisuje "
+            "tylko raster HSG, jako zwykly plik."
         ),
         rules=(("Give `depth`; add `summary` for the share and area of each group."),),
         rules_pl=(

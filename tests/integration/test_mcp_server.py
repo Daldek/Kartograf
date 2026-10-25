@@ -698,7 +698,7 @@ def test_check_refuses_the_options_of_a_run(tmp_path):
     hsg = {"depth": "0-5cm", "sheet": HSG_SHEET, "root": here}
     project = {"project_dir": here, "check": True}
     cases = [
-        ("kartograf_elevation_download", selection | {"update": "force"}, "update"),
+        ("kartograf_elevation_download", selection | {"update": "upgrade"}, "update"),
         ("kartograf_elevation_download", selection | {"plan": {}}, "plan"),
         ("kartograf_elevation_download", selection | {"workers": 2}, "workers"),
         (
@@ -1076,7 +1076,7 @@ def test_a_server_that_does_not_write_refuses_a_run_with_forbidden(
     report = error_of(call(tool, {**base, option: value}), code="forbidden")
 
     assert report["exit_code"] == 12
-    assert report["details"] == {"option": option}
+    assert report["details"] == {"reason": "writes_disabled", "option": option}
     assert report["command"] == tool.removeprefix("kartograf_").replace("_", " ", 1)
     assert FORBIDDEN_HINT in report["hint"] and "check=true" in report["hint"]
     assert list(tmp_path.iterdir()) == []  # nothing was fetched or written
@@ -1097,6 +1097,72 @@ def test_a_server_that_does_not_write_plans_what_a_run_would_do(tmp_path):
     assert (envelope["check"], envelope["command"]) == (True, "soil hsg")
     assert envelope["result"]["schema"] == "kartograf-plan/1"
     assert list(tmp_path.iterdir()) == []
+
+
+HSG = {"sheet": HSG_SHEET, "depth": "0-5cm"}
+
+
+@needs_mcp
+def test_a_writing_server_writes_plain_files_and_plans_the_replacement(tmp_path):
+    out = tmp_path / "plain"
+    with landcover_sources(soilgrids=RasterSoilGrids):
+        written = call(
+            "kartograf_soil_hsg", {**HSG, "output_dir": str(out)}, **writing(tmp_path)
+        )
+
+    assert written.is_error is False
+    report = written.structured_content["result"]
+    assert (report["mode"], report["root"], report["output_dir"]) == (
+        "plain",
+        None,
+        str(out),
+    )
+    (entry,) = report["files"]
+    assert entry["status"] == "written" and entry["path"].startswith(str(out))
+    assert [p.suffix for p in out.iterdir()] == [".tif"]  # the raster and nothing else
+    # a server that does not write plans the call as it stands: the file is a conflict;
+    # with update=force (a server that writes) the plan says replace
+    with landcover_sources(soilgrids=RasterSoilGrids):
+        plan = call("kartograf_soil_hsg", {**HSG, "output_dir": str(out)})
+        forced = call(
+            "kartograf_soil_hsg",
+            {**HSG, "output_dir": str(out), "check": True, "update": "force"},
+            **writing(tmp_path),
+        )
+
+    plans = [r.structured_content["result"] for r in (plan, forced)]
+    assert [p["mode"] for p in plans] == ["plain", "plain"]
+    assert [[i["action"] for i in p["items"]] for p in plans] == [
+        ["conflict"],
+        ["replace"],
+    ]
+    assert [p.name for p in out.iterdir()] == [Path(entry["path"]).name]
+
+
+@needs_mcp
+def test_output_dir_is_confined_like_every_path_and_excludes_root(tmp_path):
+    allowed, outside = tmp_path / "allowed", tmp_path / "outside"
+    allowed.mkdir()
+
+    refused = call(
+        "kartograf_soil_hsg",
+        {**HSG, "output_dir": str(outside)},
+        **writing(allowed),
+    )
+    both = call(
+        "kartograf_soil_hsg",
+        {**HSG, "output_dir": str(allowed / "a"), "root": str(allowed / "b")},
+        **writing(allowed),
+    )
+
+    forbidden = error_of(refused, code="forbidden", reason="outside_allowed_dirs")
+    assert (forbidden["details"]["option"], forbidden["exit_code"]) == (
+        "output_dir",
+        12,
+    )
+    exclusive = error_of(both, reason="exclusive_options")
+    assert exclusive["details"]["options"] == ["output_dir", "root"]
+    assert list(tmp_path.iterdir()) == [allowed] and list(allowed.iterdir()) == []
 
 
 @needs_mcp

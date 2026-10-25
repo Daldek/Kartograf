@@ -438,7 +438,7 @@ _DOWNLOAD_PARAMS = (
         ),
         unit="points/m2",
     ),
-    shared.root(_output_files),
+    *shared.target(_output_files, sheets=True),
     *shared.update_params(
         check=(
             "Cheap signal: the ETag of SM5 sheets, TM33 DMR 4G and DMP OK "
@@ -518,6 +518,7 @@ _DOWNLOAD_CONSTRAINTS = (
         "model",
         {"product": ["laz"]},
     ),
+    *shared.target_constraints(campaigns=True),
 )
 
 _DOWNLOAD_EXAMPLES = (
@@ -727,11 +728,10 @@ COMMANDS = (
         _DOWNLOAD_PARAMS,
         description=(
             "Fetches the DTM (NMT), DSM (NMPT), LAZ point clouds or CZ "
-            "contours of GUGiK (PL) and CUZK (CZ) into the versioned store."
-            " Select the area with a sheet code, `bbox` or `geometry`; "
+            "contours of GUGiK (PL) and CUZK (CZ) into the versioned store; "
             "`cutout` gives one WCS raster instead of sheets. Never "
-            "overwrites: new content is a new version. Not for imagery "
-            "(`imagery download`)."
+            "overwrites: new content is a new version. "
+            f"{shared.PLAIN_NOTE} Not for imagery (`imagery download`)."
         ),
         effects=("network", "store_write"),
         project_task=True,
@@ -753,7 +753,8 @@ COMMANDS = (
             "CZ: --model i arkusz SM5/TM33 albo obszar (arkusze z indeksu),"
             " bez --cutout i bez transformacji chmur. Warstwice CZ "
             "(--product contours --format SHP|DGN): ZIP arkusza SM5 1:1, "
-            "obszar = arkusze SM5 z indeksu, bez --cutout."
+            "obszar = arkusze SM5 z indeksu, bez --cutout. "
+            f"{shared.PLAIN_NOTE_PL}"
         ),
         rules=(
             (

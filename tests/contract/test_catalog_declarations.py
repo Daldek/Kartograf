@@ -732,14 +732,51 @@ def test_the_options_that_write_are_roots_or_outputs():
 
     assert {name for (_, name) in roles} == {
         "root",
+        "output_dir",
         "geometry",
         "project_dir",
         "path",
         "inject",
     }
     assert {role for (_, name), role in roles.items() if name == "root"} == {"root"}
+    assert {role for (_, name), role in roles.items() if name == "output_dir"} == {
+        "output"
+    }
     assert roles["project init", "project_dir"] == "output"
     assert roles["project status", "project_dir"] == "input"
+
+
+def test_every_data_command_has_both_targets_and_the_store_commands_say_store_only():
+    """DEV-19.1 and DEV-19.18: ``output_dir`` and ``root`` are one optional ``one_of``
+    group of every data command; the ``project`` commands and ``store init`` take
+    only ``root``, and their catalog entry says so."""
+    commands = _DECLARED.commands
+    with_output = {c.id for c in commands if _has(c, "output_dir")}
+    with_root = {c.id for c in commands if _has(c, "root")}
+    says_store_only = {c.id for c in commands if "Store only:" in " ".join(c.rules)}
+
+    assert with_output <= with_root
+    assert with_root - with_output == {
+        "project init",
+        "store entries",
+        "store init",
+        "store overview",
+    }
+    assert says_store_only == {"store init"} | {
+        c.id for c in commands if c.id.startswith("project ")
+    }
+    for command in commands:
+        if command.id in with_output:
+            target = next(c for c in command.constraints if c.group == "target")
+            assert (target.type, target.params, target.optional) == (
+                "one_of",
+                ("output_dir", "root"),
+                True,
+            ), command.id
+
+
+def _has(command: Command, name: str) -> bool:
+    return any(param.name == name for param in command.params)
 
 
 def test_group_texts_are_ascii_in_both_languages():

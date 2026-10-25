@@ -382,7 +382,7 @@ _DOWNLOAD_PARAMS = (
             "pelny = w granicach Polski; nie dziala z --cutout"
         ),
     ),
-    shared.root(_output_files),
+    *shared.target(_output_files, sheets=True),
     *shared.update_params(
         check=(
             "Signal: the GUGiK index for PL sheets, the release in the CUZK"
@@ -460,6 +460,7 @@ _DOWNLOAD_CONSTRAINTS = (
         "--year wyklucza sie z --min-year/--max-year",
         "year",
     ),
+    *shared.target_constraints(campaigns=True),
 )
 
 _DOWNLOAD_EXAMPLES = (
@@ -529,7 +530,7 @@ COMMANDS = (
             " (CZ) into the versioned store. Sheets are the source files "
             "1:1; `cutout` (PL orthophoto and true orthophoto) gives one "
             "WCS GeoTIFF. Never overwrites: new content is a new version. "
-            "Not for terrain (`elevation download`)."
+            f"{shared.PLAIN_NOTE} Not for terrain (`elevation download`)."
         ),
         effects=("network", "store_write"),
         project_task=True,
@@ -547,7 +548,7 @@ COMMANDS = (
             "arkusze SM5 aktualnego rocznika (archiwalne ortofoto CUZK sa "
             "platne), JPEG z plikami JGW w S-JTSK, TM33N i TM34N "
             "(--bbox/--geometry rozwija sie na arkusze SM5). Arkusze: pliki"
-            " zrodlowe 1:1, piksel zrodla."
+            f" zrodlowe 1:1, piksel zrodla. {shared.PLAIN_NOTE_PL}"
         ),
         rules=(
             ("Use `cutout` for one image of an area, sheets for the source files."),

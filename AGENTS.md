@@ -33,7 +33,7 @@ Rules:
 
 1. **Discover, do not guess:** `kartograf commands list` lists the commands and `kartograf commands schema` (option `command`) gives the options of one, with allowed values and their meanings, rules, examples and errors; in MCP use `kartograf_commands_list` and `kartograf_commands_schema`.
 2. **Select the data explicitly:** `product`, `resolution`, `vertical_crs` and the area: `sheet`, `bbox` with `bbox_crs`, or `geometry`, exactly one; `country` goes with a bbox or a geometry. Nothing is guessed: a missing argument is an error with a hint.
-3. **Absolute paths, outside the repository and /tmp:** `root` (CLI `--root`) is the store; a version is never overwritten, so a rerun is safe.
+3. **Absolute paths, outside the repository and /tmp:** `output_dir` (CLI `-o`) writes plain files, `root` (CLI `--root`) the versioned store, at most one; neither: the default store. A store never overwrites a version; a plain rerun is a `conflict` until `--force`.
 4. **Check, then run:** `--check` (MCP: `check`) plans without fetching; `--upgrade` fetches newer content, `--force` fetches again, and `--plan` runs a saved plan.
 5. **Decide by codes:** `status` of the envelope (`ok`, `partial`, `failed`), `code`, `details.option` and `details.reason`, or the exit code; `partial` and `failed` (exit 10 and 11) are results: read `items` and retry only the failed units.
 6. **Read `notices`:** non-fatal warnings (a skipped sheet, a mixed campaign); pass them on with the result.
@@ -60,7 +60,7 @@ An error is a `kartograf-error/1` document (`code`, `title`, `message`, `hint`, 
 | `no_data` | 14 | the source has no data there (`details.reason`): change area or year |
 | `store_unavailable` | 8 | the metadata cache is locked or unreadable: retry or `--no-cache`; a store root without its marker (`details.reason` `no_marker`): run `store init` |
 | `data_error` | 7 | a sidecar is unreadable or of another schema: see `details.path`; `invalid_layout`: see `details.problems` |
-| `conflict` | 4 | the target cannot be written (`details.reason`): a store root must be new or empty and never inside another store, see `hint` |
+| `conflict` | 4 | the target cannot be written (`details.reason`): `output_exists` (add `--force` or change `output_dir`), `output_in_store` (use `root`), a store root not new or empty or inside another store; see `hint` |
 | `missing_dependency` | 6 | an extra is missing: install it as `hint` says |
 | `forbidden` | 12 | MCP refused: a path outside `--allow-dir` or a write without `--allow-writes` |
 | `calculation_error` | 13 | a coordinate transformation failed: change the CRS or area |
