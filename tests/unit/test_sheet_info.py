@@ -221,7 +221,7 @@ def test_cz_sheets_have_no_hierarchy_children_or_descendants(
 
     assert error.value.option == option
     assert error.value.options == options
-    assert "tylko godel PL" in str(error.value)
+    assert "to PL sheet codes" in str(error.value)
     assert not isinstance(error.value, ParseError)
 
 
@@ -244,7 +244,7 @@ def test_descendants_scale_not_finer_than_the_sheet_is_an_error_of_the_option():
 
     assert error.value.option == "descendants"
     assert error.value.allowed is None
-    assert "musi byc wieksza" in str(error.value)
+    assert "must be larger" in str(error.value)
 
 
 @pytest.mark.parametrize("code", ["XYZ", "", "   ", "N-99-1", "6.179", "1:5000"])
@@ -258,7 +258,7 @@ def test_bad_code_is_parse_error_with_option_sheet(code):
         "invalid_sheet_code",
     )
     # the text of the CLI: the library's message and the CZ code formats
-    assert "Godla CZ: SM5 (np. CTES96)" in str(error.value)
+    assert "codes: SM5" in str(error.value)
 
 
 def test_bad_codes_that_are_not_text_or_off_the_tm33_grid():
@@ -269,8 +269,8 @@ def test_bad_codes_that_are_not_text_or_off_the_tm33_grid():
 
     assert number.value.option == "sheet"
     assert off_grid.value.option == "sheet"
-    assert "kafle co 2 km" in str(off_grid.value)
-    assert "Godla CZ:" not in str(off_grid.value)
+    assert "tiles every 2" in str(off_grid.value)
+    assert "CZ sheet codes:" not in str(off_grid.value)
 
 
 def test_arguments_of_a_wrong_type_name_their_option():
@@ -633,7 +633,7 @@ def test_an_unsupported_geometry_file_names_the_geometry(tmp_path):
         )
 
     assert error.value.option == "geometry"
-    assert "Nieobslugiwany format geometrii" in str(error.value)
+    assert "Unsupported geometry format: '" in str(error.value)
 
 
 def test_missing_keyword_arguments_are_a_type_error():

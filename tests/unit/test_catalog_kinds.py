@@ -274,9 +274,7 @@ def test_parse_per_country_names_the_flag_of_a_malformed_value(raw):
     with pytest.raises(ValidationError) as caught:
         parse_per_country(raw, "--vertical-crs")
 
-    assert str(caught.value).startswith(
-        f"--vertical-crs: nieprawidlowa wartosc {raw!r}"
-    )
+    assert str(caught.value).startswith(f"--vertical-crs: invalid value {raw!r}")
     assert "--vertical-crs pl=...,cz=..." in str(caught.value)
 
 

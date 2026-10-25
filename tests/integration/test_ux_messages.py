@@ -156,7 +156,7 @@ def test_area_outside_the_explicit_country_fails_before_network(tmp_path):
             product="network", output_dir=tmp_path, country="cz",
             bbox=BBox(-600000, -1100000, -590000, -1090000, "EPSG:2180"),
         )  # fmt: skip
-    assert str(error.value).startswith("--bbox (EPSG:2180) lezy poza CZ")
+    assert str(error.value).startswith("--bbox (EPSG:2180) lies outside CZ")
     assert "--bbox-crs EPSG:5514" in str(error.value)
     with pytest.raises(ValidationError) as error:
         validate_data_request(
@@ -165,7 +165,7 @@ def test_area_outside_the_explicit_country_fails_before_network(tmp_path):
             bbox=BBox(50.05, 19.93, 50.06, 19.94, "EPSG:4326"),
         )  # fmt: skip
     assert str(error.value).endswith(
-        "osie wygladaja na zamienione: --bbox 19.93,50.05,19.94,50.06"
+        "the axes look swapped: --bbox 19.93,50.05,19.94,50.06"
     )
 
 

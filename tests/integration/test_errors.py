@@ -993,7 +993,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "lezy poza PL",
+        "lies outside PL",
     ),
     _row(
         kartograf.download_collection,
@@ -1536,7 +1536,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "bbox odwrocony",
+        "bbox is inverted",
     ),
     _row(
         kartograf.download_data,
@@ -1544,7 +1544,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "bbox o zerowej powierzchni",
+        "with zero area",
     ),
     _row(
         kartograf.download_data,
@@ -1552,7 +1552,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "bbox o zerowej powierzchni",
+        "with zero area",
     ),
     _row(
         kartograf.download_data,
@@ -1563,7 +1563,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "poza zakresem EPSG:4326",
+        "Invalid bbox: coordinates",
     ),
     _row(
         kartograf.download_data,
@@ -1571,7 +1571,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "poza zakresem EPSG:4326",
+        "Invalid bbox: coordinates",
     ),
     _row(
         kartograf.download_data,
@@ -1590,7 +1590,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "poza zakresem EPSG:4326",
+        "Invalid bbox: coordinates",
     ),
     _row(
         kartograf.download_data,
@@ -1598,7 +1598,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         BBOX_CRS_CHOICES,
-        "nieobslugiwany uklad",
+        "unsupported CRS",
     ),
     _row(
         kartograf.download_data,
@@ -2007,7 +2007,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "lezy poza PL",
+        "lies outside PL",
     ),
     _row(
         kartograf.download_data,
@@ -2203,7 +2203,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "bbox odwrocony",
+        "bbox is inverted",
     ),
     _row(
         kartograf.check_availability,
@@ -2216,7 +2216,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "lezy poza CZ",
+        "lies outside CZ",
     ),
     _row(
         kartograf.check_availability,
@@ -2229,7 +2229,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "lezy poza PL",
+        "lies outside PL",
     ),
     _row(
         kartograf.check_availability,
@@ -2242,7 +2242,7 @@ OPTION_SCENARIOS = [
         "bbox",
         None,
         None,
-        "bbox o zerowej powierzchni",
+        "with zero area",
     ),
 ]
 

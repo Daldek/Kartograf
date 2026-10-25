@@ -23,6 +23,11 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   Polish by default (`--lang pl`); the last line of stderr is always English. The other
   library texts follow area by area (ADR-053, PROGRESS Next 25); a client that matched the
   Polish `hint` matches the English one or the `code` and `details`.
+- The library texts of the areas that moved into the message catalog are English by default and
+  Polish with `--lang pl` (ADR-053), area by area: the sheet code parsers and geometry readers
+  (`core`), `sheet_info`, the argument conversion (`catalog/kinds.py`) and the bbox check
+  (`Invalid bbox: <reason>. Expected: ...` is one catalog message). A client that matched the
+  Polish text matches the English one or the `code` and `details`.
 - The package lives in `src/kartograf/` (ECO-011). Import paths do not change;
   repeat an editable install made before (`uv sync --locked --all-extras`).
 - `kartograf.__version__` is `0.8.0.dev0` on `develop` (REL-1.1); the release
@@ -146,7 +151,7 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - The message catalog `kartograf.messages` (ADR-053): `message(key, lang="en", **values)`
   renders a `Text(en, pl)` entry of `kartograf.messages.<area>` as a `Message`, a `str` that
   remembers its key and values (`Message.localized(lang)`, `localize`, `reason`), with counted
-  nouns written `{n:plural(file|files)}`. `KartografError.localized(lang)`,
+  nouns written `{n:plural(file|files)}` and lists written `{items:join}`. `KartografError.localized(lang)`,
   `Notice.localized(lang)`, `error_report(exc, lang=)`, `config.human_language` and the
   CLI-only option `--lang pl|en` of every command (after it `KARTOGRAF_LANG`, `NOGAT_LANG`,
   `nogat.toml`, then `pl`) follow it. `tests/unit/test_messages.py` checks every entry,

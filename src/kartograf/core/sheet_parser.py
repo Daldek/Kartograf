@@ -16,6 +16,7 @@ from kartograf.core import parser_registry
 from kartograf.core.bbox import BBox as BBox
 from kartograf.core.bbox import transform_bbox, validate_bbox
 from kartograf.exceptions import ParseError, ValidationError
+from kartograf.messages import message
 
 
 def _is_pl2000_format(sheet: str) -> bool:
@@ -28,12 +29,7 @@ _PL2000_ZONES = ("5", "6", "7", "8")
 
 def _zone_number_error(sheet: str) -> ParseError:
     """Build the error for a bare PL-2000 zone number used as a sheet code."""
-    return ParseError(
-        f"Nieprawidlowe godlo: '{sheet}'. "
-        f"To numer strefy PL-2000, a nie godlo arkusza. "
-        f"Najgrubsze godlo PL-2000 ma format strefa.pas.slup "
-        f"(1:10000), np. 6.179.12."
-    )
+    return ParseError(message("core.zone_number_not_sheet", sheet=sheet))
 
 
 class SheetParser:
@@ -151,11 +147,13 @@ class SheetParser:
         '1:100000'
         """
         if not isinstance(sheet, str):
-            raise ParseError(f"Godlo musi byc stringiem, otrzymano: {type(sheet)}")
+            raise ParseError(
+                message("core.sheet_code_must_be_string", sheet_type=type(sheet))
+            )
 
         cleaned = sheet.strip()
         if not cleaned:
-            raise ParseError("Godlo nie moze byc puste")
+            raise ParseError(message("core.sheet_code_must_not_be_empty"))
 
         # Auto-detect PL-2000 format (dots + digits only, starts with 5-8)
         if _is_pl2000_format(cleaned):
@@ -163,8 +161,11 @@ class SheetParser:
 
             if sheet_system is not None and sheet_system != "2000":
                 raise ValidationError(
-                    f"Godlo '{cleaned}' ma format PL-2000, ale podano "
-                    f"sheet_system='{sheet_system}'"
+                    message(
+                        "core.sheet_code_has_pl_2000_format",
+                        cleaned=cleaned,
+                        sheet_system=sheet_system,
+                    )
                 )
             self._pl2000: Parser2000 | None = Parser2000(cleaned)
             self._original_sheet = cleaned
@@ -177,8 +178,7 @@ class SheetParser:
                 raise _zone_number_error(cleaned)
             if sheet_system is not None and sheet_system == "2000":
                 raise ValidationError(
-                    f"Godlo '{cleaned}' ma format PL-1992, ale podano "
-                    "sheet_system='2000'"
+                    message("core.sheet_code_has_pl_1992_format", cleaned=cleaned)
                 )
             self._pl2000 = None
             self._original_sheet = cleaned
@@ -265,8 +265,11 @@ class SheetParser:
 
         if system not in self.VALID_SYSTEMS:
             raise ValidationError(
-                f"Nieprawidlowy uklad: '{system}'. "
-                f"Dozwolone wartosci: {', '.join(self.VALID_SYSTEMS)}"
+                message(
+                    "core.invalid_system_allowed_values",
+                    system=system,
+                    valid_systems=", ".join(self.VALID_SYSTEMS),
+                )
             )
 
         return system
@@ -293,9 +296,9 @@ class SheetParser:
             raise _zone_number_error(self._original_sheet)
 
         raise ParseError(
-            f"Nieprawidlowe godlo: '{self._original_sheet}'. "
-            f"Oczekiwano godla PL-1992 (np. N-34-130-D-d-2-4) "
-            f"albo PL-2000 (np. 6.179.12)."
+            message(
+                "core.sheet_code_unknown_format", original_sheet=self._original_sheet
+            )
         )
 
     def _parse_components(self) -> dict[str, str]:
@@ -311,7 +314,9 @@ class SheetParser:
         match = re.match(pattern, self._sheet)
 
         if not match:
-            raise ParseError(f"Blad parsowania godla: {self._sheet}")
+            raise ParseError(
+                message("core.sheet_code_parsing_error", sheet=self._sheet)
+            )
 
         groups = match.groups()
         components = {}
@@ -334,16 +339,19 @@ class SheetParser:
         pas = self._components["pas"]
         slup = int(self._components["slup"])
         if pas not in self.VALID_BANDS:
-            problems.append(f"pas {pas} (dozwolone: M, N)")
+            problems.append(message("core.row_allowed_m", pas=pas))
         if slup not in self.VALID_COLUMNS:
-            problems.append(f"slup {slup} (dozwolone: 33-35)")
+            problems.append(message("core.column_allowed_33_35", slup=slup))
         sheet = self._components.get("arkusz_200k", "")
         if sheet.isdigit() and int(sheet) not in self.VALID_SHEET_NUMBERS:
-            problems.append(f"arkusz {sheet} (dozwolone: 1-144)")
+            problems.append(message("core.sheet_allowed_1_144", sheet=sheet))
         if problems:
             raise ParseError(
-                f"Nieprawidlowe godlo: '{self._original_sheet}' - poza zakresem "
-                f"nomenklatury PL-1992: {', '.join(problems)}"
+                message(
+                    "core.sheet_code_out_of_range",
+                    original_sheet=self._original_sheet,
+                    problems=problems,
+                )
             )
 
     @property
@@ -375,7 +383,12 @@ class SheetParser:
 
     def __str__(self) -> str:
         """Return a readable representation of the sheet."""
-        return f"{self._sheet} (skala {self._scale}, uklad {self._system})"
+        return message(
+            "core.scale_system",
+            sheet=self._sheet,
+            scale=self._scale,
+            system=self._system,
+        )
 
     def __eq__(self, other: object) -> bool:
         """Compare two parsers by sheet code and coordinate system."""
@@ -618,8 +631,11 @@ class SheetParser:
 
         if target_scale not in self.SCALE_HIERARCHY:
             raise ValidationError(
-                f"Nieprawidlowa skala: '{target_scale}'. "
-                f"Dozwolone: {', '.join(self.SCALE_HIERARCHY)}"
+                message(
+                    "core.invalid_scale_allowed_2",
+                    target_scale=target_scale,
+                    scale_hierarchy=", ".join(self.SCALE_HIERARCHY),
+                )
             )
 
         current_idx = self.SCALE_HIERARCHY.index(self._scale)
@@ -627,8 +643,11 @@ class SheetParser:
 
         if target_idx <= current_idx:
             raise ValidationError(
-                f"Skala docelowa {target_scale} musi byc wieksza "
-                f"(bardziej szczegolowa) niz biezaca {self._scale}"
+                message(
+                    "core.target_scale_must_be_larger",
+                    target_scale=target_scale,
+                    scale=self._scale,
+                )
             )
 
         # Collect the descendants recursively
@@ -724,10 +743,7 @@ class SheetParser:
                 "EPSG:2180",
             )
 
-        raise ValidationError(
-            f"Nieobslugiwany uklad wspolrzednych: {crs}. "
-            "Obslugiwane: EPSG:2180, EPSG:4326"
-        )
+        raise ValidationError(message("core.unsupported_coordinate_system_2", crs=crs))
 
     def _calculate_wgs84_bbox(self) -> tuple[Any, ...]:
         """
@@ -927,7 +943,7 @@ def series_scale(parts: int) -> str:
     """
     scale = _SERIES_SCALE.get(parts)
     if scale is None:
-        raise ValueError(f"Seria arkuszy PL-1992 o {parts} czlonach nie istnieje")
+        raise ValueError(f"The PL-1992 sheet series with {parts} parts does not exist")
     return scale
 
 
@@ -1070,7 +1086,7 @@ def find_sheets_for_bbox(
     """
     if sheet_system not in ("1992", "2000"):
         raise ValidationError(
-            f"Nieobslugiwany system godel: {sheet_system!r}. Dozwolone: '1992', '2000'"
+            message("core.unsupported_sheet_system", sheet_system=sheet_system)
         )
 
     validate_bbox(bbox)
@@ -1082,13 +1098,20 @@ def find_sheets_for_bbox(
 
     if target_scale not in SheetParser.SCALE_HIERARCHY:
         raise ValidationError(
-            f"Nieprawidlowa skala: '{target_scale}'. "
-            f"Dozwolone: {', '.join(SheetParser.SCALE_HIERARCHY)}"
+            message(
+                "core.invalid_scale_allowed_2",
+                target_scale=target_scale,
+                scale_hierarchy=", ".join(SheetParser.SCALE_HIERARCHY),
+            )
         )
 
     if bbox.crs not in PL_BBOX_CRS:
         raise ValidationError(
-            f"Nieobslugiwany CRS: '{bbox.crs}'. Obslugiwane: {', '.join(PL_BBOX_CRS)}"
+            message(
+                "core.unsupported_crs_supported",
+                crs=bbox.crs,
+                pl_bbox_crs=", ".join(PL_BBOX_CRS),
+            )
         )
 
     # Normalize to WGS84. Densified envelope (core.bbox): in PUWG 1992 a line of

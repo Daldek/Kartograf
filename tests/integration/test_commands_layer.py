@@ -307,32 +307,32 @@ def test_format_command_rejects_options_that_do_not_belong():
         (
             {"workers": "4"},
             "workers",
-            "opcja workers: oczekiwano liczba calkowita, podano '4'",
+            "option workers: expected integer, got '4'",
         ),
         (
             {"workers": True},
             "workers",
-            "opcja workers: oczekiwano liczba calkowita, podano True",
+            "option workers: expected integer, got True",
         ),
         (
             {"upgrade": "tak"},
             "upgrade",
-            "opcja upgrade: oczekiwano true, podano 'tak'",
+            "option upgrade: expected true, got 'tak'",
         ),
         (
             {"output_dir": 5},
             "output_dir",
-            "opcja output_dir: oczekiwano niepusta sciezka (napis), podano 5",
+            "option output_dir: expected non-empty path (string), got 5",
         ),
         (
             {"plan": {"items": []}},
             "plan",
-            "opcja plan: oczekiwano niepusta sciezka (napis), podano {'items': []}",
+            "option plan: expected non-empty path (string), got {'items': []}",
         ),
         # the library argument ``update`` has no flag: the flags are --upgrade
         # and --force; a task option does not belong among the flags of a run
-        ({"update": "upgrade"}, "update", "nieznana opcja 'update'"),
-        ({"sheet": G}, "sheet", "nieznana opcja 'sheet'"),
+        ({"update": "upgrade"}, "update", "unknown option 'update'"),
+        ({"sheet": G}, "sheet", "unknown option 'sheet'"),
     ],
     ids=[
         "workers-text",

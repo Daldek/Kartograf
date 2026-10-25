@@ -28,12 +28,10 @@ from kartograf.core.parser_registry import detect_system, ztm_sheet_system
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox
 from kartograf.exceptions import ParseError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.serialization import Document
 
-_CZ_CODES = (
-    "Godla CZ: SM5 (np. CTES96), kafel TM33 (np. 302_5550), ZTM (np. 0510-D-11, "
-    "NM-34-07-1-D-15)."
-)
+_CZ_CODES = message("sheet_info.cz_codes")
 _SM5_CRS = "EPSG:5514"
 # ZTM map sheets by their ``sheet_system`` value (``--sheet-system``).
 _ZTM_CRS = {"sjtsk": "EPSG:5514", "etrs89": "EPSG:3045"}
@@ -178,7 +176,7 @@ def _accepting(system: str) -> tuple[str, ...]:
 def _require_flag(value: object, flag: str, option: str) -> None:
     if not isinstance(value, bool):
         raise ValidationError(
-            f"{flag} musi byc przelacznikiem (True albo False), otrzymano {value!r}",
+            message("sheet_info.must_be_switch", flag=flag, value=value),
             option=option,
         )
 
@@ -268,12 +266,13 @@ def describe_sheet(
     _require_flag(children, "--children", "children")
     if descendants is not None and not isinstance(descendants, str):
         raise ValidationError(
-            f"--descendants musi byc napisem (str), otrzymano {descendants!r}",
+            message("sheet_info.descendants_must_be_string", descendants=descendants),
             option="descendants",
         )
     if not isinstance(sheet, str):
         raise ParseError(
-            f"Godlo musi byc stringiem, otrzymano: {type(sheet)}", option="sheet"
+            message("core.sheet_code_must_be_string", sheet_type=type(sheet)),
+            option="sheet",
         )
     code = sheet.strip()
     asked = [
@@ -289,8 +288,7 @@ def describe_sheet(
     if cz is not None:
         if asked:
             raise ValidationError(
-                "--hierarchy, --children i --descendants dotycza tylko godel PL "
-                "(PL-1992, PL-2000)",
+                message("sheet_info.hierarchy_children_descendants_apply"),
                 option=asked[0],
                 options=asked if len(asked) > 1 else None,
             )
@@ -299,11 +297,23 @@ def describe_sheet(
         parser = SheetParser(code)
     except ParseError as error:
         raise ParseError(
-            f"{error} {_CZ_CODES}", option="sheet", hint=error.hint
+            message(
+                "sheet_info.error_with_cz_codes",
+                error=reason(error),
+                cz_codes=_CZ_CODES,
+            ),
+            option="sheet",
+            hint=error.hint,
         ) from error
     except ValidationError as error:
         raise ValidationError(
-            f"{error} {_CZ_CODES}", option="sheet", hint=error.hint
+            message(
+                "sheet_info.error_with_cz_codes",
+                error=reason(error),
+                cz_codes=_CZ_CODES,
+            ),
+            option="sheet",
+            hint=error.hint,
         ) from error
     components = parser.components
     zone = int(components["strefa"]) if parser.sheet_system == "2000" else None
@@ -399,23 +409,23 @@ def find_sheets(
     ]
     if len(given) != 1:
         raise ValidationError(
-            "Podaj dokladnie jeden wybor obszaru: bbox albo geometry",
+            message("sheet_info.give_exactly_one_area_choice"),
             options=("bbox", "geometry"),
         )
     if layer is not None:
         if not isinstance(layer, str):
             raise ValidationError(
-                f"layer musi byc napisem (str), otrzymano {layer!r}", option="layer"
+                message("sheet_info.layer_must_be_string", layer=layer), option="layer"
             )
         if geometry is None:
             raise ValidationError(
-                "layer dotyczy tylko geometry (warstwa pliku GPKG z obszarem)",
+                message("sheet_info.layer_applies_only_geometry"),
                 option="layer",
             )
     if bbox is not None:
         if not isinstance(bbox, BBox):
             raise ValidationError(
-                f"bbox musi byc obiektem BBox (z ukladem), otrzymano {bbox!r}",
+                message("sheet_info.bbox_must_be_bbox_object", bbox=bbox),
                 option="bbox",
             )
         try:
@@ -429,7 +439,7 @@ def find_sheets(
     else:
         if not isinstance(geometry, str | os.PathLike):
             raise ValidationError(
-                f"geometry musi byc sciezka pliku, otrzymano {geometry!r}",
+                message("sheet_info.geometry_must_be_file_path", geometry=geometry),
                 option="geometry",
             )
         path = Path(geometry)

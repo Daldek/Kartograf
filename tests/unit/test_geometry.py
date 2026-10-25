@@ -689,7 +689,7 @@ class TestReadShpBboxes:
 
     def test_missing_prj_raises_error(self, shp_no_prj):
         """Brak pliku .prj file raises ValidationError."""
-        with pytest.raises(ValidationError, match="Brak pliku .prj"):
+        with pytest.raises(ValidationError, match=".prj file of"):
             read_feature_bboxes(shp_no_prj, target_crs="EPSG:2180")
 
     def test_point_shapes_yield_degenerate_bboxes(self, shp_points_epsg2180):
@@ -751,7 +751,7 @@ class TestReadGpkgBboxes:
 
     def test_invalid_layer_raises_error(self, gpkg_multi_layer):
         """Requesting non-existent layer raises ValidationError."""
-        with pytest.raises(ValidationError, match="Brak warstwy"):
+        with pytest.raises(ValidationError, match="No layer '"):
             read_feature_bboxes(
                 gpkg_multi_layer, layer="nonexistent", target_crs="EPSG:2180"
             )
@@ -788,7 +788,7 @@ class TestReadGpkgBboxes:
 
     def test_no_feature_tables_raises_error(self, gpkg_no_features):
         """GPKG without feature tables raises ValidationError."""
-        with pytest.raises(ValidationError, match="Brak tabel obiektow"):
+        with pytest.raises(ValidationError, match="feature tables"):
             read_feature_bboxes(gpkg_no_features, target_crs="EPSG:2180")
 
     def test_no_envelope_point_feature_is_read(self, gpkg_no_envelope):
@@ -837,7 +837,7 @@ class TestReadFeatureBboxes:
         """Nieobslugiwany format raises ValidationError."""
         geojson = tmp_path / "test.geojson"
         geojson.write_text("{}")
-        with pytest.raises(ValidationError, match="Nieobslugiwany format geometrii"):
+        with pytest.raises(ValidationError, match="Unsupported geometry format: '"):
             read_feature_bboxes(geojson)
 
 
@@ -868,7 +868,7 @@ class TestGetOverallBbox:
 
     def test_no_features_raises_error(self, gpkg_no_features_geom):
         """Brak obiektow with geometry raises ValidationError."""
-        with pytest.raises(ValidationError, match="Brak obiektow"):
+        with pytest.raises(ValidationError, match="No features"):
             get_overall_bbox(gpkg_no_features_geom)
 
 
@@ -891,7 +891,7 @@ class TestReadSourceCrs:
     def test_shp_missing_prj_raises(self, shp_no_prj):
         from kartograf.core.geometry import read_source_crs
 
-        with pytest.raises(ValidationError, match="Brak pliku .prj"):
+        with pytest.raises(ValidationError, match=".prj file of"):
             read_source_crs(shp_no_prj)
 
     def test_gpkg_crs(self, gpkg_epsg2180):
@@ -912,7 +912,7 @@ class TestReadSourceCrs:
     def test_gpkg_unknown_layer_raises(self, gpkg_multi_layer):
         from kartograf.core.geometry import read_source_crs
 
-        with pytest.raises(ValidationError, match="w GeoPackage"):
+        with pytest.raises(ValidationError, match="in the GeoPackage."):
             read_source_crs(gpkg_multi_layer, layer="nie_ma")
 
     def test_unsupported_format_raises(self, tmp_path):
@@ -920,7 +920,7 @@ class TestReadSourceCrs:
 
         path = tmp_path / "area.geojson"
         path.write_text("{}", encoding="utf-8")
-        with pytest.raises(ValidationError, match="Nieobslugiwany format geometrii"):
+        with pytest.raises(ValidationError, match="Unsupported geometry format: '"):
             read_source_crs(path)
 
 

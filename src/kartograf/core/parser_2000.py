@@ -17,6 +17,7 @@ from kartograf.core.sheet_parser import (
     _expand_degenerate,
 )
 from kartograf.exceptions import ParseError, ValidationError
+from kartograf.messages import message
 
 # PL-2000 scale hierarchy (from coarsest to finest)
 SCALE_HIERARCHY_2000 = ["1:10000", "1:5000", "1:2000", "1:1000", "1:500"]
@@ -125,18 +126,17 @@ class Parser2000:
             If ark_2k is outside the range 01-25.
         """
         if not isinstance(sheet, str):
-            raise ParseError(f"Godlo musi byc stringiem, otrzymano: {type(sheet)}")
+            raise ParseError(
+                message("core.sheet_code_must_be_string", sheet_type=type(sheet))
+            )
 
         sheet = sheet.strip()
         if not sheet:
-            raise ParseError("Godlo nie moze byc puste")
+            raise ParseError(message("core.sheet_code_must_not_be_empty"))
 
         # Reject the PL-1992 format (dashes)
         if "-" in sheet:
-            raise ParseError(
-                f"Nieprawidlowe godlo PL-2000: '{sheet}'. "
-                f"Format PL-1992 (z myslnikami) nie jest obslugiwany przez Parser2000."
-            )
+            raise ParseError(message("core.pl2000_code_is_pl1992", sheet=sheet))
 
         self._sheet = sheet
         self._scale = self._determine_scale()
@@ -161,10 +161,7 @@ class Parser2000:
             if re.match(pattern, self._sheet):
                 return scale
 
-        raise ParseError(
-            f"Nieprawidlowe godlo PL-2000: '{self._sheet}'. "
-            f"Godlo musi byc w formacie: strefa.pas.slup[.subdivisions]"
-        )
+        raise ParseError(message("core.pl2000_code_format", sheet=self._sheet))
 
     def _parse_components(self) -> dict[str, str]:
         """
@@ -179,7 +176,9 @@ class Parser2000:
         match = re.match(pattern, self._sheet)
 
         if not match:
-            raise ParseError(f"Blad parsowania godla: {self._sheet}")
+            raise ParseError(
+                message("core.sheet_code_parsing_error", sheet=self._sheet)
+            )
 
         names = self._COMPONENT_NAMES[self._scale]
         return dict(zip(names, match.groups(), strict=True))
@@ -198,8 +197,7 @@ class Parser2000:
             if ark_2k < 1 or ark_2k > 25:
                 ark_val = self._components["ark_2k"]
                 raise ValidationError(
-                    f"Nieprawidlowy numer arkusza 1:2000: {ark_val}. "
-                    f"Dozwolone wartosci: 01-25."
+                    message("core.invalid_1_2000_sheet_number", ark_val=ark_val)
                 )
 
     # =========================================================================
@@ -258,7 +256,7 @@ class Parser2000:
 
     def __str__(self) -> str:
         """Return a readable representation of the sheet."""
-        return f"{self._sheet} (skala {self._scale}, uklad 2000)"
+        return message("core.scale_system_2000", sheet=self._sheet, scale=self._scale)
 
     # =========================================================================
     # BBox
@@ -296,8 +294,11 @@ class Parser2000:
 
         if crs not in _SUPPORTED_CRS:
             raise ValidationError(
-                f"Nieobslugiwany uklad wspolrzednych: {crs}. "
-                f"Obslugiwane: {', '.join(sorted(_SUPPORTED_CRS))}"
+                message(
+                    "core.unsupported_coordinate_system",
+                    crs=crs,
+                    supported_crs=", ".join(sorted(_SUPPORTED_CRS)),
+                )
             )
 
         # Compute the bbox in the native CRS of the zone
@@ -505,8 +506,11 @@ class Parser2000:
         # Check whether target_scale is finer
         if target_scale not in SCALE_HIERARCHY_2000:
             raise ValidationError(
-                f"Nieznana skala: {target_scale}. "
-                f"Dozwolone: {', '.join(SCALE_HIERARCHY_2000)}"
+                message(
+                    "core.unknown_scale_allowed",
+                    target_scale=target_scale,
+                    scale_hierarchy_2000=", ".join(SCALE_HIERARCHY_2000),
+                )
             )
 
         # Find the indices in the hierarchy
@@ -515,8 +519,11 @@ class Parser2000:
 
         if target_idx < current_idx:
             raise ValidationError(
-                f"Skala docelowa {target_scale} jest grubsza niz "
-                f"biezaca skala {self._scale}."
+                message(
+                    "core.target_scale_coarser_current_scale",
+                    target_scale=target_scale,
+                    scale=self._scale,
+                )
             )
 
         # Special case: from 1:10000 to 1:5000 - the 5k branch
@@ -526,16 +533,21 @@ class Parser2000:
         # Special case: nothing below 1:5000 (leaves)
         if self._scale == "1:5000" and target_scale != "1:5000":
             raise ValidationError(
-                f"Arkusz 1:5000 nie ma potomkow w skali {target_scale}. "
-                f"Galaz 1:5000 jest niezalezna i nie ma drobniejszych podzialkow."
+                message(
+                    "core.sheet_1_5000_has_no_descendants", target_scale=target_scale
+                )
             )
 
         # Recursively: expand the children down to target_scale
         children = self.get_children()
         if not children:
             raise ValidationError(
-                f"Arkusz {self._sheet} ({self._scale}) nie ma potomkow "
-                f"w skali {target_scale}."
+                message(
+                    "core.sheet_has_no_descendants_scale",
+                    sheet=self._sheet,
+                    scale=self._scale,
+                    target_scale=target_scale,
+                )
             )
 
         if children[0].scale == target_scale:
@@ -677,8 +689,11 @@ def find_sheets_2000_for_bbox(
     """
     if target_scale not in SCALE_HIERARCHY_2000:
         raise ValidationError(
-            f"Nieprawidlowa skala: '{target_scale}'. "
-            f"Dozwolone: {', '.join(SCALE_HIERARCHY_2000)}"
+            message(
+                "core.invalid_scale_allowed",
+                target_scale=target_scale,
+                scale_hierarchy_2000=", ".join(SCALE_HIERARCHY_2000),
+            )
         )
 
     validate_bbox(bbox)

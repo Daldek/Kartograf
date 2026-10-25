@@ -22,7 +22,7 @@ class TestParserTM33Parsing:
         assert ParserTM33("  302_5550 ").sheet == "302_5550"
 
     def test_non_string_raises_parse_error(self):
-        with pytest.raises(ParseError, match="stringiem"):
+        with pytest.raises(ParseError, match="TM33 sheet code must be"):
             ParserTM33(123)
 
     @pytest.mark.parametrize(
@@ -36,7 +36,7 @@ class TestParserTM33Parsing:
     @pytest.mark.parametrize("sheet", ["303_5550", "302_5551", "301_5549"])
     def test_odd_kilometers_raise(self, sheet):
         """Tiles every 2 km - odd kilometres are not an SW corner."""
-        with pytest.raises(ParseError, match="parzyste"):
+        with pytest.raises(ParseError, match="must be even"):
             ParserTM33(sheet)
 
 

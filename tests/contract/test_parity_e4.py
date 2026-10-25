@@ -147,6 +147,6 @@ def test_invalid_options_match_cli_and_api(
     fake = serve(monkeypatch)
     run = _landcover(tmp_path, source, flags, **options)
     assert run.cli_code == 2 and isinstance(run.api_error, ValidationError)
-    assert run.cli_text == f"Error: {run.api_error}\n"
+    assert run.cli_text == f"Error: {run.api_error.localized('pl')}\n"
     assert not run.cli_store.exists() and not run.api_store.exists()
     assert fake.calls == []

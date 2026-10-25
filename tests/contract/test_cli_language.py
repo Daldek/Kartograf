@@ -72,12 +72,14 @@ def _library_errors():
 
 
 @pytest.mark.parametrize("call", list(_library_errors()))
-def test_library_error_paths_are_ascii_polish(call, tmp_path, monkeypatch):
+def test_library_error_paths_are_ascii_and_polish_on_request(
+    call, tmp_path, monkeypatch
+):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(KartografError) as exc:
         call()
-    text = str(exc.value)
-    assert text.isascii(), text
+    text = exc.value.localized("pl")
+    assert str(exc.value).isascii() and text.isascii(), text
     assert any(
         word in text.lower()
         for word in ("wymagane", "nieprawidlow", "nie ", "dostepne", "podaj")

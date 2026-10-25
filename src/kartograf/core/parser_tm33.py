@@ -11,6 +11,7 @@ import math
 from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import CZ_TM33_PATTERN
 from kartograf.exceptions import ParseError, ValidationError
+from kartograf.messages import message
 
 TM33_CRS = "EPSG:3045"
 TILE_SIZE_M = 2000
@@ -24,20 +25,18 @@ class ParserTM33:
     def __init__(self, sheet: str):
         if not isinstance(sheet, str):
             raise ParseError(
-                f"Godlo TM33 musi byc stringiem, otrzymano: {type(sheet).__name__}"
+                message(
+                    "core.tm33_sheet_code_must_be_string",
+                    sheet_type=type(sheet).__name__,
+                )
             )
         sheet = sheet.strip()
         match = CZ_TM33_PATTERN.match(sheet)
         if not match:
-            raise ParseError(
-                f"Niepoprawne godlo TM33: '{sheet}' (oczekiwano EEE_NNNN, np. 302_5550)"
-            )
+            raise ParseError(message("core.tm33_code_format", sheet=sheet))
         e_km, n_km = int(match.group(1)), int(match.group(2))
         if e_km % 2 or n_km % 2:
-            raise ParseError(
-                f"Niepoprawne godlo TM33: '{sheet}' "
-                f"(kafle co 2 km - kilometry musza byc parzyste)"
-            )
+            raise ParseError(message("core.tm33_code_odd_km", sheet=sheet))
         self.sheet = sheet
         self._west = e_km * 1000
         self._south = n_km * 1000
@@ -72,12 +71,19 @@ def find_tiles_tm33_for_bbox(bbox: BBox) -> list[str]:
     """
     if bbox.crs != TM33_CRS:
         raise ValidationError(
-            f"find_tiles_tm33_for_bbox wymaga bbox w {TM33_CRS}, otrzymano: {bbox.crs}"
+            message(
+                "core.find_tiles_tm33_bbox_needs_bbox", tm33_crs=TM33_CRS, crs=bbox.crs
+            )
         )
     if bbox.min_x >= bbox.max_x or bbox.min_y >= bbox.max_y:
         raise ValidationError(
-            f"Niepoprawny bbox: ({bbox.min_x}, {bbox.min_y}, "
-            f"{bbox.max_x}, {bbox.max_y})"
+            message(
+                "core.invalid_bbox",
+                min_x=bbox.min_x,
+                min_y=bbox.min_y,
+                max_x=bbox.max_x,
+                max_y=bbox.max_y,
+            )
         )
     e_start = int(math.floor(bbox.min_x / TILE_SIZE_M)) * TILE_SIZE_M
     n_start = int(math.floor(bbox.min_y / TILE_SIZE_M)) * TILE_SIZE_M

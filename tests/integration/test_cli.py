@@ -185,7 +185,7 @@ class TestParseBboxArg:
         inverted bbox (the sheet finder still accepts a point)."""
         from kartograf.catalog.kinds import parse_bbox_arg
 
-        with pytest.raises(ValidationError, match="bbox o zerowej powierzchni") as exc:
+        with pytest.raises(ValidationError, match="with zero area") as exc:
             parse_bbox_arg(text, "EPSG:2180")
         assert exc.value.option == "bbox"
 
@@ -194,20 +194,20 @@ class TestParseBboxArg:
 
         with pytest.raises(ValidationError) as exc:
             parse_bbox_arg("626000,480000,628000,482000", "EPSG:4326")
-        assert "poza zakresem EPSG:4326" in str(exc.value)
+        assert "Invalid bbox: coordinates" in str(exc.value)
         assert exc.value.option == "bbox" and "--bbox-crs" in (exc.value.hint or "")
 
     @pytest.mark.parametrize(
         ("text", "reason"),
         [
-            ("1,2,3", "oczekiwano 4 wartosci rozdzielonych przecinkami, podano 3"),
-            ("1,2,3,4,", "oczekiwano 4 wartosci rozdzielonych przecinkami, podano 5"),
-            ("1;2;3;4", "podano 1"),
-            ("a,2,3,4", "'a' nie jest liczba"),
+            ("1,2,3", "expected 4 comma-separated values, got 3"),
+            ("1,2,3,4,", "expected 4 comma-separated values, got 5"),
+            ("1;2;3;4", "got 1"),
+            ("a,2,3,4", "'a' is not a number"),
             ("10,10,5,5", "min > max"),
             ("1,10,5,5", "min > max"),
-            ("nan,1,2,3", "skonczone"),
-            ("1,2,inf,4", "skonczone"),
+            ("nan,1,2,3", "must be finite"),
+            ("1,2,inf,4", "must be finite"),
         ],
     )
     def test_invalid(self, text, reason):
@@ -216,9 +216,9 @@ class TestParseBboxArg:
         with pytest.raises(ValidationError) as exc:
             parse_bbox_arg(text, "EPSG:2180")
         msg = str(exc.value)
-        assert msg.startswith("Nieprawidlowy bbox: ")
+        assert msg.startswith("Invalid bbox: ")
         assert reason in msg
-        assert "Oczekiwano: min_x,min_y,max_x,max_y" in msg
+        assert "Expected: min_x,min_y,max_x,max_y" in msg
 
 
 class TestCreateParserSheetStrip:
@@ -2249,7 +2249,7 @@ class TestNmt5mKron86Rejected:
         task = ns("KRON86")
         with pytest.raises(ValidationError) as kron:
             resolve_pl_options(task, code_system="1992")
-        assert f"Error: {kron.value}" == _5M_KRON86_ERROR
+        assert f"Error: {kron.value.localized('pl')}" == _5M_KRON86_ERROR
         assert task.vertical_crs == "KRON86"  # no silent swap
 
 

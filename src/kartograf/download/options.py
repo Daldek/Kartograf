@@ -30,6 +30,7 @@ from kartograf.download.cz_contours import contours_formats
 from kartograf.download.cz_orto import cz_orto_sheet
 from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, orto_cutout_error
 from kartograf.exceptions import ParseError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
     coverage_choices,
@@ -288,7 +289,7 @@ BBOX_CRS_CHOICES = (
 )
 
 
-BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
+BBOX_EXPECTED = message("options.expected_min_x_min_y_max")
 # Limits of an EPSG:4326 bbox in degrees (``validate_request_bbox``).
 _LON_LIMIT = 180.0
 _LAT_LIMIT = 90.0
@@ -973,8 +974,11 @@ def validate_request_bbox(bbox: BBox) -> BBox:
     bbox = canonical_bbox(bbox)
     if bbox.crs not in BBOX_CRS_CHOICES:
         raise ValidationError(
-            f"Nieprawidlowy bbox: nieobslugiwany uklad {bbox.crs!r} - dostepne: "
-            f"{', '.join(BBOX_CRS_CHOICES)}",
+            message(
+                "options.invalid_bbox_unsupported_crs",
+                crs=bbox.crs,
+                bbox_crs_choices=", ".join(BBOX_CRS_CHOICES),
+            ),
             option="bbox",
             allowed=BBOX_CRS_CHOICES,
         )
@@ -990,13 +994,19 @@ def validate_request_bbox(bbox: BBox) -> BBox:
         validate_bbox(normalized)
     except ValidationError as e:
         raise ValidationError(
-            f"Nieprawidlowy bbox: {e}. {BBOX_EXPECTED}", option="bbox"
+            message(
+                "kinds.invalid_bbox", reason=reason(e), bbox_expected=BBOX_EXPECTED
+            ),
+            option="bbox",
         ) from e
     coords = (normalized.min_x, normalized.min_y, normalized.max_x, normalized.max_y)
     if normalized.min_x == normalized.max_x or normalized.min_y == normalized.max_y:
         raise ValidationError(
-            f"Nieprawidlowy bbox: bbox o zerowej powierzchni (min == max): {coords}; "
-            f"oczekiwano min_x < max_x i min_y < max_y. {BBOX_EXPECTED}",
+            message(
+                "options.invalid_bbox_bbox_zero_area",
+                coords=coords,
+                bbox_expected=BBOX_EXPECTED,
+            ),
             option="bbox",
         )
     if normalized.crs == "EPSG:4326" and (
@@ -1004,11 +1014,16 @@ def validate_request_bbox(bbox: BBox) -> BBox:
         or max(abs(normalized.min_y), abs(normalized.max_y)) > _LAT_LIMIT
     ):
         raise ValidationError(
-            f"Nieprawidlowy bbox: wspolrzedne {coords} leza poza zakresem EPSG:4326 "
-            f"(dlugosc -180..180, szerokosc -90..90). {BBOX_CRS_REMEDY}. "
-            f"{BBOX_EXPECTED}",
+            message(
+                "options.invalid_bbox_coordinates_lie_outside",
+                coords=coords,
+                bbox_crs_remedy=BBOX_CRS_REMEDY,
+                bbox_expected=BBOX_EXPECTED,
+            ),
             option="bbox",
-            hint=f"{BBOX_CRS_REMEDY}.",
+            hint=message(
+                "options.bbox_crs_remedy_hint", bbox_crs_remedy=BBOX_CRS_REMEDY
+            ),
         )
     return bbox
 

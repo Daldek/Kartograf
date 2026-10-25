@@ -182,19 +182,19 @@ def test_area_outside_countries_is_validation_error(tmp_path):
         ),
         (
             {"bbox": BBox(10, 10, 5, 5, "EPSG:2180")},
-            "Nieprawidlowy bbox: bbox odwrocony",
+            "Invalid bbox: bbox is inverted",
         ),
         (
             {"bbox": BBox(1, 2, 3, 4, "bogus")},
-            "Nieprawidlowy bbox: nieobslugiwany uklad 'bogus'",
+            "Invalid bbox: unsupported CRS 'bogus'",
         ),
         (
             {"bbox": BBox(1, 2, 3, 4, "EPSG:9999")},
-            "Nieprawidlowy bbox: nieobslugiwany uklad 'EPSG:9999'",
+            "Invalid bbox: unsupported CRS 'EPSG:9999'",
         ),
         (
             {"bbox": BBox(float("nan"), 0, 5, 5, "EPSG:2180")},
-            "Nieprawidlowy bbox: wspolrzedne bboxa musza byc skonczone",
+            "Invalid bbox: bbox coordinates must be finite",
         ),
     ],
 )
@@ -499,9 +499,9 @@ _BBOX_TRACKS = (
 @pytest.mark.parametrize(
     ("bbox", "reason"),
     [
-        (BBox(1, 2, 3, 4, "bogus"), "nieobslugiwany uklad 'bogus'"),
-        (BBox(1, 2, 3, 4, "EPSG:9999"), "nieobslugiwany uklad 'EPSG:9999'"),
-        (BBox(10, 10, 5, 5, "EPSG:2180"), "bbox odwrocony"),
+        (BBox(1, 2, 3, 4, "bogus"), "unsupported CRS 'bogus'"),
+        (BBox(1, 2, 3, 4, "EPSG:9999"), "unsupported CRS 'EPSG:9999'"),
+        (BBox(10, 10, 5, 5, "EPSG:2180"), "bbox is inverted"),
     ],
 )
 def test_all_public_bbox_tracks_reject_invalid_input_before_network(
@@ -512,7 +512,7 @@ def test_all_public_bbox_tracks_reject_invalid_input_before_network(
         pytest.raises(ValidationError) as exc,
     ):
         operation(bbox=bbox, output_dir=tmp_path, cache=False, **choices)
-    assert str(exc.value).startswith(f"Nieprawidlowy bbox: {reason}")
+    assert str(exc.value).startswith(f"Invalid bbox: {reason}")
 
 
 @pytest.mark.parametrize("operation", [check_cz_cutout, download_cz_cutout])

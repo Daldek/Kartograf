@@ -466,7 +466,7 @@ def test_add_selection_error_matches_public_api_without_store_changes(tmp_path, 
         == 2
     )
     assert without_error_document(capsys.readouterr().err).splitlines() == [
-        f"Error: {api_error.value}"
+        f"Error: {api_error.value.localized('pl')}"
     ]
     assert _manifest_bytes(project) == manifest
     assert list((project / "data").iterdir()) == []
@@ -687,7 +687,7 @@ def test_project_error_same_as_public_api(tmp_path, capsys):
         download_project(project, tasks=["literowka"])
     assert main(["project", "download", "--project", str(project), "literowka"]) == 2
     assert without_error_document(capsys.readouterr().err).splitlines() == [
-        f"Error: {api_error.value}"
+        f"Error: {api_error.value.localized('pl')}"
     ]
     assert open_project(project).tasks == ()
 

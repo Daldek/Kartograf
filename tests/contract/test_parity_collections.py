@@ -310,6 +310,6 @@ def test_input_errors_same_type_and_text(tmp_path, monkeypatch, argv, kwargs):
     )
     assert isinstance(run.api_error, ValidationError)
     assert run.cli_code == 2
-    assert run.cli_text == f"Error: {run.api_error}\n"
+    assert run.cli_text == f"Error: {run.api_error.localized('pl')}\n"
     assert session.calls == []
     assert not run.cli_store.exists() and not run.api_store.exists()
