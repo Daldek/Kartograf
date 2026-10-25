@@ -5,6 +5,7 @@ from typing import Any
 from kartograf.download.manager import DownloadManager, SheetInspection, _Pick
 from kartograf.download.plan import ItemStatus, PlanItem
 from kartograf.download.versions import LocalVersion, newest_version
+from kartograf.output import plain_of
 
 
 def _where(manager: DownloadManager, sheet: str) -> tuple[str, str]:
@@ -31,7 +32,8 @@ def _status(pick: _Pick) -> ItemStatus:
 
 def _items(manager: DownloadManager, inspection: SheetInspection) -> list[PlanItem]:
     sheet = inspection.sheet
-    segment, hierarchy = _where(manager, sheet)
+    plain = plain_of(manager.storage.root) is not None
+    segment, hierarchy = ("", "") if plain else _where(manager, sheet)
 
     def item(
         name: str,

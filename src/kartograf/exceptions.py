@@ -323,8 +323,9 @@ class DownloadError(KartografError):
         status_code: int | None = None,
         *,
         hint: str | None = None,
+        reason: str | None = None,
     ):
-        super().__init__(message, hint=hint)
+        super().__init__(message, hint=hint, reason=reason)
         self.sheet = sheet
         self.status_code = status_code
 
@@ -343,6 +344,9 @@ class NoCoverageError(DownloadError):
     hints : tuple[str, ...]
         User-facing hints (e.g. ``use --scale 1:2000``), the same texts the
         message contains after the period; empty when there are none.
+    reason : str
+        ``no_coverage``; ``skipped_incomplete`` when the sheets of a plain write
+        (``output_dir``) all lack a full flight in the year range (ADR-054 decision 5).
     """
 
     code = "no_data"
@@ -357,8 +361,11 @@ class NoCoverageError(DownloadError):
         hints: tuple[str, ...] = (),
         *,
         hint: str | None = None,
+        reason: str | None = None,
     ):
-        super().__init__(message, sheet=sheet, status_code=status_code, hint=hint)
+        super().__init__(
+            message, sheet=sheet, status_code=status_code, hint=hint, reason=reason
+        )
         self.hints = tuple(hints)
 
 

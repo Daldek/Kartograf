@@ -90,6 +90,7 @@ from kartograf.download.manager import (
     DownloadManager,
     DownloadProgress,
     DownloadResult,
+    incomplete_text,
     no_coverage_text,
 )
 from kartograf.download.options import (
@@ -122,11 +123,13 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.messages import message
 from kartograf.notices import (
     AUTO_NARROWED_TO_CZ,
     AUTO_NARROWED_TO_PL,
     BETTER_COVERAGE,
     CHECK_FAILED,
+    FULL_SHEET_REDUNDANT,
     INCOMPLETE_CAMPAIGN,
     LEGACY_CAMPAIGNS_DIR,
     LINK_OUTSIDE_RANGE,
@@ -137,6 +140,7 @@ from kartograf.notices import (
     SHEET_CRS_MISMATCH,
     SHEET_LIST,
     SHEETS,
+    SKIPPED_INCOMPLETE,
     UNVERIFIED_LOCAL,
     Notice,
     NoticeSink,
@@ -154,7 +158,9 @@ from kartograf.sources.variants import cz_model_text, cz_models, cz_sheet_system
 if TYPE_CHECKING:
     from kartograf.download.storage import FileStorage
 
-FailureKind = Literal["no_coverage", "year_out_of_range", "download", "country"]
+FailureKind = Literal[
+    "no_coverage", "year_out_of_range", "download", "country", "skipped_incomplete"
+]
 MAX_HINT_LINES = 5
 
 # ``kartograf-download/1``: the schema of the five command reports (``DataReport``,
@@ -269,6 +275,7 @@ class WriteTarget:
 FAILURE_CODES: Mapping[FailureKind, tuple[str, str | None]] = {
     "no_coverage": ("no_data", "no_coverage"),
     "year_out_of_range": ("no_data", "year_out_of_range"),
+    "skipped_incomplete": ("no_data", "skipped_incomplete"),
     "download": ("source_unavailable", None),
     "country": ("source_unavailable", None),
 }
@@ -424,7 +431,11 @@ def failure_kind(
     ``DownloadError`` gets ``default``.
     """
     if isinstance(error, NoCoverageError):
-        return "no_coverage"
+        return (
+            "skipped_incomplete"
+            if error.reason == "skipped_incomplete"
+            else "no_coverage"
+        )
     if isinstance(error, YearRangeError):
         return "year_out_of_range"
     return default
@@ -537,6 +548,11 @@ def _start(
             run.root = task.root
         else:
             run.output_dir = write.directory
+            if task.full_sheet:  # a plain write takes the newest full flight anyway
+                run.sink.emit(
+                    "info", FULL_SHEET_REDUNDANT, message("output.full_sheet_redundant")
+                )
+                task.full_sheet = False
             if not check:
                 _preflight(task, run)
         rc = _execute(task, run)
@@ -1277,7 +1293,13 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
     if run.check:
         run.plans.append(
             manager.check_sheets(
-                sheets, on_no_coverage=_check_no_coverage(run, _prefix(manager))
+                sheets,
+                on_no_coverage=_check_no_coverage(run, _prefix(manager)),
+                on_incomplete=lambda incomplete, _total: _skip_incomplete(
+                    run,
+                    {s: incomplete_text(s, r) for s, r in incomplete.items()},
+                    _prefix(manager),
+                ),
             )
         )
         return 0
@@ -1297,9 +1319,9 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
             )
     rc = run.add_stale(report.stale)
     prefix = _prefix(manager)
-    for sheet, message in report.errors.items():
+    for sheet, failure in report.errors.items():
         kind: FailureKind = "no_coverage" if sheet in report.no_coverage else "download"
-        run.fail(sheet, "PL", f"{prefix}{sheet}: {message}", kind)
+        run.fail(sheet, "PL", f"{prefix}{sheet}: {failure}", kind)
     return 1 if rc or report.failed else 0
 
 
@@ -1401,6 +1423,8 @@ def _download_pl_code(
     except DownloadError as e:
         # a sheet without data or outside the years is the same kind of failure
         # in the download and in the check (``_check_error``)
+        if failure_kind(e) == "skipped_incomplete" and e.sheet is not None:
+            _skip_incomplete(run, {e.sheet: str(e)}, prefix)
         return run.fail(task.sheet, "PL", f"{prefix}{e}", failure_kind(e), e)
     if expanded:
         return _finish_pl_sheets(task, run, result, prefix)
@@ -1675,6 +1699,27 @@ def _download_pl_files(
     return max(run.add_stale(stale), 1 if failed else 0)
 
 
+def _skip_incomplete(run: _Run, sheets: Mapping[str, str], prefix: str = "") -> None:
+    """Record the sheets a plain write leaves out (DEV-19.4, ADR-054 decision 5).
+
+    Each sheet is an entry of ``skipped[]`` with the reason ``skipped_incomplete``
+    (its message ends with the hint ``--root``); one warning notice names the first
+    ten, ``prefix`` the view direction of an oblique sheet.
+    """
+    hint = message("output.skipped_incomplete_hint")
+    run.skipped.extend(
+        SkippedUnit(sheet, "skipped_incomplete", f"{message} ({hint})")
+        for sheet, message in sheets.items()
+    )
+    shown = ", ".join(list(sheets)[:10]) + (" ..." if len(sheets) > 10 else "")
+    run.sink.emit(
+        "warning",
+        SKIPPED_INCOMPLETE,
+        prefix
+        + message("output.skipped_incomplete_some", count=len(sheets), sheets=shown),
+    )
+
+
 def _finish_pl_sheets(
     task: SimpleNamespace, run: _Run, result: DownloadResult, prefix: str = ""
 ) -> int:
@@ -1686,6 +1731,13 @@ def _finish_pl_sheets(
     of the result in its messages (``kierunek n: ``, oblique orthophotomap).
     """
     paths = _result_paths(result)
+    if result.incomplete:
+        _skip_incomplete(run, result.incomplete, prefix)
+        if not paths and not result.failed:  # every sheet was left out: no_data
+            return max(
+                run.fail(sheet, "PL", message, "skipped_incomplete")
+                for sheet, message in result.incomplete.items()
+            )
     _sheet_sidecar_notices(task, run, result, paths)
     reported = any(n.code == CHECK_FAILED for n in result.notices)
     for sheet, files in result.files.items():
