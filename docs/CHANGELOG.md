@@ -1422,10 +1422,11 @@ from the key `root`, and the MCP tool names.
 ### Added
 
 - `find_sheet_outlines(bbox, target_scale, sheet_system) -> list[SheetOutline]` (ADR-055): the
-  sheets of `find_sheets_for_bbox` with their PL-2000 `zone` (`None` for PL-1992) and the
+  sheets of `find_sheets_for_bbox` with their PL-2000 `zone` (`None` for PL-1992), the
   `outline` a map draws (GeoJSON in EPSG:4326: the sheet with its edges split at 1 km, and for a
   PL-2000 sheet that a zone boundary cuts, its part inside its zone; the outlines of two zones
-  never overlap). For Archiwista's sheet grid.
+  never overlap) and `bbox`, the WGS84 envelope of the whole sheet (its size also when the
+  outline is a part of it). For Archiwista's sheet grid.
 - Sheet and campaign details in the availability report (KD-1, KD-2; ADR-047;
   added to the prepared 0.8.0 release before tagging): new fields of
   `AvailabilityCombination` - `full_m2` (land within full sheets, lower

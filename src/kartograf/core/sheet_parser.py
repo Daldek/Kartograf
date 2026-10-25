@@ -1053,14 +1053,19 @@ class SheetOutline:
         for PL-1992.
     outline : dict[str, Any]
         GeoJSON ``Polygon`` or ``MultiPolygon`` in EPSG:4326. PL-1992: the
-        sheet. PL-2000: the four corners of the sheet or, for a sheet that a
-        zone boundary cuts, its part inside its zone (ADR-055). The whole
-        sheet stays ``SheetParser(sheet).get_bbox()``.
+        sheet. PL-2000: the sheet with its edges split into parts of at most
+        1 km or, for a sheet that a zone boundary cuts, its part inside its
+        zone (ADR-055).
+    bbox : BBox
+        Envelope of the whole sheet in EPSG:4326 (also of a sheet whose
+        outline is a part of it); the sheet in its own CRS stays
+        ``SheetParser(sheet).get_bbox()``.
     """
 
     sheet: str
     zone: int | None
     outline: dict[str, Any]
+    bbox: BBox
 
 
 def find_sheets_for_bbox(
@@ -1237,6 +1242,7 @@ def find_sheet_outlines(
                 sheet=sheet,
                 zone=None,
                 outline={"type": "Polygon", "coordinates": [ring]},
+                bbox=box,
             )
         )
     return outlines

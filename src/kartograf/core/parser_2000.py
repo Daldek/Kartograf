@@ -608,6 +608,10 @@ _MIN_SHARE = 1e-9
 # degrees (~1 km) around the sheets when the zone area is cut out
 _ZONE_MARGIN_DEG = 0.01
 
+# What a map draws of a sheet: its GeoJSON outline (EPSG:4326) and the WGS84
+# envelope of the whole sheet.
+type _Drawn = tuple[dict[str, Any], BBox]
+
 
 # metres (~1 mm) - PL-2000 zones are metric, not degrees
 _DEGENERATE_EPS_M = 1e-3
@@ -723,11 +727,11 @@ def find_sheet_outlines_2000(
         As ``find_sheets_2000_for_bbox``.
     """
     return [
-        SheetOutline(sheet=sheet, zone=found_zone, outline=outline)
-        for sheet, found_zone, outline in _find_2000(
+        SheetOutline(sheet=sheet, zone=found_zone, outline=drawn[0], bbox=drawn[1])
+        for sheet, found_zone, drawn in _find_2000(
             bbox, target_scale, zone, outline=True
         )
-        if outline is not None
+        if drawn is not None
     ]
 
 
@@ -737,8 +741,8 @@ def _find_2000(
     zone: int | None,
     *,
     outline: bool = False,
-) -> list[tuple[str, int, dict[str, Any] | None]]:
-    """Sheets of the zones that meet a bbox: ``(sheet, zone, outline)``."""
+) -> list[tuple[str, int, _Drawn | None]]:
+    """Sheets of the zones that meet a bbox: ``(sheet, zone, drawn)``."""
     if target_scale not in SCALE_HIERARCHY_2000:
         raise ValidationError(
             message(
@@ -758,7 +762,7 @@ def _find_2000(
     window = (detect.min_x, detect.min_y, detect.max_x, detect.max_y)
     zones = [zone] if zone is not None else pl2000_zones.zones_in(window)
 
-    found: dict[int, tuple[list[tuple[str, dict[str, Any] | None]], float]] = {}
+    found: dict[int, tuple[list[tuple[str, _Drawn | None]], float]] = {}
     for z in zones:
         zone_crs = ZONE_EPSG[z]
         if bbox.crs == zone_crs:
@@ -788,9 +792,9 @@ def _find_2000(
         found = {best: found[best]}
 
     result = [
-        (sheet, z, sheet_outline)
+        (sheet, z, drawn)
         for z, (kept, _share) in found.items()
-        for sheet, sheet_outline in kept
+        for sheet, drawn in kept
     ]
     return sorted(result, key=lambda item: item[0])
 
@@ -868,7 +872,7 @@ def _in_zone(
     zone_bbox: BBox,
     candidates: list[Parser2000],
     outline: bool,
-) -> tuple[list[tuple[str, dict[str, Any] | None]], float]:
+) -> tuple[list[tuple[str, _Drawn | None]], float]:
     """
     Keep the candidates whose part inside the zone area meets the bbox.
 
@@ -879,8 +883,8 @@ def _in_zone(
     Returns
     -------
     tuple
-        The kept ``(sheet, outline)`` pairs (``outline`` only when asked for)
-        and the share of the bbox inside the zone.
+        The kept ``(sheet, drawn)`` pairs (``drawn`` only when asked for) and
+        the share of the bbox inside the zone.
     """
     zone_crs = ZONE_EPSG[zone]
     boxes = np.array(
@@ -935,8 +939,8 @@ def _in_zone(
         return [(c.sheet, None) for c in kept], share
     if sheets is None:
         sheets = _wgs84_rectangles(zone_crs, boxes)
-    outlines = _outlines(zone_crs, boxes[keep], sheets[keep], area)
-    return [(c.sheet, o) for c, o in zip(kept, outlines, strict=True)], share
+    drawn = _outlines(sheets[keep], area)
+    return [(c.sheet, d) for c, d in zip(kept, drawn, strict=True)], share
 
 
 def _wgs84_rectangles(
@@ -982,16 +986,18 @@ def _wgs84_rectangles(
     return polygons
 
 
-def _outlines(
-    crs: str, boxes: np.ndarray, sheets: np.ndarray, area: Any
-) -> list[dict[str, Any]]:
-    """GeoJSON outlines: the sheet inside its zone, else its part inside it."""
+def _outlines(sheets: np.ndarray, area: Any) -> list[_Drawn]:
+    """Outlines and envelopes: the sheet inside its zone, else its part inside it."""
     whole = shapely.covers(area, sheets)
-    outlines = []
-    for sheet, inside in zip(sheets, whole, strict=True):
+    drawn: list[_Drawn] = []
+    for sheet, inside, bounds in zip(
+        sheets, whole, shapely.bounds(sheets).tolist(), strict=True
+    ):
+        min_x, min_y, max_x, max_y = bounds
+        envelope = BBox(min_x, min_y, max_x, max_y, "EPSG:4326")
         if inside:
             ring = shapely.get_coordinates(sheet).tolist()
-            outlines.append({"type": "Polygon", "coordinates": [ring]})
+            drawn.append(({"type": "Polygon", "coordinates": [ring]}, envelope))
             continue
         parts = [
             p
@@ -999,7 +1005,6 @@ def _outlines(
             if p.geom_type == "Polygon" and not p.is_empty
         ]
         clipped = parts[0] if len(parts) == 1 else shapely.MultiPolygon(parts)
-        outlines.append(
-            json.loads(shapely.to_geojson(shapely.orient_polygons(clipped)))
-        )
-    return outlines
+        outline = json.loads(shapely.to_geojson(shapely.orient_polygons(clipped)))
+        drawn.append((outline, envelope))
+    return drawn

@@ -20,7 +20,7 @@ import pytest
 import shapely
 from pyproj import Transformer
 
-from kartograf import BBox, find_sheet_outlines, find_sheets_for_bbox
+from kartograf import BBox, SheetParser, find_sheet_outlines, find_sheets_for_bbox
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "pl2000_zones"
 _TO_2180 = Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)
@@ -98,6 +98,26 @@ def test_sheets_of_two_zones_never_overlap_and_cover_the_view(name, scale):
     assert sorted(codes) == codes
     assert len(codes) == sum(len(parts) for parts in by_zone.values())
     assert {int(code.split(".")[0]) for code in codes} == set(by_zone)
+
+
+@pytest.mark.parametrize("name", sorted(VIEWS))
+def test_outline_bbox_is_the_whole_sheet(name):
+    """A sheet cut at a zone boundary keeps the envelope of the whole sheet
+    (what a map needs for the sheet size), and its outline lies inside it."""
+    found = find_sheet_outlines(BBox(*VIEWS[name], "EPSG:4326"), "1:10000", "2000")
+    cut = 0
+
+    for sheet in found:
+        whole = SheetParser(sheet.sheet).get_bbox("EPSG:4326")
+        drawn = shapely.from_geojson(json.dumps(sheet.outline))
+        assert sheet.bbox[:4] == pytest.approx(whole[:4], abs=1e-6)
+        assert shapely.covers(shapely.box(*sheet.bbox[:4]), drawn)
+        bounds = shapely.bounds(drawn).tolist()
+        cut += any(
+            abs(a - b) > 1e-6 for a, b in zip(bounds, sheet.bbox[:4], strict=True)
+        )
+
+    assert cut > 0, "the view has sheets cut at the zone boundary"
 
 
 @pytest.mark.parametrize("scale", SCALES)
