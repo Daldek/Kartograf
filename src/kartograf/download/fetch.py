@@ -10,7 +10,7 @@ and the hardlink at the standard path. ``fetch_version`` downloads (modes
 downloading data) + download + ``store_file`` (the staged file becomes a
 version); callers storing several files of one download use the two parts
 directly. ``inspect_version`` builds the update plan position WITHOUT
-downloading (``--check-updates``).
+downloading (``--check``).
 """
 
 import functools
@@ -97,7 +97,7 @@ def validate_update(update: object, *, check: str | None = None) -> None:
 def refreshes_cache(update: UpdateMode | None) -> bool:
     """Return whether a download mode refreshes the metadata cache, not reads it.
 
-    ``"upgrade"`` and ``"force"`` ask the source like ``--check-updates`` (a flight
+    ``"upgrade"`` and ``"force"`` ask the source like ``--check`` (a flight
     published within the cache TTL is seen); the default mode reads it (TTL 7 days).
     """
     return update in ("upgrade", "force")
@@ -151,7 +151,7 @@ class VersionedFile:
     an index record asked for the selection). ``unverified``: the local
     version was used without a comparison — ``"unchecked"`` (the default
     mode asks no source for the freshness of a local version: ADR-036
-    erratum 3, ``--check-updates``/``--upgrade`` compare it), ``"none"`` (no
+    erratum 3, ``--check``/``--upgrade`` compare it), ``"none"`` (no
     cheap or comparable signal) or ``"check_failed: <error>"``. ``same_as``: for
     ``relabeled``, the label of the newest existing version with identical
     content; otherwise ``None``.
@@ -515,7 +515,7 @@ def inspect_version(
     edition: EditionLookup | None = None,
     available: tuple[str | None, dict[str, Any] | None] = (None, None),
 ) -> PlanItem:
-    """Plan position of one file WITHOUT downloading (``--check-updates``).
+    """Plan position of one file WITHOUT downloading (``--check``).
 
     ``missing`` without a local version; with a local version: ``http`` +
     ``probe`` -> ``current``/``newer`` (``unverifiable`` when the signals

@@ -7,7 +7,7 @@ and ``CommandCatalog`` (``kartograf-commands/1``). The entry of every command is
 once per process and is read-only; ``command_schema`` picks one of them.
 
 An *option* of a command is a parameter that has an argument of the library function
-(and so a key of an MCP tool call) and the plan option ``check_updates`` of a command
+(and so a key of an MCP tool call) and the plan option ``check`` of a command
 that has a check; a flag only the CLI has (``--json``, ``--quiet``, ``--upgrade``,
 ``--force``) and the constant argument of ``<group> list-sources`` are not options
 (``is_option``).
@@ -74,7 +74,7 @@ _WRITING = frozenset({"store_write", "project_write", "cache_write", "cache_dele
 def is_option(command: Command, param: Param) -> bool:
     """Check whether a parameter is an option of the command in every interface.
 
-    It has an argument of the library function, or it is ``check_updates`` of a command
+    It has an argument of the library function, or it is ``check`` of a command
     with a check; the constant argument of a command (``fixed``) is none.
     """
     if param.fixed is not None:

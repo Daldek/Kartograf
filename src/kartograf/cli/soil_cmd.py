@@ -38,7 +38,7 @@ def cmd_soil_download(args: argparse.Namespace) -> int:
 def _soil_download(args: argparse.Namespace) -> int:
     arguments = {**library_arguments(args), "root": store_dir(args)}
     on_notice = notice_printer(args)
-    if args.check_updates:
+    if args.check:
         return _report_plan(args, check_soil(**arguments, on_notice=on_notice))
     update = _update_mode(args)
     report = download_soil(
@@ -88,7 +88,7 @@ def _hsg_task(args: argparse.Namespace, selection: dict[str, Any]) -> int:
     """One ``soil hsg`` request: plan or inputs plus the derived raster."""
     arguments = {**selection, "root": store_dir(args)}
     on_notice = notice_printer(args)
-    if args.check_updates:
+    if args.check:
         return _report_plan(args, check_hsg(**arguments, on_notice=on_notice))
     update = _update_mode(args)
     result = calculate_hsg(

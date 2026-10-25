@@ -53,7 +53,7 @@ def cmd_collection_download(args: argparse.Namespace, group: str) -> int:
 def _collection_download(args: argparse.Namespace) -> int:
     arguments = {**library_arguments(args), "root": store_dir(args)}
     on_notice = notice_printer(args)
-    if args.check_updates:
+    if args.check:
         return _report_plan(args, check_collection(**arguments, on_notice=on_notice))
     update = _update_mode(args)
     # a group whose request is always one file (hydro) has no --workers

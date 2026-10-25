@@ -7,7 +7,7 @@ frozen clock.
 Scenarios: PRG objects of an area (``--level``), PRG national file (size
 notice), RUIAN objects of an area (CZ), HY-NET national file (HEAD and GET),
 EGiB export of a powiat, 3D models of a powiat, 3D models of an area with a
-powiat without a package, ``--check-updates --plan`` + ``--upgrade --plan``,
+powiat without a package, ``--check --plan`` + ``--upgrade --plan``,
 input errors. BDOT10k ``--year`` and ZABAGED:
 ``tests/contract/test_parity_landcover.py``.
 """
@@ -246,7 +246,7 @@ def test_check_plan_upgrade(tmp_path, monkeypatch):
     ]
     plan_file = tmp_path / "plan.json"
     checked = run_both(
-        [*argv, "--check-updates", "--plan", str(plan_file)],
+        [*argv, "--check", "--plan", str(plan_file)],
         lambda out: check_collection(root=out, **choice),
         tmp_path,
     )

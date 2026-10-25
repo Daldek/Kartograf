@@ -371,7 +371,7 @@ def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):
     any work: ``test_plan_file_that_is_a_directory_is_one_error_line``.)"""
     plan_file = tmp_path / "plan.json"
     checked = new_plan(tmp_path, [])
-    argv = [*ELEVATION, "--root", str(tmp_path), "--check-updates", "--json"]
+    argv = [*ELEVATION, "--root", str(tmp_path), "--check", "--json"]
     failure = IsADirectoryError(21, "Is a directory", str(plan_file))
     with (
         patch("kartograf.cli.download_cmd.check_data", return_value=checked),
@@ -546,7 +546,7 @@ def test_plan_file_errors_are_input_errors_of_the_plan(capsys, tmp_path, plan_er
     mode = {
         "unreadable": ["--upgrade"],
         "foreign_schema": ["--upgrade"],
-        "directory_missing": ["--check-updates"],
+        "directory_missing": ["--check"],
         "no_mode": [],
     }[plan_error]
     if plan_error == "directory_missing":

@@ -357,10 +357,8 @@ def test_project_download_has_the_update_modes_but_no_plan():
     )
     assert download.supports_check and not download.project_task
     assert "plan" not in params
-    assert {
-        name: params[name].exclusive for name in ("check_updates", "upgrade", "force")
-    } == {
-        "check_updates": "update",
+    assert {name: params[name].exclusive for name in ("check", "upgrade", "force")} == {
+        "check": "update",
         "upgrade": "update",
         "force": "update",
     }

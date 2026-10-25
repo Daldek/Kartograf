@@ -400,7 +400,7 @@ _DOWNLOAD_PARAMS = (
         force="Pobierz ponownie kazdy plik zadania (arkusze, wycinek) "
         "i odswiez liste kampanii z GUGiK; ta sama tresc = bez zmian, inna = "
         "nowa wersja; nic nie jest nadpisywane",
-        plan="Z --check-updates: zapisz plan aktualizacji (JSON "
+        plan="Z --check: zapisz plan aktualizacji (JSON "
         "kartograf-plan/1, przy --country auto jeden plan PL i CZ); z --upgrade: "
         "wykonaj plan (pozycje zmienione od planu = blad, bez pobrania)",
     ),

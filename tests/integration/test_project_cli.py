@@ -74,7 +74,7 @@ def test_data_parser_options_cover_manifest_options(command):
     parser = _parser_for(command)
     run_flags = {
         "root",
-        "check_updates",
+        "check",
         "upgrade",
         "force",
         "plan",
@@ -316,7 +316,7 @@ def test_cz_laz_task_pins_model_file_and_rejects_availability(
 
 
 @pytest.mark.parametrize(
-    "flag", ["--upgrade", "--force", "--check-updates", "--plan", "--root"]
+    "flag", ["--upgrade", "--force", "--check", "--plan", "--root"]
 )
 def test_add_rejects_update_modes_and_foreign_output(tmp_path, capsys, flag):
     project = tmp_path / "projekt"
@@ -385,7 +385,7 @@ def test_project_download_has_no_store_plan_file_option(tmp_path, capsys):
                 "download",
                 "--project",
                 str(project),
-                "--check-updates",
+                "--check",
                 "--plan",
                 str(tmp_path / "plan.json"),
             ]
@@ -619,9 +619,7 @@ def test_project_cli_matches_api_for_download_status_verify_and_updates(
     with pl_sheets() as fake:
         check_bytes = (cli_dir / "kartograf-project.json").read_bytes()
         count = len(fake.downloads)
-        code = main(
-            ["project", "download", "--check-updates", "--project", str(cli_dir)]
-        )
+        code = main(["project", "download", "--check", "--project", str(cli_dir)])
         text = capsys.readouterr()
         api_check = check_project(api_dir)
         assert code == (0 if api_check.ok else 1)

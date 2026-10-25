@@ -70,7 +70,7 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
         check_config()
     # --plan needs a mode in every store command
     if getattr(parsed_args, "plan", None) is not None and not (
-        parsed_args.check_updates or parsed_args.upgrade
+        parsed_args.check or parsed_args.upgrade
     ):
         raise ValidationError(message("cli.plan_needs_mode"), option="plan")
     return HANDLERS[command](parsed_args)

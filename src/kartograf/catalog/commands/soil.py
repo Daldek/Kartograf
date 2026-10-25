@@ -100,7 +100,7 @@ def _update(plan: str) -> tuple[Param, ...]:
 
 
 _PLAN = (
-    "Z --check-updates: zapisz plan aktualizacji (kartograf-plan/1); "
+    "Z --check: zapisz plan aktualizacji (kartograf-plan/1); "
     "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)"
 )
 
@@ -143,7 +143,7 @@ _DOWNLOAD_PARAMS = (
     ),
     shared.root(lambda: store_files(["soil"])),
     *_update(
-        "Z --check-updates: zapisz plan aktualizacji (kartograf-plan/1); "
+        "Z --check: zapisz plan aktualizacji (kartograf-plan/1); "
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)"
     ),
     shared.QUIET,

@@ -651,7 +651,7 @@ class TestCommandGroups:
             "--layer",
             "--whole-country",
             "--root",
-            "--check-updates",
+            "--check",
             "--upgrade",
             "--force",
             "--plan",
@@ -1698,7 +1698,7 @@ class TestCmdDownloadProduct:
         self, mock_manager_cls, mock_create, tmp_path, mode
     ):
         """``--force`` and ``--upgrade`` (live test 0.8.0: like
-        ``--check-updates``, a flight published within the TTL is seen) skip
+        ``--check``, a flight published within the TTL is seen) skip
         old metadata, then save the new record."""
         from kartograf.cache.defaults import open_cache
 
@@ -4894,7 +4894,7 @@ def _cmd_download_cz(args, bbox=None):
         argv += ["--sheet", args.sheet]
         if args.horizontal_crs:
             argv += ["--cutout", "--horizontal-crs", args.horizontal_crs]
-    for flag in ("force", "quiet", "upgrade", "check_updates"):
+    for flag in ("force", "quiet", "upgrade", "check"):
         if getattr(args, flag, False):
             argv.append("--" + flag.replace("_", "-"))
     if args.sheet_system:
@@ -5717,7 +5717,7 @@ class TestCmdDownloadCz:
         assert "Pobieranie 302_5550 (CZ, rozdzielczosc: 2m)" in first
         assert "nmt/cz_dmr5g_bpv/302/5550/302_5550.tif: nowa wersja " in first
         assert "nmt/cz_dmr5g_bpv/302/5550/302_5550.tif: lokalna wersja " in second
-        assert "(bez sprawdzania; --check-updates)" in second  # TM33: signal none
+        assert "(bez sprawdzania; --check)" in second  # TM33: signal none
         provider.download.assert_called_once()
 
     def test_verbose_bbox_reports_progress_and_skip(self, tmp_path, capsys):
@@ -5735,7 +5735,7 @@ class TestCmdDownloadCz:
         unit = "nmt/cz_dmr5g_bpv/bbox/-447000_-1114000_-446000_-1113000.tif"
         assert f"{unit}: nowa wersja " in first
         assert f"{unit}: lokalna wersja " in second
-        assert "(bez sprawdzania; --check-updates)" in second
+        assert "(bez sprawdzania; --check)" in second
         provider.download_bbox.assert_called_once()
 
     def test_bbox_download_error_returns_1(self, tmp_path, capsys):

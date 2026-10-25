@@ -72,7 +72,7 @@ def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
     error, not a silently dropped value.
     """
     for flag, name in (
-        ("--check-updates", "check_updates"),
+        ("--check", "check"),
         ("--upgrade", "upgrade"),
         ("--force", "force"),
         ("--plan", "plan"),
@@ -189,10 +189,10 @@ def _file_count(count: int) -> str:
     return message("cli.file_count", lang=language(), count=count)
 
 
-def _check_line(file: FileCheck, checking_updates: bool) -> str:
+def _check_line(file: FileCheck, checking: bool) -> str:
     """Return the status of a file relative to the pin, never to the latest alias."""
     status: str
-    if checking_updates:
+    if checking:
         if file.status == "newer":
             status = message(
                 "cli.status_newer",
@@ -233,9 +233,9 @@ def _unit_file(unit: str, path: str) -> str:
     return f"{unit} ({PurePosixPath(path).name})"
 
 
-def _render_check(report: ProjectCheck, *, quiet: bool, checking_updates: bool) -> int:
+def _render_check(report: ProjectCheck, *, quiet: bool, checking: bool) -> int:
     """Render API file statuses and report failures; notices stay on stderr."""
-    if not quiet and not checking_updates:
+    if not quiet and not checking:
         print(
             message(
                 "cli.project_directory",
@@ -273,12 +273,12 @@ def _render_check(report: ProjectCheck, *, quiet: bool, checking_updates: bool) 
                 )
             )
     for file in report.files:
-        line = _check_line(file, checking_updates)
+        line = _check_line(file, checking)
         if file.status in ("check_failed", "missing", "corrupt"):
             print(f"Error: {line}", file=sys.stderr)
         elif not quiet:
             print(line)
-    return exit_code_of(report, check=checking_updates)
+    return exit_code_of(report, check=checking)
 
 
 def _print_download(
@@ -339,13 +339,13 @@ def _print_download(
 def cmd_project_download(args: argparse.Namespace) -> int:
     """Use ``check_project`` in check mode; otherwise ``download_project``."""
     on_notice = notice_printer(args)
-    if args.check_updates:
+    if args.check:
         checked = check_project(
             args.project, tasks=_selected_tasks(args), on_notice=on_notice
         )
         if wants_json(args):
             return emit_result(command_id(args), checked, check=True)
-        return _render_check(checked, quiet=args.quiet, checking_updates=True)
+        return _render_check(checked, quiet=args.quiet, checking=True)
     mode: UpdateMode | None = (
         "upgrade" if args.upgrade else "force" if args.force else None
     )
@@ -368,7 +368,7 @@ def _check(args: argparse.Namespace, report: ProjectCheck) -> int:
     """Return the result of ``status``/``verify``: the text or the document."""
     if wants_json(args):
         return emit_result(command_id(args), report)
-    return _render_check(report, quiet=args.quiet, checking_updates=False)
+    return _render_check(report, quiet=args.quiet, checking=False)
 
 
 def cmd_project_status(args: argparse.Namespace) -> int:

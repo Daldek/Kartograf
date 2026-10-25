@@ -327,13 +327,13 @@ def test_json_hsg_with_summary(tmp_path):
 
 
 @pytest.mark.usefixtures("frozen_clock")
-def test_json_check_updates_plan(tmp_path):
-    """``--check-updates`` is the plan document; ``--plan FILE`` writes the same
+def test_json_check_plan(tmp_path):
+    """``--check`` is the plan document; ``--plan FILE`` writes the same
     document, and the line ``Info: zapisano plan`` is not printed."""
     plan_file = tmp_path / "plan.json"
     with _pl_store(FakeCampaignProvider(C14)):
         run = run_both(
-            [*ELEVATION, "--check-updates", "--plan", str(plan_file), "--json"],
+            [*ELEVATION, "--check", "--plan", str(plan_file), "--json"],
             lambda out: check_data(root=out, **NMT_SHEET),
             tmp_path,
         )
@@ -346,12 +346,12 @@ def test_json_check_updates_plan(tmp_path):
 
 @pytest.mark.usefixtures("frozen_clock")
 def test_json_plan_file_feeds_the_upgrade(tmp_path):
-    """The plan file written by ``--check-updates --json`` is read by ``--upgrade
+    """The plan file written by ``--check --json`` is read by ``--upgrade
     --plan``, which prints the document of ``download_data(update="upgrade")``."""
     plan_file = tmp_path / "plan.json"
     with _pl_store(FakeCampaignProvider(C14)):
         checked = run_both(
-            [*ELEVATION, "--check-updates", "--plan", str(plan_file), "--json"],
+            [*ELEVATION, "--check", "--plan", str(plan_file), "--json"],
             lambda out: check_data(root=out, **NMT_SHEET),
             tmp_path,
         )
@@ -856,7 +856,7 @@ def test_json_project_commands_print_the_documents_of_the_api(
         same(
             check_project(api_dir),
             "project download",
-            *("project", "download", "--check-updates", *where, "--json"),
+            *("project", "download", "--check", *where, "--json"),
             check=True,
         )
     same(
@@ -872,7 +872,7 @@ def test_json_project_commands_print_the_documents_of_the_api(
         (["--json"], "json"),
         (["-w", "8"], "workers"),
         (["-w4"], "workers"),  # the default written out is a flag that was given
-        (["--check-updates"], "check_updates"),
+        (["--check"], "check"),
         (["--upgrade"], "upgrade"),
         (["--force"], "force"),
         (["--plan", "plan.json", "--upgrade"], "upgrade"),

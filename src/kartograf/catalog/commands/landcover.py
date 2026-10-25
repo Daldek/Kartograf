@@ -246,7 +246,7 @@ _DOWNLOAD_PARAMS = (
         "plan",
         force="Pobierz ponownie kazdy plik (BDOT10k i BDOO: takze odswiez "
         "jednostki obszaru z PRG); ta sama tresc = bez zmian, inna = nowa wersja",
-        plan="Z --check-updates: zapisz plan aktualizacji (kartograf-plan/1); "
+        plan="Z --check: zapisz plan aktualizacji (kartograf-plan/1); "
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)",
     ),
     shared.workers(

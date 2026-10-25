@@ -45,7 +45,7 @@ def cadastral_areas_for_bbox(
     ``kod``/``nazev`` is a source failure (``DownloadError``). ``cache``:
     the answer of an area (also an empty one) is kept for the TTL of the
     cache (``index_area_cache``), like the powiats of PRG - a repeated area
-    asks no service (works offline); a refreshing cache (``--check-updates``,
+    asks no service (works offline); a refreshing cache (``--check``,
     ``--upgrade``, ``--force``) asks again and stores the new answer.
     """
     endpoint, _, layer = layer_url.rstrip("/").rpartition("/")

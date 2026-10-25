@@ -72,8 +72,8 @@ CARDINALITIES: Final[tuple[str, ...]] = get_args(Cardinality)
 FAMILIES: Final[tuple[str, ...]] = get_args(Family)
 # The parameter that makes a call a plan without effects (``check_command``): an
 # option of every command with a ``check_function``, though no function takes it as an
-# argument. The data-output change renames it (DEV-19.10).
-CHECK_OPTION: Final = "check_updates"
+# argument; ``--check`` on the command line (DEV-19.10).
+CHECK_OPTION: Final = "check"
 # At most this many tools make the ``core`` family (AGI-5.12).
 CORE_MAX: Final = 10
 # Sheet systems a ``sheet`` parameter may accept (``SheetInfo.system``): the ids

@@ -243,7 +243,7 @@ def _zabaged_country(monkeypatch, body: bytes, events: list[str]) -> dict[str, b
 
 
 def test_zabaged_whole_country_check_by_edition(tmp_path, monkeypatch, frozen_clock):
-    """``--check-updates`` of the national file reads only the ATOM feeds:
+    """``--check`` of the national file reads only the ATOM feeds:
     the same ``updated`` of the file entry = ``current``, a later one =
     ``newer`` (labelled by the new date); the file itself is never fetched."""
     events: list[str] = []
@@ -337,7 +337,7 @@ def test_zabaged_bbox_gpkg(tmp_path, monkeypatch, frozen_clock):
 def test_national_file_http_signal(tmp_path, monkeypatch, name, product, stored, crs):
     """RUIAN and HY-NET national files (signal ``http``): the real size from
     ``HEAD`` announced before the transfer, the ZIP stored 1:1 with the CRS
-    of the file; ``--check-updates`` asks only ``HEAD`` - the same ``ETag`` =
+    of the file; ``--check`` asks only ``HEAD`` - the same ``ETag`` =
     ``current``, another = ``newer``; the default run keeps the local file,
     ``--upgrade`` stores the new one next to it. No frozen clock: of two
     versions with one label (the day of the download) the later is newest."""

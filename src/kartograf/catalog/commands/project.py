@@ -333,7 +333,7 @@ COMMANDS = (
             "(SHA-256). A task whose pinned files exist is kept without "
             "asking the source; missing files are restored only when the "
             "SHA-256 matches. `update` upgrade or force re-pins whole "
-            "tasks. With `check_updates` it only checks the sources."
+            "tasks. With `check` it only checks the sources."
         ),
         effects=("network", "store_write", "project_write"),
         check_function="check_project",
@@ -347,7 +347,7 @@ COMMANDS = (
             Example(
                 {},
                 title="Check the sources without fetching",
-                run={"check_updates": True},
+                run={"check": True},
                 title_pl="Sprawdz aktualnosc zrodel bez pobierania",
             ),
             Example(
@@ -365,8 +365,8 @@ COMMANDS = (
             "tylko przy zgodnej SHA-256. Zmiana przypiec: --upgrade albo "
             "--force."
         ),
-        rules=("Check first with `check_updates`: it changes no pin.",),
-        rules_pl=("Najpierw `check_updates`: nie zmienia przypiec.",),
+        rules=("Check first with `check`: it changes no pin.",),
+        rules_pl=("Najpierw `check`: nie zmienia przypiec.",),
         errors=(
             "validation_error",
             "source_unavailable",

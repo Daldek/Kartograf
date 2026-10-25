@@ -28,7 +28,7 @@ list of the public API: `src/kartograf/__init__.py` (`__all__`).
 4. [GUGiK campaigns](#4-gugik-campaigns)
    - [4.1 Choosing the data year (`--year`, `--min-year`, `--max-year`)](#41-choosing-the-data-year---year---min-year---max-year)
    - [4.2 Latest full flight (`full_sheet/`, `--full-sheet`)](#42-latest-full-flight-full_sheet---full-sheet)
-   - [4.3 Versions, modes and update plan (`--check-updates`, `--upgrade`, `--force`)](#43-versions-modes-and-update-plan---check-updates---upgrade---force)
+   - [4.3 Versions, modes and update plan (`--check`, `--upgrade`, `--force`)](#43-versions-modes-and-update-plan---check---upgrade---force)
 5. [Soils and HSG](#5-soils-and-hsg)
 6. [CLMS API configuration (CORINE GeoTIFF)](#6-clms-api-configuration-corine-geotiff)
 7. [Known issues and limitations](#7-known-issues-and-limitations)
@@ -244,7 +244,7 @@ kartograf elevation download --product nmt --resolution 100m --country pl --bbox
 - Without sheets, flights and cutout: `--sheet-system`, `--scale`, year flags,
   `--all-campaigns`, `--full-sheet`, `--cutout`, `--horizontal-crs`,
   `--min-density` and `--country cz` give `Error: ... NMT 100 m to pliki
-  wojewodztw z ATOM - bez arkuszy, lotow i wycinka`. `--check-updates`
+  wojewodztw z ATOM - bez arkuszy, lotow i wycinka`. `--check`
   reads only the feeds.
 
 **Intensity images, true orthophoto and oblique orthophoto (since 0.8.0).** GUGiK
@@ -277,7 +277,7 @@ kartograf imagery download --product oblique-orto --sheet 7.125.11.08 --directio
   WCS GUGiK nie ma w tym obszarze prawdziwej ortofotomapy ...` (exit code 11) without a
   version in the store; the service does not publish the cutout extent, so the image is
   downloaded and checked before saving.
-- Result lines and `--check-updates` of a unit with several files give the file
+- Result lines and `--check` of a unit with several files give the file
   name (`7.125.11.08_e.tif: do pobrania ...`).
 - Under `--country auto` a single-country product narrows the area to that country
   (`Info: --country auto -> pl (--product intensity tylko dla PL)`).
@@ -417,7 +417,7 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
 - The result is a hard link `<segment>/bbox/<coords>.tif` (without a date) to a
   version in `<segment>/versions/bbox/<YYYY-MM-DD>_<sha8>/`. By default
   and with `--upgrade` the existing version is used without PRG and WCS requests
-  (line `... lokalna wersja ... (bez sprawdzania; --check-updates)`);
+  (line `... lokalna wersja ... (bez sprawdzania; --check)`);
   `--force` downloads again — the same content is "unchanged" (cutouts are
   byte-reproducible, measurement 2026-10-12), a different one is a new version next to the
   old one. A failed download does not touch the previous version or the hard link.
@@ -510,7 +510,7 @@ kartograf imagery download --product orto --country pl --bbox 566000,243000,5662
   auto -> pl (--resolution 0.25m, --coverage standard dotyczy tylko PL)`).
   `--coverage` and `--resolution` without `--cutout` give `Error:` (orthophoto
   sheets have the source pixel). A cutout is in the version store
-  (`orto/pl_1992_<coverage>_<res>/bbox/`); `--check-updates` reports
+  (`orto/pl_1992_<coverage>_<res>/bbox/`); `--check` reports
   `nie da sie sprawdzic bez pobrania`, newer content is obtained with `--force`.
   Details: ARCHITECTURE 4.3, [ADR-042](DECISIONS.md) D14 (erratum 5).
 
@@ -666,7 +666,7 @@ kartograf imagery download --product orto --country cz "--bbox=-448500,-1113500,
 # border area under auto: PL sheets (--sheet-system for the PL part) and CZ SM5 sheets
 kartograf imagery download --product orto --country auto --bbox 18.60,49.74,18.64,49.76 --bbox-crs EPSG:4326 --sheet-system 1992 --root ./data
 # newer vintage without downloading images (release from the ATOM feed)
-kartograf imagery download --product orto --sheet CTES96 --check-updates --root ./data
+kartograf imagery download --product orto --sheet CTES96 --check --root ./data
 kartograf imagery list-sources   # --product orto (PL: pl.gugik.orto, CZ: cz.cuzk.orto)
 ```
 
@@ -693,12 +693,12 @@ kartograf imagery list-sources   # --product orto (PL: pl.gugik.orto, CZ: cz.cuz
   CTES96, AS91); kafle TM33 sa tylko dla NMT ...`; `--cutout` with CZ — `Error:`.
 - **Freshness.** The version label is the year and release date from the ATOM feed
   (`2024_2025-02-06`). By default local files are used without queries
-  (suffix `(bez sprawdzania; --check-updates)`; immediately when offline),
-  `--check-updates` checks the release without downloading images, `--upgrade`
+  (suffix `(bez sprawdzania; --check)`; immediately when offline),
+  `--check` checks the release without downloading images, `--upgrade`
   downloads the new year (old versions stay in `versions/`), `--force`
   downloads again (the same content = `bez zmian`). One sheet is one
   ZIP download and one release check; a failed check
-  (`--check-updates`) gives one line `nie udalo sie sprawdzic` per file.
+  (`--check`) gives one line `nie udalo sie sprawdzic` per file.
   JGW files are written before the JPEG, so
   an image version always has georeferencing files.
 - **Border area.** Under `--country auto` an area at the border gives PL sheets
@@ -724,7 +724,7 @@ kartograf elevation download --product contours --format SHP --country cz "--bbo
   and flight flags give `Error: ... warstwice to arkusze SM5 (wektor) - bez
   rozdzielczosci, lotow i wycinka`; a TM33 tile and `--country pl` - `Error:`.
 - Freshness: HTTP signal (`ETag`) - local version after one `HEAD`,
-  `--check-updates` without downloading. The sidecar has a list of ZIP files
+  `--check` without downloading. The sidecar has a list of ZIP files
   (`extra.members`), `mapname` and `cz_share` from the index.
 
 ### 1.5 Land cover, soils, HSG, cache
@@ -737,7 +737,7 @@ kartograf landcover download --product bdot10k --teryt 1465 --format SHP --root 
 # Area spanning two counties (TERYT from PRG WFS): package of EACH county, separate file
 kartograf landcover download --product bdot10k --bbox 626000,480000,628000,482000 --root ./data
 #   landcover/pl_bdot10k_gpkg/teryt/1421.gpkg: nowa wersja 2026-10-12_38da4056
-#   landcover/pl_bdot10k_gpkg/teryt/1465.gpkg: lokalna wersja 2026-10-12 (bez sprawdzania; --check-updates)
+#   landcover/pl_bdot10k_gpkg/teryt/1465.gpkg: lokalna wersja 2026-10-12 (bez sprawdzania; --check)
 #   Nowe: 1, nowa etykieta: 0, bez zmian: 0, lokalne: 1, bledy: 0 (./data)
 #   (ścieżka zawsze teryt/<TERYT> — pakiet to cały powiat; obszar żądania
 #    w sidecarze extra.parent_request; to samo dla --sheet i --geometry)
@@ -811,7 +811,7 @@ in `Info:` (`unit_list`). `--layers`: a BDOT10k class code from `landcover list-
 the network, a class without objects in the county (absent from the package, e.g. `SWKN` in Sopot)
 is an `Info:` `classes_absent` — the remaining classes are saved, and the absence of all of them is an
 error for the county (as with BDOO). Modes
-`--check-updates`/`--upgrade`/`--force`/`--plan`: section 4.3. CORINE without
+`--check`/`--upgrade`/`--force`/`--plan`: section 4.3. CORINE without
 CLMS credentials downloads a PNG preview (section 6). BDOT10k layers,
 SoilGrids parameters and CORINE years: PRD 3.5–3.7. ZABAGED, Data50 and Data250
 (`--product zabaged|data50|data250`, CZ: an area or a national file): section 1.9.
@@ -832,7 +832,7 @@ Packages up to 2023 have no file for a class whose objects are absent
 in the voivodeship: the absence of some selected classes is an `Info:`, the absence of all — an
 error for that voivodeship. A class outside the vintage (e.g. `KUIK` from 2024) is an
 `Error:` with the list of classes of the vintage. The version has a vintage label; GUGiK does not
-provide a change signal, so `--check-updates` reports "nie da się sprawdzić
+provide a change signal, so `--check` reports "nie da się sprawdzić
 bez pobrania", and `--force` downloads again (the same content = `bez zmian`).
 
 ### 1.6 When `--scale` is required
@@ -1279,7 +1279,7 @@ and `models3d` (3D building models, `--product buildings`)
 share a common shape (ADR-042): exactly one choice — `--teryt` (unit
 package), an `--bbox`/`--sheet`/`--geometry` area (with `--country`) or
 `--whole-country` (national file; `boundaries` only) — and the modes
-`--check-updates`/`--upgrade`/`--force`/`--plan`, `--workers` and `-q` as
+`--check`/`--upgrade`/`--force`/`--plan`, `--workers` and `-q` as
 in the other groups. Each group has only its own content flags (`--level`
 and `--format` in `boundaries`, `--format` and `--ku` in `cadastre`,
 `--lod`/`--year` in `models3d`; a foreign flag is a parser error, code 2).
@@ -1327,10 +1327,10 @@ kartograf cadastre download --product map --teryt 1261 --root ./data
 kartograf cadastre download --product map --country pl --bbox 565000,243000,567000,245000 --root ./data
 #   cadastre/pl_egib/bbox/565000_243000_567000_245000.gpkg: nowa wersja 2026-10-15_14c95c95
 
-# Again: local version without queries; --check-updates: no cheap signal
+# Again: local version without queries; --check: no cheap signal
 kartograf boundaries download --product admin --teryt 12 --root ./data
-#   boundaries/pl_prg_gml/teryt/12.zip: lokalna wersja 2026-10-15 (bez sprawdzania; --check-updates)
-kartograf boundaries download --product admin --teryt 12 --check-updates --root ./data
+#   boundaries/pl_prg_gml/teryt/12.zip: lokalna wersja 2026-10-15 (bez sprawdzania; --check)
+kartograf boundaries download --product admin --teryt 12 --check --root ./data
 #   boundaries/pl_prg_gml/teryt/12.zip: nie da sie sprawdzic bez pobrania (2026-10-15)
 
 # PRG address points and streets (since 0.8.0): area, county package, national file
@@ -1442,7 +1442,7 @@ with the size appears before the download.
 
 **Freshness and versions.** GUGiK packages and service objects have no cheap
 change signal: the next run uses the local version without queries,
-`--check-updates` reports `nie da sie sprawdzic bez pobrania`, and new
+`--check` reports `nie da sie sprawdzic bez pobrania`, and new
 content is obtained with `--force` (the same content = `bez zmian`, different = a new version next to the
 old one). The version label is the archive edition or the 3D model year, and for PRG
 and EGiB — the download date. The version sidecar carries the choice (`request`), the source
@@ -1455,7 +1455,7 @@ that would download more than **100 files** or more than **10 GB** ends
 with an `Error:` (code 2) before the download: the message gives the number of
 files, their size (the sum from `HEAD` or from the ATOM feed; above 100 files —
 an estimate from 5 files) and what to do — narrow the area, choose a unit
-(`--teryt`, `--ku`) or run a plan with part of the items (`--check-updates
+(`--teryt`, `--ku`) or run a plan with part of the items (`--check
 --plan PLIK`, edit the file, then `--upgrade --plan PLIK`). Only
 files to be downloaded count: versions already local do not (with `--force` — all).
 Choosing a unit (`--teryt`, `--ku`) and `--whole-country` have no limit —
@@ -1467,7 +1467,7 @@ NMT 100 m (voivodeship files of the area).
 ```bash
 kartograf models3d download --product trees --country pl --bbox 560000,240000,575000,250000 --root ~/kartograf-data
 #   Info: trees: powiaty obszaru wg PRG (2): 1206, 1261
-#   Error: trees: obszar daje 2 pliki do pobrania, razem ok. 13,7 GB wg HEAD - limit jednego zadania to 100 plikow i 10 GB. Zawez obszar (--bbox, --sheet, --geometry), wybierz jednostke (--teryt <4 digits>) albo wykonaj plan z czescia pozycji (--check-updates --plan PLIK, potem --upgrade --plan PLIK)
+#   Error: trees: obszar daje 2 pliki do pobrania, razem ok. 13,7 GB wg HEAD - limit jednego zadania to 100 plikow i 10 GB. Zawez obszar (--bbox, --sheet, --geometry), wybierz jednostke (--teryt <4 digits>) albo wykonaj plan z czescia pozycji (--check --plan PLIK, potem --upgrade --plan PLIK)
 ```
 
 ### 1.9 CZ data: ZABAGED, Data50, Data250, RUIAN and HY-NET
@@ -1501,7 +1501,7 @@ kartograf landcover list-layers --product data250
 kartograf landcover download --product data250 --whole-country --horizontal-crs EPSG:5514 --root ./data
 #   Warning: data250 CZ: plik krajowy https://openzu.cuzk.gov.cz/opendata/Data250/epsg-5514/data250.zip - 230485722 B (ok. 230 MB)
 #   landcover/cz_data250_shp_5514/country/cz.zip: nowa wersja 2026-05-12_ae501843
-kartograf landcover download --product data250 --whole-country --horizontal-crs EPSG:5514 --check-updates --root ./data
+kartograf landcover download --product data250 --whole-country --horizontal-crs EPSG:5514 --check --root ./data
 #   landcover/cz_data250_shp_5514/country/cz.zip: aktualne (2026-05-12)
 
 # RUIAN (boundaries --country cz): units of the --level level intersecting the area
@@ -1519,7 +1519,7 @@ kartograf hydro download --product network --country cz "--bbox=-470000,-1130000
 #   -> hydro/cz_hynet/bbox/-470000_-1130000_-440000_-1100000.gpkg (warstwy WatercourseLink, HydroNode)
 kartograf hydro download --product network --country cz --whole-country --root ./data
 #   -> hydro/cz_hynet_gpkg/country/cz.zip (HY-NET.gpkg w EPSG:3045, ok. 194 MB)
-kartograf hydro download --product network --country cz --whole-country --check-updates --root ./data
+kartograf hydro download --product network --country cz --whole-country --check --root ./data
 
 # Geomorphological units of CZ: the --level level is required for an area
 kartograf boundaries download --product geomorphology --country cz --level celek "--bbox=-452000,-1112000,-450000,-1110000" --bbox-crs EPSG:5514 --root ./data
@@ -1531,7 +1531,7 @@ kartograf cadastre download --product map --ku 623164 --format SHP --root ./data
 kartograf cadastre download --product map --country cz --format SHP "--bbox=-452000,-1112000,-450000,-1110500" --bbox-crs EPSG:5514 --root ./data
 #   Info: map: katastralni uzemi obszaru wg RUIAN (3): 652954, 696137, 753521
 #   cadastre/cz_cadastral-map_shp/ku/652954.zip: nowa wersja 2026-10-16_223d7ce9 (i dwa kolejne KU)
-kartograf cadastre download --product map --country cz --format SHP "--bbox=-452000,-1112000,-450000,-1110500" --bbox-crs EPSG:5514 --check-updates --root ./data
+kartograf cadastre download --product map --country cz --format SHP "--bbox=-452000,-1112000,-450000,-1110500" --bbox-crs EPSG:5514 --check --root ./data
 #   cadastre/cz_cadastral-map_shp/ku/652954.zip: aktualne (2026-10-16)   (tak samo 696137 i 753521)
 kartograf hydro list-sources
 ```
@@ -1556,7 +1556,7 @@ with an `Info:` line (`Notice` `area_omitted`). The area result is always in EPS
 (`--horizontal-crs` with an area = `Error:`); `--teryt`, `--sheet`,
 `--format`, `--layers`, `--keep-raw` and `--year` with `--product zabaged` are
 `Error:`. The national file has a release from the ATOM feed (label e.g.
-`2026-10-04`): `--check-updates` compares it without downloading, `--upgrade`
+`2026-10-04`): `--check` compares it without downloading, `--upgrade`
 downloads the new release.
 
 **Data50 and Data250.** `--product data50` and `--product data250` are the CUZK digital
@@ -1570,7 +1570,7 @@ with its schema. `--whole-country` with `--horizontal-crs EPSG:5514` or
 `EPSG:3045` writes the national ZIP with Shapefile files 1:1 (Data50: directory
 `shp/`, Data250: `DATA250_<year>_SHP/`; the layer names of the national file are
 different from the layers of the area result, e.g. `Akvadukt.shp`, `AirfldA.shp`), with a
-release from the ATOM feed (`--check-updates` without downloading). The remaining rules
+release from the ATOM feed (`--check` without downloading). The remaining rules
 are as for ZABAGED: the area result is always in EPSG:5514, `--teryt`, `--sheet`,
 `--year`, `--layers`, `--format` and `--keep-raw` are `Error:`.
 
@@ -1585,7 +1585,7 @@ country (`--level pl=gmina,cz=obec`; library: `{"pl": "gmina", "cz":
 with the hint `--level pl=<level>,cz=<level>`. `--whole-country
 --country cz` is the national SHP (approx. 251 MB) with an `ETag`: by default the local
 version is used without a request (section 4.3), `HEAD` is done only by
-`--check-updates` (`aktualne` or `nowsza`) and `--upgrade`.
+`--check` (`aktualne` or `nowsza`) and `--upgrade`.
 
 **`--country auto` in collections.** Country envelopes are rectangles, so
 an area deep inside one country (e.g. Cieszyn on the Polish side) also falls
@@ -1595,7 +1595,7 @@ in `failed` (`kind` `no_coverage` or `download`; `unit` = country code when
 the units could not be determined) and an `Error:` line — but the other country is
 downloaded, and the task ends with code 0 with a `Warning:`
 `auto_partial_success` (the same rule as in `elevation` and `imagery`;
-`--check-updates`: `Warning:` `check_failed` and `auto_partial_success`).
+`--check`: `Warning:` `check_failed` and `auto_partial_success`).
 Code 1 is kept for an explicit `--country` and for the failure of all countries
 (no units in either = `no_coverage`). A project task with a partial
 success is not pinned.
@@ -1618,7 +1618,7 @@ file (`--whole-country --country cz`, approx. 194 MB) is a ZIP with
 `HY-NET.gpkg` in **EPSG:3045** (ETRS89 / UTM 33N) — in a different CRS than the
 area result (EPSG:5514); the sidecar gives the actual CRS, and there is no other
 CRS of the file (`--horizontal-crs` is unnecessary). The file has an `ETag`:
-`--check-updates` reports `aktualne` or `nowsza`. The service redirects the
+`--check` reports `aktualne` or `nowsza`. The service redirects the
 default `User-Agent` of `curl` to a PDF with the terms of use —
 Kartograf sends its own (`kartograf/<version>`).
 
@@ -1640,15 +1640,15 @@ every KU of the area according to RUIAN (with an `Info:` list of KUs). A missing
 `Error:` with the list of formats. A KU without a package (e.g. 999999) ends with
 `Error: ... (HTTP 404)`, and the remaining KUs of the task are saved. The packages have an
 HTTP signal: the next run uses the local version without a request
-(`HEAD` is done only by `--check-updates` and `--upgrade`: `aktualne` or
+(`HEAD` is done only by `--check` and `--upgrade`: `aktualne` or
 `nowsza`). The KUs of an area from RUIAN are kept in the metadata cache (TTL 7 days; `--force`,
-`--upgrade` and `--check-updates` query the service), so repeating the area
+`--upgrade` and `--check` query the service), so repeating the area
 works without a network.
 The VKM format (cadastral exchange) is not supported: its address
 returns 404 for KU 623164 (state 2026-10-16).
 
 **Freshness and size.** Area features (ZABAGED, RUIAN, HY-NET) have
-no cheap change signal: local version without requests, `--check-updates`
+no cheap change signal: local version without requests, `--check`
 = `nie da sie sprawdzic bez pobrania`, new content — `--force`. The area result
 is assembled in memory (the whole layer at once): a 30 x 30 km area
 is thousands of features per ZABAGED layer (reconnaissance of 2026-10-15: 4979
@@ -1676,7 +1676,7 @@ kartograf names download --product geographic --country cz --bbox=-452000,-11120
 kartograf names download --product geographic --country pl --whole-country --format SHP --root ~/kartograf-data
 kartograf names download --product world --country pl --whole-country --format GML --root ~/kartograf-data
 kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 --root ~/kartograf-data
-kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 --check-updates --root ~/kartograf-data
+kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 --check --root ~/kartograf-data
 ```
 
 PRNG RP has **two** country files (`miejscowosci`, `obiekty-fizjograficzne`:
@@ -1685,7 +1685,7 @@ the Polish names of the world have one (`pl_swiat.zip`). GUGiK formats: `GML`, `
 `XLSX` (original ZIP archives). Geonames: `GPKG` or `FGDB` in
 `EPSG:5514`/`EPSG:3045`, with an explicit `--horizontal-crs` required; the country file is
 the original ZIP from the CUZK ATOM feed, and the release date is the version label and the
-`--check-updates` signal. A warning about their size appears before
+`--check` signal. A warning about their size appears before
 country files are downloaded.
 
 `maps download --product topographic` downloads BDOT10k visualisation sheets
@@ -1709,7 +1709,7 @@ kartograf maps download --product topographic --country pl --sheet M-34-064-D-d-
 kartograf maps download --product topographic --country pl --sheet M-34-064 --scale 1:100000 --format PDF --root ~/kartograf-data
 kartograf maps download --product topographic --country cz --sheet 0510-D-11 --scale 1:10000 --format TIFF --root ~/kartograf-data
 kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF --root ~/kartograf-data
-kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF --check-updates --root ~/kartograf-data
+kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF --check --root ~/kartograf-data
 kartograf maps list-sources
 kartograf names list-sources
 ```
@@ -1733,7 +1733,7 @@ from photos and from scanning), so you get both versions as separate files;
 first component of the PL-2000 sheet code): the OBJ has the coordinates of that
 zone (E with the zone prefix) and PL-EVRF2007-NH heights (sidecar
 `horizontal_crs`, `vertical_crs` EPSG:9651). The version label is the date
-and the work report number from the record, so `--check-updates` compares a tile
+and the work report number from the record, so `--check` compares a tile
 with the index without downloading. The area of a large city is hundreds of tiles — above
 100 tiles the task ends with `Error:` with the count and estimated size
 (area limit, section 1.8). `--product trees` is CityGML LoD1 tree models
@@ -1746,7 +1746,7 @@ CRS): a county package (`--teryt`) or the county packages of the area,
 kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 --root ~/kartograf-data
 #   Info: mesh: kafle obszaru (1): 2000/7/78944_6777_74230_55482
 #   models3d/pl_mesh/2000/7/78944_6777_74230_55482.zip: nowa wersja 2021-10-03_DFT.7201.043.2023_7950f585
-kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 --check-updates --root ~/kartograf-data
+kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 --check --root ~/kartograf-data
 #   models3d/pl_mesh/2000/7/78944_6777_74230_55482.zip: aktualne (2021-10-03_DFT.7201.043.2023)
 kartograf models3d download --product trees --teryt 3063 --root ~/kartograf-data
 #   Warning: trees PL 3063: duzy plik https://opendata.geoportal.gov.pl/InneDane/Drzewa3D/LOD1/2023/30/3063.zip - 324674789 B (ok. 325 MB)
@@ -1779,7 +1779,7 @@ country file, only with `--whole-country`: `--country pl` — PL-geoid2021 for
 PL-EVRF2007-NH (TXT: latitude, longitude, zeta in ETRF2000-PL, grid
 0.01°, 42 MB), `--country cz` — QGZU-2013 (ZIP of 17 TXT grids for Bpv
 heights, 58 MB; the release date from the ATOM feed is the label and the
-`--check-updates` signal). An area gives `Error:`. Kartograf downloads the models
+`--check` signal). An area gives `Error:`. Kartograf downloads the models
 as data and does not apply them to other data.
 
 ```bash
@@ -1805,7 +1805,7 @@ kartograf geodesy list-sources
 ```
 
 Control points, packages, archives and PL-geoid2021 have no cheap freshness
-signal (`--check-updates`: `nie da sie sprawdzic bez pobrania`; new
+signal (`--check`: `nie da sie sprawdzic bez pobrania`; new
 content with `--force`). The `models3d download` and `geodesy download` commands
 are suitable for a manifest (`kartograf project add <name> geodesy download
 --product control --network horizontal --teryt 1201`).
@@ -1851,7 +1851,7 @@ for failure in report.failed:                # UnitFailure(unit, country, error,
     print(failure.country, failure.error)
 print(report.ok)  # CLI exit code: True = 0 (also auto partial success)
 
-plan = check_data(**selection)               # = --check-updates, without downloading
+plan = check_data(**selection)               # = --check, without downloading
 report = download_data(**selection, update="upgrade", plan=plan)  # = --upgrade --plan
 ```
 
@@ -2202,7 +2202,7 @@ clouds = download_cz_laz(**selection_cz, update="upgrade", plan=plan)
 (`<cache_dir>/kartograf/metadata.db`, TTL 7 days), `False` = no cache, a custom
 `MetadataCache` = that one. `update="force"` skips cache reads in this
 call (like `--force`), and the check functions (`check_data`, `check_*`)
-always skip them (like `--check-updates`). Read-only directory:
+always skip them (like `--check`). Read-only directory:
 cache disabled with a `Notice` `cache_disabled`, the download continues.
 A provider created manually (below) without a `MetadataCache` queries the GUGiK sheet index
 on EVERY `download_sheet`; pass it a cache, and sheet queries
@@ -2349,7 +2349,7 @@ default pyproj. Cost, threads and layout variants: ARCHITECTURE 3.3.1.
 | `classes_absent` | info | the package has no file for one of the `--layers` classes (no such objects) | `landcover --product bdoo` |
 | `corine_preview` | info | CORINE without CLMS credentials: WMS preview instead of data | `landcover --product corine` |
 | `cache_disabled` | warning | metadata cache not usable (e.g. read-only directory); the download continues | all |
-| `project_geometry_changed` | warning | the task geometry file has changed since pinning | `project download --check-updates` |
+| `project_geometry_changed` | warning | the task geometry file has changed since pinning | `project download --check` |
 | `index_unsupported`, `cz_service_only` | info | index records that Kartograf does not download; CZ models without sheet files (DMR 5G, DMP 1G) | `elevation availability` |
 
 The area unit list has two codes because of the printout: `sheet_list`
@@ -2624,7 +2624,7 @@ kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 20
   `DownloadResult.full_link_outside_range`.
 
 
-### 4.3 Versions, modes and update plan (`--check-updates`, `--upgrade`, `--force`)
+### 4.3 Versions, modes and update plan (`--check`, `--upgrade`, `--force`)
 
 Applies to every track of `kartograf elevation download` and `kartograf imagery download`: PL NMT/NMPT/orthophoto sheets,
 LAZ tiles (PL and CZ), CZ sheets (TM33, SM5; CZ orthophoto), CZ cutouts and PL cutouts
@@ -2632,11 +2632,11 @@ LAZ tiles (PL and CZ), CZ sheets (TM33, SM5; CZ orthophoto), CZ cutouts and PL c
 and `boundaries download`, `cadastre download`, `models3d download`,
 `hydro download`, `names download`, `maps download` and `geodesy download`. The flags
 are mutually exclusive. The table below describes PL sheets (signal:
-sheet index); the other tracks differ in the signal. Without `--check-updates`
+sheet index); the other tracks differ in the signal. Without `--check`
 and `--upgrade` a file with a local version is used **without querying
 the signal** (`HEAD`, release, ATOM feed, map sheet index record):
-the line `lokalna wersja ... (bez sprawdzania; --check-updates)`, with no network
-at once and no `Warning:`. The signal is compared by `--check-updates` (`nowsza:
+the line `lokalna wersja ... (bez sprawdzania; --check)`, with no network
+at once and no `Warning:`. The signal is compared by `--check` (`nowsza:
 ...`) and `--upgrade` (downloads the newer content). PL sheets and PL LAZ tiles
 query the sheet index for the file selection (sheet index records from the cache):
 
@@ -2644,31 +2644,31 @@ query the sheet index for the file selection (sheet index records from the cache
 |---|---|---|
 | PL sheets | GUGiK sheet index (`index`) | table below |
 | PL LAZ tiles | WFS record (`index`) | a newer flight means new files — downloaded by default; a tile with a local version only with `--force` (D26) |
-| CZ: SM5 sheets, TM33 DMR 4G/DMP OK tiles in EVRF2007, LAZ files (plan track `cz_laz`) | `ETag`/`Last-Modified` (`http`) | `--check-updates`/`--upgrade`: one `HEAD` per file; a different `ETag` = `nowsza`, `--upgrade` downloads |
-| other TM33 tiles (warp from ImageServer), CZ and PL cutouts (including orthophotos) | none (`none`) | by default `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = local + `Info:` about `--force` |
-| CZ orthophoto (SM5 sheet; plan track `cz_orto`) | release from the CUZK ATOM feed (`metadata`) | label = `<year>_<release>` (`2024_2025-02-06`); one release check per sheet (four files); a newer vintage = `nowsza: ...` in `--check-updates`, `--upgrade` downloads |
-| SoilGrids, CORINE CLMS | source release (`metadata`: GetCapabilities / CLMS catalogue) | version label = release (`2.0`, `V2020_20u1`); a newer release = `nowsza: ...` in `--check-updates`, `--upgrade` downloads; release unavailable: without a local version `Error:`, with a local one the local version by default without a query (with `--upgrade` `Error:`) |
+| CZ: SM5 sheets, TM33 DMR 4G/DMP OK tiles in EVRF2007, LAZ files (plan track `cz_laz`) | `ETag`/`Last-Modified` (`http`) | `--check`/`--upgrade`: one `HEAD` per file; a different `ETag` = `nowsza`, `--upgrade` downloads |
+| other TM33 tiles (warp from ImageServer), CZ and PL cutouts (including orthophotos) | none (`none`) | by default `lokalna wersja ... (bez sprawdzania; --check)`; `--check` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = local + `Info:` about `--force` |
+| CZ orthophoto (SM5 sheet; plan track `cz_orto`) | release from the CUZK ATOM feed (`metadata`) | label = `<year>_<release>` (`2024_2025-02-06`); one release check per sheet (four files); a newer vintage = `nowsza: ...` in `--check`, `--upgrade` downloads |
+| SoilGrids, CORINE CLMS | source release (`metadata`: GetCapabilities / CLMS catalogue) | version label = release (`2.0`, `V2020_20u1`); a newer release = `nowsza: ...` in `--check`, `--upgrade` downloads; release unavailable: without a local version `Error:`, with a local one the local version by default without a query (with `--upgrade` `Error:`) |
 | BDOT10k, CORINE preview | none (`none`) | like cutouts; `--force` for BDOT10k also refreshes the PRG cache |
 | collections (`boundaries`, `cadastre`, `models3d`, `hydro`; plan track `collection`), area ZABAGED and the BDOT10k archive (`--year`) | none (`none`) | like cutouts; label = vintage/release year or download date (sections 1.8, 1.9) |
 | national RUIAN and HY-NET files | `ETag`/`Last-Modified` (`http`) | like SM5 sheets |
 | national ZABAGED file | release from the ATOM feed (`metadata`) | label = release date (`2026-10-04`); like CZ orthophoto |
 | PRNG/Geonames areas, PRNG country | none (`none`) | `--force` to check for new content; PRNG RP has two national packages |
-| Geonames country | ATOM feed release (`metadata`) | `--check-updates` compares the release date without downloading the ZIP |
+| Geonames country | ATOM feed release (`metadata`) | `--check` compares the release date without downloading the ZIP |
 | BDOT10k maps | `Stan bazy` date of the sheet index (`index`) | date separate per scale, without downloading TIFF/PDF; a sheet with a local version by default without GetFeatureInfo |
-| CZ ZTM | `ETag`/`Last-Modified` (`http`) | `--check-updates`/`--upgrade`: one `HEAD` per sheet |
+| CZ ZTM | `ETag`/`Last-Modified` (`http`) | `--check`/`--upgrade`: one `HEAD` per sheet |
 | HSG (`soil hsg`) | sha256 of inputs | the same input content = `uzyta ponownie` (no computation); in the plan an `hsg` item next to three `landcover` items |
 
-Under `--country auto` `--check-updates --plan FILE` writes ONE plan
+Under `--country auto` `--check --plan FILE` writes ONE plan
 with PL and CZ items (field `track`), and `--upgrade --plan FILE` executes
 the items of each track.
 
-| Situation | default | `--check-updates` | `--upgrade` | `--force` |
+| Situation | default | `--check` | `--upgrade` | `--force` |
 |---|---|---|---|---|
 | local version up to date | local version | `aktualne` | local version | downloads again |
 | a newer campaign in the sheet index | local version + `Info:` | `nowsza: <label> (lokalna <label>)` | downloads the newer one | downloads |
 | no local version | downloads | `do pobrania` | downloads | downloads |
 
-`--check-updates` downloads nothing; with `--plan FILE` it writes a JSON plan
+`--check` downloads nothing; with `--plan FILE` it writes a JSON plan
 (`kartograf-plan/1`), which `--upgrade --plan FILE` executes later —
 an item whose source has changed since the plan ends with `Error:` without
 a download, and items removed from the file are not executed. A `--plan`
@@ -2680,10 +2680,10 @@ again and refreshes the metadata cache, but does not overwrite: the same content
 `bez zmian`, different = a new version (in a project `--force` also repairs
 damaged pinned versions, section 8.1).
 
-`--check-updates` behaves like a download of the same area with regard to data
+`--check` behaves like a download of the same area with regard to data
 (since 0.8.0): a sheet without data in the sheet index (sea, area abroad, no
 resolution in the region) **is not a plan item** and is not a check
-error — when the rest of the area has data, `--check-updates` ends with code 0
+error — when the rest of the area has data, `--check` ends with code 0
 with the same `Warning: GUGiK nie ma danych dla N z M arkuszy ...` as the download
 (in JSON: `notices`, `ok: true`); when no sheet has data, it is an
 `Error:` with exit code 14 and error code `no_data` (reason `no_coverage`). Sheets with data only outside the
@@ -2691,23 +2691,23 @@ year range give ONE `no_data` error (reason `year_out_of_range`) for all of them
 arkuszy`), as in the download; the `check_failed` item remains for a sheet index
 failure (network, 5xx).
 
-`--check-updates` and `--upgrade` always query the source: reading the metadata
+`--check` and `--upgrade` always query the source: reading the metadata
 cache (sheet index records, PRG responses, indexes; TTL 7 days) is
 skipped, and the entries are refreshed — a new flight published after the last
 query is visible at once (also without an earlier
-`--check-updates`), and without a network the check ends with `Error:`.
+`--check`), and without a network the check ends with `Error:`.
 The default download uses the cache as before.
 
 ```bash
 kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data
 #   nmt/pl_1992_1m_evrf2007/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc: nowa wersja 2025-10-21_84183_4de1eac7
-kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data --check-updates --plan plan.json
+kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data --check --plan plan.json
 #   nmt/pl_1992_1m_evrf2007/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc: aktualne (2025-10-21_84183)
 kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data --upgrade --plan plan.json
 ```
 
 Result: one line per file — its subject is always the file path under
-`--root` (the same in the download and in `--check-updates`, each file separately,
+`--root` (the same in the download and in `--check`, each file separately,
 e.g. the four directions of oblique orthophoto and the JPEG/JGW files of CZ orthophoto), then
 `nowa wersja <label>_<sha8>`, `nowa
 etykieta <label> (plik identyczny z <label>)` (GUGiK published under
@@ -2716,7 +2716,7 @@ version directory is a hard link, with no additional disk space;
 in the library `VersionedFile.same_as`), `bez zmian <label>`,
 `lokalna wersja <label>`
 (with the suffix `; dostepna nowsza <label> (--upgrade)` from the sheet index
-record or `(bez sprawdzania; --check-updates)`), after the list
+record or `(bez sprawdzania; --check)`), after the list
 the summary `Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N`
 (also for PL and CZ LAZ tiles). A CZ sheet, a CZ LAZ file and a cutout give one
 status line.
@@ -3051,12 +3051,12 @@ bytes. Without `--force`, manual repair: remove the version directory and run
 ### 8.2 Freshness and data variant
 
 ```bash
-kartograf project download --check-updates
+kartograf project download --check
 kartograf project download --upgrade teren
 kartograf project download --force pokrycie
 ```
 
-`--check-updates` queries the source without downloading and compares the state
+`--check` queries the source without downloading and compares the state
 **with the pin**, not with the newest local version in the store; it does not change the
 manifest. `--upgrade` explicitly re-pins the whole task to a newer version,
 if there is a change signal, also when the new version is already in the store.
@@ -3081,7 +3081,7 @@ chosen task flags — the report prints a ready line `W projekcie:
 kartograf project add NAME elevation download ...` without `--root`
 (section 1.7; an archive with `--format`, in the manifest the option `format`).
 `availability` answers the question *which
-variants are available*, and `project download --check-updates` — *whether the
+variants are available*, and `project download --check` — *whether the
 pinned files are current for the chosen variant*. The `--year`
 choice remains current for a given year even after a
 newer vintage is released.
@@ -3113,7 +3113,7 @@ links (section 4); `verify` does not detect redundant copies.
 It is worth keeping the area geometry file next to the manifest and giving it as a relative path:
 it moves with the project. Changing its bytes since pinning
 usually blocks restoring missing files; `status`, `verify` and `download`
-do not see it when the files are present (`--check-updates` warns), and an explicit
+do not see it when the files are present (`--check` warns), and an explicit
 `--upgrade`/`--force` may accept the changed area. The other commands
 require an existing store directory (a missing mounted share will not
 cause a download into an empty directory).
@@ -3190,7 +3190,7 @@ of the library return it as `CommandResult` (`to_dict()` is the same document).
 |---|---|
 | `schema`, `tool`, `version` | `kartograf-result/1`, `kartograf` and the package version |
 | `command` | the catalog id of the command (`elevation download`) |
-| `check` | `true` when the run was a plan without effects (`--check-updates`) |
+| `check` | `true` when the run was a plan without effects (`--check`) |
 | `status` | `ok`, `partial` or `failed` (a cancelled command is the error `cancelled`) |
 | `result` | the domain document of the table below |
 | `items` | one entry per unit of a batch, `{id, status, code?, reason?, message?}`: `status` is `ok` or `failed`, a failed unit has the registry `code` of its failure (`reason` where the code is not precise enough); `[]` for a command with no batch |
@@ -3217,7 +3217,7 @@ the catalog, a project that was changed) is `ok` with no items. The documents:
 |---|---|---|---|
 | `kartograf-result/1` | every command with `--json` (MCP: every tool), around the document of its own row | `run_command`, `check_command` (`CommandResult`) | never: `status` is the verdict |
 | `kartograf-download/1` | `elevation download`, `imagery download`, `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download`, `landcover download`, `soil download`, `soil hsg` (MCP: `kartograf_<group>_download`, `kartograf_soil_hsg`) | `download_data`, `download_collection`, `download_landcover`, `download_soil`, `calculate_hsg` | `ok: false` |
-| `kartograf-plan/1` | each of the above with `--check-updates` (MCP: the same tool with `check_updates: true`) | `check_data`, `check_collection`, `check_landcover`, `check_soil`, `check_hsg` | item `check_failed` (`ok: false`) |
+| `kartograf-plan/1` | each of the above with `--check` (MCP: the same tool with `check: true`) | `check_data`, `check_collection`, `check_landcover`, `check_soil`, `check_hsg` | item `check_failed` (`ok: false`) |
 | `kartograf-availability/1` | `elevation availability` (MCP: `kartograf_elevation_availability`) | `check_availability` | `ok: false` |
 | `kartograf-sheet/1` | `sheet parse` (MCP: `kartograf_sheet_parse`) | `describe_sheet` | - |
 | `kartograf-sheets/1` | `sheet find` (MCP: `kartograf_sheet_find`) | `find_sheets` | - |
@@ -3225,7 +3225,7 @@ the catalog, a project that was changed) is `ok` with no items. The documents:
 | `kartograf-layers/1` | `landcover list-layers`, `soil list-layers` (MCP: `kartograf_landcover_list_layers`, `kartograf_soil_list_layers`) | `list_layers` | - |
 | `kartograf-project-state/1` | `project init`, `project add`, `project remove` | `init_project`, `add_project_task`, `remove_project_task` | - |
 | `kartograf-project-report/1` | `project download` | `download_project` | `ok: false` |
-| `kartograf-project-check/1` | `project status`, `project verify`, `project download --check-updates` (MCP: `kartograf_project_download` with `check_updates: true`) | `get_project_status`, `verify_project`, `check_project` | `ok: false` |
+| `kartograf-project-check/1` | `project status`, `project verify`, `project download --check` (MCP: `kartograf_project_download` with `check: true`) | `get_project_status`, `verify_project`, `check_project` | `ok: false` |
 | `kartograf-cache/1` | `cache stats`, `cache path`, `cache clear` | `get_cache_info`, `get_cache_path`, `clear_cache` | - |
 | `kartograf-config/1` | `config show` | `get_config` | - |
 | `kartograf-command-list/1` | `commands list` (MCP: `kartograf_commands_list`) | `list_commands` | - |
@@ -3255,7 +3255,7 @@ Common rules of the documents:
 - `ok` in `kartograf-project-check/1` depends on the command: `project status` and
   `project verify` give `ok: false` when a task is not downloaded
   (`not_downloaded`) or a file does not have status `ok`; `project download
-  --check-updates` assesses only source freshness (`ok: false` = item
+  --check` assesses only source freshness (`ok: false` = item
   `check_failed`), so a project without pins has `ok: true` there and status `ok`, and
   `not_downloaded` lists all tasks. Completeness and the whole
   project content are assessed by `status`/`verify` (idiom `project status -q ||
@@ -3540,7 +3540,7 @@ print(schema.to_json())                         # to_dict() / to_json(): like ev
 `groups` (`name`, `summary`, `products`: the product names) and `commands` (`name` =
 `<group> <command>`, `operation_id` = `kartograf_<group>_<command>`, `summary`, `families`,
 `read_only`, `check`: the command that plans this command without effects, that is, itself with the option
-`check_updates`, or `null`).
+`check`, or `null`).
 
 **The schema** (`kartograf-commands/1`, the Nogat schema `schemas/nogat/commands-1.schema.json`; up to
 about 16 thousand characters of compact JSON, the CLI prints it indented) carries one command: `name`,
@@ -3552,7 +3552,7 @@ main tasks), `rules`, `examples` (`call` = the full CLI command, `result` = an e
 `title`), `errors` (codes of the error registry, 9.3) and `i18n.pl` (the Polish `summary`, `description`,
 `rules`; the document does not carry the Polish option descriptions, they are in `--help`).
 
-An option (`options[]`) is a parameter with an argument of the library function, or `check_updates` of a command with a
+An option (`options[]`) is a parameter with an argument of the library function, or `check` of a command with a
 plan; the flags only the CLI has (`--json`, `--quiet`, `--upgrade`, `--force`) are not options
 (`--upgrade` and `--force` write the option `update`). It has a `name` (the function argument, the key of the MCP
 call and the `--flag`), `type` (`string`, `integer`, `boolean`, `array`, `object`), `required`,
@@ -3575,10 +3575,10 @@ knowing the per-product functions:
 
 | Function | Role |
 |---|---|
-| `parse_command(argv)` | command line (a list of words or a string, also with a leading `kartograf`, as `format_command` writes it) -> `CommandCall(command, options, run)`: `options` is the JSON form of the task options (as in `kartograf-project.json`, `bbox` always with `bbox_crs`), `run` is the remaining flags of the line under the parameter names (`root`, `upgrade`, `force`, `check_updates`, `plan`, `workers`, `quiet`, `json`, `summary`; there is no `update` key); a syntax error is a `UsageError`, a command outside the data commands is a `ValidationError(option="command")` |
+| `parse_command(argv)` | command line (a list of words or a string, also with a leading `kartograf`, as `format_command` writes it) -> `CommandCall(command, options, run)`: `options` is the JSON form of the task options (as in `kartograf-project.json`, `bbox` always with `bbox_crs`), `run` is the remaining flags of the line under the parameter names (`root`, `upgrade`, `force`, `check`, `plan`, `workers`, `quiet`, `json`, `summary`; there is no `update` key); a syntax error is a `UsageError`, a command outside the data commands is a `ValidationError(option="command")` |
 | `validate_command(command, options, root=None)` | validation without network and without writing, with the same rules as the download: `ValidationError` with `option`/`allowed` |
 | `format_command(command, options, run=None)` | canonical line `kartograf <group> <command> --flag ...` (the inverse of `parse_command`) |
-| `run_command(command, options, root=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | calls the function of the command (`download_data`, ...) and returns its envelope `CommandResult` (9.1; `result` is the report, `kartograf-download/1`); the mode is `update="upgrade"` or `"force"` (the caller makes it of `run`: `upgrade`/`force` -> `update`, `check_updates` -> `check_command`), `plan` is `check_command(...).result` |
+| `run_command(command, options, root=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | calls the function of the command (`download_data`, ...) and returns its envelope `CommandResult` (9.1; `result` is the report, `kartograf-download/1`); the mode is `update="upgrade"` or `"force"` (the caller makes it of `run`: `upgrade`/`force` -> `update`, `check` -> `check_command`), `plan` is `check_command(...).result` |
 | `check_command(command, options, root=, cache=, on_notice=)` | the `check_*` of the command, without downloading: the envelope with `check: true`, `result` is `kartograf-plan/1` |
 
 ```python
@@ -3674,14 +3674,14 @@ failure to start prints `Error: ...` and the `kartograf-error/1` document as the
 **Read only by default (AGI-1.3).** Without `--allow-writes` the 23 tools that only read work
 as usual, and each of the 13 tools that write and have a plan (the twelve data commands and
 `project download`) is offered as its **plan-only variant**: its input schema has no `update`,
-`plan`, `workers` or `summary`, `check_updates` is fixed to `true` (the call may leave it
+`plan`, `workers` or `summary`, `check` is fixed to `true` (the call may leave it
 out), its hints say `readOnlyHint: true`, and every call is the plan (`check: true` in the
 envelope, the document `kartograf-plan/1`; for `project download` `kartograf-project-check/1`).
-An argument of a run, or `check_updates: false`, answers `forbidden` (12) with `details.option`
+An argument of a run, or `check: false`, answers `forbidden` (12) with `details.option`
 and the hint to start the server with `--allow-writes`. The three tools that write and have no
 plan (`project init`, `project add`, `project remove`) are not offered at all; a call of one (a
 client may still have the old list) answers `forbidden` (12). With `--allow-writes` all 39
-tools are offered as declared, and `check_updates: true` still plans.
+tools are offered as declared, and `check: true` still plans.
 
 #### MCP server tools
 
@@ -3749,7 +3749,7 @@ generated from the vendored `schemas/nogat/result-1.schema.json` by
 A tool takes the arguments of the library function, named like the `options` of the
 catalog (not the CLI flags); `kartograf_commands_schema(command="elevation download")` lists
 them with the meaning of every allowed value. The same task, run and then planned (the
-`arguments` of the second call add `check_updates`; the plan is what `update="upgrade"` and
+`arguments` of the second call add `check`; the plan is what `update="upgrade"` and
 `plan` run later):
 
 ```json
@@ -3774,7 +3774,7 @@ them with the meaning of every allowed value. The same task, run and then planne
     "resolution": "1m",
     "vertical_crs": "EVRF2007",
     "root": "/data/kartograf",
-    "check_updates": true
+    "check": true
   }
 }
 ```
@@ -3791,13 +3791,13 @@ them with the meaning of every allowed value. The same task, run and then planne
   `command` = the command of the tool. `OSError` is `io_error`, any other exception outside
   the hierarchy is `internal_error` (the full traceback only in the stderr log of the
   server). `forbidden` (12) is a path outside `--allow-dir`, an argument of a run (or
-  `check_updates: false`) on a server that does not write, or a tool that is not offered. The
+  `check: false`) on a server that does not write, or a tool that is not offered. The
   only protocol error is an unknown tool name (`INVALID_PARAMS`, naming the close tool names).
 - The order of the checks of a call: a write that a plan-only tool refuses (`forbidden`); the
   arguments against the input schema of the tool (the first violation is `validation_error`
   with `details.option` = the property: a missing argument, then an unknown one, then a
   missing companion such as `bbox_crs`, then a wrong value); the rule of paths (absolute;
-  `--allow-dir`); the options of a run next to `check_updates` (`validation_error`: a plan
+  `--allow-dir`); the options of a run next to `check` (`validation_error`: a plan
   fetches nothing); `validate_command` (the rules of the library, with `option`); then the
   execution in a worker thread. The server adds no default that changes data: a `root`
   that is given is absolute (a relative one is `validation_error` with `option: root` and a
@@ -3834,8 +3834,8 @@ in the default state (`kartograf.mcp_server.INSTRUCTIONS`); a test compares it:
 ```text
 Kartograf downloads spatial data of Poland and Czechia (GUGiK, CUZK, Copernicus, ISRIC) into a versioned store: the directory root, one directory per product, files never overwritten. Order: discover, check, run, read. Discover with kartograf_commands_list (groups, products and commands) and kartograf_commands_schema(command="elevation download") (the options of one command, its allowed values with their meanings, rules, examples and errors). What years, grids and CRSs an area has: kartograf_elevation_availability. Read the store: kartograf_store_overview, kartograf_store_entries, kartograf_store_sidecar; the sidecar of a file has its CRS, source and licence.
 Shared arguments. Paths (root, project_dir, geometry, path) are absolute. Area: sheet (a sheet code, for example N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no default) or geometry (a SHP or GPKG file; layer is its GPKG layer), exactly one; some commands also take teryt, ku or whole_country. country is pl, cz or auto: required with bbox and geometry, implied by a sheet code. Select data explicitly (product, resolution, vertical_crs, ...): nothing is guessed. A value per country is a string or {"pl": ..., "cz": ...}.
-Updates. update omitted fetches what is missing, update=upgrade fetches newer content when the source signals it, update=force fetches again; a version is never overwritten. check_updates=true plans without fetching: its plan (the result of the envelope, kartograf-plan/1) runs later with update=upgrade and plan.
-This server does not write: a command that writes only plans (check_updates is true; update, plan, workers and summary are forbidden), and kartograf_project_init, kartograf_project_add, kartograf_project_remove and kartograf_store_init are unavailable. Start kartograf-mcp with --allow-writes and --allow-dir DIR to download.
+Updates. update omitted fetches what is missing, update=upgrade fetches newer content when the source signals it, update=force fetches again; a version is never overwritten. check=true plans without fetching: its plan (the result of the envelope, kartograf-plan/1) runs later with update=upgrade and plan.
+This server does not write: a command that writes only plans (check is true; update, plan, workers and summary are forbidden), and kartograf_project_init, kartograf_project_add, kartograf_project_remove and kartograf_store_init are unavailable. Start kartograf-mcp with --allow-writes and --allow-dir DIR to download.
 Results. A result is the envelope kartograf-result/1: status (ok, partial, failed), result (the document of the command), items (one per unit; a failed one has code and reason) and notices. partial and failed are results (isError false): read items. An error (isError true) is kartograf-error/1 with code, message, hint and details; details.option names the argument to fix. forbidden is a path outside --allow-dir or a write on a server that only plans.
 ```
 <!-- end generated -->

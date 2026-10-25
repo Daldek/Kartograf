@@ -66,10 +66,10 @@ Offline. The envelope names the command and holds the document of the command:
 }
 ```
 
-Plan a download, then run it (network). `--check-updates` writes nothing:
+Plan a download, then run it (network). `--check` writes nothing:
 
 ```bash
-kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 --root ~/kartograf-data --check-updates --json
+kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 --root ~/kartograf-data --check --json
 kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 --root ~/kartograf-data --json
 ```
 
@@ -159,7 +159,7 @@ The full list is `kartograf commands list --json`. Python names are keyword-only
 - [llms.txt](https://raw.githubusercontent.com/Daldek/Kartograf/main/llms.txt) and [AGENTS.md](https://raw.githubusercontent.com/Daldek/Kartograf/main/AGENTS.md) are generated from the command catalog; `kartograf commands guide --format agents|llms|agents-md-block` prints them and `--inject PATH` puts the block into the AGENTS.md of another repository.
 - Discover the commands with `kartograf commands list --json` and one command with `kartograf commands schema --command "elevation download" --json` (options, allowed values with meanings, rules, examples, errors). In Python: `list_commands()`, `command_schema()`, `validate_command()`, `check_command()`, `run_command()`; in MCP: `kartograf_commands_list` and `kartograf_commands_schema`.
 - Every command answers with `kartograf-result/1` (`status` `ok`, `partial` or `failed`, `result`, `items`, `notices`); an error is `kartograf-error/1` on the last line of stderr.
-- Read-only operations come first: `--check-updates` plans without fetching or writing, a version is never overwritten, and the MCP server only plans until it is started with `--allow-writes`.
+- Read-only operations come first: `--check` plans without fetching or writing, a version is never overwritten, and the MCP server only plans until it is started with `--allow-writes`.
 
 ## MCP server
 
@@ -200,7 +200,7 @@ VS Code reads `.vscode/mcp.json`, whose key is `servers`:
 |---|---|
 | `--tools FAMILIES` | `discovery`, `availability`, `data`, `project`, `store`; `core` is the ten tools of the main tasks |
 | `--allow-dir DIR` | absolute directory (repeatable) that every path argument and the store must lie in; another path is `forbidden` |
-| `--allow-writes` | data tools write (needs `--allow-dir`); without it they only plan (`check_updates`) |
+| `--allow-writes` | data tools write (needs `--allow-dir`); without it they only plan (`check`) |
 
 Tool descriptions and instructions are English; the server plans until `--allow-writes` and never writes outside `--allow-dir`.
 

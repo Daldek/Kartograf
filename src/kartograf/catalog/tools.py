@@ -8,12 +8,12 @@ the declaration (English, at most 600 characters together, DOC-1.7). The input
 schema (JSON Schema 2020-12, ``additionalProperties: false``) has one property per
 option of the command, with the description, the allowed values, the bounds and the
 default of the catalog; a rule among options (``one_of``) is a sentence of their
-descriptions, not a keyword that clients reject. ``check_updates`` is an option of
+descriptions, not a keyword that clients reject. ``check`` is an option of
 every command that has a check, so there is no separate tool for a check.
 
 The server mode decides what a write tool is (``allow_writes``): with writes it is
 the command as declared; without them a command that has a check is its plan-only
-variant (the options of a run are gone, ``check_updates`` is fixed to true, the
+variant (the options of a run are gone, ``check`` is fixed to true, the
 annotations say read only) and a command that writes without a check
 (``project init``, ``project add``, ``project remove``) is not offered at all
 (``hidden_tools``).
@@ -54,7 +54,7 @@ FAMILIES: Final[tuple[str, ...]] = (*COMMAND_FAMILIES, "core")
 """What ``--tools`` selects: the families of the commands and ``core`` (AGI-5.12)."""
 
 RUN_OPTIONS: Final[tuple[str, ...]] = ("update", "plan", "workers", "summary")
-"""The options of a run: a plan (``check_updates``) has none of them."""
+"""The options of a run: a plan (``check``) has none of them."""
 
 ALWAYS_LOAD_KEY: Final = "anthropic/alwaysLoad"
 """Key of ``_meta`` that tells Claude Code to load a tool's definition up front."""
@@ -115,10 +115,10 @@ class ToolSpec:
     function : str
         The library function the command calls (a name of ``kartograf.__all__``).
     check_function : str, optional
-        The ``check_*`` twin the tool calls for ``check_updates``.
+        The ``check_*`` twin the tool calls for ``check``.
     kinds : dict
         The catalog kind of every argument that reaches the library
-        (``check_updates`` does not).
+        (``check`` does not).
     fixed : dict
         Constant arguments of the function (the ``group`` of ``<group> list-sources``).
     paths : dict

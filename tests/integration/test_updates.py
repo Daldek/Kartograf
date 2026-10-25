@@ -42,7 +42,7 @@ def _manager(tmp_path, fake, **kwargs):
     return DownloadManager(provider=fake, root=tmp_path, **kwargs)
 
 
-def test_check_sheets_plan_equals_old_check_updates(tmp_path):
+def test_check_sheets_plan_equals_old_check(tmp_path):
     fake = FakeCampaignProvider(C14)
     plan = _manager(tmp_path, fake).check_sheets([G])
     assert fake.downloads == []
@@ -59,7 +59,7 @@ def test_check_sheets_plan_equals_old_check_updates(tmp_path):
     assert plan.store == str(tmp_path.resolve()) and plan.schema == PLAN_SCHEMA
 
 
-def test_check_updates_current_and_newer(tmp_path):
+def test_check_current_and_newer(tmp_path):
     fake = FakeCampaignProvider({"newest": [REC["83233"]]})
     _manager(tmp_path, fake).download_sheet(G)
     (current,) = _manager(tmp_path, fake).check_sheets([G]).items

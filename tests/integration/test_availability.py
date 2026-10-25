@@ -777,7 +777,7 @@ def test_full_sheet_records_and_campaigns_on_their_own():
 
 
 def test_check_asks_the_index_despite_cached_records(tmp_path):
-    """Live test 0.8.0 (P2-2): ``--check-updates`` always asks the source - a
+    """Live test 0.8.0 (P2-2): ``--check`` always asks the source - a
     sheet record in the metadata cache (TTL 7 days) is refreshed, not read,
     so a flight published since the last query is found."""
     report = _report("nmt", "krakow")

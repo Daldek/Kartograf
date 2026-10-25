@@ -219,7 +219,7 @@ def test_ku_units_cached_asks_no_service_again_also_when_empty(tmp_path):
 
 
 def test_ku_units_refreshing_cache_asks_again_and_stores_the_answer(tmp_path):
-    """``--force``/``--upgrade``/``--check-updates`` (a refreshing cache) ask
+    """``--force``/``--upgrade``/``--check`` (a refreshing cache) ask
     the service even for a stored area; the answer replaces the stored one
     for the next plain run."""
     path = tmp_path / "meta.db"

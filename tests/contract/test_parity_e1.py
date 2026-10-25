@@ -94,7 +94,7 @@ def test_oblique_direction_and_check_lines(tmp_path):
     assert run.api_result.files[0].file.path.name == f"{OBLIQUE_SHEET}_n.tif"
 
     checked = run_both(
-        [*argv, OBLIQUE_SHEET, "--check-updates"],
+        [*argv, OBLIQUE_SHEET, "--check"],
         lambda out: check_data(product="oblique-orto", sheet=OBLIQUE_SHEET, root=out),
         tmp_path,
     )

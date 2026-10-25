@@ -196,8 +196,8 @@ LANG = Param(
     normalize="lower",
     metavar="JEZYK",
 )
-CHECK_UPDATES = Param(
-    "check_updates",
+CHECK = Param(
+    "check",
     "flag",
     CHECK_HELP,
     description_pl="Sprawdz aktualnosc lokalnych wersji bez pobierania",
@@ -359,7 +359,7 @@ def update_params(
 ) -> tuple[Param, ...]:
     """Update modes of a store command.
 
-    The exclusive flags ``--check-updates``, ``--upgrade`` and ``--force``, the API
+    The exclusive flags ``--check``, ``--upgrade`` and ``--force``, the API
     argument ``update`` and, when ``plan`` is the Polish text of its description,
     ``--plan``. ``check`` is ``(English, Polish)``: the English sentence says what
     the source signals for this command and is added to the common text of the
@@ -367,7 +367,7 @@ def update_params(
     """
     params = [
         replace(
-            CHECK_UPDATES,
+            CHECK,
             description=f"{CHECK_HELP} {check[0]}".strip(),
             description_pl=check[1],
         ),

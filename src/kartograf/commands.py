@@ -77,7 +77,7 @@ class CommandCall:
         parameters of the command; ``bbox`` always comes with ``bbox_crs``.
     run : dict
         The other flags the line gave, by parameter name (``root``,
-        ``upgrade``, ``force``, ``check_updates``, ``plan``, ``workers``,
+        ``upgrade``, ``force``, ``check``, ``plan``, ``workers``,
         ``quiet``, ``json``, ``summary``): a text, a number or ``True``.
     """
 
@@ -250,7 +250,7 @@ def format_command(
     The flags follow the order of the parameters of the command; ``--bbox-crs`` is
     left out when it is the default of the flag; ``run`` adds the other flags
     (``root`` as ``--root``): ``root`` and ``plan`` are paths, ``workers``
-    a whole number, ``upgrade``, ``force``, ``check_updates``, ``quiet``, ``json``
+    a whole number, ``upgrade``, ``force``, ``check``, ``quiet``, ``json``
     and ``summary`` are ``True`` (or left out). ``parse_command`` reads the line
     back into the same command, options and run.
 

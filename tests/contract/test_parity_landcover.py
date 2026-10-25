@@ -4,7 +4,7 @@ and ``soil hsg``: same store bytes, statuses, plan and notices, frozen clock.
 Scenarios: BDOT10k ``teryt``, BDOT10k area of several powiats (one failing),
 BDOT10k archive ``--year``, CORINE CLMS and WMS preview, SoilGrids, ZABAGED
 area (recorded CUZK REST answers), HSG ``bbox`` and ``geometry``,
-``--check-updates --plan`` + ``--upgrade --plan``.
+``--check --plan`` + ``--upgrade --plan``.
 """
 
 from unittest.mock import patch
@@ -188,7 +188,7 @@ def test_soilgrids_local_version_asks_no_edition(tmp_path):
     _same(run, run.api_result.notices, run.api_result.ok)
     assert run.api_result.notices == ()
     assert "Warning:" not in run.cli_stderr
-    assert "(bez sprawdzania; --check-updates)" in run.cli_stdout
+    assert "(bez sprawdzania; --check)" in run.cli_stdout
 
 
 def test_zabaged_area(tmp_path, monkeypatch):
@@ -271,14 +271,14 @@ def test_hsg_geometry(tmp_path):
 
 
 def test_check_plan_upgrade(tmp_path):
-    """``--check-updates --plan`` = ``check``; ``--upgrade --plan`` =
+    """``--check --plan`` = ``check``; ``--upgrade --plan`` =
     ``download(update="upgrade", plan=...)`` - same plan and store."""
     plan_file = tmp_path / "plan.json"
     soil = _providers(soilgrids=lambda: SoilGridsProvider(session=FakeSoilGrids()))
     args = ["--bbox", BBOX_ARG, *CLAY_ARGS]
     with soil:
         checked = run_both(
-            ["soil", "download", *args, "--check-updates", "--plan", str(plan_file)],
+            ["soil", "download", *args, "--check", "--plan", str(plan_file)],
             lambda out: check_soil(root=out, bbox=BBOX, **CLAY),
             tmp_path,
         )

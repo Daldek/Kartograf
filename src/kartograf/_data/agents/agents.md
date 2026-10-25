@@ -22,12 +22,12 @@ Python 3.12 or newer: `pip install "kartograf @ git+https://github.com/Daldek/Ka
 
 - Python: <!-- kartograf:python_example --> (keyword arguments are the options). Also `kartograf.list_commands`, `kartograf.command_schema`, `kartograf.validate_command`, `kartograf.check_command` and `kartograf.run_command`. Results are documents with `to_dict()` and `to_json()`; errors raise `KartografError` subclasses (`code`, `exit_code`, `hint`, `details`).
 - CLI: `kartograf <group> <command> --option value --json`, e.g. <!-- kartograf:cli_example -->. A flag is `--` and the option name with `-` for `_`. `--json` prints the result envelope as one document on stdout; logs and progress go to stderr. `--root DIR` is the store of a data command.
-- MCP: `kartograf-mcp [--allow-writes] [--allow-dir DIR] [--tools FAMILIES]` (extra `mcp`). A tool is named like the `operation_id` (`kartograf_elevation_download`) and its arguments are the options. The server reads and plans by default: a data tool only plans (`check_updates` is true) until `--allow-writes` is given, and that needs `--allow-dir`. `--tools core` keeps the ten tools of the main tasks.
+- MCP: `kartograf-mcp [--allow-writes] [--allow-dir DIR] [--tools FAMILIES]` (extra `mcp`). A tool is named like the `operation_id` (`kartograf_elevation_download`) and its arguments are the options. The server reads and plans by default: a data tool only plans (`check` is true) until `--allow-writes` is given, and that needs `--allow-dir`. `--tools core` keeps the ten tools of the main tasks.
 - Settings: `kartograf config show` prints the effective settings (`root`, `data_dir`, `cache_dir`, `lang`, `debug`) and their sources.
 
 ## Workflow rules
 
-Discover, check, run, read: find the command with `kartograf commands list` and read its options with `kartograf commands schema --command "<name>"`; run a data command with `--check-updates` first (the plan fetches and writes nothing); run it; read `status`, `result`, `items` and `notices` of the envelope.
+Discover, check, run, read: find the command with `kartograf commands list` and read its options with `kartograf commands schema --command "<name>"`; run a data command with `--check` first (the plan fetches and writes nothing); run it; read `status`, `result`, `items` and `notices` of the envelope.
 
 Rules:
 
@@ -56,7 +56,7 @@ One line per command: name, `operation_id`, summary. Options, allowed values, un
 
 ## Typical flows
 
-CLI lines; in MCP call the tool of the `operation_id` with the same options as arguments (`check_updates: true` for `--check-updates`). Paths under `/data/` are examples: give your own, absolute.
+CLI lines; in MCP call the tool of the `operation_id` with the same options as arguments (`check: true` for `--check`). Paths under `/data/` are examples: give your own, absolute.
 
 <!-- kartograf:flows -->
 

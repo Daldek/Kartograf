@@ -369,7 +369,7 @@ COMMANDS = (
         description=(
             "Offline, read only: every group with its products and every "
             "command with its `operation_id`, summary, MCP families, whether "
-            "it only reads and whether `check_updates` plans it. Start here; "
+            "it only reads and whether `check` plans it. Start here; "
             "for the options of one command use `commands schema`."
         ),
         examples=(

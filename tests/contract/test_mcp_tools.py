@@ -208,9 +208,9 @@ def test_the_commands_that_write_and_have_a_check_are_plans_without_writes():
         assert plan.refused == options & set(RUN_OPTIONS)
         assert plan.refused  # every command with a check has an option of a run
         assert set(plan.input_schema["properties"]) == options - plan.refused
-        assert plan.input_schema["properties"]["check_updates"]["const"] is True
-        assert plan.input_schema["properties"]["check_updates"]["default"] is True
-        assert "const" not in full.input_schema["properties"]["check_updates"]
+        assert plan.input_schema["properties"]["check"]["const"] is True
+        assert plan.input_schema["properties"]["check"]["default"] is True
+        assert "const" not in full.input_schema["properties"]["check"]
         assert plan.description.endswith(PLAN_ONLY_NOTE)
         assert plan.description.startswith(full.description)
         assert plan.kinds.keys() == full.kinds.keys() - plan.refused
@@ -239,13 +239,13 @@ def test_the_run_options_are_update_plan_workers_and_summary():
     )
 
 
-def test_check_updates_is_an_option_of_the_commands_with_a_check_only():
+def test_check_is_an_option_of_the_commands_with_a_check_only():
     for command in TOOL_COMMANDS:
         properties = WRITES[command.operation_id].input_schema["properties"]
 
-        assert ("check_updates" in properties) == command.supports_check, command.id
-    assert "kartograf_check_updates" not in WRITES
-    assert "kartograf_project_check_updates" not in WRITES
+        assert ("check" in properties) == command.supports_check, command.id
+    assert "kartograf_check" not in WRITES
+    assert "kartograf_project_check" not in WRITES
 
 
 # -- input schemas --------------------------------------------------------------------
@@ -389,7 +389,7 @@ def test_project_add_takes_a_command_and_its_options():
 
 def test_every_argument_has_a_kind_and_the_data_tools_know_their_task_options():
     for spec in WRITES.values():
-        properties = set(spec.input_schema["properties"]) - {"check_updates"}
+        properties = set(spec.input_schema["properties"]) - {"check"}
 
         assert set(spec.kinds) == properties, spec.name
         assert set(spec.paths) <= set(spec.kinds)
@@ -443,7 +443,7 @@ def test_the_texts_a_client_reads_are_english_without_flags_or_steering():
         text = _text(spec)
 
         assert not POLISH_LETTERS.search(text), spec.name
-        assert "check-updates" not in text
+        assert "--check" not in text
         for banned in ("always recommend", "best tool for", "ignore previous"):
             assert banned not in text.lower(), spec.name
 

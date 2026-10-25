@@ -193,7 +193,7 @@ def wfs_records(
     the records of the area are kept in the metadata cache
     (``index_area_cache``, its TTL) like the records of the PL sheet
     indexes - a repeated area asks no service; a refreshing cache
-    (``--check-updates``, ``--upgrade``, ``--force``) asks again.
+    (``--check``, ``--upgrade``, ``--force``) asks again.
     """
     _check_wfs_source(source)
     key = f"wfs-records|{source.endpoint}|{layer}|{_mm(bbox)}"
