@@ -393,8 +393,24 @@ changes and the migration guide ("Migration guide: data output") are written wit
   `check_data(output_dir=, force=)` run the check of the whole request first, so a request over
   two countries is judged as one list; the reports have `mode` `plain`, `output_dir` and the
   file statuses `written` and `replaced`, and a check lists `action`, `path` and `reason` of each
-  target (a conflict is a result). The PL sheets, the collections, land cover and HSG follow in
-  the next steps.
+  target (a conflict is a result). The collections, land cover and HSG follow in the next
+  steps.
+- PL sheets in plain mode (ADR-054 decision 5, DEV-19.4; adopted from D12 and D13 of the
+  template branch): `DownloadManager(provider, output_dir=...)` and `download_data(output_dir=)`
+  write one file per sheet, `<sheet>.<ext>`, taken from the newest flight DECLARED FULL
+  (`full_sheet is True`) within the year bounds, not the newest flight: a file in a plain
+  directory has no sidecar that says it is partial. A sheet that has flights in the range and
+  none of them full is left out: a `warning` notice `skipped_incomplete` names the sheets (the
+  first ten) and the hint `--root`, `skipped[]` lists `{id, reason, message}` for each, and
+  `DownloadResult.incomplete` maps the sheet to its newest partial flight; the other sheets are
+  written. When every sheet is left out the command fails with `no_data`, `details.reason`
+  `skipped_incomplete` (a failed unit per sheet, exit 11; `check` raises the same
+  `NoCoverageError(reason="skipped_incomplete")`). The year options filter the flights as in the
+  store, with the same `YearRangeError`; `--full-sheet` is an `info` notice
+  `full_sheet_redundant` and has no effect; `all_campaigns` is `store_only_option`. The rule
+  applies to plain mode only. `DownloadResult` has `written`, `replaced` and `incomplete`,
+  `YearRangeCheck` and `SheetInspection` an `incomplete` entry, and `NoCoverageError` takes an
+  instance `reason`.
 
 ### Breaking changes
 

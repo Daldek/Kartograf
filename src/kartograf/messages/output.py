@@ -64,4 +64,37 @@ MESSAGES = {
         "Use --root to write the store, or leave out {option} for plain files",
         "Uzyj --root, aby zapisac magazyn, albo pomin {option} dla zwyklych plikow",
     ),
+    # ``output``: PL sheets of a plain write that have no full flight (the newest FULL
+    # flight is the only one a plain write takes).
+    "skipped_incomplete": Text(
+        "{sheet}: no full flight within the year range (the newest flight, {flight}, "
+        "is partial)",
+        "{sheet}: brak pelnego przelotu w zakresie lat (najnowszy przelot, {flight}, "
+        "jest czesciowy)",
+    ),
+    "skipped_incomplete_hint": Text(
+        "Use --root to write the store, which takes the newest flight, partial or not",
+        "Uzyj --root, aby zapisac magazyn, ktory bierze najnowszy przelot, czesciowy "
+        "lub nie",
+    ),
+    "skipped_incomplete_all": Text(
+        "none of the {count} {count:plural(sheet|sheets)} has a full flight within "
+        "the year range: nothing to write",
+        "zaden z {count} {count:plural(arkusza|arkuszy|arkuszy)} nie ma pelnego "
+        "przelotu w zakresie lat: nie ma czego zapisac",
+    ),
+    "skipped_incomplete_some": Text(
+        "{count} {count:plural(sheet|sheets)} not written, no full flight within the "
+        "year range ({sheets}); --root writes the store, which takes the newest "
+        "flight, partial or not",
+        "Nie zapisano {count} {count:plural(arkusza|arkuszy|arkuszy)}, brak pelnego "
+        "przelotu w zakresie lat ({sheets}); --root zapisuje magazyn, ktory bierze "
+        "najnowszy przelot, czesciowy lub nie",
+    ),
+    "full_sheet_redundant": Text(
+        "--full-sheet has no effect with --output-dir: a plain write takes the newest "
+        "full flight anyway",
+        "--full-sheet nie dziala z --output-dir: zwykly zapis i tak bierze najnowszy "
+        "pelny przelot",
+    ),
 }

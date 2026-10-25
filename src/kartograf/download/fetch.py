@@ -455,6 +455,25 @@ def emit_file_notices(
         )
 
 
+def store_plain_file(slot: FileSlot, staged: Path) -> VersionedFile:
+    """Move the staged file of a plain write to its name in the output directory.
+
+    ``os.replace``, size and SHA-256 from one chunked read; the staging directory
+    of the file is removed in every case.
+
+    Raises
+    ------
+    ConflictError
+        The target appeared after the preflight and the write is not forced.
+    """
+    plain = plain_of(slot.root)
+    assert plain is not None  # the slot is built on the handle root of a plain write
+    try:
+        return plain_file(plain.commit(staged, plain.target(slot.name)))
+    finally:
+        plain.discard(staged)
+
+
 def store_file(
     slot: FileSlot,
     staged: Path,
@@ -486,12 +505,8 @@ def store_file(
     ConflictError
         A plain target appeared after the preflight and the write is not forced.
     """
-    plain = plain_of(slot.root)
-    if plain is not None:
-        try:
-            return plain_file(plain.commit(staged, plain.target(slot.name)))
-        finally:
-            plain.discard(staged)
+    if plain_of(slot.root) is not None:
+        return store_plain_file(slot, staged)
     assert version is not None  # a store file is labelled
     try:
         prepare_store(slot.root)

@@ -8,6 +8,8 @@ Supports parallel downloads via ThreadPoolExecutor when workers > 1.
 """
 
 import concurrent.futures
+import copy
+import functools
 import logging
 import os
 import shutil
@@ -15,7 +17,7 @@ import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Literal, Protocol, cast
+from typing import Any, Concatenate, Literal, Protocol, cast
 
 import requests
 
@@ -40,8 +42,11 @@ from kartograf.download.fetch import (
     UpdateMode,
     VersionedFile,
     committed_file,
+    discard_staging,
     fetch_version,
     local_file,
+    new_staging,
+    store_plain_file,
     validate_update,
 )
 from kartograf.download.links import ensure_link, linked_version, update_sidecar_extra
@@ -76,6 +81,7 @@ from kartograf.exceptions import (
 )
 from kartograf.interrupt import run_parallel
 from kartograf.marker import lenient_store, prepare_store
+from kartograf.messages import message
 from kartograf.notices import (
     CHECK_FAILED,
     DOWNLOAD_SIZE,
@@ -87,13 +93,13 @@ from kartograf.notices import (
     count_text,
     size_text,
 )
-from kartograf.output import plain_of
+from kartograf.output import plain_of, preflight, resolve_target, store_only, writing
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
 from kartograf.sources.registry import get_source
 
 # Outcome of one sheet: the strongest status among its files (spec 4.5).
-SheetStatus = Literal["new", "unchanged", "relabeled", "local"]
+SheetStatus = Literal["new", "unchanged", "relabeled", "local", "written", "replaced"]
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +206,13 @@ class DownloadResult:
     full_link_outside_range : dict[str, Path]
         With year bounds, sheets whose ``full_sheet/`` link still points to a
         full flight outside this request: sheet -> that campaign file.
+    written, replaced : list[str]
+        Successful sheets of a plain write (``output_dir``) by the status of their
+        file: a new file, or an existing one replaced with ``update="force"``.
+    incomplete : dict[str, str]
+        Plain write: sheets left out because the index lists no FULL flight of
+        them within the year bounds (a file without a sidecar cannot say it is
+        partial): sheet -> its newest partial flight (ADR-054 decision 5).
     without_full : list[str]
         With ``full_sheet=True``: sheets whose newest flight is partial and
         whose index lists no full flight within the year bounds.
@@ -223,6 +236,9 @@ class DownloadResult:
     relabeled: list[str] = field(default_factory=list)
     unchanged: list[str] = field(default_factory=list)
     local: list[str] = field(default_factory=list)
+    written: list[str] = field(default_factory=list)
+    replaced: list[str] = field(default_factory=list)
+    incomplete: dict[str, str] = field(default_factory=dict)
     reused_campaign_files: dict[str, tuple[Path, ...]] = field(default_factory=dict)
     unverified: dict[str, str] = field(default_factory=dict)
     no_coverage_hints: dict[str, tuple[str, ...]] = field(default_factory=dict)
@@ -266,7 +282,10 @@ class YearRangeCheck:
     includes all known years even when none fall inside the requested range.
     ``no_data`` identifies sheets with no years at all, while ``conflicts``
     identifies sheets with years only outside the range. ``failed`` contains
-    index errors for which the year cannot be established.
+    index errors for which the year cannot be established. ``incomplete``
+    (plain write only) holds the sheets that have flights within the range and
+    no full one, with their newest flight: they are neither selected nor a
+    conflict.
     """
 
     selected: dict[str, tuple[SkorowidzRecord, ...]]
@@ -274,6 +293,7 @@ class YearRangeCheck:
     no_data: dict[str, NoCoverageError]
     conflicts: dict[str, tuple[int, ...]]
     failed: dict[str, DownloadError]
+    incomplete: dict[str, SkorowidzRecord] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -386,7 +406,8 @@ class SheetInspection:
     ``records`` are the resolved records (``upgrade`` reuses them);
     ``error`` = the index could not be checked (or no data / a year
     conflict); ``record_errors`` = invalid records (campaign, error).
-    ``versions`` = local versions of a sheet without campaigns.
+    ``versions`` = local versions of a sheet without campaigns. ``incomplete``
+    (plain write) = the newest flight of a sheet that has no full one in range.
     """
 
     sheet: str
@@ -397,6 +418,7 @@ class SheetInspection:
     error: Exception | None = None
     record_errors: tuple[tuple[str, DownloadError], ...] = ()
     versions: tuple[LocalVersion, ...] = ()
+    incomplete: SkorowidzRecord | None = None
 
 
 class CampaignProvider(Protocol):
@@ -490,6 +512,45 @@ def no_coverage_text(total: int) -> str:
     return f"GUGiK nie ma danych dla zadnego z {count_text(total, *OF_SHEETS)} obszaru"
 
 
+def incomplete_text(sheet: str, record: SkorowidzRecord) -> str:
+    """Say why a plain write leaves a sheet out: its newest flight is partial.
+
+    The flight is named as the store names a campaign (``<date>_<id>``).
+    """
+    try:
+        flight = CampaignRef.from_record(record).dirname
+    except DownloadError:
+        flight = record.url
+    return message("output.skipped_incomplete", sheet=sheet, flight=flight)
+
+
+def _writes[**P, R](
+    method: Callable[Concatenate["DownloadManager", P], R],
+) -> Callable[Concatenate["DownloadManager", P], R]:
+    """Run a public method of a manager made with ``output_dir`` in its plain write.
+
+    The call opens the write (``writing``: the staging directory, SIGTERM) and works
+    on a copy of the manager whose storage is the handle root of that write, so
+    every slot it builds is a slot of the plain write; a manager of a store calls
+    the method as it is.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self: "DownloadManager", *args: P.args, **kwargs: P.kwargs) -> R:
+        if self._output_dir is None:
+            return method(self, *args, **kwargs)
+        options = cast(dict[str, Any], kwargs)
+        with writing(
+            output_dir=self._output_dir,
+            update=options.get("update"),
+            plan=options.get("plan"),
+            all_campaigns=self._all_campaigns,
+        ) as handle:
+            return method(self._on(handle), *args, **kwargs)
+
+    return cast(Callable[Concatenate["DownloadManager", P], R], wrapper)
+
+
 class DownloadManager:
     """
     Manages downloading of NMT data sheets.
@@ -529,6 +590,7 @@ class DownloadManager:
         provider: BaseProvider,
         *,
         root: str | Path | None = None,
+        output_dir: str | Path | None = None,
         storage: FileStorage | None = None,
         workers: int = 1,
         sidecar_extra: dict[str, Any] | None = None,
@@ -552,6 +614,13 @@ class DownloadManager:
         root : str or Path, optional
             The store root; the provider selects the segment. Default: the
             store root of the settings (``store_root()``, DEV-19.2).
+        output_dir : str or Path, optional
+            Write plain files, named as in the store, into this directory instead
+            of the store (no sidecar, no version, no link; ``update="force"``
+            replaces existing files, a conflict stops before the first byte). A PL
+            sheet is the newest FULL flight within the year bounds; a sheet without
+            a full flight is left out (``DownloadResult.incomplete``). Excludes
+            ``root``, ``storage``, ``all_campaigns`` and ``update="upgrade"``.
         storage : FileStorage, optional
             Explicit storage manager (default: storage from the provider's
             descriptor, resolution, vertical CRS and optional variant).
@@ -607,9 +676,20 @@ class DownloadManager:
             provider_vertical_crs if isinstance(provider_vertical_crs, str) else None
         )
         self._record_vertical_crs = vertical_crs
+        if output_dir is not None and storage is not None:
+            raise ValidationError(
+                "output_dir and storage exclude each other: the files of a plain "
+                "write have no storage layout",
+                options=("output_dir", "storage"),
+            )
+        if output_dir is not None and all_campaigns:
+            raise store_only("--all-campaigns")
+        self._output_dir: Path | None = None
+        if output_dir is not None:
+            self._output_dir = resolve_target(output_dir=output_dir, root=root).path
         if storage is None:
             storage = storage_for_provider(
-                resolve_root(root),
+                self._output_dir or resolve_root(root),
                 provider,
                 resolution=resolution,
                 vertical_crs=vertical_crs,
@@ -654,16 +734,27 @@ class DownloadManager:
                 f"Provider {self._provider.name} nie obsluguje kampanii "
                 f"(--all-campaigns/--min-year/--max-year/--year/--full-sheet)"
             )
-        if self._campaign_aware and plain_of(self._storage.root) is not None:
-            raise ValidationError(
-                "output_dir: the PL sheets of the GUGiK index (campaigns) are not "
-                "written as plain files yet; write the store (root)"
-            )
         self._all_campaigns = all_campaigns
         self._min_year = min_year
         self._max_year = max_year
         self._full_sheet = full_sheet
         self._has_range = min_year is not None or max_year is not None
+
+    def _on(self, handle: Path) -> "DownloadManager":
+        """Return a copy of this manager that writes where a plain write says.
+
+        The copy shares the provider, the lock and the notices of this manager; its
+        storage lies under ``handle``, the handle root of the plain write of one call.
+        """
+        view = copy.copy(self)
+        view._storage = storage_for_provider(
+            handle,
+            self._provider,
+            resolution=self._resolution,
+            vertical_crs=self._vertical_crs,
+        )
+        view._output_dir = None
+        return view
 
     @property
     def vertical_crs(self) -> str | None:
@@ -711,7 +802,7 @@ class DownloadManager:
         return cast(CampaignProvider, self._provider)
 
     def check_year_range(
-        self, sheets: list[str], workers: int | None = None
+        self, sheets: list[str], workers: int | None = None, *, plain: bool = False
     ) -> YearRangeCheck:
         """Check every PL sheet against the year bounds before any download.
 
@@ -720,21 +811,34 @@ class DownloadManager:
         ``selected`` is empty. This public phase performs no file downloads;
         callers must abort if ``failed`` or ``conflicts`` is nonempty.
         ``workers`` overrides the manager's default worker count for the queries.
+
+        ``plain`` (the selection of a write into ``output_dir``, ADR-054 decision 5;
+        the year bounds are optional then): ``selected`` holds ONE flight per sheet,
+        the newest one declared FULL within the bounds, because a plain file has no
+        sidecar that says it is partial; a sheet with flights within the bounds and
+        none of them full is in ``incomplete`` (its newest flight), not in
+        ``selected`` and not a conflict.
         """
-        if not self._campaign_aware or not self._has_range:
+        if not self._campaign_aware or not (self._has_range or plain):
             raise ValidationError(
                 "Sprawdzenie przedzialu wymaga kampanii PL i granicy roku"
             )
 
         def classify(
             sheet: str,
-        ) -> tuple[str, tuple[SkorowidzRecord, ...], tuple[int, ...], Exception | None]:
+        ) -> tuple[
+            str,
+            tuple[SkorowidzRecord, ...],
+            tuple[int, ...],
+            SkorowidzRecord | None,
+            Exception | None,
+        ]:
             try:
                 records = self._campaign_provider.resolve_campaigns(
                     sheet, all_campaigns=True
                 )
             except DownloadError as e:
-                return sheet, (), (), e
+                return sheet, (), (), None, e
             years = tuple(
                 sorted({y for r in records if (y := record_year(r)) is not None})
             )
@@ -749,9 +853,14 @@ class DownloadManager:
                     reverse=True,
                 )
             )
-            if not self._all_campaigns:
+            partial: SkorowidzRecord | None = None
+            if plain:
+                full = tuple(r for r in selected if r.full_sheet is True)
+                partial = selected[0] if selected and not full else None
+                selected = full[:1]
+            elif not self._all_campaigns:
                 selected = selected[:1]
-            return sheet, selected, years, None
+            return sheet, selected, years, partial, None
 
         pool = self._workers if workers is None else workers
         if len(sheets) > 1 and pool > 1:
@@ -765,36 +874,46 @@ class DownloadManager:
         no_data: dict[str, NoCoverageError] = {}
         conflicts: dict[str, tuple[int, ...]] = {}
         failed: dict[str, DownloadError] = {}
-        for sheet, records, years, error in rows:
+        incomplete: dict[str, SkorowidzRecord] = {}
+        for sheet, records, years, partial, error in rows:
             if isinstance(error, NoCoverageError):
                 no_data[sheet] = error
             elif isinstance(error, DownloadError):
                 failed[sheet] = error
             elif not years:
                 no_data[sheet] = NoCoverageError(f"Brak kampanii {sheet}", sheet=sheet)
+            elif partial is not None:
+                incomplete[sheet] = partial
+                available[sheet] = years
             elif not records:
                 conflicts[sheet] = years
             else:
                 selected[sheet] = records
                 available[sheet] = years
-        return YearRangeCheck(selected, available, no_data, conflicts, failed)
+        return YearRangeCheck(
+            selected, available, no_data, conflicts, failed, incomplete
+        )
 
     def _checked_range(
         self,
         sheets: list[str],
         workers: int | None = None,
         update: UpdateMode | None = None,
+        *,
+        plain: bool = False,
     ) -> YearRangeCheck:
         """Abort the whole task on an index failure or a year conflict.
 
         D14: in the default mode an index TRANSPORT failure is not fatal when
         EVERY sheet of the task (except those without data) has a local
         version from the year range — the failed sheets stay in
-        ``check.failed`` and are served from local versions with a warning.
+        ``check.failed`` and are served from local versions with a warning. A
+        plain write has no local version: the failure is always fatal.
         """
-        check = self.check_year_range(sheets, workers)
+        check = self.check_year_range(sheets, workers, plain=plain)
         if check.failed and not (
-            update is None
+            not plain
+            and update is None
             and all(_is_transport_failure(e) for e in check.failed.values())
             and all(
                 self._local_in_range(g) is not None
@@ -873,6 +992,7 @@ class DownloadManager:
     # Download by sheet code → ASC
     # =========================================================================
 
+    @_writes
     def download_sheet(
         self,
         sheet: str,
@@ -909,13 +1029,23 @@ class DownloadManager:
                 [parser.sheet], update=update, plan=plan, on_progress=on_progress
             )
 
+        plain = self._campaign_aware and self._is_plain()
         check = (
-            self._checked_range([parser.sheet], update=update)
-            if self._has_range
+            self._checked_range([parser.sheet], update=update, plain=plain)
+            if (self._has_range or plain)
             else None
         )
         if check is not None and parser.sheet in check.no_data:
             raise check.no_data[parser.sheet]
+        if check is not None and parser.sheet in check.incomplete:
+            raise NoCoverageError(
+                incomplete_text(parser.sheet, check.incomplete[parser.sheet]),
+                sheet=parser.sheet,
+                hint=message("output.skipped_incomplete_hint"),
+                reason="skipped_incomplete",
+            )
+        if plain or not self._campaign_aware:
+            self._preflight_plain([parser.sheet], check)
         if check is not None and parser.sheet in check.failed:
             fetch = self._local_unverified(parser.sheet, check.failed[parser.sheet])
         else:
@@ -943,6 +1073,7 @@ class DownloadManager:
             SheetParser(sheet), self._sheet_scale
         )
 
+    @_writes
     def download_hierarchy(
         self,
         sheet: str,
@@ -1009,6 +1140,7 @@ class DownloadManager:
             return self.expand_sheets(sheets, self._sheet_scale)
         return list(dict.fromkeys(SheetParser(sheet).sheet for sheet in sheets))
 
+    @_writes
     def download_sheets(
         self,
         sheets: list[str],
@@ -1038,6 +1170,7 @@ class DownloadManager:
         )
         return self._download_many(leaves, update, on_progress, self._workers)
 
+    @_writes
     def inspect_sheets(self, sheets: list[str]) -> list[SheetInspection]:
         """Freshness of the leaf sheets WITHOUT downloading (spec 4.1, 4.4).
 
@@ -1057,7 +1190,12 @@ class DownloadManager:
                 versions = tuple(list_versions(root, std.name))
                 result.append(SheetInspection(sheet, std, versions=versions))
             return result
-        check = self.check_year_range(leaves) if self._has_range else None
+        plain = self._is_plain()
+        check = (
+            self.check_year_range(leaves, plain=plain)
+            if (self._has_range or plain)
+            else None
+        )
 
         def inspect(sheet: str) -> SheetInspection:
             std = self._storage.get_path(sheet, self._default_ext)
@@ -1076,6 +1214,13 @@ class DownloadManager:
                             total=1,
                         )
                     available = check.available[sheet]
+                    if sheet in check.incomplete:
+                        return SheetInspection(
+                            sheet,
+                            std,
+                            available=available,
+                            incomplete=check.incomplete[sheet],
+                        )
                     chosen, _ = self._resolve_chosen(sheet, check.selected[sheet])
                 else:
                     chosen, _ = self._resolve_chosen(sheet)
@@ -1096,11 +1241,14 @@ class DownloadManager:
                 return list(executor.map(inspect, leaves))
         return [inspect(sheet) for sheet in leaves]
 
+    @_writes
     def check_sheets(
         self,
         sheets: list[str],
         *,
         on_no_coverage: Callable[[Mapping[str, NoCoverageError], int], None]
+        | None = None,
+        on_incomplete: Callable[[Mapping[str, SkorowidzRecord], int], None]
         | None = None,
     ) -> UpdatePlan:
         """Return the PL-sheet update plan without downloading any files.
@@ -1118,7 +1266,12 @@ class DownloadManager:
           ``no_coverage_text``), as the download fails;
         - sheets with data only in other years raise ONE ``YearRangeError``
           for all of them, nothing is planned (as ``download_sheets``);
-        - an index error (network, 5xx) is a ``check_failed`` position.
+        - an index error (network, 5xx) is a ``check_failed`` position;
+        - a plain write (``output_dir``) lists only the sheets that have a FULL flight
+          within the year bounds; ``on_incomplete(incomplete, total)`` receives the
+          others (sheet -> newest flight), and when every sheet with data is one of them
+          the check raises ``NoCoverageError`` (reason ``skipped_incomplete``), as the
+          download fails.
 
         Raises
         ------
@@ -1129,7 +1282,8 @@ class DownloadManager:
         """
         from kartograf.download.updates import _items
 
-        lenient_store(self._storage.root)
+        if not self._is_plain():
+            lenient_store(self._storage.root)
         inspections = self.inspect_sheets(sheets)
         conflicts: dict[str, tuple[int, ...]] = {}
         no_data: dict[str, NoCoverageError] = {}
@@ -1154,10 +1308,21 @@ class DownloadManager:
                     dict.fromkeys(hint for e in no_data.values() for hint in e.hints)
                 ),
             )
+        incomplete = {
+            i.sheet: i.incomplete for i in inspections if i.incomplete is not None
+        }
+        if incomplete and on_incomplete is not None:
+            on_incomplete(incomplete, len(inspections))
+        if incomplete and len(incomplete) + len(no_data) == len(inspections):
+            raise NoCoverageError(
+                message("output.skipped_incomplete_all", count=len(incomplete)),
+                hint=message("output.skipped_incomplete_hint"),
+                reason="skipped_incomplete",
+            )
         items = [
             item
             for inspection in inspections
-            if inspection.sheet not in no_data
+            if inspection.sheet not in no_data and inspection.incomplete is None
             for item in _items(self, inspection)
         ]
         return new_plan(self._storage.root, items)
@@ -1284,6 +1449,9 @@ class DownloadManager:
         (``_fetch_sheet_plain``). ``on_download`` is called right before the
         first download (sequential mode reports ``"downloading"``).
         """
+        if self._campaign_aware and self._is_plain():
+            assert records is not None  # the plain check of the year range selected it
+            return self._fetch_plain(sheet, records, on_download)
         if self._campaign_aware:
             return self._fetch_campaigns(
                 sheet,
@@ -1294,6 +1462,79 @@ class DownloadManager:
                 on_progress=on_progress,
             )
         return self._fetch_sheet_plain(sheet, update, on_download)
+
+    def _is_plain(self) -> bool:
+        """Say whether this manager works on the handle root of a plain write."""
+        return plain_of(self._storage.root) is not None
+
+    def _preflight_plain(self, sheets: list[str], check: YearRangeCheck | None) -> None:
+        """Refuse a plain write whose files conflict, before its first transfer.
+
+        The name of a file is known before the transfer: ``<sheet>`` and the extension
+        of the flight the survey selected (a provider without campaigns: its own).
+        """
+        names: list[str] = []
+        for sheet in sheets:
+            if check is None:
+                names.append(self._storage.get_path(sheet, self._default_ext).name)
+                continue
+            for record in check.selected.get(sheet, ()):
+                try:
+                    ref = CampaignRef.from_record(record)
+                    ext = campaign_extension(ref, self._default_ext)
+                except DownloadError:
+                    continue  # the sheet fails by itself, with that error
+                names.append(self._storage.get_path(sheet, ext).name)
+        preflight(self._storage.root, names)
+
+    def _fetch_plain(
+        self,
+        sheet: str,
+        records: tuple[SkorowidzRecord, ...],
+        on_download: Callable[[], None] | None,
+    ) -> SheetFetch:
+        """Write the one flight the plain survey selected as the file of the sheet.
+
+        The record is checked before the network like the store does (``verify_record_
+        url``, the datum, the extension), the file goes through the staging directory
+        (``verify_file_format``, ``verify_sheet_extent``) and is moved into place with
+        its name in the store; there is no sidecar, no version and no link.
+        """
+        (record,) = records
+        ref = CampaignRef.from_record(record)
+        verify_record_url(record.url, sheet, self._url_suffix)
+        verify_record_vertical_crs(record, self._record_vertical_crs, sheet)
+        ext = campaign_extension(ref, self._default_ext)
+        std = self._storage.get_path(sheet, ext)
+        slot = FileSlot(
+            root=self._storage.root,
+            std=std,
+            versions_base=self._storage.get_versions_base(sheet),
+            versions_root=self._storage.get_versions_root(sheet),
+            ext=ext,
+        )
+        if self._announces_size:
+            self._announce_size(sheet, record)
+        if on_download is not None:
+            on_download()
+        logger.info(f"Downloading {sheet} {ref.dirname}...")
+        staged = new_staging(slot)
+        try:
+            self._campaign_provider.download_record(record, staged)
+            verify_file_format(staged, ext)
+            verify_sheet_extent(staged, sheet, ext)
+        except BaseException:
+            discard_staging(staged, slot)
+            raise
+        file = store_plain_file(slot, staged)
+        return SheetFetch(
+            sheet,
+            file.path,
+            skipped=False,
+            downloaded=(file.path,),
+            status=cast(SheetStatus, file.status),
+            files=(file,),
+        )
 
     def _fetch_sheet_plain(
         self,
@@ -1875,6 +2116,14 @@ class DownloadManager:
         try:
             if check is not None and sheet in check.no_data:
                 raise check.no_data[sheet]
+            if check is not None and sheet in check.incomplete:
+                return (
+                    sheet,
+                    None,
+                    "incomplete",
+                    incomplete_text(sheet, check.incomplete[sheet]),
+                    (),
+                )
             if check is not None and sheet in check.failed:
                 fetch = self._local_unverified(sheet, check.failed[sheet])
             else:
@@ -1931,6 +2180,8 @@ class DownloadManager:
                 result.newer[sheet] = fetch.newer
             if fetch.files:
                 result.files[sheet] = fetch.files
+        elif status == "incomplete":
+            result.incomplete[sheet] = message
         elif status in ("failed", "no_coverage"):
             result.failed.append(sheet)
             result.errors[sheet] = message
@@ -2016,9 +2267,14 @@ class DownloadManager:
         completion order; the result (and its notices) the order of ``sheets``,
         so the same request always gives the same report.
         """
+        plain = self._campaign_aware and self._is_plain()
         check = (
-            self._checked_range(sheets, workers, update) if self._has_range else None
+            self._checked_range(sheets, workers, update, plain=plain)
+            if (self._has_range or plain)
+            else None
         )
+        if plain or not self._campaign_aware:
+            self._preflight_plain(sheets, check)
         result = DownloadResult()
         total = len(sheets)
 

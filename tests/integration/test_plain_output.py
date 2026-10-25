@@ -9,15 +9,19 @@ options that need a store.
 import hashlib
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from kartograf import check_cz_laz, download_cz_laz
 from kartograf.core.bbox import BBox
 from kartograf.download.data import check_data, download_data
-from kartograf.exceptions import ConflictError, ValidationError
+from kartograf.download.manager import DownloadManager
+from kartograf.exceptions import ConflictError, NoCoverageError, ValidationError
 from kartograf.marker import STORE_MARKERS
+from kartograf.notices import FULL_SHEET_REDUNDANT, SKIPPED_INCOMPLETE
 from kartograf.output import STAGING
 from tests.integration.test_cuzk_laz import (
     CTES86_URL,
@@ -29,6 +33,16 @@ from tests.integration.test_cuzk_laz import (
 )
 from tests.integration.test_cz_laz import recorded
 from tests.integration.test_cz_orto import SUFFIXES, _members, cuzk  # noqa: F401
+from tests.integration.test_manager_campaigns import (
+    C14,
+    C14_ALL,
+    REC,
+    FakeCampaignProvider,
+    G,
+    asc_for,
+    c14_records,
+    tag,
+)
 from tests.support.interrupt_fakes import EndlessResponse
 
 SHEET = {"model": "dmr4g", "vertical_crs": "Bpv", "sheet": "CTES96"}
@@ -282,3 +296,123 @@ def test_the_cz_orthophoto_is_four_plain_files_of_one_archive(tmp_path, cuzk):  
     assert [(i.action, i.reason) for i in plan.items] == [
         ("conflict", "output_exists")
     ] * 4
+
+
+# --------------------------------------------------------------------------
+# PL sheets: the newest FULL flight, a sheet without one is skipped (ADR-054, 5)
+# --------------------------------------------------------------------------
+
+PL = {
+    "product": "nmt",
+    "vertical_crs": "EVRF2007",
+    "resolution": "1m",
+    "cache": False,
+}
+
+
+def _pl_sheets(fake):
+    return patch(
+        "kartograf.download.data._create_provider_and_storage",
+        return_value=(fake, None),
+    )
+
+
+def _partial(records):
+    return [replace(record, full_sheet=False) for record in records]
+
+
+def test_a_pl_sheet_is_the_newest_full_flight_not_the_newest_flight(tmp_path):
+    fake = FakeCampaignProvider(C14)
+    out = tmp_path / "out"
+
+    result = DownloadManager(fake, output_dir=out).download_sheet(G)
+
+    full = REC["83233"]  # 2025-04-27; the newest flight, 84183, is partial
+    (file,) = result.files[G]
+    assert (file.status, file.label, file.path) == ("written", "", out / f"{G}.asc")
+    assert file.path.read_bytes() == asc_for(G, f"v1 {tag(full)}")
+    assert fake.downloads == [full.url]
+    assert result.written == [G] and result.incomplete == {}
+    assert listing(out) == [f"{G}.asc"]  # no sidecar, no versions/, no full_sheet/
+
+
+def test_year_bounds_filter_the_flights_before_the_full_one_is_taken(tmp_path):
+    fake = FakeCampaignProvider(C14)
+
+    DownloadManager(fake, output_dir=tmp_path, max_year=2024).download_sheet(G)
+
+    assert fake.downloads == [REC["78047"].url]  # 2023: the newest full one <= 2024
+
+
+def test_a_sheet_without_a_full_flight_is_left_out_with_its_newest_flight(tmp_path):
+    fake = FakeCampaignProvider(
+        {"all": _partial(C14_ALL), "newest": _partial(C14["newest"])}
+    )
+
+    with pytest.raises(NoCoverageError) as error:
+        DownloadManager(fake, output_dir=tmp_path).download_sheet(G)
+
+    assert error.value.reason == "skipped_incomplete"
+    assert "2025-10-21" in str(error.value) and "--root" in str(error.value.hint)
+    assert fake.downloads == [] and listing(tmp_path) == []
+
+
+def test_a_list_skips_the_incomplete_sheet_and_writes_the_others(tmp_path):
+    records = [*_partial(c14_records(G)), *c14_records("N-34-139-C-a-3-2")]
+    fake = FakeCampaignProvider({"all": records, "newest": records[:1]})
+
+    result = DownloadManager(fake, output_dir=tmp_path).download_sheets(
+        [G, "N-34-139-C-a-3-2"]
+    )
+
+    assert list(result.incomplete) == [G] and result.failed == []
+    assert result.written == ["N-34-139-C-a-3-2"]
+    assert listing(tmp_path) == ["N-34-139-C-a-3-2.asc"]
+
+
+def test_the_data_command_reports_the_skipped_sheet_and_fails_when_all_are_skipped(
+    tmp_path,
+):
+    partial = FakeCampaignProvider(
+        {"all": _partial(C14_ALL), "newest": _partial(C14["newest"])}
+    )
+    with _pl_sheets(partial):
+        report = download_data(sheet=G, output_dir=tmp_path / "out", **PL)
+
+    assert not report.ok and report.files == ()
+    (skipped,) = report.skipped
+    assert (skipped.id, skipped.reason) == (G, "skipped_incomplete")
+    assert "--root" in skipped.message
+    (failure,) = report.failed
+    assert (failure.code, failure.reason) == ("no_data", "skipped_incomplete")
+    assert [n.code for n in report.notices] == [SKIPPED_INCOMPLETE]
+    assert report.notices[0].level == "warning"
+    assert not (tmp_path / "out").exists()
+    assert report.to_dict()["skipped"][0]["reason"] == "skipped_incomplete"
+
+
+def test_the_data_command_writes_the_full_flight_and_checks_before_the_first_byte(
+    tmp_path,
+):
+    fake = FakeCampaignProvider(C14)
+    out = tmp_path / "out"
+    with _pl_sheets(fake):
+        plan = check_data(sheet=G, output_dir=out, full_sheet=True, **PL)
+        report = download_data(sheet=G, output_dir=out, full_sheet=True, **PL)
+
+    assert [(i.name, i.action, i.segment) for i in plan.items] == [
+        (f"{G}.asc", "write", "")
+    ]
+    assert plan.items[0].available_label == "2025-04-27_83233"
+    assert report.ok and [f.file.status for f in report.files] == ["written"]
+    assert [n.code for n in report.notices] == [FULL_SHEET_REDUNDANT]
+    assert fake.downloads == [REC["83233"].url]  # the extra full flight is not fetched
+    assert listing(out) == [f"{G}.asc"]
+
+    with _pl_sheets(fake), pytest.raises(ConflictError) as error:
+        download_data(sheet=G, output_dir=out, **PL)
+    assert error.value.reason == "output_exists"
+    assert len(fake.downloads) == 1
+    with _pl_sheets(fake):
+        forced = download_data(sheet=G, output_dir=out, update="force", **PL)
+    assert [f.file.status for f in forced.files] == ["replaced"]
