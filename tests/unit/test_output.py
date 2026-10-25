@@ -458,3 +458,28 @@ def test_a_plan_of_the_handle_is_the_plan_of_the_directory_with_one_action_each(
     assert plan.items[0].path == tmp_path / "new.laz"
     assert refused[0].action == "conflict"
     assert (replaced.action, replaced.status) == ("replace", "unverifiable")
+
+
+def test_a_position_whose_check_failed_stays_failed_and_the_others_are_judged(
+    tmp_path,
+):
+    """DEV-19.10: the position keeps ``check_failed``, its error and no action, as in
+    the store, so the plan is not ok; its name still counts for the others."""
+
+    def item(name, status="missing", error=None):
+        return PlanItem(
+            "pl_sheet", "", "", name, name, None, None, None, None, status, error
+        )
+
+    failed = item("a.asc", "check_failed", "HTTP 503")
+    with writing(output_dir=tmp_path) as handle:
+        plan = new_plan(handle, [failed, item("a.asc"), item("b.asc")])
+        again = plain_items(open_write(handle), plan.items)
+
+    assert plan.items[0] == failed
+    assert [(i.status, i.action, i.reason, i.path) for i in plan.items[1:]] == [
+        ("unverifiable", "conflict", "duplicate_output_name", tmp_path / "a.asc"),
+        ("missing", "write", None, tmp_path / "b.asc"),
+    ]
+    assert again == plan.items
+    assert not plan.ok

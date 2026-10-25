@@ -19,6 +19,7 @@ import pytest
 from kartograf.cli.commands import main
 from kartograf.config import store_root
 from kartograf.download import collections
+from kartograf.exceptions import DownloadError
 from kartograf.marker import STORE_MARKERS
 from kartograf.output import STAGING
 from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
@@ -131,6 +132,32 @@ def test_the_plan_says_write_replace_or_conflict_and_is_a_result(capsys, tmp_pat
     assert forced[1] == f"{G}.asc: do zastapienia (--force)\n"
     assert fake.downloads == [REC["83233"].url]  # the plans fetched no data
     assert listing(out) == [f"{G}.asc"]
+
+
+def test_a_sheet_the_index_cannot_tell_fails_the_plan_as_in_the_store(capsys, tmp_path):
+    """DEV-19.10: a position whose check failed (the sheet index is unreachable) stays
+    ``check_failed`` in a plain plan: a failed result (exit 11) whose line says why,
+    as the plan of the store and the run; it is no target with an action."""
+    fake = FakeCampaignProvider(C14, errors={G: DownloadError("HTTP 503")})
+    out = tmp_path / "out"
+
+    plain = run_nmt(capsys, fake, "-o", out, "--check")
+    store = run_nmt(capsys, fake, "--root", tmp_path / "store", "--check")
+    code, stdout, _ = run_nmt(capsys, fake, "-o", out, "--check", "--json")
+    run_code = run_nmt(capsys, fake, "-o", out)[0]
+
+    assert (plain[0], store[0], code, run_code) == (11, 11, 11, 11)
+    assert plain[1] == f"{G}.asc: nie udalo sie sprawdzic: HTTP 503\n"
+    assert store[1].endswith(f"/{G}.asc: nie udalo sie sprawdzic: HTTP 503\n")
+    envelope = json.loads(stdout)
+    (item,) = envelope["result"]["items"]
+    assert (item["status"], item["error"]) == ("check_failed", "HTTP 503")
+    assert (item["action"], item["path"], item["reason"]) == (None, None, None)
+    assert envelope["result"]["ok"] is False
+    assert [(i["status"], i["code"], i["reason"]) for i in envelope["items"]] == [
+        ("failed", "source_unavailable", "check_failed")
+    ]
+    assert fake.downloads == [] and not out.exists()
 
 
 def test_the_json_of_a_plain_run_lists_files_and_says_where_it_wrote(capsys, tmp_path):

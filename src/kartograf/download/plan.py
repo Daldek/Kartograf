@@ -68,11 +68,13 @@ class PlanItem:
     would do (``write`` a new file, ``replace`` an existing one with ``--force``,
     ``conflict``), ``path`` is the target and ``reason`` names a conflict
     (``duplicate_output_name``, ``output_in_store``, ``output_exists``). The
-    ``status`` is ``missing`` for ``write`` and ``unverifiable`` for the others. All
-    three are ``None`` in the store. The position of the track ``store`` is the root
-    of a store that a write would refuse (``nested_store``, ``not_empty``; DEV-19.14):
-    ``action`` is ``conflict``, ``path`` the root, ``reason`` why, ``error`` the text
-    of the refusal, and ``name`` and ``unit`` are the root too.
+    ``status`` is ``missing`` for ``write`` and ``unverifiable`` for the others. A
+    position whose source could not be checked stays ``check_failed`` and has none of
+    the three, as in the store, where all three are ``None``. The position of the
+    track ``store`` is the root of a store that a write would refuse
+    (``nested_store``, ``not_empty``; DEV-19.14): ``action`` is ``conflict``,
+    ``path`` the root, ``reason`` why, ``error`` the text of the refusal, and
+    ``name`` and ``unit`` are the root too.
     """
 
     track: Track
@@ -276,13 +278,19 @@ def plain_items(write: Staging, items: Iterable[PlanItem]) -> tuple[PlanItem, ..
     One `plan_plain` over the names of every position: each gets its ``action``
     (``write``, ``replace`` with ``--force``, ``conflict``), its ``path`` and, for a
     conflict, its ``reason``; the ``status`` is ``missing`` for ``write`` and
-    ``unverifiable`` for the others. Called again on positions already judged, it
-    judges them again (a plan merged from several tracks sees their duplicates).
+    ``unverifiable`` for the others. A position whose source could not be checked
+    stays as it is, as in the store: ``check_failed`` with its ``error`` and no
+    action, path or reason, so the plan is not ``ok`` (the run fails that unit); its
+    name still counts for the others, as in the preflight of the run. Called again on
+    positions already judged, it judges them again (a plan merged from several tracks
+    sees their duplicates).
     """
     listed = tuple(items)
     entries = write.plan([item.name for item in listed])
     return tuple(
-        replace(
+        item
+        if item.status == "check_failed"
+        else replace(
             item,
             status="missing" if entry.action == "write" else "unverifiable",
             action=entry.action,

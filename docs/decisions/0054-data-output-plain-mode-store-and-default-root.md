@@ -102,7 +102,11 @@ changes land before the first release and no data is migrated (ECO-020).
    `missing` for `write` and `unverifiable` for the others, as in IMGWTools. A plan that lists conflicts is a
    successful result (`ok`, exit 0); only the run fails with `conflict`. `kartograf-plan/1` gains `mode`
    (`store` or `plain`) and `output_dir`, and its `store` key is renamed `root` (a plan file of 0.8.0-dev is not
-   read: make a new one).
+   read: make a new one). A position whose source could not be checked (`check_failed`, e.g. an unreachable
+   sheet index) stays `check_failed` with its `error` and has no `action`, `path` or `reason`, as in the
+   store: the plan is not `ok` (exit 11, or 10 beside positions that are), as the run fails that unit
+   (erratum 2026-10-25: the plain plan judged it as a target with the status `missing`, so `--check` was
+   `ok` and exited 0 while the run exited 11).
 7. **Output in a store (DEV-19.11).** An `output_dir` that is, lies in, or would enter (through a unit
    sub-path) a directory that holds `kartograf-store.json` or `imgw-store.json` is `conflict`,
    `details.reason` `output_in_store`, and the hint names `--root`. The check reads marker file names only;

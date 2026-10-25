@@ -1947,8 +1947,10 @@ store (the flow words `local` and `reused` of `VersionedFile.status` are `unchan
 lists `{id, reason, message}` of units a plain write leaves out on purpose
 (`skipped_incomplete`). `kartograf-plan/1` has the same `mode`, `root` and `output_dir` (the key
 `store` of 0.8.0-dev is `root`; a plan file with `store` is not read, make a new one), and an item
-of a plain plan has `action` (`write`, `replace`, `conflict`), `path` and `reason`; the one
-position of a store root that is a conflict has the track `store` and the same three fields.
+of a plain plan has `action` (`write`, `replace`, `conflict`), `path` and `reason`, except a
+position whose source could not be checked: it stays `check_failed` without them, as in the store,
+and the plan is not `ok`; the one position of a store root that is a conflict has the track
+`store` and the same three fields.
 
 **The target in the interfaces (ADR-054 decisions 1, 11, 13, 14).** The catalog declares the two
 targets once: `catalog/shared.py` `target(files, sheets=)` gives the two `Param`s (`output_dir`
