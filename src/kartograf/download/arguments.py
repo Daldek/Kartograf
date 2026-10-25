@@ -14,6 +14,7 @@ handled by the callers. The error carries the API name of the argument as
 """
 
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 
 
 def option_name(name: str) -> str:
@@ -40,7 +41,7 @@ def require_int(value: object, name: str) -> None:
     """``ValidationError`` unless ``value`` is an ``int`` (``bool`` is not)."""
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValidationError(
-            f"{name} musi byc liczba calkowita (int), otrzymano {value!r}",
+            message("download.require_int", name=name, value=value),
             option=option_name(name),
         )
 
@@ -55,7 +56,8 @@ def require_workers(value: object, name: str = "--workers") -> None:
     assert isinstance(value, int)
     if value < 1:
         raise ValidationError(
-            f"{name} musi byc >= 1, podano {value}", option=option_name(name)
+            message("download.require_workers", name=name, value=value),
+            option=option_name(name),
         )
 
 
@@ -67,7 +69,7 @@ def require_str(value: object, name: str) -> None:
     """
     if not isinstance(value, str):
         raise ValidationError(
-            f"{name} musi byc napisem (str), otrzymano {value!r}",
+            message("download.require_str", name=name, value=value),
             option=option_name(name),
         )
 
@@ -76,7 +78,7 @@ def require_bool(value: object, name: str) -> None:
     """``ValidationError`` unless ``value`` is ``True`` or ``False``."""
     if not isinstance(value, bool):
         raise ValidationError(
-            f"{name} musi byc przelacznikiem (True albo False), otrzymano {value!r}",
+            message("download.require_bool", name=name, value=value),
             option=option_name(name),
         )
 
@@ -90,12 +92,12 @@ def require_codes(value: object, name: str, example: str) -> None:
     """
     if not isinstance(value, list | tuple | set | frozenset):
         raise ValidationError(
-            f"{name}: podaj liste kodow, np. {example}, otrzymano {value!r}",
+            message("download.codes_not_list", name=name, example=example, value=value),
             option=option_name(name),
         )
     bad = [item for item in value if not isinstance(item, str)]
     if bad:
         raise ValidationError(
-            f"{name}: kody musza byc napisami, np. {example}, otrzymano {bad!r}",
+            message("download.codes_not_strings", name=name, example=example, bad=bad),
             option=option_name(name),
         )

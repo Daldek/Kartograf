@@ -267,7 +267,7 @@ def test_check_mode_names_the_plan_function_of_the_track(
     its own track, before any request or write."""
     import kartograf
 
-    with pytest.raises(ValidationError, match=rf"uzyj {check}\(\)"):
+    with pytest.raises(ValidationError, match=rf"use {check}\(\)"):
         getattr(kartograf, function)(
             root=tmp_path, update="check", cache=False, **arguments
         )

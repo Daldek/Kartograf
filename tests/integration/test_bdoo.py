@@ -148,7 +148,7 @@ def test_class_pattern_reads_the_recorded_file_names(name, year):
         ({}, f"--year required: {YEARS}$"),
         # the source answers 404 for 2014 and 2016-2020 (packages.json)
         ({"year": 2018}, f"--year 2018: not available; available: {YEARS}$"),
-        ({"year": "2023"}, "--year musi byc liczba calkowita"),
+        ({"year": "2023"}, "--year must be an integer"),
     ],
 )
 def test_bdoo_year_required(bdoo, monkeypatch, options, message):
@@ -163,8 +163,8 @@ def test_bdoo_year_required(bdoo, monkeypatch, options, message):
 @pytest.mark.parametrize(
     ("options", "message"),
     [
-        ({"teryt": "1261"}, "bdoo jest publikowane per wojewodztwo - podaj --teryt 12"),
-        ({"teryt": "1"}, "Nieprawidlowy kod TERYT '1'"),
+        ({"teryt": "1261"}, "bdoo is published per voivodeship - give --teryt 12"),
+        ({"teryt": "1"}, "Invalid TERYT code '1'"),
         (
             {"teryt": "12", "format": "GML"},
             ("--format only works with --product bdot10k"),
@@ -255,7 +255,7 @@ def test_bdoo_woj_units(bdoo, monkeypatch, area, units):
     assert {item.segment for item in plan.items} == {"landcover/pl_bdoo_2023"}
     assert [n.code for n in notices] == [UNIT_LIST]
     assert notices[0].message.startswith(
-        f"bdoo: wojewodztwa obszaru wg PRG ({len(units)})"
+        f"bdoo: voivodeships of the area according to PRG ({len(units)})"
     )
     assert "12 (malopolskie)" in notices[0].message
     assert fake.calls == [("GET", PRG_WFS_ENDPOINT)]
@@ -369,8 +369,8 @@ def test_bdoo_layers_class_absent(bdoo, monkeypatch, tmp_path):
     ] == ["OT_KUIK_A.xml"]
     assert [n.code for n in notices] == [CLASSES_ABSENT]
     assert notices[0].level == "info"
-    assert "plikow klas PTWP" in notices[0].message
-    assert "zapisano klasy KUIK" in notices[0].message
+    assert "no files for classes PTWP" in notices[0].message
+    assert "saved classes KUIK" in notices[0].message
     assert _meta(file.version_path)["extra"]["source"]["classes"] == ["KUIK"]
 
     missing = bdoo.download(teryt="12", year=2023, layers=["PTWP"])
@@ -383,16 +383,18 @@ def test_bdoo_layers_class_absent(bdoo, monkeypatch, tmp_path):
 @pytest.mark.parametrize(
     ("year", "layers", "message"),
     [
-        (2023, ["XXXX"], "--layers XXXX: brak takich klas w bdoo --year 2023; "),
+        (2023, ["XXXX"], "--layers XXXX: no such classes in bdoo --year 2023; "),
         # KUIK is a class of 2015-2023 only; the message lists the release's own
         (
             2024,
             ["KUIK", "PTWP"],
-            "--layers KUIK: brak takich klas w bdoo --year 2024; "
-            "dostepne: ADJA, ADMS, BUUO, KUKO, KUPG, KUPW,",
+            (
+                "--layers KUIK: no such classes in bdoo --year 2024; available: ADJA, "
+                "ADMS, BUUO, KUKO, KUPG, KUPW,"
+            ),
         ),
-        (2023, [], "--layers: podaj co najmniej jedna klase bdoo --year 2023; "),
-        (2023, "PTWP", "--layers: podaj liste kodow"),
+        (2023, [], "--layers: give at least one class of bdoo --year 2023; "),
+        (2023, "PTWP", "--layers: provide a list of codes"),
     ],
 )
 def test_bdoo_unknown_class_before_any_request(

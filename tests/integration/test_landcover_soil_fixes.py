@@ -458,11 +458,13 @@ def test_bdot10k_area_over_the_volume_limit_is_refused_before_any_download(tmp_p
             cache=False,
             on_notice=notices.append,
         )
-    assert str(refused.value).startswith("bdot10k: obszar daje 101 plikow do pobrania")
-    assert "wybierz jednostke (--teryt <4 cyfry>)" in str(refused.value)
+    assert str(refused.value).startswith(
+        "bdot10k: the area yields 101 files to download"
+    )
+    assert "choose a unit (--teryt <4 digits>)" in str(refused.value)
     (listed,) = [n for n in notices if n.code == "unit_list"]
     assert "bdot10k: counties of the area per PRG (101): 0201, 0202" in listed.message
-    assert listed.message.endswith("i 91 innych")
+    assert listed.message.endswith("and 91 others")
     assert not list(tmp_path.rglob("*.gpkg"))
 
 

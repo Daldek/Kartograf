@@ -145,7 +145,9 @@ def test_prng_whole_country_two_themes(tmp_path, monkeypatch):
     }
     assert len([n for n in report.notices if n.code == WHOLE_COUNTRY_SIZE]) == 2
     assert [method for method, _ in session.calls] == ["HEAD", "GET"] * 2
-    with pytest.raises(ValidationError, match="dokladnie jeden wybor"):
+    with pytest.raises(
+        ValidationError, match=("Give exactly one choice for --product geographic")
+    ):
         validate_collection_request(product="geographic", root=tmp_path)
 
 
@@ -182,7 +184,7 @@ def test_world_bbox_outside_poland_and_national_file(tmp_path, monkeypatch):
     )
     assert meta["request"]["bbox_crs"] == "OGC:CRS84"
     assert session.gets(f"{url}/collections/PolskaNazwaGeograficznaSwiata/items") == 1
-    with pytest.raises(ValidationError, match="tylko dla PL"):
+    with pytest.raises(ValidationError, match="available only for PL"):
         check_collection(product="world", country="cz", bbox=bbox, root=tmp_path)
     national = validate_collection_request(
         product="world",

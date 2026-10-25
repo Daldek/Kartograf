@@ -139,7 +139,7 @@ def test_area_selects_voivodeships(tmp_path, gugik, area, units):
     assert {item.track for item in plan.items} == {"collection"}
     assert [n.code for n in notices] == [UNIT_LIST]
     assert notices[0].message.startswith(
-        f"nmt: wojewodztwa obszaru wg PRG ({len(units)})"
+        f"nmt: voivodeships of the area according to PRG ({len(units)})"
     )
     assert "12 (malopolskie)" in notices[0].message
     assert gugik.file_gets() == 0
@@ -246,9 +246,10 @@ def test_100m_rejects_sheet_flags(tmp_path, gugik, flags, flag):
     choice = {"bbox": KRAKOW, "country": "pl", **flags}
     with pytest.raises(ValidationError) as error:
         download_data(root=tmp_path, **CHOICE, **choice)
-    assert str(error.value).startswith(f"{flag} nie dotyczy --resolution 100m")
+    assert str(error.value).startswith(f"{flag} does not apply to --resolution 100m")
     assert str(error.value).endswith(
-        "NMT 100 m to pliki wojewodztw z ATOM - bez arkuszy, lotow i wycinka"
+        "NMT 100 m consists of voivodeship files from ATOM - no sheets, flights or "
+        "cutout"
     )
     assert gugik.calls == []
 

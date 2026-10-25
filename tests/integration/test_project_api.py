@@ -202,7 +202,7 @@ def test_add_missing_geometry_file(tmp_path, monkeypatch):
             command="soil hsg",
             options={"geometry": "brak.gpkg", "depth": "0-5cm"},
         )
-    assert str(caught.value) == f"Brak pliku: {tmp_path / 'brak.gpkg'}"
+    assert str(caught.value) == f"File not found: {tmp_path / 'brak.gpkg'}"
     assert open_project("p").tasks == ()
 
 

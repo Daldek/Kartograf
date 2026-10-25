@@ -117,11 +117,13 @@ def test_more_files_than_the_limit_refused_before_any_transfer(tmp_path, router)
         _download(tmp_path, bbox=SQUARE_50)
 
     text = str(refused.value)
-    assert text.startswith("e5volume: obszar daje 144 pliki do pobrania, ")
-    assert "szacunkowo ok. 8,6 GB (sredni rozmiar 5 z 144 plikow wg HEAD" in text
-    assert f"limit jednego zadania to {VOLUME_FILES} plikow i 10 GB" in text
-    assert "Zawez obszar (--bbox, --sheet, --geometry)" in text
-    assert "--check --plan PLIK, potem --upgrade --plan PLIK" in text
+    assert text.startswith("e5volume: the area yields 144 files to download, ")
+    assert (
+        "an estimated approx. 8.6 GB (average size over 5 of 144 files by HEAD"
+    ) in text
+    assert f"the limit of one task is {VOLUME_FILES} files and 10 GB" in text
+    assert "Narrow the area (--bbox, --sheet, --geometry)" in text
+    assert "--check --plan FILE, then --upgrade --plan FILE" in text
     assert router.gets() == 0
     heads = _heads(router)
     assert len(heads) == 5
@@ -155,8 +157,8 @@ def test_more_bytes_than_the_limit_refused(tmp_path, router):
         _download(tmp_path, bbox=SIX)
 
     assert str(refused.value).startswith(
-        "e5volume: obszar daje 6 plikow do pobrania, razem ok. 12,0 GB wg HEAD - "
-        "limit jednego zadania"
+        "e5volume: the area yields 6 files to download, approx. 12.0 GB in "
+        "total by HEAD - the limit of one task"
     )
     assert router.gets() == 0
 
@@ -182,7 +184,7 @@ def test_local_files_do_not_count_but_force_counts_all(tmp_path, router):
     assert sorted(_heads(router)) == sorted(fetched)  # once each, none for local
     assert router.gets() == 5
 
-    with pytest.raises(ValidationError, match="obszar daje 6 plikow do pobrania"):
+    with pytest.raises(ValidationError, match="the area yields 6 files to download"):
         _download(tmp_path, bbox=SIX, update="force")
 
 

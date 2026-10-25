@@ -138,14 +138,14 @@ def test_rcn_voivodeship_export_and_size_notice(tmp_path, monkeypatch):
     )
     assert seen == [(DOWNLOAD_SIZE, 0)]
     assert "604038367 B" in report.notices[0].message
-    with pytest.raises(ValidationError, match="Nieprawidlowy kod TERYT"):
+    with pytest.raises(ValidationError, match="Invalid TERYT code"):
         download_collection(product="prices", teryt="126", root=tmp_path)
     assert fake.calls == [("HEAD", url), ("GET", url)]
 
 
 def test_rcn_has_no_national_file(tmp_path):
     """``--whole-country`` names the selections RCN has instead (K7)."""
-    with pytest.raises(ValidationError, match="nie ma pliku krajowego.*--teryt"):
+    with pytest.raises(ValidationError, match="has no national file.*--teryt"):
         download_collection(
             product="prices", country="pl", whole_country=True, root=tmp_path
         )

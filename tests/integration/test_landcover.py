@@ -1943,7 +1943,7 @@ class TestBdot10kSidecarSource:
             )
         assert rc == 11
         err = capsys.readouterr().err
-        assert "Error: 0262: Failed to extract or save the BDOT10k package" in err
+        assert "Error: 0262: Nie udalo sie rozpakowac ani zapisac paczki BDOT10k" in err
         assert "Cannot allocate memory" in err
         assert "OSError" not in err
 

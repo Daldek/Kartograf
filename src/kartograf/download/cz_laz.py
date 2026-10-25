@@ -56,6 +56,7 @@ from kartograf.download.storage import storage_for_provider
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.interrupt import run_parallel
+from kartograf.messages import message, reason
 from kartograf.notices import Notice, NoticeSink
 from kartograf.output import preflight, writing
 from kartograf.providers.cuzk.laz import CuzkLazProvider
@@ -71,10 +72,7 @@ logger = logging.getLogger(__name__)
 # thread; ``(0, total)`` comes once before the first file (as LAZ PL).
 CzLazProgressCallback = Callable[[int, int], None]
 
-NO_SHEETS_MESSAGE = (
-    "Brak arkuszy LAZ CZ dla obszaru (indeks KladyMapovychListu: arkusze SM5 "
-    "dla Bpv, kafle TM33 dla EVRF2007) - sprawdz obszar i --vertical-crs"
-)
+NO_SHEETS_MESSAGE = message("tracks.no_laz_sheets")
 
 
 @dataclass(frozen=True)
@@ -145,9 +143,7 @@ def _validate_selection(
     from kartograf.download.options import validate_request_bbox
 
     if (sheet is None) == (bbox is None):
-        raise ValidationError(
-            "LAZ CZ: podaj dokladnie jedno z sheet (godlo) albo bbox (obszar)"
-        )
+        raise ValidationError(message("tracks.sheet_or_bbox_required"))
     if bbox is not None:
         bbox = validate_request_bbox(bbox)
     system = cz_sheet_system(sheet) if sheet is not None else None
@@ -234,7 +230,7 @@ def _fetch_sheet(
                     extra["cz_share"] = info.podil
             except Exception as e:  # noqa: BLE001 - data matters more than metadata
                 logger.warning(
-                    f"Sidecar {sheet} bez extra.cz_share (PODIL; blad indeksu): {e}"
+                    message("tracks.sidecar_no_cz_share", sheet=sheet, error=reason(e))
                 )
         if parent_request is not None:
             extra["parent_request"] = parent_request
@@ -444,7 +440,7 @@ def download_cz_laz(
         model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox
     )
     if plan is not None and update != "upgrade":
-        raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+        raise ValidationError(message("hydrology.plan_requires_upgrade"))
     sink = NoticeSink(on_notice)
     with (
         writing(output_dir=output_dir, root=root, update=update, plan=plan) as store,

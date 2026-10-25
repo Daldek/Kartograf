@@ -106,11 +106,11 @@ def test_geomorphology_levels_are_the_feature_layers_of_the_service():
 
 
 def test_geomorphology_level_required(tmp_path):
-    with pytest.raises(ValidationError, match=f"--level wymagane .*: {LEVELS}$"):
+    with pytest.raises(ValidationError, match=f"--level required .*: {LEVELS}$"):
         validate_collection_request(
             product="geomorphology", country="cz", bbox=TESIN, root=tmp_path
         )
-    with pytest.raises(ValidationError, match=f"--level gmina: .*dostepne: {LEVELS}"):
+    with pytest.raises(ValidationError, match=f"--level gmina: .*available: {LEVELS}"):
         validate_collection_request(
             product="geomorphology",
             country="cz",
@@ -118,7 +118,7 @@ def test_geomorphology_level_required(tmp_path):
             level="gmina",
             root=tmp_path,
         )
-    with pytest.raises(ValidationError, match="tylko dla CZ"):
+    with pytest.raises(ValidationError, match="only for CZ"):
         validate_collection_request(
             product="geomorphology",
             country="pl",

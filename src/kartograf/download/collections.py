@@ -127,6 +127,7 @@ from kartograf.download.storage import bbox_cutout_path, content_segment, unit_s
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.interrupt import run_parallel
+from kartograf.messages import message, reason
 from kartograf.notices import (
     AREA_OMITTED,
     AUTO_NARROWED_TO_CZ,
@@ -134,16 +135,13 @@ from kartograf.notices import (
     CHECK_FAILED,
     CLASSES_ABSENT,
     DOWNLOAD_SIZE,
-    FILES,
     LARGE_FILE_BYTES,
-    OF_FILES,
     SLOW_SOURCE,
     UNIT_LIST,
     WHOLE_COUNTRY_SIZE,
     Notice,
     NoticeSink,
     cli_flag,
-    count_text,
     names_text,
     size_text,
 )
@@ -218,10 +216,10 @@ _TERYT = re.compile(r"[0-9]{2}(?:[0-9]{2})?")
 _KU = re.compile(r"[0-9]{6}")
 _MAPNOM = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")
 _UNIT_TEXT = {
-    "powiat": "paczek powiatow",
-    "woj": "paczek wojewodztw",
-    "country": "pliku krajowego",
-    "ku": "paczek katastralnich uzemi",
+    "powiat": message("collections.unit_powiat"),
+    "woj": message("collections.unit_woj"),
+    "country": message("collections.unit_country"),
+    "ku": message("collections.unit_ku"),
 }
 # Option values that select a channel or a published variant (ADR-043); the
 # allowed values are read from the descriptors (K1).
@@ -301,12 +299,29 @@ def collection_product_choices(products: Sequence[str] | None = None) -> str:
     ``--help`` (a CLI group names only its own).
     """
     names = collection_products() if products is None else tuple(products)
-    texts = []
-    for product in names:
-        descriptors = [d for d in sources_for(product=product) if _is_collection(d)]
-        sources = "; ".join(f"{d.name}, {d.country}" for d in descriptors)
-        texts.append(f"{product} ({sources})")
-    return ", ".join(texts)
+    return message(
+        "options.choices",
+        items=[
+            message(
+                "options.choice_item",
+                name=product,
+                summary=collection_product_sources(product),
+            )
+            for product in names
+        ],
+    )
+
+
+def collection_product_sources(product: str) -> str:
+    """Return the sources of a collection product: ``PRG - granice ..., PL; ...``."""
+    return message(
+        "collections.product_sources",
+        sources=[
+            message("collections.source_label", name=d.name, country=d.country)
+            for d in sources_for(product=product)
+            if _is_collection(d)
+        ],
+    )
 
 
 def collection_countries(products: Sequence[str]) -> tuple[str, ...]:
@@ -416,14 +431,20 @@ def require_collection_product(product: str | None, group: str) -> None:
     products = collection_products(group)
     if product is None:
         raise ValidationError(
-            f"--product wymagane: {collection_product_choices(products)}",
+            message(
+                "collections.product_required",
+                collection_product_choices=collection_product_choices(products),
+            ),
             option="product",
             allowed=products,
         )
     if product not in products:
         raise ValidationError(
-            f"--product {product!r}: nieznana wartosc - dostepne: "
-            f"{collection_product_choices(products)}",
+            message(
+                "collections.product_unknown_value",
+                product=product,
+                collection_product_choices=collection_product_choices(products),
+            ),
             option="product",
             allowed=products,
         )
@@ -567,14 +588,21 @@ def _descriptors(product: str | None) -> dict[str, SourceDescriptor]:
     """Return the collection descriptors of ``product`` by country code."""
     if product is None:
         raise ValidationError(
-            f"--product wymagane: {collection_product_choices()}",
+            message(
+                "collections.product_required",
+                collection_product_choices=collection_product_choices(),
+            ),
             option="product",
             allowed=collection_products(),
         )
     found = {d.country: d for d in sources_for(product=product) if _is_collection(d)}
     if not found:
         raise ValidationError(
-            f"Nieznany produkt '{product}'. Dostepne: {collection_product_choices()}",
+            message(
+                "collections.unknown_product",
+                product=product,
+                collection_product_choices=collection_product_choices(),
+            ),
             option="product",
             allowed=collection_products(),
         )
@@ -583,9 +611,9 @@ def _descriptors(product: str | None) -> dict[str, SourceDescriptor]:
 
 _AREA_UNITS = ("sheet", "tile", "ku")
 _AREA_TEXT = {
-    "sheet": "arkusze obszaru",
-    "tile": "kafle obszaru",
-    "ku": "katastralni uzemi obszaru",
+    "sheet": message("collections.area_sheet"),
+    "tile": message("collections.area_tile"),
+    "ku": message("collections.area_ku"),
 }
 
 
@@ -610,8 +638,13 @@ def _area_flags(descriptor: SourceDescriptor, channel: AccessChannel) -> str:
     return "--bbox/--geometry"
 
 
-def _selections(descriptor: SourceDescriptor, channel: AccessChannel) -> list[str]:
+def _selections(
+    descriptor: SourceDescriptor, channel: AccessChannel
+) -> list[tuple[str, str]]:
     """Return the selections reaching ``channel`` of ``descriptor`` (CLI flags).
+
+    Each one is a pair of the flags and what they select (``--teryt <4 digits>``,
+    ``county package``).
 
     An area reaches the channels ``_channel_for`` gives it: the objects of
     the area (``feature_bbox``), its sheets, tiles or cadastral areas, and
@@ -621,28 +654,46 @@ def _selections(descriptor: SourceDescriptor, channel: AccessChannel) -> list[st
     params = channel.params
     area = _area_flags(descriptor, channel)
     if isinstance(params, FeatureBBoxParams):
-        return [f"{area} (obiekty obszaru)"]
+        return [(area, message("collections.what_area_features"))]
     if isinstance(params, AtomFilesParams):
-        return ["--whole-country (plik krajowy)"]
+        return [("--whole-country", message("collections.what_country_file"))]
     if not isinstance(params, UnitPackageParams):
         return []
     if params.unit in _AREA_UNITS:
         own = (
-            ["--ku <6 cyfr> (paczka katastralniho uzemi)"]
+            [
+                (
+                    message("collections.flags_ku"),
+                    message("collections.what_ku_package"),
+                )
+            ]
             if params.unit == "ku"
             else []
         )
-        return [*own, f"{area} ({_AREA_TEXT[params.unit]})"]
-    texts = [
+        return [*own, (area, _AREA_TEXT[params.unit])]
+    texts: list[tuple[str, str]] = [
         {
-            "powiat": "--teryt <4 cyfry> (paczka powiatu)",
-            "woj": "--teryt <2 cyfry> (paczka wojewodztwa)",
-            "country": "--whole-country (plik krajowy)",
+            "powiat": (
+                message("collections.unit_choice_powiat"),
+                message("collections.what_powiat_package"),
+            ),
+            "woj": (
+                message("collections.unit_choice_voivodeship"),
+                message("collections.what_woj_package"),
+            ),
+            "country": (
+                "--whole-country",
+                message("collections.what_country_file"),
+            ),
         }[params.unit]
     ]
     if not _area_channels(descriptor) and channel in _area_package_channels(descriptor):
-        units = "powiatow" if params.unit == "powiat" else "wojewodztw"
-        texts.append(f"{area} (paczki {units} obszaru)")
+        units = (
+            message("collections.units_counties")
+            if params.unit == "powiat"
+            else message("collections.units_voivodeships")
+        )
+        texts.append((area, message("collections.what_area_packages", units=units)))
     return texts
 
 
@@ -673,25 +724,28 @@ def _available(descriptor: SourceDescriptor) -> str:
     ``--teryt <4 cyfry> z --network horizontal|vertical (paczka powiatu)``.
     """
     keys = _distinguishing_keys(descriptor)
-    found: dict[str, dict[str, list[str]]] = {}
+    found: dict[tuple[str, str], dict[str, list[str]]] = {}
     for channel in descriptor.channels:
         options = _channel_options(channel.params)
-        for text in _selections(descriptor, channel):
-            values = found.setdefault(text, {})
+        for selection in _selections(descriptor, channel):
+            values = found.setdefault(selection, {})
             for key in keys:
                 for value in options.get(key, ()):
                     if value not in values.setdefault(key, []):
                         values[key].append(value)
     texts = []
-    for text, values in found.items():
-        flags, _, what = text.partition(" (")
+    for (flags, what), values in found.items():
         chosen = " ".join(
             f"{cli_flag(key)} {'|'.join(items)}"
             for key, items in values.items()
             if items
         )
-        texts.append(f"{flags} z {chosen} ({what}" if chosen else text)
-    return ", ".join(texts)
+        texts.append(
+            message("collections.selection_with", flags=flags, chosen=chosen, what=what)
+            if chosen
+            else message("collections.selection", flags=flags, what=what)
+        )
+    return message("notices.list", items=texts)
 
 
 def selection_choices(descriptor_key: str) -> str:
@@ -774,12 +828,23 @@ def _choice_text(descriptors: Mapping[str, SourceDescriptor], country: object) -
     shown = _shown_descriptors(descriptors, country)
     first = shown[0]
     if len(shown) == 1:
-        return (
-            f"Podaj dokladnie jeden wybor dla {_subject_flag(first)} "
-            f"({first.country}): {_available(first)}"
+        return message(
+            "collections.choose_one_single",
+            subject_flag=_subject_flag(first),
+            country=first.country,
+            available=_available(first),
         )
-    per_country = "; ".join(f"{d.country}: {_available(d)}" for d in shown)
-    return f"Podaj dokladnie jeden wybor dla {_subject_flag(first)} - {per_country}"
+    per_country = [
+        message(
+            "collections.country_available", country=d.country, available=_available(d)
+        )
+        for d in shown
+    ]
+    return message(
+        "collections.choose_one_multi",
+        subject_flag=_subject_flag(first),
+        per_country=per_country,
+    )
 
 
 def _package_channels(descriptor: SourceDescriptor, unit: str) -> list[AccessChannel]:
@@ -839,7 +904,7 @@ _SELECTION_TEXT = {
     "teryt": "--teryt",
     "ku": "--ku",
     "whole_country": "--whole-country",
-    "area": "obszaru",
+    "area": message("collections.selection_text_area"),
 }
 
 
@@ -855,22 +920,38 @@ def _candidates(
     if kind == "teryt":
         assert teryt is not None
         unit = "woj" if len(teryt) == 2 else "powiat"
-        missing = f"--teryt {teryt}: {product} nie ma {_UNIT_TEXT[unit]}"
+        missing = message(
+            "collections.teryt_no_unit",
+            teryt=teryt,
+            product=product,
+            unit_text=_UNIT_TEXT[unit],
+        )
         if unit == "powiat" and _package_channels(descriptor, "woj"):
-            missing = (
-                f"--teryt {teryt}: {product} jest publikowane per wojewodztwo - "
-                f"podaj --teryt {teryt[:2]}"
+            missing = message(
+                "collections.teryt_per_voivodeship",
+                teryt=teryt,
+                product=product,
+                voivodeship_code=teryt[:2],
             )
         return _package_channels(descriptor, unit), missing
     if kind == "ku":
-        missing = f"--ku: {product} ({country}) nie ma {_UNIT_TEXT['ku']}"
+        missing = message(
+            "collections.no_ku_units",
+            product=product,
+            country=country,
+            unit_text_ku=_UNIT_TEXT["ku"],
+        )
         return _package_channels(descriptor, "ku"), missing
     if kind == "whole_country":
         atom = [c for c in descriptor.channels if isinstance(c.params, AtomFilesParams)]
-        missing = f"--whole-country: {product} ({country}) nie ma pliku krajowego"
+        missing = message(
+            "collections.no_country_file", product=product, country=country
+        )
         return _package_channels(descriptor, "country") + atom, missing
     channels = _area_channels(descriptor) or _area_package_channels(descriptor)
-    return channels, f"{product} ({country}) nie ma danych dla obszaru"
+    return channels, message(
+        "collections.no_area_data", product=product, country=country
+    )
 
 
 def _selecting_options(params: ChannelParams | None) -> dict[str, tuple[str, ...]]:
@@ -916,13 +997,34 @@ def _check_other_selection(
         hosts = [c for c in others if value in _channel_options(c.params).get(key, ())]
         if value in values or not hosts:
             continue
-        elsewhere = ", ".join(
-            dict.fromkeys(text for c in hosts for text in _selections(descriptor, c))
+        elsewhere = message(
+            "notices.list",
+            items=[
+                message("collections.selection", flags=flags, what=what)
+                for flags, what in dict.fromkeys(
+                    pair for c in hosts for pair in _selections(descriptor, c)
+                )
+            ],
         )
-        here = f"; dla {_SELECTION_TEXT[kind]}: {', '.join(values)}" if values else ""
+        here = (
+            message(
+                "collections.other_selection_here",
+                selection_text=_SELECTION_TEXT[kind],
+                values=", ".join(values),
+            )
+            if values
+            else ""
+        )
         raise ValidationError(
-            f"{cli_flag(key)} {value}: {descriptor.product} ({descriptor.country}) - "
-            f"dostepne tylko dla {elsewhere}{here}",
+            message(
+                "collections.option_only_elsewhere",
+                cli_flag=cli_flag(key),
+                value=value,
+                product=descriptor.product,
+                country=descriptor.country,
+                elsewhere=elsewhere,
+                here=here,
+            ),
             option=key,
             allowed=values or None,
         )
@@ -973,9 +1075,14 @@ def _country_options(
                 owner = others[0]
                 allowed = collection_choice_values(owner.product, name)
                 raise ValidationError(
-                    f"{cli_flag(name)} dotyczy tylko {_subject_flag(owner)} "
-                    f"({owner.country}: {', '.join(allowed.get(owner.country, ()))})"
-                    f" - dla {descriptor.country} pomin {cli_flag(name)}",
+                    message(
+                        "collections.option_country_mismatch",
+                        cli_flag=cli_flag(name),
+                        subject_flag=_subject_flag(owner),
+                        country=owner.country,
+                        allowed=", ".join(allowed.get(owner.country, ())),
+                        descriptor_country=descriptor.country,
+                    ),
                     option=name,
                 )
         values[name] = value
@@ -1001,14 +1108,26 @@ def _channel_for(
     """
     candidates, missing = _candidates(descriptor, kind, teryt)
     if not candidates:
-        raise _selection_error(f"{missing}; dostepne: {_available(descriptor)}", kind)
+        raise _selection_error(
+            message(
+                "collections.selection_missing_available",
+                missing=missing,
+                available=_available(descriptor),
+            ),
+            kind,
+        )
     _check_other_selection(descriptor, candidates, kind, options)
     if len(candidates) == 1:
         return candidates[0]
     offered = [_selecting_options(channel.params) for channel in candidates]
     keys = _distinct(key for found in offered for key in found)
     given = {k: v for k, v in options.items() if v is not None and k in keys}
-    where = f"{_SELECTION_TEXT[kind]} {descriptor.product} ({descriptor.country})"
+    where = message(
+        "collections.where_selection",
+        selection=_SELECTION_TEXT[kind],
+        product=descriptor.product,
+        country=descriptor.country,
+    )
 
     def admits(found: dict[str, tuple[str, ...]], pairs: dict[str, str]) -> bool:
         return all(value in found.get(key, ()) for key, value in pairs.items())
@@ -1021,15 +1140,23 @@ def _channel_for(
             if not any(admits(found, {key: value}) for found in offered):
                 values = _distinct(v for found in offered for v in found.get(key, ()))
                 raise ValidationError(
-                    f"{cli_flag(key)} {value}: niedostepne dla {where}; dostepne: "
-                    f"{', '.join(values)}"
-                    f"{_option_hint(descriptor, key, countries)}",
+                    message(
+                        "collections.option_value_unavailable",
+                        cli_flag=cli_flag(key),
+                        value=value,
+                        where=where,
+                        values=", ".join(values),
+                        option_hint=_option_hint(descriptor, key, countries),
+                    ),
                     option=key,
                     allowed=values,
                 )
         chosen = " ".join(f"{cli_flag(key)} {value}" for key, value in given.items())
         raise ValidationError(
-            f"{chosen}: niedostepne razem dla {where}", options=tuple(given)
+            message(
+                "collections.options_unavailable_together", chosen=chosen, where=where
+            ),
+            options=tuple(given),
         )
     if len(admitted) > 1:
         found_admitted = [
@@ -1046,8 +1173,13 @@ def _channel_for(
                     v for found in found_admitted for v in found.get(key, ())
                 )
                 raise ValidationError(
-                    f"{cli_flag(key)} wymagane dla {where}: {', '.join(values)}"
-                    f"{_option_hint(descriptor, key, countries)}",
+                    message(
+                        "collections.option_required_for",
+                        cli_flag=cli_flag(key),
+                        where=where,
+                        values=", ".join(values),
+                        option_hint=_option_hint(descriptor, key, countries),
+                    ),
                     option=key,
                     allowed=values,
                 )
@@ -1079,10 +1211,19 @@ def _option_hint(
     ]
     if key in _PER_COUNTRY_OPTIONS:
         example = ",".join(f"{c}=..." for c in ("pl", "cz") if c.upper() in countries)
-        how = f"wartosc per kraj, np. {cli_flag(key)} {example}"
+        how = message(
+            "collections.hint_value_per_country",
+            cli_flag=cli_flag(key),
+            example=example,
+        )
     else:
-        how = "jedna wartosc dla obu krajow"
-    return f" (zadanie PL+CZ: {how} - {others}; wspolne: {', '.join(common) or 'brak'})"
+        how = message("collections.hint_single_value")
+    return message(
+        "collections.hint_pl_cz_task",
+        how=how,
+        others=others,
+        common=", ".join(common) or message("cli.missing"),
+    )
 
 
 def _level_hint(level: str | Mapping[str, str] | None, product: str) -> str:
@@ -1096,8 +1237,10 @@ def _level_hint(level: str | Mapping[str, str] | None, product: str) -> str:
     levels = collection_levels(product)
     if len(levels) < 2:
         return ""
-    example = ",".join(f"{code.lower()}=<poziom>" for code in levels)
-    return f" (zadanie PL+CZ: poziom per kraj, np. --level {example})"
+    example = [
+        message("collections.level_example_item", code=code.lower()) for code in levels
+    ]
+    return message("collections.level_hint_multi_country", example=example)
 
 
 def _content(
@@ -1134,8 +1277,7 @@ def _content(
     if isinstance(params, UnitPackageParams):
         if level_value is not None:
             raise ValidationError(
-                f"--level dotyczy obiektow obszaru (--bbox/--sheet/--geometry), nie "
-                f"paczek {product}",
+                message("collections.level_not_for_packages", product=product),
                 option="level",
             )
         # the year of index records filters them when it is not a variant
@@ -1172,11 +1314,19 @@ def _content(
         ):
             if value is not None:
                 raise ValidationError(
-                    f"{cli_flag(name)} nie dotyczy pliku krajowego {product} "
-                    f"({descriptor.country}: biezace wydanie z feedu ATOM)",
+                    message(
+                        "collections.flag_not_for_national_file",
+                        cli_flag=cli_flag(name),
+                        product=product,
+                        country=descriptor.country,
+                    ),
                     option=name,
                 )
-        _check_selecting(selecting, given, f"pliku krajowego {product} ({code})")
+        _check_selecting(
+            selecting,
+            given,
+            message("collections.national_file_subject", product=product, code=code),
+        )
         _chosen_classes(None, classes, product)
         check_atom_crs(params, horizontal_crs)
         segment = content_segment(
@@ -1196,15 +1346,25 @@ def _content(
         crs = params.native_crs
         if horizontal_crs is not None and horizontal_crs != crs:
             raise ValidationError(
-                f"--horizontal-crs {horizontal_crs}: obiekty obszaru {product} "
-                f"({descriptor.country}) sa zawsze w ukladzie uslugi {crs}",
+                message(
+                    "collections.hcrs_area_service_crs",
+                    horizontal_crs=horizontal_crs,
+                    product=product,
+                    country=descriptor.country,
+                    crs=crs,
+                ),
                 option="horizontal_crs",
                 allowed=(crs,),
             )
     if horizontal_crs is not None and horizontal_crs != crs:
         raise ValidationError(
-            f"--horizontal-crs {horizontal_crs}: {product} ({descriptor.country}) "
-            f"publikuje ten plik tylko w {crs}",
+            message(
+                "collections.hcrs_file_only_crs",
+                horizontal_crs=horizontal_crs,
+                product=product,
+                country=descriptor.country,
+                crs=crs,
+            ),
             option="horizontal_crs",
             allowed=(crs,),
         )
@@ -1244,7 +1404,7 @@ def _chosen_classes(
     published = variant.classes if variant is not None else ()
     if variant is None or not published:
         raise ValidationError(
-            f"--layers nie dotyczy {product} (zawartosc zapisywana w calosci)",
+            message("collections.layers_not_applicable", product=product),
             option="layers",
         )
     wanted = tuple(sorted({code.strip().upper() for code in classes}))
@@ -1252,12 +1412,23 @@ def _chosen_classes(
     unknown = [code for code in wanted if code not in published]
     if not wanted or unknown:
         problem = (
-            f"--layers {','.join(unknown)}: brak takich klas w {product} {where}"
+            message(
+                "collections.layers_unknown_classes",
+                unknown=",".join(unknown),
+                product=product,
+                where=where,
+            )
             if unknown
-            else f"--layers: podaj co najmniej jedna klase {product} {where}"
+            else message(
+                "collections.layers_need_one_class", product=product, where=where
+            )
         )
         raise ValidationError(
-            f"{problem}; dostepne: {', '.join(published)}",
+            message(
+                "collections.layers_problem_available",
+                problem=problem,
+                published=", ".join(published),
+            ),
             option="layers",
             allowed=tuple(published),
         )
@@ -1271,8 +1442,13 @@ def _check_selecting(
     for key, value in given.items():
         if key in selecting and selecting[key] != value:
             raise ValidationError(
-                f"{cli_flag(key)} {value}: niedostepne dla {where}; dostepne: "
-                f"{selecting[key]}",
+                message(
+                    "collections.selection_not_available",
+                    cli_flag=cli_flag(key),
+                    value=value,
+                    where=where,
+                    available=selecting[key],
+                ),
                 option=key,
                 allowed=(selecting[key],),
             )
@@ -1295,12 +1471,18 @@ def _feature_content(
     the values of the channel ``choice`` and of its ``selection_key``.
     """
     product = descriptor.product
-    where = f"obszaru {product} ({descriptor.country})"
+    where = message(
+        "collections.area_product_subject", product=product, country=descriptor.country
+    )
     for name, number in (("lod", lod), ("year", year)):
         if number is not None:
             raise ValidationError(
-                f"{cli_flag(name)} nie dotyczy obiektow obszaru produktu {product} "
-                f"({descriptor.country}: biezacy stan uslugi)",
+                message(
+                    "collections.flag_not_for_area_state",
+                    cli_flag=cli_flag(name),
+                    product=product,
+                    country=descriptor.country,
+                ),
                 option=name,
             )
     selecting = dict(params.choice)
@@ -1308,8 +1490,12 @@ def _feature_content(
     for key in given:
         if key not in selecting and key != selector:
             raise ValidationError(
-                f"{cli_flag(key)} nie dotyczy obiektow obszaru produktu {product} "
-                f"({descriptor.country})",
+                message(
+                    "collections.flag_not_for_area_features",
+                    cli_flag=cli_flag(key),
+                    product=product,
+                    country=descriptor.country,
+                ),
                 option=key,
             )
     _check_selecting(selecting, given, where)
@@ -1321,37 +1507,61 @@ def _feature_content(
             content = (
                 ", ".join(codes)
                 if len(codes) <= _LISTED_LAYERS
-                else count_text(len(codes), "warstwa", "warstwy", "warstw")
+                else message("collections.layers_count", count=len(codes))
             )
             raise ValidationError(
-                f"--level nie dotyczy {_subject_flag(descriptor)} (stala "
-                f"zawartosc: {content})",
+                message(
+                    "collections.level_not_for_fixed_content",
+                    subject_flag=_subject_flag(descriptor),
+                    content=content,
+                ),
                 option="level",
             )
         return params.layers, tokens, choice
     if selector == "level":
         value = level_value
         hint = _level_hint(level, descriptor.product) if len(countries) > 1 else ""
-        unknown = f"nieznany poziom {product} ({descriptor.country})"
+        unknown = message(
+            "collections.unknown_level", product=product, country=descriptor.country
+        )
     else:
         if level_value is not None:
             raise ValidationError(
-                f"--level nie dotyczy produktu {product} (wybor: --{selector} "
-                f"{', '.join(codes)})",
+                message(
+                    "collections.level_not_applicable",
+                    product=product,
+                    selector=selector,
+                    codes=", ".join(codes),
+                ),
                 option="level",
             )
-        value, unknown = given.get(selector), f"niedostepne dla {where}"
+        value, unknown = (
+            given.get(selector),
+            message("collections.unavailable_for_where", where=where),
+        )
         hint = _option_hint(descriptor, selector, countries)
     if value is None:
         raise ValidationError(
-            f"{cli_flag(selector)} wymagane dla {where}: {', '.join(codes)}{hint}",
+            message(
+                "collections.selector_required",
+                cli_flag=cli_flag(selector),
+                where=where,
+                codes=", ".join(codes),
+                hint=hint,
+            ),
             option=selector,
             allowed=codes,
         )
     if value not in codes:
         raise ValidationError(
-            f"{cli_flag(selector)} {value}: {unknown}; dostepne: "
-            f"{', '.join(codes)}{hint}",
+            message(
+                "collections.selector_value_unknown",
+                cli_flag=cli_flag(selector),
+                value=value,
+                unknown=unknown,
+                codes=", ".join(codes),
+                hint=hint,
+            ),
             option=selector,
             allowed=codes,
         )
@@ -1504,7 +1714,11 @@ def _resolve(
     country = args["country"]
     if country is not None and country not in ("pl", "cz", "auto"):
         raise ValidationError(
-            f"Nieznany kraj --country {country!r}: {COUNTRY_CHOICES}",
+            message(
+                "collections.unknown_country",
+                country=country,
+                country_choices=COUNTRY_CHOICES,
+            ),
             option="country",
             allowed=COUNTRIES,
         )
@@ -1528,8 +1742,11 @@ def _resolve(
         if descriptor is None:
             by_unit = area_kind in ("teryt", "ku")
             raise ValidationError(
-                f"--product {product} jest dostepny tylko dla "
-                f"{', '.join(sorted(descriptors))}",
+                message(
+                    "collections.product_limited_availability",
+                    product=product,
+                    descriptors=", ".join(sorted(descriptors)),
+                ),
                 option=area_kind if by_unit else "country",
                 allowed=None
                 if by_unit
@@ -1549,21 +1766,27 @@ def _resolve(
         assert teryt is not None
         if country not in (None, "pl"):
             raise ValidationError(
-                f"--teryt to kod TERYT (PL); usun --country {country}",
+                message("collections.teryt_is_pl_code", country=country),
                 options=("teryt", "country"),
             )
         if not _TERYT.fullmatch(teryt):
             raise ValidationError(
-                f"Nieprawidlowy kod TERYT {teryt!r}: wojewodztwo (2 cyfry, np. 12) "
-                "albo powiat (4 cyfry, np. 1261)",
+                message("collections.invalid_teryt_code", teryt=teryt),
                 option="teryt",
             )
         if teryt[:2] not in WOJEWODZTWO_NAMES:
             known = ", ".join(f"{c} ({n})" for c, n in WOJEWODZTWO_NAMES.items())
-            of_powiat = " (dwie pierwsze cyfry kodu powiatu)" if len(teryt) == 4 else ""
+            of_powiat = (
+                message("collections.county_code_prefix") if len(teryt) == 4 else ""
+            )
             raise ValidationError(
-                f"--teryt {teryt}: nie ma wojewodztwa o kodzie {teryt[:2]}"
-                f"{of_powiat}; dostepne: {known}",
+                message(
+                    "collections.teryt_unknown_voivodeship",
+                    teryt=teryt,
+                    voivodeship_code=teryt[:2],
+                    of_powiat=of_powiat,
+                    known=known,
+                ),
                 option="teryt",
             )
         return CollectionRequest(product, root, teryt, False, (part("PL", "teryt"),))
@@ -1571,12 +1794,12 @@ def _resolve(
         assert ku is not None
         if country not in (None, "cz"):
             raise ValidationError(
-                f"--ku to kod katastralniho uzemi (CZ); usun --country {country}",
+                message("collections.ku_is_cz_code", country=country),
                 options=("ku", "country"),
             )
         if not _KU.fullmatch(ku):
             raise ValidationError(
-                f"Nieprawidlowy kod katastralniho uzemi {ku!r}: 6 cyfr, np. 623164",
+                message("collections.invalid_ku_code", ku=ku),
                 option="ku",
             )
         return CollectionRequest(product, root, None, False, (part("CZ", "ku"),), ku=ku)
@@ -1584,12 +1807,16 @@ def _resolve(
         if country not in ("pl", "cz"):
             # the countries of this product: hydro has CZ only, so no --country pl
             countries = tuple(c for c in COUNTRY_KEYS if c.upper() in descriptors)
-            choices = " albo ".join(f"--country {c}" for c in countries)
+            choices = [f"--country {c}" for c in countries]
             what = (
-                "plik krajowy jednego kraju" if len(countries) > 1 else "plik krajowy"
+                message("collections.national_file_one_country")
+                if len(countries) > 1
+                else message("collections.national_file")
             )
             raise ValidationError(
-                f"--whole-country wymaga {choices} ({what})",
+                message(
+                    "collections.whole_country_requires", choices=choices, what=what
+                ),
                 option="country",
                 allowed=countries,
             )
@@ -1605,7 +1832,9 @@ def _resolve(
         )
     if country is None:
         raise ValidationError(
-            f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}",
+            message(
+                "collections.country_required_area", country_choices=COUNTRY_CHOICES
+            ),
             option="country",
             allowed=COUNTRIES,
         )
@@ -1653,8 +1882,12 @@ def _sheet_part(
             selected = options["sheet_system"]
             if inferred is not None and selected is not None and selected != inferred:
                 raise ValidationError(
-                    f"--sheet {sheet} nalezy do ukladu {inferred}, a podano "
-                    f"--sheet-system {selected}",
+                    message(
+                        "collections.sheet_system_mismatch",
+                        sheet=sheet,
+                        inferred=inferred,
+                        selected=selected,
+                    ),
                     options=("sheet", "sheet_system"),
                 )
             if inferred is not None:
@@ -1663,14 +1896,14 @@ def _sheet_part(
         grid = base.variant.sheet_grid if base.variant is not None else None
         if grid is None or grid.system != "cuzk":
             raise ValidationError(
-                f"--sheet {sheet}: {cz.product} (CZ) w wybranym wariancie nie ma "
-                "arkuszy CUZK - podaj --bbox",
+                message(
+                    "collections.cz_no_sheets_variant", sheet=sheet, product=cz.product
+                ),
                 option="sheet",
             )
         if not _MAPNOM.fullmatch(sheet):
             raise ValidationError(
-                f"Nieprawidlowe godlo arkusza CUZK {sheet!r} (dozwolone litery, cyfry "
-                "i '-')",
+                message("collections.invalid_cuzk_sheet_code", sheet=sheet),
                 option="sheet",
             )
         return replace(base, sheet=sheet, parent={"sheet": sheet, "countries": ["CZ"]})
@@ -1678,20 +1911,27 @@ def _sheet_part(
     if "PL" not in descriptors:  # a source of CZ only: a sheet code is no area
         only = next(iter(descriptors.values()))
         raise ValidationError(
-            f"{_subject_flag(only)} (CZ): godlo {sheet} nie wyznacza obszaru CZ - "
-            "podaj --bbox (np. w EPSG:5514) albo --geometry",
+            message(
+                "collections.cz_sheet_no_area",
+                subject_flag=_subject_flag(only),
+                sheet=sheet,
+            ),
             option="sheet",
         )
     if country not in (None, "auto") and country != system.country.lower():
         raise ValidationError(
-            f"Godlo '{sheet}' nalezy do systemu {system.name} (kraj "
-            f"{system.country}), a podano --country {country}",
+            message(
+                "collections.sheet_country_mismatch",
+                sheet=sheet,
+                name=system.name,
+                country=system.country,
+                country_2=country,
+            ),
             options=("sheet", "country"),
         )
     if system.country != "PL":
         raise ValidationError(
-            f"--sheet {sheet} ({system.name}): obszar kolekcji wyznacza godlo PL; "
-            "dla CZ podaj --bbox (np. w EPSG:5514) albo --geometry",
+            message("collections.sheet_needs_pl", sheet=sheet, name=system.name),
             option="sheet",
         )
     parser = SheetParser(sheet)
@@ -1733,14 +1973,18 @@ def _area_parts(
         found = countries_for_bbox(area)
         if not found:
             raise ValidationError(
-                "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)",
+                message("collections.area_no_country"),
                 option=area_argument,
             )
         countries = tuple(code for code in found if code in descriptors)
         if not countries:
             raise ValidationError(
-                f"--product {product} jest dostepny tylko dla "
-                f"{', '.join(sorted(descriptors))}, a obszar lezy w {', '.join(found)}",
+                message(
+                    "collections.product_country_mismatch",
+                    product=product,
+                    descriptors=", ".join(sorted(descriptors)),
+                    found=", ".join(found),
+                ),
                 options=("product", area_argument),
             )
         if countries != found:
@@ -1748,8 +1992,12 @@ def _area_parts(
             sink.emit(
                 "info",
                 code,
-                f"--country auto -> {', '.join(c.lower() for c in countries)} "
-                f"(--product {product} tylko dla {', '.join(sorted(descriptors))})",
+                message(
+                    "collections.country_auto_product",
+                    cs=", ".join(c.lower() for c in countries),
+                    product=product,
+                    descriptors=", ".join(sorted(descriptors)),
+                ),
             )
     else:
         countries = (country.upper(),)
@@ -2015,12 +2263,17 @@ def _area_voivodeships(
     )
     codes = sorted({teryt[:2] for teryt in teryts})
     if not codes:
-        raise NoCoverageError(f"{what}: obszar nie przecina zadnego wojewodztwa (PRG)")
+        raise NoCoverageError(message("collections.area_no_voivodeship", what=what))
     named = ", ".join(f"{code} ({WOJEWODZTWO_NAMES.get(code, '?')})" for code in codes)
     sink.emit(
         "info",
         UNIT_LIST,
-        f"{what}: wojewodztwa obszaru wg PRG ({len(codes)}): {named}",
+        message(
+            "collections.area_voivodeships_list",
+            what=what,
+            codes_count=len(codes),
+            named=named,
+        ),
     )
     return codes
 
@@ -2039,7 +2292,9 @@ def _voivodeship_jobs(
     params = part.channel.params
     assert isinstance(params, AtomFilesParams) and part.area is not None
     if "woj" not in re.compile(params.entry_pattern).groupindex:
-        raise ValueError(f"{part.descriptor.key}: obszar kanalu ATOM wymaga grupy woj")
+        raise ValueError(
+            f"{part.descriptor.key}: ATOM channel area requires a woj group"
+        )
     codes = _area_voivodeships(part, sink, metadata)
     return [
         UnitJob(
@@ -2123,7 +2378,8 @@ def _record_job(
         url = index_url(variant, record.urls, unit=unit)
     else:
         raise ValueError(
-            f"{part.descriptor.key}: wariant bez szablonu URL wymaga indeksu rekordow"
+            f"{part.descriptor.key}: variant without a URL template requires a "
+            f"record index"
         )
     return UnitJob(
         descriptor=part.descriptor,
@@ -2168,7 +2424,7 @@ def _cuzk_sheets(
     from kartograf.providers.cuzk.sheets import SheetIndex
 
     if grid.layer is None or grid.crs is None:
-        raise ValueError("Siatka arkuszy CUZK wymaga warstwy i ukladu (layer, crs)")
+        raise ValueError("The CUZK sheet grid requires a layer and a CRS (layer, crs)")
     index = SheetIndex(session=_session(), cache=metadata)
     if part.sheet is not None:
         return [index.sheet(grid.layer, part.sheet, crs=grid.crs).sheet]
@@ -2188,7 +2444,7 @@ def _sheet_record(
     index = params.index
     assert index is not None
     if variant.index_layer is None:
-        raise ValueError("Wariant z indeksem rekordow wymaga index_layer")
+        raise ValueError("A variant with a record index requires index_layer")
     if index.kind == "wms_gfi":
         found = gfi_records(
             _session(), index, variant.index_layer, sheet, timeout=SERVICE_TIMEOUT
@@ -2221,7 +2477,7 @@ def _sheet_jobs(
     assert isinstance(params, UnitPackageParams) and variant is not None
     grid = variant.sheet_grid
     if grid is None:
-        raise ValueError(f"{part.descriptor.key}: wariant arkuszowy bez SheetGrid")
+        raise ValueError(f"{part.descriptor.key}: sheet variant without SheetGrid")
     cuzk = grid.system == "cuzk"
     if cuzk:
         sheets = _cuzk_sheets(part, grid, metadata)
@@ -2229,7 +2485,7 @@ def _sheet_jobs(
         assert part.area is not None
         sheets = _series_sheets(grid, part.area)
     if not sheets:
-        raise NoCoverageError(f"{product}: obszar nie przecina zadnego arkusza")
+        raise NoCoverageError(message("collections.area_no_sheet", product=product))
     slots = {
         sheet: unit_slot(
             out,
@@ -2257,15 +2513,36 @@ def _sheet_jobs(
         sheets = [s for s in sheets if s in records or s in local]
     else:
         missing = []
-    text = f"{product}: arkusze ({len(sheets)}): {names_text(sheets) or '-'}"
     if missing:
-        text += f"; bez rekordu w indeksie ({len(missing)}): {names_text(missing)}"
+        text = message(
+            "collections.sheets_list_missing",
+            product=product,
+            sheets_count=len(sheets),
+            names_text=names_text(sheets) or "-",
+            missing_count=len(missing),
+            missing_names=names_text(missing),
+        )
+    else:
+        text = message(
+            "collections.sheets_list",
+            product=product,
+            sheets_count=len(sheets),
+            names_text=names_text(sheets) or "-",
+        )
     sink.emit("info", UNIT_LIST, text)
     if not sheets:
-        year = f" z roku {part.year_filter}" if part.year_filter is not None else ""
+        year = (
+            message("collections.from_year", year_filter=part.year_filter)
+            if part.year_filter is not None
+            else ""
+        )
         raise NoCoverageError(
-            f"{product}: indeks nie ma rekordow{year} dla arkuszy obszaru "
-            f"({names_text(missing)})"
+            message(
+                "collections.index_no_records",
+                product=product,
+                year=year,
+                names_text=names_text(missing),
+            )
         )
     jobs = []
     for sheet in sheets:
@@ -2316,7 +2593,7 @@ def _tile_jobs(
     assert isinstance(params, UnitPackageParams) and variant is not None
     index = params.index
     if index is None or index.kind != "wfs" or variant.index_layer is None:
-        raise ValueError(f"{part.descriptor.key}: kafle wymagaja indeksu WFS")
+        raise ValueError(f"{part.descriptor.key}: tiles require a WFS index")
     assert part.area is not None
     area = _to_crs(part.area, "EPSG:2180")
     found = wfs_records(
@@ -2329,7 +2606,9 @@ def _tile_jobs(
     )
     if not found:
         raise NoCoverageError(
-            f"{product}: brak kafli w obszarze (indeks {index.endpoint})"
+            message(
+                "collections.no_tiles_in_area", product=product, endpoint=index.endpoint
+            )
         )
     by_tile: dict[tuple[str | None, str], list[IndexRecord]] = {}
     for record in found:
@@ -2345,14 +2624,23 @@ def _tile_jobs(
     if not chosen:
         years = sorted({r.year for r in found if r.year is not None})
         raise NoCoverageError(
-            f"{product}: brak kafli z roku {year} w obszarze (lata w indeksie: "
-            f"{', '.join(map(str, years)) or '-'})"
+            message(
+                "collections.no_tiles_for_year",
+                product=product,
+                year=year,
+                map=", ".join(map(str, years)) or "-",
+            )
         )
     names = {key: f"{key[0]}/{key[1]}" if key[0] else key[1] for key in chosen}
     sink.emit(
         "info",
         UNIT_LIST,
-        f"{product}: kafle obszaru ({len(chosen)}): {names_text(list(names.values()))}",
+        message(
+            "collections.area_tiles_list",
+            product=product,
+            chosen_count=len(chosen),
+            names_text=names_text(list(names.values())),
+        ),
     )
     return [
         _record_job(
@@ -2388,7 +2676,7 @@ def _ku_jobs(
         from kartograf.providers.cuzk.ruian import cadastral_areas_for_bbox
 
         if params.ku_layer is None:
-            raise ValueError(f"{part.descriptor.key}: jednostki ku wymagaja ku_layer")
+            raise ValueError(f"{part.descriptor.key}: ku units require ku_layer")
         assert part.area is not None
         client = CuzkClient(session=_session(), timeout=SERVICE_TIMEOUT)
         areas = cadastral_areas_for_bbox(
@@ -2399,15 +2687,18 @@ def _ku_jobs(
         )
         if not areas:
             raise NoCoverageError(
-                f"{request.product}: obszar nie przecina zadnego katastralniho "
-                "uzemi (RUIAN)"
+                message("collections.no_cadastral_territory", product=request.product)
             )
         codes = [area.code for area in areas]
         sink.emit(
             "info",
             UNIT_LIST,
-            f"{request.product}: katastralni uzemi obszaru wg RUIAN ({len(codes)}): "
-            f"{names_text(codes)}",
+            message(
+                "collections.ruian_territories_list",
+                product=request.product,
+                codes_count=len(codes),
+                names_text=names_text(codes),
+            ),
         )
     return [
         _record_job(
@@ -2479,13 +2770,17 @@ def _part_jobs(
         )
         if not units:
             raise NoCoverageError(
-                f"{request.product}: obszar nie przecina zadnego powiatu (PRG)"
+                message("collections.no_county_in_area", product=request.product)
             )
         sink.emit(
             "info",
             UNIT_LIST,
-            f"{request.product}: powiaty obszaru wg PRG ({len(units)}): "
-            f"{names_text(units)}",
+            message(
+                "collections.prg_counties_list",
+                product=request.product,
+                units_count=len(units),
+                names_text=names_text(units),
+            ),
         )
     return [
         package_job(
@@ -2544,7 +2839,7 @@ def _jobs(
             kind: FailureKind = (
                 "no_coverage" if isinstance(e, NoCoverageError) else "download"
             )
-            failures.append(UnitFailure(part.country, part.country, str(e), kind))
+            failures.append(UnitFailure(part.country, part.country, reason(e), kind))
             errors.append(e)
     if failures and not jobs:
         raise _no_units(errors)
@@ -2560,7 +2855,7 @@ def _no_units(errors: Sequence[DownloadError]) -> DownloadError:
     """
     if len(errors) == 1:
         return errors[0]
-    text = "; ".join(str(error) for error in errors)
+    text = message("notices.joined", items=[reason(error) for error in errors])
     if all(isinstance(error, NoCoverageError) for error in errors):
         return NoCoverageError(text)
     return DownloadError(text)
@@ -2734,14 +3029,26 @@ def _announce_size(job: UnitJob, sink: NoticeSink, session: requests.Session) ->
         sink.emit(
             "warning",
             WHOLE_COUNTRY_SIZE,
-            f"{what} {job.country}: plik krajowy {job.url} - {size_text(length)}",
+            message(
+                "collections.nationwide_file_size",
+                what=what,
+                country=job.country,
+                url=job.url,
+                size_text=size_text(length),
+            ),
         )
     elif length is not None and length > LARGE_FILE_BYTES:
         sink.emit(
             "warning",
             DOWNLOAD_SIZE,
-            f"{what} {job.country} {job.unit}: duzy plik {job.url} - "
-            f"{size_text(length)}",
+            message(
+                "collections.large_file_size",
+                what=what,
+                country=job.country,
+                unit=job.unit,
+                url=job.url,
+                size_text=size_text(length),
+            ),
         )
 
 
@@ -2783,9 +3090,14 @@ def _fetch_package(
             sink.emit(
                 "info",
                 CLASSES_ABSENT,
-                f"{job.descriptor.product} {job.country} {job.unit}: paczka nie ma "
-                f"plikow klas {', '.join(absent)} (brak takich obiektow); zapisano "
-                f"klasy {', '.join(package.classes)}",
+                message(
+                    "collections.package_classes_absent",
+                    product=job.descriptor.product,
+                    country=job.country,
+                    unit=job.unit,
+                    absent=", ".join(absent),
+                    classes=", ".join(package.classes),
+                ),
             )
     if job.record is not None:
         assert params.index is not None
@@ -2818,14 +3130,26 @@ def _fetch_atom(
         sink.emit(
             "warning",
             WHOLE_COUNTRY_SIZE,
-            f"{what} {job.country}: plik krajowy {file.url} - {size_text(file.length)}",
+            message(
+                "collections.nationwide_file_size",
+                what=what,
+                country=job.country,
+                url=file.url,
+                size_text=size_text(file.length),
+            ),
         )
     elif file.length is not None and file.length > LARGE_FILE_BYTES:
         sink.emit(
             "warning",
             DOWNLOAD_SIZE,
-            f"{what} {job.country} {job.unit}: duzy plik {file.url} - "
-            f"{size_text(file.length)}",
+            message(
+                "collections.large_file_size",
+                what=what,
+                country=job.country,
+                unit=job.unit,
+                url=file.url,
+                size_text=size_text(file.length),
+            ),
         )
     http = fetch_atom_file(session, file, staged, timeout=timeout)
     params = job.channel.params
@@ -2878,7 +3202,13 @@ def _fetch_features(
             requested = f"{coords} w {parent['bbox_crs']}"
         else:  # the unit is the requested bbox itself
             raise
-        raise NoCoverageError(f"{e} (obszar zadania: {requested})") from e
+        raise NoCoverageError(
+            message(
+                "collections.no_coverage_task_area",
+                error=reason(e),
+                requested=requested,
+            )
+        ) from e
     finally:
         shutil.rmtree(work, ignore_errors=True)
     value: dict[str, Any] = {
@@ -2944,8 +3274,7 @@ def run_job(
         found = _local_only(job.slot, "unchecked")
         if found is None:
             raise DownloadError(
-                f"{job.unit}: lokalna wersja usunieta w trakcie pobierania - ponow "
-                "pobranie"
+                message("collections.local_version_removed", unit=job.unit)
             )
         return found
     source = _Source()
@@ -3323,15 +3652,18 @@ def _sized(
 
 
 def _bytes_text(length: int) -> str:
-    """Size in a message: ``ok. 5,7 GB`` from 1 GB up, else ``ok. 46 MB``."""
+    """Size in a message: ``approx. 5.7 GB`` from 1 GB up, else ``approx. 46 MB``."""
     if length >= 10**9:
-        whole, tenth = divmod(round(length / 10**8), 10)
-        return f"ok. {whole},{tenth} GB"
-    return f"ok. {length / 1e6:.0f} MB"
+        return message("notices.approx_gigabytes", gigabytes=round(length / 10**8) / 10)
+    return message("notices.approx_megabytes", megabytes=length / 1e6)
 
 
 # A unit choice of a product (hint of a request over the volume limits).
-_UNIT_CHOICE = {"powiat": "--teryt <4 cyfry>", "woj": "--teryt <2 cyfry>", "ku": "--ku"}
+_UNIT_CHOICE = {
+    "powiat": message("collections.unit_choice_powiat"),
+    "woj": message("collections.unit_choice_voivodeship"),
+    "ku": message("collections.unit_choice_ku"),
+}
 
 
 def unit_choices(descriptors: Iterable[SourceDescriptor]) -> tuple[str, ...]:
@@ -3365,28 +3697,34 @@ def _volume_error(
     makes the request smaller (``units``: the flags choosing one unit).
     """
     if total is None:
-        size = "rozmiar nieznany (serwer nie podal Content-Length)"
+        size = message("notices.size_unknown")
     elif asked < count:
-        size = (
-            f"szacunkowo {_bytes_text(total)} (sredni rozmiar {known} z "
-            f"{count_text(count, *OF_FILES)} wg HEAD; tylko orientacyjnie - rozmiary "
-            "plikow sa bardzo rozne, a o odmowie decyduje juz sama liczba plikow)"
+        size = message(
+            "collections.size_estimated",
+            bytes_text=_bytes_text(total),
+            known=known,
+            count=count,
         )
     elif known < count:
-        size = (
-            f"co najmniej {_bytes_text(total)} (rozmiar znany dla {known} z "
-            f"{count_text(count, *OF_FILES)})"
+        size = message(
+            "collections.size_at_least",
+            bytes_text=_bytes_text(total),
+            known=known,
+            count=count,
         )
     else:
-        size = f"razem {_bytes_text(total)} wg HEAD"
-    unit = f", wybierz jednostke ({', '.join(units)})" if units else ""
+        size = message("collections.size_total_head", bytes_text=_bytes_text(total))
+    unit = message("collections.choose_unit_hint", units=list(units)) if units else ""
     return ValidationError(
-        f"{product}: obszar daje {count_text(count, *FILES)} do pobrania, "
-        f"{size} - limit "
-        f"jednego zadania to {VOLUME_FILES} plikow i {VOLUME_BYTES // 10**9} GB. "
-        f"Zawez obszar (--bbox, --sheet, --geometry){unit} albo wykonaj plan "
-        "z czescia pozycji (--check --plan PLIK, potem --upgrade --plan "
-        "PLIK)",
+        message(
+            "collections.volume_limit_exceeded",
+            product=product,
+            count=count,
+            size=size,
+            max_files=VOLUME_FILES,
+            max_gb=VOLUME_BYTES // 10**9,
+            unit=unit,
+        ),
         options=("sheet", "bbox", "geometry"),
     )
 
@@ -3531,7 +3869,7 @@ def run_request(
     if plan is not None:
         if update != "upgrade":
             raise ValidationError(
-                "Plan aktualizacji wymaga update='upgrade'", options=("plan", "update")
+                message("hydrology.plan_requires_upgrade"), options=("plan", "update")
             )
         require_store(plan, store_id(request.root))
     require_workers(workers, "--workers")
@@ -3568,10 +3906,10 @@ def run_request(
                     cache=metadata,
                 )
             except NoCoverageError as e:
-                return UnitFailure(job.unit, job.country, str(e), "no_coverage")
+                return UnitFailure(job.unit, job.country, reason(e), "no_coverage")
             except DownloadError as e:
                 logger.debug("%s %s: %s", request.product, job.unit, e)
-                return UnitFailure(job.unit, job.country, str(e), "download")
+                return UnitFailure(job.unit, job.country, reason(e), "download")
 
         total = len(jobs)
         # one unit: no bar (its size notice announces a large transfer)

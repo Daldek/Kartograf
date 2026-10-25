@@ -16,6 +16,7 @@ import requests
 from kartograf.cli import main
 from kartograf.cli.availability_cmd import share_text
 from kartograf.download.availability import COUNTRY_CHOICES
+from kartograf.messages import localize
 from tests.conftest import RecordedIndex, wfs_endpoint
 from tests.integration.test_availability import (
     CTES86_DMPOK,
@@ -186,9 +187,10 @@ def test_exit_codes(capsys):
 
     code, _, err = _run(capsys, KRAKOW, RecordedIndex())
     assert code == 2
+    choices = localize(COUNTRY_CHOICES, "pl")
     assert (
         without_error_document(err)
-        == f"Error: --country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}\n"
+        == f"Error: --country wymagane z --bbox/--geometry: {choices}\n"
     )
 
     with pytest.raises(SystemExit) as error:

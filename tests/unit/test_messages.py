@@ -71,30 +71,6 @@ PLURAL = re.compile(r"\{\w+:plural\([^|(){}]+(?:\|[^|(){}]+){1,2}\)\}")
 # A file leaves the set as soon as its last Polish literal does (checked below).
 _PENDING = frozenset(
     {
-        # Root modules: documents, MCP server, store read API, notices.
-        "notices.py",
-        # Downloads.
-        "download/area.py",
-        "download/arguments.py",
-        "download/availability.py",
-        "download/campaigns.py",
-        "download/collections.py",
-        "download/cutout.py",
-        "download/cz_contours.py",
-        "download/cz_cutout.py",
-        "download/cz_laz.py",
-        "download/cz_orto.py",
-        "download/cz_sheets.py",
-        "download/data.py",
-        "download/fetch.py",
-        "download/laz.py",
-        "download/links.py",
-        "download/manager.py",
-        "download/options.py",
-        "download/orto_cutout.py",
-        "download/plan.py",
-        "download/storage.py",
-        "download/versions.py",
         # Projects.
         "project/commands.py",
         "project/manifest.py",
@@ -182,10 +158,13 @@ def test_every_entry_has_both_languages_with_the_same_placeholders():
             )
         if "lang" in english:
             problems.append(f"{key}: a placeholder is called lang")
+        # A text of flags, numbers and placeholders only is the same in both languages.
         if (
             text.en == text.pl
             and not key.startswith(_SAME_AREAS)
-            and re.search(r"[^\W\d_]", re.sub(r"\{[^}]*\}", " ", text.en))
+            and re.search(
+                r"[^\W\d_]", re.sub(r"--[a-z][a-z-]*|\{[^}]*\}", " ", text.en)
+            )
         ):
             problems.append(f"{key}: the Polish text is the English one")
         for template in (text.en, text.pl):
@@ -398,6 +377,20 @@ def test_a_skipped_placeholder_is_given_but_only_the_other_language_prints_it(
     assert placeholders("Product.{choices:skip}") == {"choices"}
     with pytest.raises(KeyError):
         message("x.help")
+
+
+def test_a_number_is_written_with_a_decimal_comma_only_by_the_comma_spec(monkeypatch):
+    monkeypatch.setattr(
+        messages,
+        "_catalog",
+        lambda area: {"size": Text("{gb:.1f} GB", "{gb:comma(.1f)} GB")},
+    )
+
+    english = message("x.size", gb=5.66)
+
+    assert english == "5.7 GB"
+    assert english.localized("pl") == "5,7 GB"
+    assert placeholders("{gb:comma(.1f)} GB") == {"gb"}
 
 
 def test_the_error_document_is_english_unless_a_person_asks_for_polish():

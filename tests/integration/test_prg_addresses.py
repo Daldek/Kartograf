@@ -159,9 +159,9 @@ def test_addresses_selections_named_before_any_request(tmp_path):
     with pytest.raises(ValidationError) as voivodeship:
         validate_collection_request(product="addresses", teryt="12", root=tmp_path)
     assert str(voivodeship.value).startswith(
-        "--teryt 12: addresses nie ma paczek wojewodztw; dostepne: "
+        "--teryt 12: addresses has no voivodeship packages; available: "
     )
-    assert "--teryt <4 cyfry> (paczka powiatu)" in str(voivodeship.value)
+    assert "--teryt <4 digits> (county package)" in str(voivodeship.value)
     with pytest.raises(ValidationError, match="--format required: SHP, GML$"):
         validate_collection_request(
             product="addresses", country="pl", whole_country=True, root=tmp_path

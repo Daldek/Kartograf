@@ -60,8 +60,8 @@ TBD_25M = {"format": "TBD", "resolution": "25m", "vertical_crs": "KRON86"}
 TBD_25M_ARGV = ["--format", "TBD", "--resolution", "25m", "--vertical-crs", "KRON86"]
 STANDARD = Path("nmt/pl_1992_tbd_25m_kron86/N-34/58/D/c/3/N-34-58-D-c-3.zip")
 SHEET_LISTED = (
-    "Znaleziono arkuszy w skorowidzu GUGiK: 1 dla {what} (format: TBD, "
-    "rozdzielczosc: 25m)\n  Arkusze: N-34-58-D-c-3"
+    "Sheets found in the GUGiK sheet index: 1 for {what} (format: TBD, "
+    "resolution: 25m)\n  Sheets: N-34-58-D-c-3"
 )
 # 500 x 200 m across the east edge of SHEET (about 240 m on each side)
 ACROSS_EAST_EDGE = BBox(747400, 727600, 747900, 727800, "EPSG:2180")
@@ -329,7 +329,7 @@ class TestDownloadArchive:
 
         assert report.ok
         assert report.notices == (
-            Notice("info", SHEET_LIST, SHEET_LISTED.format(what=f"arkusza {sheet}")),
+            Notice("info", SHEET_LIST, SHEET_LISTED.format(what=f"sheet {sheet}")),
         )
         (unit,) = report.files
         assert unit.unit == SHEET
@@ -483,7 +483,7 @@ class TestDownloadArchive:
 
     @pytest.mark.parametrize(
         ("resolution", "years", "label"),
-        [("15m", {}, ""), ("25m", {"max_year": 2009}, " do roku 2009")],
+        [("15m", {}, ""), ("25m", {"max_year": 2009}, " up to 2009")],
         ids=["no-15m-record", "25m-only-in-2010"],
     )
     def test_no_record_of_the_variant_is_no_coverage(
@@ -510,8 +510,8 @@ class TestDownloadArchive:
             UnitFailure(
                 "PL",
                 "PL",
-                f"Skorowidz GUGiK nie ma plikow NMT TBD {resolution} KRON86 "
-                f"(PL-1992){label} dla arkusza {SHEET} - dostepne dane obszaru: "
+                f"The GUGiK sheet index has no NMT TBD {resolution} files KRON86 "
+                f"(PL-1992){label} for sheet {SHEET} - area data available: "
                 "kartograf elevation availability",
                 "no_coverage",
             ),
@@ -584,8 +584,8 @@ class TestDownloadArchive:
 _BBOX_ARGV = ["--bbox", "743470,725300,743480,725310", "--bbox-crs", "EPSG:2180"]
 _BBOX = BBox(743470, 725300, 743480, 725310, "EPSG:2180")
 _SCALE_ERROR = (
-    "--scale nie dotyczy --format TBD: arkusze archiwum (rozne skale) wynikaja "
-    "ze skorowidza GUGiK - pomin --scale"
+    "--scale does not apply to --format TBD: archive sheets (various scales) come "
+    "from the GUGiK sheet index - omit --scale"
 )
 
 
@@ -621,8 +621,10 @@ _SCALE_ERROR = (
                 "horizontal_crs": "EPSG:2180",
                 **TBD_25M,
             },
-            "--cutout dziala tylko z siatka ASC 1m (wycinek z WCS GUGiK); --format "
-            "TBD to pliki zrodlowe arkuszy - pomin --cutout",
+            (
+                "--cutout works only with the ASC 1m grid (a cutout from GUGiK WCS); "
+                "--format TBD means source sheet files - omit --cutout"
+            ),
         ),
         (
             ["--product", "nmt", "--sheet", SHEET, "--format", "XYZ"]
@@ -648,8 +650,10 @@ _SCALE_ERROR = (
                 "format": "TBD",
                 "vertical_crs": "KRON86",
             },
-            "--format dotyczy tylko --product nmt i nmpt (PL) oraz contours (CZ), "
-            "podano --product laz - pomin --format",
+            (
+                "--format applies only to --product nmt and nmpt (PL) and contours "
+                "(CZ), got --product laz - omit --format"
+            ),
         ),
     ],
     ids=["scale-sheet", "scale-bbox", "cutout", "xyz-resolution", "laz"],
@@ -682,8 +686,8 @@ def test_format_for_orto_is_validation_error(tmp_path):
             cache=False,
         )
     assert str(caught.value) == (
-        "--format dotyczy tylko --product nmt i nmpt (PL) oraz contours (CZ), "
-        "podano --product orto - pomin --format"
+        "--format applies only to --product nmt and nmpt (PL) and contours (CZ), "
+        "got --product orto - omit --format"
     )
 
 

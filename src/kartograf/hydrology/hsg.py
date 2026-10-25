@@ -37,7 +37,7 @@ from kartograf.download.data import (
 )
 from kartograf.download.plan import plans
 from kartograf.exceptions import ValidationError
-from kartograf.messages import message
+from kartograf.messages import message, reason
 from kartograf.notices import ALL_NODATA, Notice, NoticeSink
 from kartograf.output import (
     Staging,
@@ -852,7 +852,7 @@ class HSGCalculator:
                     )
                 except DownloadError as e:  # the store: a failure of the HSG
                     logger.debug("HSG %s: %s", unit, e)
-                    failed.append(UnitFailure(unit, country, str(e), "download"))
+                    failed.append(UnitFailure(unit, country, reason(e), "download"))
         files = (UnitFile(unit, country, hsg),) if hsg is not None else ()
         stored, plain = report_target(self._root)
         return HsgReport(
@@ -908,7 +908,7 @@ class HSGCalculator:
                     hsg = self._compute_plain(slot, files, sink)
                 except DownloadError as e:
                     logger.debug("HSG %s: %s", unit, e)
-                    failed.append(UnitFailure(unit, country, str(e), "download"))
+                    failed.append(UnitFailure(unit, country, reason(e), "download"))
         return HsgReport(
             files=(UnitFile(unit, country, hsg),) if hsg is not None else (),
             inputs=(),

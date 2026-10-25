@@ -366,7 +366,7 @@ def test_add_rejects_run_options(tmp_path, capsys, command, flag):
 def test_project_download_rejects_workers_below_one(tmp_path, capsys):
     project = tmp_path / "projekt"
     init_project(project, root=project / "data")
-    with pytest.raises(ValidationError, match="--workers musi byc >= 1, podano 0"):
+    with pytest.raises(ValidationError, match="--workers must be >= 1, got 0"):
         download_project(project, workers=0)
     assert main(["project", "download", "--project", str(project), "-w", "0"]) == 2
     assert (

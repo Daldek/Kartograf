@@ -331,7 +331,7 @@ def test_year_bounds_select_layers():
     with pytest.raises(ValidationError) as error:
         _krakow(min_year=2030)
     text = str(error.value)
-    assert "od roku 2030" in text
+    assert "from 2030 onwards" in text
     assert "EVRF2007: 2026, 2025" in text and "KRON86: 2019, 2018" in text
 
 
@@ -364,18 +364,18 @@ def test_input_errors_same_as_download_data(tmp_path, kwargs):
 
 def test_choices_of_the_report_are_validated_before_network():
     session = RecordedIndex()
-    with pytest.raises(ValidationError, match=r"--product 'orto': nieznana"):
+    with pytest.raises(ValidationError, match=r"--product 'orto': unknown"):
         _check(session, product="orto", country="pl", bbox=KRAKOW)
-    with pytest.raises(ValidationError, match="--product wymagane"):
+    with pytest.raises(ValidationError, match="--product required"):
         _check(session, product=None, country="pl", bbox=KRAKOW)
     with pytest.raises(
         ValidationError, match=r"--country 'de'.*pl \(GUGiK\), cz \(CUZK\), auto"
     ):
         _check(session, product="nmt", country="de", bbox=KRAKOW)
-    with pytest.raises(ValidationError, match="--country wymagane z --bbox"):
+    with pytest.raises(ValidationError, match="--country required with --bbox"):
         _check(session, product="nmt", bbox=KRAKOW)
     with pytest.raises(
-        ValidationError, match=r"systemu TM33 \(kraj CZ\), a podano --country pl"
+        ValidationError, match=r"system TM33 \(country CZ\), but --country pl was given"
     ):
         _check(session, product="nmt", country="pl", sheet="302_5550")
     with pytest.raises(ParseError):
@@ -632,7 +632,7 @@ def test_records_outside_the_registry_are_one_info():
     (notice,) = report.notices
     assert notice.level == "info" and notice.code == INDEX_UNSUPPORTED
     assert (
-        "ASCII NMT 12m EVRF2007 (2019; arkusze: 4) - wariant spoza rejestru"
+        "ASCII NMT 12m EVRF2007 (2019; sheets: 4) - variant not in the registry"
         in notice.message
     )
     assert {c.format for c in report.combinations if c.year == 2019} == {
@@ -1147,7 +1147,7 @@ def test_year_flags_are_pl_only():
         {"sheet": "CTES86"},
         {"country": "auto", "bbox": plzen},
     ):
-        with pytest.raises(ValidationError, match="nie publikuje lat nalotu"):
+        with pytest.raises(ValidationError, match="does not publish survey years"):
             _check(session, product="nmt", year=2024, **kwargs)
     assert session.calls == []
 
@@ -1158,7 +1158,7 @@ def test_year_flags_are_pl_only():
     assert {c.year for c in report.combinations} == {2024}
     (notice,) = report.notices
     assert notice.code == AUTO_NARROWED_TO_PL
-    assert notice.message == "--country auto -> pl (--year 2024 dotyczy tylko PL)"
+    assert notice.message == "--country auto -> pl (--year 2024 applies only to PL)"
     assert border.cz.calls == []
 
 
@@ -1228,10 +1228,8 @@ def test_auto_one_country_failed():
     assert {c.country for c in report.combinations} == {"PL"}
     (failed,) = report.notices
     assert (failed.level, failed.code) == ("warning", CHECK_FAILED)
-    assert failed.message.startswith(
-        "--country auto: nie udalo sie sprawdzic czesci CZ"
-    )
-    assert failed.message.endswith("raport obejmuje tylko PL")
+    assert failed.message.startswith("--country auto: could not check the CZ part")
+    assert failed.message.endswith("the report covers only PL")
     (country,) = report.failed
     assert (country.unit, country.country, country.kind) == ("CZ", "CZ", "country")
     assert (country.code, country.reason) == ("source_unavailable", None)

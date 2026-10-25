@@ -754,7 +754,7 @@ class TestDownloadLazArea:
         assert len(units) == 12 and "N-34-131-C-c-3-1-1" not in units
 
     def test_sheet_and_bbox_are_exclusive(self, tmp_path):
-        with pytest.raises(ValidationError, match="dokladnie jedno"):
+        with pytest.raises(ValidationError, match="give exactly one of sheet"):
             check_laz_area(
                 bbox=W2_AREA,
                 sheet="N-34-130-D-d-2-4",
@@ -816,12 +816,13 @@ class TestDownloadLazArea:
         assert notice.level == "info" and notice.code == LAZ_SUPERSEDED
         lines = notice.message.split("\n")
         assert lines[0] == (
-            "pominieto 2 kafle LAZ - obszar pokrywaja nowsze kafle (domyslnie "
-            "najnowszy rocznik per obszar; inny rocznik: --year/--min-year/--max-year)"
+            "skipped 2 LAZ tiles - the area is covered by newer tiles (by default "
+            "the newest vintage per area; another vintage: "
+            "--year/--min-year/--max-year)"
         )
         assert (
-            "  7.173.21.06.2 (2022, PL-2000:S7): pokryty przez "
-            "N-34-139-A-c-1-1-3-4 (2025, PL-1992)"
+            "  7.173.21.06.2 (2022, PL-2000:S7): covered by N-34-139-A-c-1-1-3-4 "
+            "(2025, PL-1992)"
         ) in lines
 
     def test_no_tiles_is_no_coverage_error(self, tmp_path):
@@ -857,8 +858,8 @@ class TestDownloadLazArea:
                 provider=provider,
             )
         text = str(caught.value)
-        assert "--min-density 12 odrzucilo 2 kafle" in text
-        assert "najwyzsza gestosc nominalna 8 pkt/m2" in text
+        assert "--min-density 12 rejected 2 tiles" in text
+        assert "highest nominal density 8 pts/m2" in text
         provider.download_tile.assert_not_called()
 
     def test_min_density_without_dropped_tiles_keeps_the_general_text(self, tmp_path):

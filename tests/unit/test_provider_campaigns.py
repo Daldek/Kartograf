@@ -324,7 +324,7 @@ def test_all_min_year_empty_lists_available_years(tmp_path):
             session=s2, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         ).resolve_campaigns(H, all_campaigns=True, min_year=2026)
     assert exc.value.sheets == {H: (2019, 2022, 2023, 2024, 2025)}
-    assert "od roku 2026" in str(exc.value)
+    assert "from 2026 onwards" in str(exc.value)
     assert s2.get.call_count == 0
 
 

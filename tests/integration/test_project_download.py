@@ -224,7 +224,7 @@ def test_auto_partial_success_not_pinned(tmp_path):
     # library notices pass with their code, prefixed with the task name
     (notice,) = seen
     assert report.notices == (notice,) and notice.code == "auto_partial_success"
-    assert notice.message.startswith("teren: czesc CZ zadania zakonczyla sie bledem")
+    assert notice.message.startswith("teren: part CZ of the task ended with an error")
 
 
 def test_written_after_each_task(tmp_path):

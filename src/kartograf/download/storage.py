@@ -19,6 +19,7 @@ from kartograf.download.campaigns import FULL_SHEET_DIR
 from kartograf.download.fetch import FileSlot
 from kartograf.download.versions import INCOMING_DIR, VERSIONS_DIR
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.sources.registry import get_source, sources_for
 from kartograf.sources.variants import variants
 
@@ -122,13 +123,11 @@ class FileStorage:
         """
         if variant is not None and not re.fullmatch(r"[a-z0-9]+", variant):
             raise ValidationError(
-                f"Nieprawidlowy wariant segmentu storage: '{variant}' "
-                "(oczekiwano [a-z0-9]+)"
+                message("download.invalid_segment_variant", variant=variant)
             )
         if suffix is not None and not re.fullmatch(r"_[a-z0-9]+", suffix):
             raise ValidationError(
-                f"Nieprawidlowy przyrostek nazwy pliku storage: '{suffix}' "
-                "(oczekiwano _[a-z0-9]+)"
+                message("download.invalid_file_suffix", suffix=suffix)
             )
         self._variant = variant
         self._suffix = suffix or ""
@@ -164,8 +163,13 @@ class FileStorage:
                     key=lambda label: float(label[:-1]),
                 )
                 raise ValidationError(
-                    f"Nieobslugiwana rozdzielczosc: '{resolution}'. "
-                    f"Obslugiwane ({name} {fmt}): {labels}"
+                    message(
+                        "download.unsupported_resolution",
+                        resolution=resolution,
+                        name=name,
+                        fmt=fmt,
+                        labels=labels,
+                    )
                 )
             return found[0].source
         sources = sources_for(country="PL", product=name)
@@ -213,7 +217,11 @@ class FileStorage:
         if "{" in subdir:
             missing = ", ".join(re.findall(r"\{(\w+)\}", subdir))
             raise ValidationError(
-                f"Nierozwiazany wymiar segmentu storage: {missing} (subdir '{subdir}')"
+                message(
+                    "download.unresolved_segment_dimension",
+                    missing=missing,
+                    subdir=subdir,
+                )
             )
         return subdir
 
@@ -375,9 +383,7 @@ class FileStorage:
             storage.get_raw_path(tile.sheet, tile.filename, system=tile.system)
         """
         if system is not None and system not in ("1992", "2000"):
-            raise ValidationError(
-                f"Nieznany uklad '{system}' (oczekiwano '1992' albo '2000')"
-            )
+            raise ValidationError(message("download.unknown_crs_system", system=system))
         dir_parts = self._get_directory_parts(identifier)
         dir_path = self._root / self._resolved_subdir(identifier, system)
         for part in dir_parts:
@@ -394,9 +400,7 @@ class FileStorage:
         directory ``.incoming/`` (D19).
         """
         if system is not None and system not in ("1992", "2000"):
-            raise ValidationError(
-                f"Nieznany uklad '{system}' (oczekiwano '1992' albo '2000')"
-            )
+            raise ValidationError(message("download.unknown_crs_system", system=system))
         segment = self._resolved_subdir(identifier, system)
         return self._root / segment / VERSIONS_DIR
 
@@ -768,8 +772,7 @@ def token_segment(prefix: str, tokens: Sequence[str]) -> str:
     for token in lowered:
         if not _SEGMENT_TOKEN.fullmatch(token):
             raise ValidationError(
-                f"Niedozwolony element segmentu {token!r} (dozwolone male litery "
-                "i cyfry, '-' i '.' tylko miedzy nimi)"
+                message("download.invalid_segment_token", token=token)
             )
     return "_".join([prefix, *lowered])
 
@@ -838,10 +841,7 @@ def unit_slot(
         v for v in (teryt, bbox, sheet, country, ku, tile, mapnom) if v is not None
     ]
     if len(given) != 1 or (zone is not None and tile is None):
-        raise ValidationError(
-            "Podaj dokladnie jeden wybor: teryt, bbox, sheet, country, ku, tile "
-            "albo mapnom (zone tylko z tile)"
-        )
+        raise ValidationError(message("download.exactly_one_selection"))
     root = Path(root)
     related = tuple(Path(r) for r in related_roots)
     if bbox is not None:
@@ -857,26 +857,30 @@ def unit_slot(
     parts: list[str]
     if teryt is not None:
         if not _TERYT.fullmatch(teryt):
-            raise ValidationError(f"Nieprawidlowy kod TERYT: {teryt!r}")
+            raise ValidationError(message("download.invalid_teryt_code", teryt=teryt))
         parts, name = ["teryt"], teryt
     elif country is not None:
         name = country.lower()
         if not _COUNTRY.fullmatch(name):
-            raise ValidationError(f"Nieprawidlowy kod kraju: {country!r}")
+            raise ValidationError(
+                message("download.invalid_country_code", country=country)
+            )
         parts = ["country"]
     elif ku is not None:
         if not _KU.fullmatch(ku):
-            raise ValidationError(f"Nieprawidlowy kod katastralniho uzemi: {ku!r}")
+            raise ValidationError(message("download.invalid_ku_code", ku=ku))
         parts, name = ["ku"], ku
     elif tile is not None:
         if not _TILE.fullmatch(tile):
-            raise ValidationError(f"Nieprawidlowy identyfikator kafla: {tile!r}")
+            raise ValidationError(message("download.invalid_tile_id", tile=tile))
         if zone is not None and not _ZONE.fullmatch(zone):
-            raise ValidationError(f"Nieprawidlowy katalog ukladu kafla: {zone!r}")
+            raise ValidationError(message("download.invalid_tile_crs_dir", zone=zone))
         parts, name = (zone.split("/") if zone else ["tile"]), tile
     elif mapnom is not None:
         if not _MAPNOM.fullmatch(mapnom):
-            raise ValidationError(f"Nieprawidlowe godlo arkusza CUZK: {mapnom!r}")
+            raise ValidationError(
+                message("download.invalid_cuzk_sheet_code", mapnom=mapnom)
+            )
         parts, name = parser_registry.cuzk_map_path_parts(mapnom), mapnom
     else:
         assert sheet is not None

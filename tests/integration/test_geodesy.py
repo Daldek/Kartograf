@@ -203,7 +203,7 @@ def test_pl_control_packages_and_archives(tmp_path, router):
             cache=False,
         )
     assert "--network gravity" in str(area_only.value)
-    assert "tylko dla --bbox/--sheet/--geometry" in str(area_only.value)
+    assert "available only for --bbox/--sheet/--geometry" in str(area_only.value)
     assert "--teryt: horizontal, vertical" in str(area_only.value)
     assert len(router.calls) == calls
 
@@ -319,7 +319,7 @@ def test_network_required_with_the_values_of_each_country(tmp_path, router):
         validate_collection_request(
             product="control", country="cz", bbox=TESIN, root=tmp_path
         )
-    assert "--network wymagane" in str(cz.value)
+    assert "--network required" in str(cz.value)
     assert (
         "gnss, horizontal, densification, horizontal-detailed, vertical, "
         "vertical-detailed, gravity" in str(cz.value)
@@ -331,7 +331,7 @@ def test_network_required_with_the_values_of_each_country(tmp_path, router):
     text = str(both.value)
     assert "PL: horizontal, vertical, gravity, magnetic, archive-1942" in text
     assert "(CZ): gnss, horizontal, densification" in text
-    assert "wspolne: horizontal, vertical, gravity" in text
+    assert "common: horizontal, vertical, gravity" in text
     request = validate_collection_request(
         product="control",
         country="auto",

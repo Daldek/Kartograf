@@ -271,7 +271,7 @@ def test_true_orto_cutout_outside_cities_is_no_coverage(tmp_path, images):
     images.coverage = "orto_true/true_0.05m_krakow.tif"
     krakow = BBox(566000, 243000, 566001, 243001, "EPSG:2180")
     out = tmp_path / "data"
-    with pytest.raises(NoCoverageError, match="wybrane miasta"):
+    with pytest.raises(NoCoverageError, match="covers only selected cities"):
         download_image_cutout(
             product="true-orto",
             bbox=krakow,
@@ -327,7 +327,7 @@ def test_oblique_directions_are_files(tmp_path, images):
         validate_data_request(
             product="oblique-orto", sheet=OBLIQUE_SHEET, direction="x", root=out
         )
-    with pytest.raises(ValidationError, match="--direction dotyczy tylko"):
+    with pytest.raises(ValidationError, match="--direction applies only to"):
         validate_data_request(
             product="orto", sheet=INTENSITY_SHEET, direction="n", root=out
         )
@@ -379,11 +379,11 @@ def test_full_sheet_only_with_record_flag(tmp_path, product, sheet, allowed):
 @pytest.mark.parametrize(
     ("request_", "fragment"),
     [
-        ({"product": "oblique-orto", "sheet": INTENSITY_SHEET}, "tylko PL-2000"),
-        ({"product": "true-orto", "sheet": OBLIQUE_SHEET}, "tylko PL-1992"),
+        ({"product": "oblique-orto", "sheet": INTENSITY_SHEET}, "only PL-2000"),
+        ({"product": "true-orto", "sheet": OBLIQUE_SHEET}, "only PL-1992"),
         (
             {"product": "intensity", "sheet": INTENSITY_SHEET, "cutout": True},
-            "--cutout dziala tylko z --bbox/--geometry",
+            "--cutout works only with --bbox/--geometry",
         ),
         (
             {
@@ -392,11 +392,11 @@ def test_full_sheet_only_with_record_flag(tmp_path, product, sheet, allowed):
                 "country": "pl",
                 "cutout": True,
             },
-            "--cutout dziala tylko z --product nmt, nmpt, orto albo true-orto",
+            "--cutout works only with --product nmt, nmpt, orto or true-orto",
         ),
         (
             {"product": "intensity", "sheet": "CTES96"},
-            "--product intensity nie ma danych CZ",
+            "--product intensity has no data for CZ",
         ),
     ],
 )

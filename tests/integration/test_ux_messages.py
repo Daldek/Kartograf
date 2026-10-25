@@ -11,7 +11,6 @@ from kartograf.download.collections import validate_collection_request
 from kartograf.download.data import download_data, validate_data_request
 from kartograf.exceptions import ValidationError
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.notices import FILES, OF_SHEETS, count_text
 
 SHEET = "N-34-130-D-d-2-4"
 
@@ -26,24 +25,6 @@ def _no_network(monkeypatch):
     monkeypatch.setattr("requests.Session.request", refuse)
 
 
-@pytest.mark.parametrize(
-    ("count", "files", "of_sheets"),
-    [
-        (1, "1 plik", "1 arkusza"),
-        (2, "2 pliki", "2 arkuszy"),
-        (4, "4 pliki", "4 arkuszy"),
-        (5, "5 plikow", "5 arkuszy"),
-        (12, "12 plikow", "12 arkuszy"),
-        (22, "22 pliki", "22 arkuszy"),
-        (25, "25 plikow", "25 arkuszy"),
-        (112, "112 plikow", "112 arkuszy"),
-    ],
-)
-def test_count_text_polish_numerals(count, files, of_sheets):
-    assert count_text(count, *FILES) == files
-    assert count_text(count, *OF_SHEETS) == of_sheets
-
-
 def _cli_error(capsys, *argv: str) -> str:
     assert main(list(argv)) == 2
     return capsys.readouterr().err
@@ -52,18 +33,19 @@ def _cli_error(capsys, *argv: str) -> str:
 def test_layer_without_geometry_is_an_error_in_cli_api_and_project(tmp_path, capsys):
     # UX-01: --layer names a layer of the --geometry file; without it the
     # value was dropped silently (and written into the project manifest)
-    text = "--layer dotyczy tylko --geometry"
+    text = "--layer applies only to --geometry"
+    polish = "--layer dotyczy tylko --geometry"  # the terminal speaks Polish
     err = _cli_error(
         capsys,
         "boundaries", "download", "--product", "admin", "--teryt", "14",
         "--layer", "x", "--root", str(tmp_path),
     )  # fmt: skip
-    assert text in err
+    assert polish in err
     with pytest.raises(ValidationError, match=text):
         validate_collection_request(
             product="admin", root=tmp_path, teryt="14", layer="x"
         )
-    with pytest.raises(ValidationError, match=f"{text}.*wybiera --layers"):
+    with pytest.raises(ValidationError, match=f"{text}.*are selected with --layers"):
         LandCoverManager("bdot10k", root=tmp_path).validate_request(
             teryt="1465", layer="PTWP"
         )
@@ -78,7 +60,7 @@ def test_layer_without_geometry_is_an_error_in_cli_api_and_project(tmp_path, cap
         "project", "add", "--project", str(tmp_path), "t1", "boundaries",
         "download", "--product", "admin", "--teryt", "14", "--layer", "x",
     )  # fmt: skip
-    assert text in err
+    assert polish in err
 
 
 @pytest.mark.parametrize(
@@ -119,8 +101,8 @@ def test_missing_selection_names_only_the_selections_of_the_product(tmp_path):
     with pytest.raises(ValidationError) as error:
         validate_collection_request(product="network", root=tmp_path, country="cz")
     assert str(error.value) == (
-        "Podaj dokladnie jeden wybor dla --product network (CZ): --bbox/--geometry "
-        "(obiekty obszaru), --whole-country (plik krajowy)"
+        "Give exactly one choice for --product network (CZ): --bbox/--geometry (area "
+        "features), --whole-country (country file)"
     )
 
 
@@ -132,8 +114,10 @@ def test_survey_control_hint_names_the_network_of_each_selection(tmp_path):
             whole_country=True, network="horizontal",
         )  # fmt: skip
     text = str(error.value)
-    assert "--teryt <4 cyfry> z --network horizontal|vertical (paczka powiatu)" in text
-    assert "z --network archive-1942|archive-kronsztadt60 (arkusze obszaru)" in text
+    assert "with --network horizontal|vertical (county package)" in text
+    assert (
+        "with --network archive-1942|archive-kronsztadt60 (sheets of the area)"
+    ) in text
 
 
 def test_cz_source_with_a_pl_sheet_code_names_the_source(tmp_path):
@@ -141,8 +125,8 @@ def test_cz_source_with_a_pl_sheet_code_names_the_source(tmp_path):
     with pytest.raises(ValidationError) as error:
         LandCoverManager("zabaged", root=tmp_path).validate_request(sheet="N-34-130-D")
     assert str(error.value) == (
-        "--product zabaged (CZ): godlo N-34-130-D nie wyznacza obszaru CZ - podaj "
-        "--bbox (np. w EPSG:5514) albo --geometry"
+        "--product zabaged (CZ): sheet code N-34-130-D does not define a CZ area - "
+        "give --bbox (e.g. in EPSG:5514) or --geometry"
     )
 
 
@@ -284,7 +268,9 @@ def test_pl_sheet_code_with_another_sheet_system_fails_before_network(tmp_path, 
         "EVRF2007", "--root", str(tmp_path),
     )  # fmt: skip
     assert f"Error: {text}" in err
-    with pytest.raises(ValidationError, match="nie zgadza sie z godlem 6.129.30.25.3"):
+    with pytest.raises(
+        ValidationError, match=("does not match sheet code 6.129.30.25.3")
+    ):
         validate_data_request(
             product="orto", root=tmp_path, sheet="6.129.30.25.3",
             sheet_system="1992",
@@ -313,8 +299,8 @@ def test_option_of_the_other_country_source(tmp_path):
             scale="1:10000", format="TIFF", sheet_system="1992",
         )  # fmt: skip
     assert str(error.value) == (
-        "--sheet-system dotyczy tylko --product topographic (CZ: sjtsk, etrs89) - "
-        "dla PL pomin --sheet-system"
+        "--sheet-system applies only to --product topographic (CZ: sjtsk, etrs89) - "
+        "for PL omit --sheet-system"
     )
     request = validate_collection_request(
         product="topographic", root=tmp_path, country="auto", bbox=BORDER,
@@ -341,9 +327,7 @@ def test_survey_network_per_country(tmp_path):
             product="control", root=tmp_path, country="auto", bbox=BORDER,
             network="gnss",
         )  # fmt: skip
-    assert "(zadanie PL+CZ: wartosc per kraj, np. --network pl=...,cz=..." in str(
-        error.value
-    )
+    assert "common: horizontal, vertical, gravity)" in str(error.value)
 
 
 def test_project_init_with_an_empty_root_is_an_input_error(tmp_path, capsys):
@@ -370,13 +354,13 @@ def test_teryt_of_a_missing_voivodeship_says_so_and_lists_the_existing_ones(
     with pytest.raises(ValidationError) as error:
         validate_collection_request(product="admin", root=tmp_path, teryt=teryt)
     text = str(error.value)
-    assert f"nie ma wojewodztwa o kodzie {teryt[:2]}" in text
-    assert "12 (malopolskie)" in text and "Nieprawidlowy" not in text
+    assert f"no voivodeship with code {teryt[:2]}" in text
+    assert "12 (malopolskie)" in text and "Invalid" not in text
     assert error.value.option == "teryt"
 
 
 def test_teryt_of_a_wrong_format_is_still_a_format_error(tmp_path):
-    with pytest.raises(ValidationError, match="2 cyfry, np. 12") as error:
+    with pytest.raises(ValidationError, match="2 digits, e.g. 12") as error:
         validate_collection_request(product="admin", root=tmp_path, teryt="126")
     assert error.value.option == "teryt"
 
@@ -394,5 +378,5 @@ def test_whole_country_names_only_the_countries_of_the_product(tmp_path):
         validate_collection_request(
             product="admin", root=tmp_path, whole_country=True, country="auto"
         )
-    assert "--country pl albo --country cz" in str(admin.value)
+    assert "--country pl or --country cz" in str(admin.value)
     assert admin.value.allowed == ("pl", "cz")

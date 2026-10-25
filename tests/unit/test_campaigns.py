@@ -210,7 +210,7 @@ def test_verify_file_format_accepts_tiff_signatures(tmp_path):
 def test_verify_file_format_rejects_mismatch(body, ext, tmp_path):
     f = tmp_path / ("x" + ext)
     f.write_bytes(XYZ_HEAD.read_bytes() if body is None else body)
-    with pytest.raises(DownloadError, match="tresc nie jest"):
+    with pytest.raises(DownloadError, match="content is not"):
         verify_file_format(f, ext)
 
 
@@ -261,14 +261,14 @@ def test_verify_file_format_rejects_zip_without_central_directory(tmp_path):
     data = _zip_archive()
     path = tmp_path / "N-34-58-D-c-3.zip"
     path.write_bytes(data[: data.index(b"PK\x01\x02")])
-    with pytest.raises(DownloadError, match="tresc nie jest archiwum ZIP"):
+    with pytest.raises(DownloadError, match="content is not ZIP archive"):
         verify_file_format(path, ".zip")
 
 
 @pytest.mark.parametrize(
     ("ext", "name"),
     [
-        (".zip", "archiwum ZIP"),
+        (".zip", "ZIP archive"),
         (".ttn", "Intergraph TTN"),
         (".grd", "Intergraph GRD"),
         (".dgn", "DGN"),
@@ -298,7 +298,7 @@ def test_verify_file_format_rejects_other_content_naming_format(
     path = tmp_path / f"N-34-58-D-c-3{ext}"
     path.write_bytes(other[ext] if content is None else content)
     with pytest.raises(
-        DownloadError, match=f"^{re.escape(path.name)}: tresc nie jest {name} "
+        DownloadError, match=f"^{re.escape(path.name)}: content is not {name} "
     ):
         verify_file_format(path, ext)
 
@@ -314,7 +314,7 @@ def test_verify_file_format_rejects_ole_container_as_grd(tmp_path):
     """An Intergraph GRD is never an OLE compound file."""
     path = tmp_path / "x.grd"
     path.write_bytes(OLE_HEAD)
-    with pytest.raises(DownloadError, match="tresc nie jest Intergraph GRD"):
+    with pytest.raises(DownloadError, match="content is not Intergraph GRD"):
         verify_file_format(path, ".grd")
 
 
@@ -329,7 +329,7 @@ def test_coverage_of_asc_counts_nodata(tmp_path, monkeypatch):
     monkeypatch.setattr(campaign_module, "_COVERAGE_CHUNK", 2)
     assert measure_coverage(path, ".asc") == 0.6667
     path.write_text(header + "1 -9999 2\n3 -9999\n")
-    with pytest.raises(DownloadError, match="5 komorek"):
+    with pytest.raises(DownloadError, match="5 cells"):
         measure_coverage(path, ".asc")
 
 
@@ -451,7 +451,7 @@ def test_sort_key_date_beats_dt_pzgik():
 
 @pytest.mark.parametrize("bad", ["", "2025", "2025-4-27", "../etc", "2025-04-27T00:00"])
 def test_invalid_aktualnosc_is_download_error(bad):
-    with pytest.raises(DownloadError, match="aktualnosc"):
+    with pytest.raises(DownloadError, match="invalid freshness"):
         CampaignRef.from_record(_rec(aktualnosc=bad))
 
 
@@ -517,26 +517,26 @@ def test_record_year_prefers_aktualnosc_rok():
 @pytest.mark.parametrize(
     "suffixes,min_year,max_year,hints",
     [
-        ((2,), 2018, 2018, ("--min-year 2018 (rok 2018 i nowsze)",)),
-        ((1,), 2026, 2026, ("--max-year 2026 (rok 2026 i starsze)",)),
+        ((2,), 2018, 2018, ("--min-year 2018 (year 2018 and newer)",)),
+        ((1,), 2026, 2026, ("--max-year 2026 (year 2026 and older)",)),
         (
             (1, 3),
             2024,
             2024,
             (
-                "--min-year 2024 (rok 2024 i nowsze)",
-                "--max-year 2024 (rok 2024 i starsze)",
+                "--min-year 2024 (year 2024 and newer)",
+                "--max-year 2024 (year 2024 and older)",
             ),
         ),
-        ((1, 3), 2026, 2026, ("--max-year 2026 (rok 2026 i starsze)",)),
-        ((1, 3), 2026, None, ("--min-year 2025 (rok 2025 i nowsze)",)),
+        ((1, 3), 2026, 2026, ("--max-year 2026 (year 2026 and older)",)),
+        ((1, 3), 2026, None, ("--min-year 2025 (year 2025 and newer)",)),
         (
             (3,),
             2023,
             2024,
             (
-                "--max-year 2025 (z lat 2023-2025)",
-                "--min-year 2019 (z lat 2019-2024)",
+                "--max-year 2025 (from years 2023-2025)",
+                "--min-year 2019 (from years 2019-2024)",
             ),
         ),
     ],
@@ -609,16 +609,16 @@ def test_year_range_error_lists_years_and_truncates():
     error = year_range_error(conflicts, 2024, 2024, total=4)
     assert isinstance(error, YearRangeError)
     assert isinstance(error, DownloadError)
-    assert "z roku 2024 dla 2 z 4 arkuszy" in str(error)
-    assert "N-34-139-C-a-3-1: dostepne roczniki 2019, 2023, 2025" in str(error)
-    assert "N-34-139-C-a-3-3: dostepne roczniki 2019, 2025" in str(error)
+    assert "from year 2024 for 2 of 4 sheets" in str(error)
+    assert "N-34-139-C-a-3-1: available vintages 2019, 2023, 2025" in str(error)
+    assert "N-34-139-C-a-3-3: available vintages 2019, 2025" in str(error)
     assert error.sheets == conflicts
     assert error.min_year == error.max_year == 2024
     assert error.hints == (
-        "--min-year 2024 (rok 2024 i nowsze)",
-        "--max-year 2024 (rok 2024 i starsze)",
+        "--min-year 2024 (year 2024 and newer)",
+        "--max-year 2024 (year 2024 and older)",
     )
-    assert "Podpowiedz: " + " albo ".join(error.hints) in str(error)
+    assert "Hint: " + " or ".join(error.hints) in str(error)
 
     many = {f"N-34-139-C-a-3-{i:02d}": (2019, 2025) for i in range(25)}
     truncated = year_range_error(many, 2024, 2024, total=25)
@@ -628,21 +628,21 @@ def test_year_range_error_lists_years_and_truncates():
             [
                 line
                 for line in str(truncated).splitlines()
-                if "dostepne roczniki" in line
+                if "available vintages" in line
             ]
         )
         == 20
     )
-    assert "... i 5 innych" in str(truncated)
+    assert "... and 5 more" in str(truncated)
 
 
 @pytest.mark.parametrize(
     "min_year,max_year,label",
     [
-        (2024, 2024, "z roku 2024"),
-        (2026, None, "od roku 2026"),
-        (None, 2020, "do roku 2020"),
-        (2023, 2024, "z lat 2023-2024"),
+        (2024, 2024, "from year 2024"),
+        (2026, None, "from 2026 onwards"),
+        (None, 2020, "up to 2020"),
+        (2023, 2024, "from years 2023-2024"),
     ],
 )
 def test_year_range_label(min_year, max_year, label):
@@ -689,11 +689,11 @@ class TestVerifyRecordUrl:
         verify_record_url("https://x/64878_364829_7.124.07.24.tif", "7.124.07.24")
 
     def test_url_without_sheet_raises(self):
-        with pytest.raises(DownloadError, match="nie zawiera godla"):
+        with pytest.raises(DownloadError, match="does not contain sheet code"):
             verify_record_url("https://x/NMT/84183/84183_1_G.asc", "N-34-130-D-d-2-4")
 
     def test_url_with_other_sheet_raises(self):
-        with pytest.raises(DownloadError, match="nie zawiera godla"):
+        with pytest.raises(DownloadError, match="does not contain sheet code"):
             verify_record_url("https://x/1_2_N-34-130-D-d-2-3.asc", "N-34-130-D-d-2-4")
 
     # Archive file names of the full WFS inventory 2026-10-15 (ADR-041)
@@ -737,7 +737,7 @@ class TestVerifyRecordUrl:
         with pytest.raises(DownloadError) as caught:
             verify_record_url(url, sheet)
         assert str(caught.value) == (
-            f"URL rekordu skorowidza nie zawiera godla {sheet}: {url}"
+            f"Sheet index record URL does not contain sheet code {sheet}: {url}"
         )
 
 
@@ -768,7 +768,7 @@ class TestVerifySheetExtent:
             center=True,
             cell=600,
         )
-        with pytest.raises(DownloadError, match="zasieg"):
+        with pytest.raises(DownloadError, match="file extent"):
             verify_sheet_extent(outside, self.G, ".asc")
 
     def test_partial_sheet_inside_frame_passes(self, tmp_path):
@@ -779,7 +779,7 @@ class TestVerifySheetExtent:
     def test_neighbour_sheet_raises(self, tmp_path):
         b = SheetParser(self.G).get_bbox()
         p = _asc_for_frame(tmp_path / "a.asc", self.G, shift_x=b.max_x - b.min_x)
-        with pytest.raises(DownloadError, match="zasieg"):
+        with pytest.raises(DownloadError, match="file extent"):
             verify_sheet_extent(p, self.G, ".asc")
 
     def test_pl2000_sheet_in_zone_crs_passes(self, tmp_path):
@@ -794,13 +794,13 @@ class TestVerifySheetExtent:
     def test_pl2000_sheet_with_2180_file_of_other_place_raises(self, tmp_path):
         # EPSG:2180 header of N-34-130-D-d-2-4 - far from 7.124.07.24
         p = _asc_for_frame(tmp_path / "a.asc", self.G)
-        with pytest.raises(DownloadError, match="zasieg"):
+        with pytest.raises(DownloadError, match="file extent"):
             verify_sheet_extent(p, "7.124.07.24", ".asc")
 
     def test_unreadable_header_raises(self, tmp_path):
         p = tmp_path / "a.asc"
         p.write_text("garbage\n")
-        with pytest.raises(DownloadError, match="naglowek"):
+        with pytest.raises(DownloadError, match="incomplete ASC header"):
             verify_sheet_extent(p, self.G, ".asc")
 
     def test_tif_not_checked(self, tmp_path):
@@ -871,8 +871,8 @@ class TestVerifyRecordVerticalCrs:
             verify_record_vertical_crs(record, requested, record.sheet)
         message = str(exc.value)
         assert record.sheet in message
-        assert f"deklaruje uklad wysokosci {record.raw[VFIELD]}" in message
-        assert f"zadano {requested}" in message
+        assert f"declares vertical CRS {record.raw[VFIELD]}" in message
+        assert f"but {requested} was requested" in message
         assert RECORD_VERTICAL_CRS[requested] in message
         assert exc.value.sheet == record.sheet
 
@@ -881,7 +881,7 @@ class TestVerifyRecordVerticalCrs:
         record = _declaring(KRON86_RECORDS[0], value)
         with caplog.at_level(logging.DEBUG, logger="kartograf.download.campaigns"):
             verify_record_vertical_crs(record, "EVRF2007", record.sheet)
-        assert "niesprawdzony" in caplog.text
+        assert "vertical CRS not checked" in caplog.text
 
     def test_case_and_whitespace_of_declared_value_are_tolerated(self):
         record = _declaring(EVRF2007_RECORDS[0], " pl-evrf2007-nh ")

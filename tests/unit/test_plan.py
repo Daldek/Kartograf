@@ -64,7 +64,7 @@ def test_plan_unknown_track_or_status_is_validation_error(field, value):
 def test_plan_without_track_is_validation_error():
     payload = json.loads(_plan(_item()).to_json())
     del payload["items"][0]["track"]
-    with pytest.raises(ValidationError, match="Niekompletny"):
+    with pytest.raises(ValidationError, match="Incomplete update plan"):
         UpdatePlan.from_json(json.dumps(payload))
 
 
@@ -128,12 +128,12 @@ def test_plan_from_dict_rejects_other_schema():
     payload = _plan(_item()).to_dict()
     for schema in ("kartograf-plan/2", "kartograf-availability/1", None):
         broken = {**payload, "schema": schema}
-        with pytest.raises(ValidationError, match="schemat"):
+        with pytest.raises(ValidationError, match="schema"):
             UpdatePlan.from_dict(broken)
     del payload["schema"]
-    with pytest.raises(ValidationError, match="schemat"):
+    with pytest.raises(ValidationError, match="schema"):
         UpdatePlan.from_dict(payload)
-    with pytest.raises(ValidationError, match="schemat"):
+    with pytest.raises(ValidationError, match="schema"):
         UpdatePlan.from_json("[1, 2]")
 
 
@@ -145,10 +145,10 @@ def test_plan_from_dict_rejects_malformed_notices():
         "not a list",
         None,
     ):
-        with pytest.raises(ValidationError, match="Niekompletny"):
+        with pytest.raises(ValidationError, match="Incomplete update plan"):
             UpdatePlan.from_dict({**payload, "notices": notices})
     unknown_level = [{"level": "debug", "code": "x", "message": "t"}]
-    with pytest.raises(ValidationError, match="Nieznany poziom"):
+    with pytest.raises(ValidationError, match="Unknown plan notice level"):
         UpdatePlan.from_dict({**payload, "notices": unknown_level})
 
 
@@ -189,14 +189,14 @@ def test_merge_keeps_both_and_earliest_check():
 
 
 def test_merge_rejects_other_store():
-    with pytest.raises(ValidationError, match="roznych magazynow"):
+    with pytest.raises(ValidationError, match="different stores"):
         _plan(_item()).merge(_plan(_item(), root="/inny"))
 
 
 def test_require_store_rejects_other_store(tmp_path):
     plan = _plan(_item(), root=store_id(tmp_path))
     require_store(plan, store_id(tmp_path / "." / ""))
-    with pytest.raises(ValidationError, match="innego magazynu") as caught:
+    with pytest.raises(ValidationError, match="different store") as caught:
         require_store(plan, store_id(tmp_path / "b"))
     # the error names the argument like the other errors of a plan do
     assert caught.value.option == "plan"
@@ -276,5 +276,5 @@ def test_plans_of_a_store_and_of_a_directory_do_not_merge(tmp_path):
         None, "2026-10-12T08:00:00+00:00", "0.8.0", (), output_dir=store_id(tmp_path)
     )
 
-    with pytest.raises(ValidationError, match="roznych magazynow"):
+    with pytest.raises(ValidationError, match="different stores"):
         _plan(_item()).merge(plain)

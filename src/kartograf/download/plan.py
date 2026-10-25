@@ -26,7 +26,7 @@ from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.exceptions import ConflictError, KartografError, ValidationError
 from kartograf.marker import store_refusal
-from kartograf.messages import message
+from kartograf.messages import message, reason
 from kartograf.notices import Notice
 from kartograf.output import Action, Mode, Staging, plain_of, wrapping
 from kartograf.serialization import Document
@@ -157,7 +157,9 @@ class UpdatePlan(Document):
         try:
             payload = json.loads(text)
         except ValueError as e:
-            raise ValidationError(f"Plan aktualizacji nie jest JSON: {e}") from e
+            raise ValidationError(
+                message("download.plan_not_json", error=reason(e))
+            ) from e
         return cls.from_dict(payload)
 
     @classmethod
@@ -170,8 +172,11 @@ class UpdatePlan(Document):
         if not isinstance(payload, Mapping) or payload.get("schema") != PLAN_SCHEMA:
             schema = payload.get("schema") if isinstance(payload, Mapping) else None
             raise ValidationError(
-                f"Nieznany schemat planu aktualizacji {schema!r} "
-                f"(oczekiwano {PLAN_SCHEMA!r})"
+                message(
+                    "download.plan_unknown_schema",
+                    schema=schema,
+                    plan_schema=PLAN_SCHEMA,
+                )
             )
         if "store" in payload and "root" not in payload:
             raise ValidationError(message("download.old_plan_store_key"), option="plan")
@@ -190,7 +195,9 @@ class UpdatePlan(Document):
                 notices=notices,
             )
         except (KeyError, TypeError, AttributeError, ValueError) as e:
-            raise ValidationError(f"Niekompletny plan aktualizacji: {e}") from e
+            raise ValidationError(
+                message("download.plan_incomplete", error=reason(e))
+            ) from e
 
     def merge(self, other: "UpdatePlan") -> "UpdatePlan":
         """One plan of both (``--country auto``); the earlier ``checked_at`` wins.
@@ -204,8 +211,11 @@ class UpdatePlan(Document):
         """
         if (other.root, other.output_dir) != (self.root, self.output_dir):
             raise ValidationError(
-                f"Nie mozna polaczyc planow roznych magazynow ({self.target}, "
-                f"{other.target})"
+                message(
+                    "download.plan_merge_stores_differ",
+                    target=self.target,
+                    other_target=other.target,
+                )
             )
         return replace(
             self,
@@ -222,10 +232,12 @@ class UpdatePlan(Document):
 def _item(raw: dict[str, Any]) -> PlanItem:
     status = raw["status"]
     if status not in get_args(ItemStatus):
-        raise ValidationError(f"Nieznany status pozycji planu {status!r}")
+        raise ValidationError(
+            message("download.plan_unknown_item_status", status=status)
+        )
     track = raw["track"]
     if track not in TRACKS:
-        raise ValidationError(f"Nieznany tor pozycji planu {track!r}")
+        raise ValidationError(message("download.plan_unknown_item_track", track=track))
     return PlanItem(
         track=cast(Track, track),
         segment=str(raw["segment"]),
@@ -247,7 +259,9 @@ def _item(raw: dict[str, Any]) -> PlanItem:
 def _notice(raw: Mapping[str, object]) -> Notice:
     level = raw["level"]
     if level not in ("info", "warning"):
-        raise ValidationError(f"Nieznany poziom komunikatu planu {level!r}")
+        raise ValidationError(
+            message("download.plan_unknown_notice_level", level=level)
+        )
     return Notice(level, str(raw["code"]), str(raw["message"]))
 
 
@@ -375,7 +389,7 @@ def require_store(plan: UpdatePlan, store: str) -> None:
     """
     if plan.root != store:
         raise ValidationError(
-            f"Plan dotyczy innego magazynu ({plan.target}), nie {store}",
+            message("download.plan_other_store", target=plan.target, store=store),
             option="plan",
         )
 

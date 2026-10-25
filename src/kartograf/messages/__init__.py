@@ -24,7 +24,8 @@ messages or names is written ``{items:join}`` (joined with ``", "``) or
 ``{items:join(; )}``; a `Message` among the items is rendered in the language of
 its parent, so a list of fragments stays translatable. ``{name:skip}`` renders
 nothing: a language whose text does not use a value of the entry still names it, so
-both languages keep the same placeholders.
+both languages keep the same placeholders. A number with a decimal comma is
+``{size:comma(.1f)}`` (Polish; English writes ``{size:.1f}``).
 
 Raise sites and notices call `message` with the key as a literal and one keyword
 per placeholder; ``tests/unit/test_messages.py`` checks every call against its
@@ -68,6 +69,7 @@ _KEY = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+")
 _AREA = re.compile(r"[a-z][a-z0-9_]*")
 _PLURAL = re.compile(r"plural\(([^|()]+(?:\|[^|()]+){1,2})\)")
 _JOIN = re.compile(r"join(?:\(([^()]*)\))?")
+_COMMA = re.compile(r"comma\(([^()]*)\)")
 
 
 class Text(NamedTuple):
@@ -191,12 +193,13 @@ def plural_forms(count: object, forms: Sequence[str]) -> str:
 
 class _Formatter(string.Formatter):
     """
-    ``str.format`` plus ``plural(a|b)``, ``plural(a|b|c)``, ``join`` and ``skip``.
+    ``str.format`` plus ``plural(a|b[|c])``, ``join``, ``comma`` and ``skip``.
 
     ``{name:skip}`` renders nothing: the placeholder is given its value but the text of
     this language does not use it (a Polish help text lists the choices of the registry,
     the English one of the same entry does not), so both languages of an entry keep the
-    same placeholders.
+    same placeholders. ``{name:comma(.1f)}`` formats a number with the given
+    ``str.format`` spec and a decimal comma (the English text writes ``{name:.1f}``).
     """
 
     def format_field(self, value: Any, format_spec: str) -> str:
@@ -209,6 +212,9 @@ class _Formatter(string.Formatter):
         if joined is not None:
             separator = ", " if joined.group(1) is None else joined.group(1)
             return separator.join(str(item) for item in value)
+        comma = _COMMA.fullmatch(format_spec)
+        if comma is not None:
+            return format(value, comma.group(1)).replace(".", ",")
         return str(super().format_field(value, format_spec))
 
 

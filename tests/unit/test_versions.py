@@ -65,7 +65,7 @@ def test_read_content_malformed_asc_keeps_digest_without_coverage(tmp_path, capl
     d = v.read_content(p, ext=".asc", coverage=True)
     assert d.sha256 == hashlib.sha256(p.read_bytes()).hexdigest()
     assert d.coverage is None
-    assert "3 komorek" in caplog.text
+    assert "3 cells" in caplog.text
 
 
 def test_commit_same_content_same_label_is_unchanged(tmp_path):

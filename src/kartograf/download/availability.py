@@ -105,6 +105,7 @@ from kartograf.download.options import (
     year_bounds,
 )
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.notices import (
     AUTO_NARROWED_TO_PL,
     CHECK_FAILED,
@@ -113,6 +114,7 @@ from kartograf.notices import (
     NO_LAND,
     Notice,
     NoticeSink,
+    ascii_text,
 )
 from kartograf.providers.cuzk.client import wkid
 from kartograf.providers.cuzk.raster import bbox_to_crs
@@ -162,9 +164,11 @@ AVAILABILITY_PRODUCTS = ("nmt", "nmpt", "laz")
 AVAILABILITY_COUNTRIES = {
     "pl": "pl (GUGiK)",
     "cz": "cz (CUZK)",
-    "auto": "auto (czesci PL i CZ wg prostokatnych obwiedni krajow w jednym raporcie)",
+    "auto": message("availability.country_auto"),
 }
-COUNTRY_CHOICES = ", ".join(AVAILABILITY_COUNTRIES.values())
+COUNTRY_CHOICES = message(
+    "options.choices", items=list(AVAILABILITY_COUNTRIES.values())
+)
 
 # Timeout (s) of every index and PRG request (as the sheet providers).
 _TIMEOUT = 30
@@ -177,28 +181,21 @@ _HEAD_WORKERS = 8
 _CZ_CRS = "EPSG:5514"
 _CZ_HORIZONTAL = {"sm5": "S-JTSK", "tm33": "ETRS89-TM33"}
 # Year bounds choose GUGiK index layers; CUZK files carry a publication date.
-_CZ_NO_YEARS = (
-    "CZ (CUZK) nie publikuje lat nalotu - --year/--min-year/--max-year dotycza "
-    "tylko PL (raport CZ podaje date publikacji plikow)"
-)
+_CZ_NO_YEARS = message("availability.cz_no_years")
 # ``NO_LAND``: why every combination of a land-less area is complete.
-_NO_LAND = (
-    "obszar nie ma ladu PL (morze terytorialne albo obszar poza granica "
-    "panstwa) - nie ma ladu do pokrycia, wiec kazda kombinacja jest kompletna "
-    "(komplet: tak) bez obietnicy danych do pobrania"
-)
+_NO_LAND = message("availability.no_land")
 # Pixels per row strip of the completeness grid (as LandMask.apply).
 _STRIP_PX = 4_000_000
 _HORIZONTAL = {"1992": "PL-1992", "2000": "PL-2000"}
 _FORMAT_ORDER = {f.token: i for i, f in enumerate(FORMATS)}
 # Why an index record is not downloadable (INDEX_UNSUPPORTED texts).
 _REASONS = {
-    "sheet": "godla spoza ukladow arkuszy PL-1992/PL-2000",
-    "url": "bez adresu https pliku",
-    "crs": "bez ukladu wspolrzednych",
-    "file": "format rekordu niezgodny z plikiem",
-    "format": "format spoza rejestru wariantow",
-    "registry": "wariant spoza rejestru (rozdzielczosc albo uklad wysokosci)",
+    "sheet": message("availability.reason_sheet"),
+    "url": message("availability.reason_url"),
+    "crs": message("availability.reason_crs"),
+    "file": message("availability.reason_file"),
+    "format": message("availability.reason_format"),
+    "registry": message("availability.reason_registry"),
 }
 
 
@@ -561,11 +558,13 @@ def check_availability(
     if failed and len(failed) == len(parts.countries):
         raise failed[0][1]
     for code, failure in failed:
-        text = (
-            f"--country auto: nie udalo sie sprawdzic czesci {code} ({failure}) - "
-            f"raport obejmuje tylko {', '.join(a.country for a in areas)}"
+        text = message(
+            "availability.auto_part_failed",
+            code=code,
+            failure=reason(failure),
+            countries=", ".join(a.country for a in areas),
         )
-        sink.emit("warning", CHECK_FAILED, text.encode("ascii", "replace").decode())
+        sink.emit("warning", CHECK_FAILED, ascii_text(text))
     return AvailabilityReport(
         request=_request_payload(request, layer_name),
         checked_at=_clock.now().isoformat(timespec="seconds"),
@@ -575,7 +574,7 @@ def check_availability(
             UnitFailure(
                 code,
                 code,
-                str(error).encode("ascii", "replace").decode(),
+                ascii_text(reason(error)),
                 failure_kind(error, "country"),
             )
             for code, error in failed
@@ -680,25 +679,31 @@ def _validated(
     choices = product_choices(AVAILABILITY_PRODUCTS)
     if product is None:
         raise ValidationError(
-            f"--product wymagane: {choices}",
+            message("availability.product_required", choices=choices),
             option="product",
             allowed=AVAILABILITY_PRODUCTS,
         )
     if product not in AVAILABILITY_PRODUCTS:
         raise ValidationError(
-            f"--product {product!r}: nieznana wartosc - dostepne: {choices}",
+            message("availability.product_unknown", product=product, choices=choices),
             option="product",
             allowed=AVAILABILITY_PRODUCTS,
         )
     if sheet is None and country is None:
         raise ValidationError(
-            f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}",
+            message(
+                "availability.country_required_area", country_choices=COUNTRY_CHOICES
+            ),
             option="country",
             allowed=tuple(AVAILABILITY_COUNTRIES),
         )
     if country is not None and country not in AVAILABILITY_COUNTRIES:
         raise ValidationError(
-            f"--country {country!r}: raport dostepnosci obejmuje: {COUNTRY_CHOICES}",
+            message(
+                "availability.country_unsupported",
+                country=country,
+                country_choices=COUNTRY_CHOICES,
+            ),
             option="country",
             allowed=tuple(AVAILABILITY_COUNTRIES),
         )
@@ -708,8 +713,13 @@ def _validated(
         system = detect_system(sheet)
         if country not in (None, "auto") and country != system.country.lower():
             raise ValidationError(
-                f"Godlo '{sheet}' nalezy do systemu {system.name} (kraj "
-                f"{system.country}), a podano --country {country}",
+                message(
+                    "availability.sheet_country_mismatch",
+                    sheet=sheet,
+                    name=system.name,
+                    country=system.country,
+                    country_2=country,
+                ),
                 options=("sheet", "country"),
             )
         country = system.country.lower()
@@ -791,7 +801,7 @@ def _explicit_area(request: _Request, layer_name: str | None) -> BBox | None:
         assert request.geometry is not None
         area = geometry_envelope(request.geometry, layer_name)
         if request.country == "cz":  # PL keeps the area of each feature
-            require_geometry_area(area, "raport dostepnosci")
+            require_geometry_area(area, message("availability.availability_report"))
     error = outside_country(area, request.country.upper(), flag=f"--{option}")
     if error is not None:
         raise ValidationError(error, option=option)
@@ -827,10 +837,10 @@ def _parts(request: _Request, layer_name: str | None, sink: NoticeSink) -> _Part
     split = split_bbox_by_country(area, cz_crs=_CZ_CRS)
     countries = tuple(code for code in ("PL", "CZ") if code in split)
     if request.geometry is not None and "CZ" in countries:
-        require_geometry_area(area, "raport dostepnosci")
+        require_geometry_area(area, message("availability.availability_report"))
     if not countries:
         raise ValidationError(
-            "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)",
+            message("availability.area_no_country"),
             option="bbox" if request.geometry is None else "geometry",
         )
     if request.years and "CZ" in countries:
@@ -841,7 +851,7 @@ def _parts(request: _Request, layer_name: str | None, sink: NoticeSink) -> _Part
         sink.emit(
             "info",
             AUTO_NARROWED_TO_PL,
-            f"--country auto -> pl ({', '.join(request.years)} dotyczy tylko PL)",
+            message("availability.auto_narrowed_to_pl", years=", ".join(request.years)),
         )
         countries = ("PL",)
     pl = None
@@ -875,18 +885,19 @@ def _area_polygons(
     boxes = read_feature_bboxes(request.geometry, layer_name, "EPSG:2180")
     if not boxes:
         raise ValidationError(
-            f"{request.geometry.name}: warstwa bez obiektow", option="geometry"
+            message("availability.layer_no_features", name=request.geometry.name),
+            option="geometry",
         )
     if laz:
         b = get_overall_bbox(request.geometry, layer=layer_name, target_crs="EPSG:2180")
-        require_geometry_area(b, "raport dostepnosci")
+        require_geometry_area(b, message("availability.availability_report"))
         return [rectangle(b.min_x, b.min_y, b.max_x, b.max_y)]
     if not any(b.min_x < b.max_x and b.min_y < b.max_y for b in boxes):
         # sheets per feature: points and axis-parallel lines add no area
         overall = get_overall_bbox(
             request.geometry, layer=layer_name, target_crs="EPSG:2180"
         )
-        raise geometry_area_error(overall, "raport dostepnosci")
+        raise geometry_area_error(overall, message("availability.availability_report"))
     return [rectangle(b.min_x, b.min_y, b.max_x, b.max_y) for b in boxes]
 
 
@@ -949,9 +960,13 @@ def _no_layer_error(
     one_year = request.min_year is not None and request.min_year == request.max_year
     flags = f"--year {request.min_year}" if one_year else "--min-year/--max-year"
     return option_error(
-        f"{flags}: skorowidz GUGiK {name} nie ma rocznika "
-        f"{year_range_label(request.min_year, request.max_year)} - dostepne "
-        f"roczniki: {available}",
+        message(
+            "availability.index_no_vintage",
+            flags=flags,
+            name=name,
+            year_range_label=year_range_label(request.min_year, request.max_year),
+            available=available,
+        ),
         *(("year",) if one_year else ("min_year", "max_year")),
     )
 
@@ -1140,10 +1155,12 @@ def _group(
             reason, variant = _variant(product, service.vertical_crs, entry, found)
             if variant is None or entry.system is None:
                 label = _label(entry.resolution_m)
-                name = (entry.format or "bez formatu").strip()
+                name = (entry.format or message("providers.no_format")).strip()
                 if reason == "file":
                     suffix = entry.url.rsplit("/", 1)[-1].rsplit(".", 1)[-1]
-                    name = f"{name}, plik .{suffix}"
+                    name = message(
+                        "availability.name_file_suffix", name=name, suffix=suffix
+                    )
                 slot = unsupported.setdefault(
                     (service.vertical_crs, name, label or "", reason or "crs"),
                     {"years": set(), "sheets": set()},
@@ -1474,19 +1491,21 @@ def _laz_records(entries: list[_Entry], area: Polygon) -> list[_Entry]:
 def _unsupported_text(unsupported: dict[tuple[Any, ...], dict[str, Any]]) -> str:
     """``INDEX_UNSUPPORTED``: the records of the area Kartograf does not download."""
     parts = []
-    for vertical_crs, name, label, reason in sorted(unsupported):
-        slot = unsupported[(vertical_crs, name, label, reason)]
+    for vertical_crs, name, label, why in sorted(unsupported):
+        slot = unsupported[(vertical_crs, name, label, why)]
         years = ", ".join(str(y) for y in sorted(slot["years"], reverse=True))
         shown = f"{name} {label}" if label else name
         parts.append(
-            f"{shown} {vertical_crs} ({years}; arkusze: {len(slot['sheets'])}) - "
-            f"{_REASONS[reason]}"
+            message(
+                "availability.unsupported_slot_summary",
+                shown=shown,
+                vertical_crs=vertical_crs,
+                years=years,
+                slot_sheets_count=len(slot["sheets"]),
+                reason_text=_REASONS[why],
+            )
         )
-    text = (
-        "Skorowidz GUGiK ma dla obszaru tez rekordy, ktorych Kartograf nie "
-        "pobiera: " + "; ".join(parts)
-    )
-    return text.encode("ascii", "replace").decode("ascii")
+    return ascii_text(message("availability.unsupported_records_notice", parts=parts))
 
 
 # =============================================================================
@@ -1613,15 +1632,26 @@ def _cz_service_only(product: str) -> str | None:
     ]
     if not service:
         return None
-    names = " i ".join(
-        f"{CZ_MODELS[model][0]} ({found[0].label})" for model, found in service
+    names = message(
+        "availability.cz_models_list",
+        models=[
+            f"{CZ_MODELS[model][0]} ({found[0].label})" for model, found in service
+        ],
     )
-    have, are = ("nie ma", "jest") if len(service) == 1 else ("nie maja", "sa")
+    have, are = (
+        (
+            message("availability.cz_have_singular"),
+            message("availability.cz_are_singular"),
+        )
+        if len(service) == 1
+        else (
+            message("availability.cz_have_plural"),
+            message("availability.cz_are_plural"),
+        )
+    )
     models = ", ".join(model for model, _ in service)
-    return (
-        f"{names} {have} plikow arkuszy CUZK (raport ich nie obejmuje) - {are} "
-        "dla calego CZ jako wycinek (--cutout), kafel TM33 z uslugi ImageServer "
-        f"(--sheet, np. 302_5550) i LAZ (--product laz --model {models})"
+    return message(
+        "availability.cz_service_only", names=names, have=have, are=are, models=models
     )
 
 

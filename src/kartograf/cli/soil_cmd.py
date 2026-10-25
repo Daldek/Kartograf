@@ -67,7 +67,7 @@ def _print_soil(
     for item in report.files:
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
     for failure in report.failed:
-        print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
+        print(f"Error: {failure.unit}: {localized(failure.error)}", file=sys.stderr)
     _report_stale(report.stale)
     return exit_code_of(report)
 
@@ -124,7 +124,7 @@ def _print_hsg(
     for item in (*result.inputs, *result.files):
         _report_file(args, _unit_of(item.file.path, out), item.file, update)
     for failure in result.failed:
-        print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
+        print(f"Error: {failure.unit}: {localized(failure.error)}", file=sys.stderr)
     _report_stale(result.stale)
     if result.summary is not None:
         _print_summary(result.summary)

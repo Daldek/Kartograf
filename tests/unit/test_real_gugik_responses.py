@@ -928,7 +928,7 @@ class TestLazDiscoveryOnRealWfs:
             )
         err = caught.value
         assert err.sheets == {"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)}
-        assert "brak LAZ tiles z roku 2024 dla 1 z 1 area tiles" in str(err)
+        assert "no LAZ tiles from year 2024 for 1 of 1 area tiles" in str(err)
         assert "N-34-139-A-c-1-1-3-4 (2025, PL-1992)" in str(err)
         assert "--min-year 2024" in str(err)
         assert "--max-year 2024" in str(err)
@@ -1006,8 +1006,8 @@ class TestLazDiscoveryOnRealWfs:
         err = caught.value
         assert err.sheets == {"M-33-35-A-c-4-4-3-2": (2019, 2022, 2024, 2025)}
         assert (
-            "M-33-35-A-c-4-4-3-2 (2024, PL-1992): dostepne roczniki "
-            "2019, 2022, 2024, 2025 (tylko arkusze niepelne)"
+            "M-33-35-A-c-4-4-3-2 (2024, PL-1992): available vintages 2019, 2022, "
+            "2024, 2025 (incomplete sheets only)"
         ) in str(err)
         assert "area tiles" in str(err)
         assert "--max-year 2025" in str(err)
@@ -1038,7 +1038,7 @@ class TestLazDiscoveryOnRealWfs:
             )
         err = caught.value
         assert err.sheets == {sheet: years}
-        assert f"z roku {year} dla 1 z 2 area tiles" in str(err)
+        assert f"from year {year} for 1 of 2 area tiles" in str(err)
         assert hint in str(err)
         assert no_hint not in str(err)
         assert "niepelne" not in str(err)  # every tile here is a full sheet
@@ -1232,8 +1232,8 @@ class TestDeclaredVerticalCrsOnRealWfs:
         with pytest.raises(DownloadError) as exc:
             provider.download(self.SHEET, tmp_path / "a.asc")
         message = str(exc.value)
-        assert "deklaruje uklad wysokosci PL-KRON86-NH" in message
-        assert "zadano EVRF2007" in message
+        assert "declares vertical CRS PL-KRON86-NH" in message
+        assert "but EVRF2007 was requested" in message
         assert self.SHEET in message
         provider.download_record.assert_not_called()
 

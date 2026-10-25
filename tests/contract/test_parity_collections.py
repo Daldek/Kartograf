@@ -20,6 +20,7 @@ from kartograf.download.collections import check_collection, download_collection
 from kartograf.download.plan import UpdatePlan
 from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
+from kartograf.messages import localize
 from kartograf.notices import UNIT_LIST, WHOLE_COUNTRY_SIZE
 from tests.integration.test_collections_cz import NATIONAL, FakeCuzk, _page_size
 from tests.integration.test_collections_products import (
@@ -226,7 +227,8 @@ def test_buildings_area_with_missing_powiat(tmp_path, monkeypatch):
     _same(run, statuses=["new"])
     assert [n.code for n in run.api_result.notices] == [UNIT_LIST]
     assert [f.unit for f in run.api_result.failed] == ["0224"]
-    assert f"Error: 0224: {run.api_result.failed[0].error}\n" in run.cli_stderr
+    polish = localize(run.api_result.failed[0].error, "pl")
+    assert f"Error: 0224: {polish}\n" in run.cli_stderr
 
 
 def test_check_plan_upgrade(tmp_path, monkeypatch):

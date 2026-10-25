@@ -203,7 +203,7 @@ def test_contours_area_expands_to_sm5(tmp_path, openzu):
     ],
 )
 def test_contours_reject_grid_choices(tmp_path, openzu, choice):
-    with pytest.raises(ValidationError, match="warstwice to arkusze SM5 \\(wektor\\)"):
+    with pytest.raises(ValidationError, match="contours are SM5 sheets \\(vector\\)"):
         download_data(
             product="contours",
             format="SHP",
@@ -219,11 +219,11 @@ def test_contours_reject_grid_choices(tmp_path, openzu, choice):
 def test_contours_format_and_height_system(tmp_path, openzu):
     """``--format`` is required (SHP, DGN); ``--vertical-crs`` may be omitted
     and takes only Bpv."""
-    with pytest.raises(ValidationError, match="--format wymagane .*: SHP, DGN"):
+    with pytest.raises(ValidationError, match="--format required .*: SHP, DGN"):
         download_data(product="contours", sheet="CTES96", root=tmp_path)
-    with pytest.raises(ValidationError, match="dostepne: SHP, DGN"):
+    with pytest.raises(ValidationError, match="available: SHP, DGN"):
         download_data(product="contours", format="GPKG", sheet="CTES96", root=tmp_path)
-    with pytest.raises(ValidationError, match="wysokosci Bpv"):
+    with pytest.raises(ValidationError, match="have heights Bpv"):
         download_data(
             product="contours",
             format="SHP",
@@ -246,9 +246,9 @@ def test_contours_format_and_height_system(tmp_path, openzu):
 
 def test_contours_sheet_systems(tmp_path, openzu):
     """A TM33 tile and a PL sheet code are not contour sheets."""
-    with pytest.raises(ValidationError, match="arkusze SM5"):
+    with pytest.raises(ValidationError, match="are SM5 sheets"):
         download_data(product="contours", format="SHP", sheet="302_5550", root=tmp_path)
-    with pytest.raises(ValidationError, match="nie ma danych PL"):
+    with pytest.raises(ValidationError, match="has no data for PL"):
         download_data(
             product="contours",
             format="SHP",
@@ -260,7 +260,7 @@ def test_contours_sheet_systems(tmp_path, openzu):
 
 def test_contours_country_rules(tmp_path, openzu):
     """``--country pl`` is an error; ``auto`` across the border keeps CZ."""
-    with pytest.raises(ValidationError, match="dostepny tylko dla CZ"):
+    with pytest.raises(ValidationError, match="is available only for CZ"):
         download_data(
             product="contours",
             format="SHP",
@@ -280,7 +280,7 @@ def test_contours_country_rules(tmp_path, openzu):
         on_notice=notices.append,
     )
     (narrowed,) = [n for n in notices if n.code == AUTO_NARROWED_TO_CZ]
-    assert narrowed.message == "--country auto -> cz (--product contours tylko dla CZ)"
+    assert narrowed.message == "--country auto -> cz (--product contours only for CZ)"
 
 
 def test_contours_http_signal(tmp_path, openzu):

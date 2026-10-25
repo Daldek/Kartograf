@@ -65,6 +65,7 @@ from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef, new_incoming_dir
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.marker import lenient_store
+from kartograf.messages import message, reason
 from kartograf.notices import Notice, NoticeSink
 from kartograf.output import plain_of, preflight, writing
 from kartograf.sources.descriptor import AtomFilesParams, SignalKind
@@ -100,9 +101,7 @@ _IMAGE_CRS = "EPSG:5514"
 _SUFFIXES = (*_WORLD_FILES, _IMAGE)
 _SM5_CRS = "EPSG:5514"
 
-CZ_ORTO_SHEETS = (
-    "ortofoto CZ ma arkusze SM5 (np. CTES96, AS91); kafle TM33 sa tylko dla NMT"
-)
+CZ_ORTO_SHEETS = message("tracks.cz_orto_sheets_hint")
 
 _sessions = SessionPerThread()
 
@@ -139,11 +138,15 @@ def cz_orto_sheet(sheet: str) -> str:
     code = sheet.strip()
     system = detect_system(code).id
     if system == "cz_tm33":
-        raise ValidationError(f"{CZ_ORTO_SHEETS} (podano {code})", option="sheet")
+        raise ValidationError(
+            message(
+                "tracks.cz_orto_tm33_given", cz_orto_sheets=CZ_ORTO_SHEETS, code=code
+            ),
+            option="sheet",
+        )
     if system != "cz_sm5":
         raise ValidationError(
-            f"Godlo '{code}' nie jest arkuszem SM5 ortofoto CZ (2 albo 4 wielkie "
-            "litery + 2 cyfry, np. CTES96, AS91)",
+            message("tracks.cz_orto_bad_sheet_code", code=code),
             option="sheet",
         )
     return code
@@ -289,7 +292,7 @@ def _sheet_extra(
             extra["cz_share"] = info.podil
     except Exception as e:  # noqa: BLE001 — data matters more than metadata
         logger.warning(
-            f"Sidecar {sheet} bez extra.mapname/cz_share (blad indeksu): {e}"
+            message("tracks.sidecar_missing_extra", sheet=sheet, error=reason(e))
         )
     if parent_request:
         extra["parent_request"] = parent_request
@@ -436,7 +439,7 @@ def _run(
         failed = next((item for item in fresh if item.status == "check_failed"), None)
         if failed is not None:
             raise DownloadError(
-                f"Nie udalo sie sprawdzic arkusza ortofoto CZ {sheet}: {failed.error}"
+                message("tracks.cz_orto_check_failed", sheet=sheet, error=failed.error)
             )
         todo, rejected = select_planned(scoped, fresh, _TRACK)
         stale = tuple(rejected)
@@ -545,7 +548,7 @@ def download_cz_orto_sheet(
     sheet = cz_orto_sheet(sheet)
     validate_update(update, check="check_cz_orto_sheet")
     if plan is not None and update != "upgrade":
-        raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+        raise ValidationError(message("hydrology.plan_requires_upgrade"))
     sink = NoticeSink(on_notice)
     with (
         writing(output_dir=output_dir, root=root, update=update, plan=plan) as store,

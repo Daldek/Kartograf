@@ -16,6 +16,7 @@ import argparse
 import sys
 
 from kartograf.cli._args import library_arguments, target_arguments
+from kartograf.cli._language import localized
 from kartograf.cli.download_cmd import (
     _end_progress,
     _plan_context,
@@ -101,6 +102,6 @@ def _print_collection(
                 plain=report.output_dir is not None,
             )
     for failure in report.failed:
-        print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
+        print(f"Error: {failure.unit}: {localized(failure.error)}", file=sys.stderr)
     _report_stale(report.stale)
     return exit_code_of(report)

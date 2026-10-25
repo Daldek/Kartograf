@@ -38,8 +38,12 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   unknown command of `command_schema` is English in the error document), the command
   layer, the store read API with the names of its segments, the cache, source and layer documents
   and the fixture builders (the root modules; the `directory` of a source is `<crs>` and
-  `<vertical-crs>`; `kartograf-mcp` says English only and has no `--lang`). A client that matched
-  the Polish text matches the English one or the `code` and `details`.
+  `<vertical-crs>`; `kartograf-mcp` says English only and has no `--lang`) and the downloads
+  (`download/*`: the registry texts that the help lists are catalog messages too, so the Polish
+  help is Polish where English leaked; `notices.size_text` and `names_text` return catalog
+  messages and `notices.count_text` with its noun tables is gone; the error of a failed unit is
+  English in the report and Polish at the terminal). A client that matched the Polish text
+  matches the English one or the `code` and `details`.
 - The package lives in `src/kartograf/` (ECO-011). Import paths do not change;
   repeat an editable install made before (`uv sync --locked --all-extras`).
 - `kartograf.__version__` is `0.8.0.dev0` on `develop` (REL-1.1); the release

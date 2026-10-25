@@ -222,7 +222,7 @@ class TestSoilGridsStore:
         plan = _soil(tmp_path, FakeSoilGrids()).check(bbox=BBOX, **CLAY)
         with pytest.raises(ValidationError):
             _soil(tmp_path, FakeSoilGrids()).download(bbox=BBOX, plan=plan, **CLAY)
-        with pytest.raises(ValidationError, match="innego magazynu"):
+        with pytest.raises(ValidationError, match="different store"):
             _soil(tmp_path / "other", FakeSoilGrids()).download(
                 bbox=BBOX, update="upgrade", plan=plan, **CLAY
             )
@@ -451,9 +451,9 @@ class TestBdot10kStore:
             Notice(
                 "info",
                 UNVERIFIED_LOCAL,
-                f"{file.path.relative_to(tmp_path).as_posix()}: lokalna wersja "
-                f"{file.label} niesprawdzona - zrodlo bez taniego sygnalu; "
-                "pobierz ponownie: --force",
+                f"{file.path.relative_to(tmp_path).as_posix()}: local version "
+                f"{file.label} not verified - source has no cheap signal; "
+                "download again: --force",
             )
             for file in files
         )
@@ -678,8 +678,10 @@ class TestCommandLevel:
         expected = Notice(
             "info",
             GEOMETRY_LAYER_DEFAULT,
-            "area.gpkg: liczba warstw 2, uzyto pierwszej 'layer_a' (pozostale: "
-            "layer_b); inna warstwa: --layer NAZWA",
+            (
+                "area.gpkg: 2 layers, used the first 'layer_a' (others: layer_b); for "
+                "another layer: --layer NAME"
+            ),
         )
         assert area.notices == (expected,) and seen == [expected]
         assert envelope.call_args.kwargs["layer"] == "layer_a"

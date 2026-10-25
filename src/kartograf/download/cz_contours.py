@@ -57,7 +57,8 @@ from kartograf.download.plan import (
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.notices import FILES, Notice, NoticeSink, count_text
+from kartograf.messages import message, reason
+from kartograf.notices import Notice, NoticeSink
 from kartograf.output import preflight, writing
 from kartograf.sources.descriptor import SignalKind, SourceDescriptor
 from kartograf.sources.registry import get_source
@@ -80,9 +81,7 @@ _SM5_CRS = "EPSG:5514"
 ZIP_TIMEOUT = 60
 HEAD_TIMEOUT = 30
 
-CZ_CONTOURS_SHEETS = (
-    "warstwice CZ to arkusze SM5 (np. CTES96, AS91); kafle TM33 sa tylko dla NMT i NMPT"
-)
+CZ_CONTOURS_SHEETS = message("tracks.cz_contours_sheets")
 
 _sessions = SessionPerThread()
 
@@ -122,8 +121,12 @@ def contours_source(fmt: str) -> SourceDescriptor:
     found = variants(product=PRODUCT, country="CZ", format=fmt)
     if len(found) != 1:
         raise ValidationError(
-            f"--format {fmt!r}: nieznana wartosc dla --product {PRODUCT} - "
-            f"dostepne: {', '.join(contours_formats())}"
+            message(
+                "tracks.unknown_contours_format",
+                fmt=fmt,
+                product=PRODUCT,
+                contours_formats=", ".join(contours_formats()),
+            )
         )
     return get_source(found[0].source)
 
@@ -139,12 +142,15 @@ def cz_contours_sheet(sheet: str) -> str:
     code = sheet.strip()
     system = detect_system(code).id
     if system == "cz_tm33":
-        raise ValidationError(f"{CZ_CONTOURS_SHEETS} (podano {code})")
-    if system != "cz_sm5":
         raise ValidationError(
-            f"Godlo '{code}' nie jest arkuszem SM5 warstwic CZ (2 albo 4 wielkie "
-            "litery + 2 cyfry, np. CTES96, AS91)"
+            message(
+                "tracks.tm33_not_for_contours",
+                cz_contours_sheets=CZ_CONTOURS_SHEETS,
+                code=code,
+            )
         )
+    if system != "cz_sm5":
+        raise ValidationError(message("tracks.not_sm5_contours_sheet", code=code))
     return code
 
 
@@ -233,16 +239,26 @@ def _members(path: Path, url: str, fmt: str) -> list[str]:
             names = [info.filename for info in archive.infolist() if not info.is_dir()]
             broken = archive.testzip()
     except (zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError) as e:
-        raise DownloadError(f"{url}: uszkodzona albo nie-ZIP paczka: {e}") from e
+        raise DownloadError(
+            message("tracks.bad_zip_package", url=url, error=reason(e))
+        ) from e
     except OSError as e:
-        raise DownloadError(f"{url}: nie udalo sie odczytac paczki: {e}") from e
+        raise DownloadError(
+            message("transport.package_read_failed", url=url, error=reason(e))
+        ) from e
     if broken is not None:
-        raise DownloadError(f"{url}: uszkodzony plik {broken} w paczce ZIP")
+        raise DownloadError(
+            message("tracks.corrupt_zip_member", url=url, broken=broken)
+        )
     suffix = f".{fmt.lower()}"
     if not any(name.lower().endswith(suffix) for name in names):
         raise DownloadError(
-            f"{url}: paczka bez pliku {suffix} ({count_text(len(names), *FILES)}) - "
-            "to nie sa oczekiwane dane"
+            message(
+                "tracks.zip_missing_suffix_file",
+                url=url,
+                suffix=suffix,
+                names_count=len(names),
+            )
         )
     return sorted(names)
 
@@ -265,7 +281,7 @@ def _sheet_extra(
             extra["cz_share"] = info.podil
     except Exception as e:  # noqa: BLE001 - data matters more than metadata
         logger.warning(
-            f"Sidecar {sheet} bez extra.mapname/cz_share (blad indeksu): {e}"
+            message("tracks.sidecar_missing_extra", sheet=sheet, error=reason(e))
         )
     return extra
 
@@ -308,8 +324,7 @@ def _fetch(
             if e.status_code != 404:
                 raise
             raise DownloadError(
-                f"{e} - CUZK nie ma pliku warstwic arkusza {sheet} (zweryfikuj "
-                "godlo w indeksie KladyMapovychListu)",
+                message("tracks.cuzk_no_contours_file", error=reason(e), sheet=sheet),
                 sheet=sheet,
                 status_code=e.status_code,
             ) from e
@@ -398,7 +413,7 @@ def _run(
         fresh = _inspect(session, source, sheet, slot)
         if fresh.status == "check_failed":
             raise DownloadError(
-                f"Nie udalo sie sprawdzic arkusza warstwic CZ {sheet}: {fresh.error}"
+                message("tracks.contours_check_failed", sheet=sheet, error=fresh.error)
             )
         todo, rejected = select_planned(scoped, [fresh], _TRACK)
         stale = tuple(rejected)
@@ -491,7 +506,7 @@ def download_cz_contours_sheet(
     source = contours_source(format)
     validate_update(update, check="check_cz_contours_sheet")
     if plan is not None and update != "upgrade":
-        raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+        raise ValidationError(message("hydrology.plan_requires_upgrade"))
     sink = NoticeSink(on_notice)
     with (
         writing(output_dir=output_dir, root=root, update=update, plan=plan) as store,
