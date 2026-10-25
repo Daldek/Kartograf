@@ -350,7 +350,7 @@ class TestLandCoverCLI:
         assert result == 0
         captured = capsys.readouterr()
         assert "PTLZ" in captured.out
-        assert "Forest areas" in captured.out
+        assert "Tereny lesne" in captured.out
 
     def test_landcover_list_layers_corine(self, capsys):
         """Test list-layers for CORINE."""

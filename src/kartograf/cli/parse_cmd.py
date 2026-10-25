@@ -19,6 +19,8 @@ from collections.abc import Sequence
 from kartograf.catalog.commands import declared_commands
 from kartograf.catalog.kinds import parse_bbox_arg
 from kartograf.cli._json import command_id, emit_result, wants_json
+from kartograf.cli._language import language, localized
+from kartograf.messages import message
 from kartograf.sheet_info import (
     SheetDescendants,
     SheetInfo,
@@ -30,23 +32,26 @@ from kartograf.sheet_info import (
 
 # Longer lists of descendants are shortened in the text (the document has all).
 _DESCENDANTS_SHOWN = 20
-# The wording of the line ``Uklad:`` of each CZ system.
-_CZ_SYSTEM = {
-    "cz_tm33": "TM33 (CZ) - kafel 2 x 2 km",
-    "cz_sm5": "SM5 (CZ) - arkusz Statni mapy 1:5000",
-    "cz_ztm": "ZTM (CZ) - arkusz mapy topograficznej (--sheet-system {sheet_system})",
-}
-# What the line ``Komendy:`` adds after the name of a command for a system. Which
+# What the line ``Commands:`` adds after the name of a command for a system. Which
 # commands take the code is the document's (``SheetInfo.commands``).
 _CZ_NOTES = {
-    ("cz_sm5", "elevation download"): " (takze warstwice)",
+    ("cz_sm5", "elevation download"): message("cli.note_also_contours"),
     ("cz_ztm", "maps download"): " --country cz",
 }
 _CRS_NAMES = {"EPSG:5514": "S-JTSK", "EPSG:3045": "ETRS89 / UTM 33N"}
 
 
+def _cz_system(info: SheetInfo) -> str:
+    """Return the wording of the line ``System:`` of a CZ system."""
+    if info.system == "cz_tm33":
+        return message("cli.system_cz_tm33", lang=language())
+    if info.system == "cz_sm5":
+        return message("cli.system_cz_sm5", lang=language())
+    return message("cli.system_cz_ztm", lang=language(), sheet_system=info.sheet_system)
+
+
 def _commands_text(info: SheetInfo) -> str:
-    """Return ``--sheet w <komendy>``.
+    """Return ``--sheet in <commands>``.
 
     The commands that take the code, from the document (the commands that download
     first, then the report; each with its note).
@@ -54,9 +59,21 @@ def _commands_text(info: SheetInfo) -> str:
     ordered = sorted(
         info.commands, key=lambda command: declared_commands()[command].kind != "data"
     )
-    names = [command + _CZ_NOTES.get((info.system, command), "") for command in ordered]
-    listed = names[0] if len(names) == 1 else f"{', '.join(names[:-1])} i {names[-1]}"
-    return f"--sheet w {listed}"
+    names = [
+        command + localized(_CZ_NOTES.get((info.system, command), ""))
+        for command in ordered
+    ]
+    listed = (
+        names[0]
+        if len(names) == 1
+        else message(
+            "cli.commands_and",
+            lang=language(),
+            head=", ".join(names[:-1]),
+            last=names[-1],
+        )
+    )
+    return message("cli.sheet_in_commands", lang=language(), commands=listed)
 
 
 def _format_cz(info: SheetInfo) -> str:
@@ -65,19 +82,24 @@ def _format_cz(info: SheetInfo) -> str:
     The system, CRS and extent (the frame of an SM5 or ZTM sheet is in the CUZK index,
     read at the download) and the commands.
     """
-    system = _CZ_SYSTEM[info.system].format(sheet_system=info.sheet_system)
+    system = _cz_system(info)
+    extent: str
     if info.bounds is None:
-        extent = "rama z indeksu arkuszy CUZK (odczyt przy pobraniu)"
+        extent = message("cli.extent_from_cuzk_index", lang=language())
     else:
         b = info.bounds
         extent = f"{b.min_x:.0f},{b.min_y:.0f},{b.max_x:.0f},{b.max_y:.0f}"
     return "\n".join(
         [
-            f"Godlo:     {info.sheet}",
-            f"Uklad:     {system}",
+            message("cli.label_sheet_code", lang=language(), sheet=info.sheet),
+            message("cli.label_system", lang=language(), system=system),
             f"CRS:       {info.crs} ({_CRS_NAMES[info.crs]})",
-            f"Zasieg:    {extent}",
-            f"Komendy:   {_commands_text(info)}",
+            message("cli.label_extent", lang=language(), extent=extent),
+            message(
+                "cli.label_commands",
+                lang=language(),
+                commands_text=_commands_text(info),
+            ),
         ]
     )
 
@@ -87,23 +109,23 @@ def _format_basics(info: SheetInfo) -> str:
 
     The sheet, scale, system and parts (PL-2000 also the zone and the native CRS).
     """
-    lines = [
-        f"Godlo:     {info.sheet}",
-        f"Skala:     {info.scale}",
-        f"Uklad:     {info.sheet_system}",
-        "Czlony:",
+    lines: list[str] = [
+        message("cli.label_sheet_code", lang=language(), sheet=info.sheet),
+        message("cli.label_scale", lang=language(), scale=info.scale),
+        message("cli.label_system", lang=language(), system=info.sheet_system),
+        message("cli.label_components", lang=language()),
     ]
     for name, value in (info.components or {}).items():
         lines.append(f"  {name}: {value}")
     if info.zone is not None:
-        lines.append(f"  Strefa: {info.zone}")
-        lines.append(f"  Natywny CRS: {info.crs}")
+        lines.append(message("cli.label_zone", lang=language(), zone=info.zone))
+        lines.append(message("cli.label_native_crs", lang=language(), crs=info.crs))
     return "\n".join(lines)
 
 
 def _format_hierarchy(sheet_scale: str | None, levels: Sequence[SheetLevel]) -> str:
     top_scale = levels[-1].scale if levels else sheet_scale
-    lines = [f"Hierarchia (od arkusza do {top_scale}):", ""]
+    lines = [message("cli.hierarchy_header", lang=language(), top_scale=top_scale), ""]
     for i, level in enumerate(levels):
         arrow = "`- " if i > 0 else ""
         lines.append(f"{'  ' * i}{arrow}{level.sheet} ({level.scale})")
@@ -112,17 +134,33 @@ def _format_hierarchy(sheet_scale: str | None, levels: Sequence[SheetLevel]) -> 
 
 def _format_children(info: SheetInfo, children: Sequence[SheetLevel]) -> str:
     if not children:
-        return (
-            f"Arkusz {info.sheet} nie ma arkuszy potomnych "
-            f"(najdokladniejsza skala {info.scale})"
+        return message(
+            "cli.no_child_sheets", lang=language(), sheet=info.sheet, scale=info.scale
         )
-    lines = [f"Arkusze potomne {info.sheet} ({len(children)}):", ""]
+    lines = [
+        message(
+            "cli.child_sheets_header",
+            lang=language(),
+            sheet=info.sheet,
+            children_count=len(children),
+        ),
+        "",
+    ]
     lines.extend(f"  {child.sheet} ({child.scale})" for child in children)
     return "\n".join(lines)
 
 
 def _format_descendants(sheet: str, found: SheetDescendants) -> str:
-    lines = [f"Arkusze potomne {sheet} do skali {found.scale} ({found.count}):", ""]
+    lines = [
+        message(
+            "cli.descendant_sheets_header",
+            lang=language(),
+            sheet=sheet,
+            scale=found.scale,
+            count=found.count,
+        ),
+        "",
+    ]
     sheets = found.sheets
     if len(sheets) > _DESCENDANTS_SHOWN:
         # the first and the last two: the count is in the header
@@ -183,7 +221,13 @@ def format_sheets(found: SheetList) -> str:
     """
     request = found.request
     system = f"PL-{request.sheet_system}"
-    header = f"Arkusze {system} {request.scale} ({found.count}):"
+    header = message(
+        "cli.sheets_list_header",
+        lang=language(),
+        system=system,
+        scale=request.scale,
+        count=found.count,
+    )
     return "\n".join([header, "", *(f"  {code}" for code in found.sheets)])
 
 

@@ -201,8 +201,8 @@ def test_landcover_corine_preview_line(tmp_path, capsys, caplog):
     assert rc == 0
     captured = capsys.readouterr()
     assert captured.err == (
-        "Info: CORINE 2018: WMS preview (styled PNG, not data; CLMS data requires "
-        "CLMS_CREDENTIALS)\n"
+        "Info: CORINE 2018: podglad WMS (stylizowany PNG, nie dane; dane CLMS "
+        "wymagaja CLMS_CREDENTIALS)\n"
     )
     assert (
         f"landcover/eu_corine_2018_preview/bbox/{COORDS}.png: nowa wersja "

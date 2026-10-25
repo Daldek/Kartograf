@@ -14,7 +14,9 @@ import argparse
 import json
 
 from kartograf.cli._json import command_id, emit_result, wants_json
+from kartograf.cli._language import language, localized
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.store_documents import (
     StoreEntries,
     StoreOverview,
@@ -25,15 +27,19 @@ from kartograf.store_documents import (
 )
 
 _NONE = "-"
-_OVERVIEW_HEADER = ("SEGMENT", "PRODUKT", "KRAJ", "KLUCZ", "NAZWA")
+_OVERVIEW_HEADER = (
+    "SEGMENT",
+    message("cli.header_product"),
+    message("cli.header_country"),
+    message("cli.header_key"),
+    message("cli.header_name"),
+)
 
 
 def _output(args: argparse.Namespace) -> str:
     """Return the store directory of ``--output``; the library has no default for it."""
     if not args.output:
-        raise ValidationError(
-            "-o/--output jest wymagane (katalog magazynu)", option="output_dir"
-        )
+        raise ValidationError(message("cli.output_required"), option="output_dir")
     output: str = args.output
     return output
 
@@ -45,23 +51,37 @@ def format_overview(overview: StoreOverview) -> str:
     segment no source produces is marked), or the note that the store is empty.
     """
     if not overview.segments:
-        return f"Magazyn {overview.output_dir} jest pusty (brak segmentow)"
+        return message(
+            "cli.store_empty", lang=language(), output_dir=overview.output_dir
+        )
+    header = tuple(localized(cell) for cell in _OVERVIEW_HEADER)
     rows = [
         (
             info.segment,
             info.product or _NONE,
             info.country or _NONE,
             info.dataset_key or _NONE,
-            info.name if info.known else f"{info.name} [nieznany w rejestrze]",
+            localized(info.name)
+            if info.known
+            else message(
+                "cli.segment_unknown_registry",
+                lang=language(),
+                name=localized(info.name),
+            ),
         )
         for info in overview.segments
     ]
-    widths = [
-        max(len(row[i]) for row in (_OVERVIEW_HEADER, *rows))
-        for i in range(len(_OVERVIEW_HEADER))
+    widths = [max(len(row[i]) for row in (header, *rows)) for i in range(len(header))]
+    lines = [
+        message(
+            "cli.store_segments_header",
+            lang=language(),
+            output_dir=overview.output_dir,
+            rows_count=len(rows),
+        ),
+        "",
     ]
-    lines = [f"Magazyn {overview.output_dir} ({len(rows)} segmentow):", ""]
-    for row in (_OVERVIEW_HEADER, *rows):
+    for row in (header, *rows):
         cells = (cell.ljust(width) for cell, width in zip(row, widths, strict=True))
         lines.append("  " + "  ".join(cells).rstrip())
     return "\n".join(lines)
@@ -74,14 +94,22 @@ def format_entries(listed: StoreEntries) -> str:
     per entry: its kind, label, the first digits of its SHA-256 and its path; a problem
     names what is wrong with the file.
     """
-    more = ", sa dalsze" if listed.truncated else ""
+    more = (
+        message("cli.more_entries_suffix", lang=language()) if listed.truncated else ""
+    )
     lines = [
-        f"Segment {listed.segment}: {len(listed.entries)} wpisow "
-        f"(limit {listed.limit}{more})",
+        message(
+            "cli.segment_entries_header",
+            lang=language(),
+            segment=listed.segment,
+            entries_count=len(listed.entries),
+            limit=listed.limit,
+            more=more,
+        ),
         "",
     ]
     for entry in listed.entries:
-        problem = f"  problem: {entry.problem}" if entry.problem else ""
+        problem = f"  problem: {localized(entry.problem)}" if entry.problem else ""
         lines.append(
             f"  {entry.kind:<10} {entry.label or _NONE:<24} "
             f"{entry.sha8 or _NONE:<8}  {entry.path}{problem}"
@@ -121,7 +149,7 @@ def cmd_store_entries(args: argparse.Namespace) -> int:
 def cmd_store_sidecar(args: argparse.Namespace) -> int:
     """Print the sidecar of ``--path`` (``--json``: the document)."""
     if not args.path:
-        raise ValidationError("--path jest wymagane (plik magazynu)", option="path")
+        raise ValidationError(message("cli.path_required"), option="path")
     document = read_store_sidecar(args.path)
     if wants_json(args):
         return emit_result(command_id(args), document)

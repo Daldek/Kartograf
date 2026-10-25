@@ -26,14 +26,13 @@ from kartograf.catalog.commands import declared, declared_commands
 from kartograf.catalog.formatting import example_command_line
 from kartograf.catalog.spec import Command, Group, Param, resolve
 from kartograf.cli._json import command_id, emit_result, wants_json
+from kartograf.cli._language import language, localized, yes_no
 from kartograf.exceptions import ValidationError
 from kartograf.guide import agent_guide, inject_block
+from kartograf.messages import message
 
 _WIDTH = 78
-_LIST_FOOTER = (
-    "Opis komendy z parametrami i przykladami: kartograf commands schema --command "
-    '"<grupa> <komenda>". Dokument JSON: kartograf commands list --json.'
-)
+_LIST_FOOTER = message("cli.list_footer")
 
 
 def _wrap(text: str, indent: str, first: str | None = None) -> list[str]:
@@ -60,10 +59,10 @@ def _group_view(group: Group, commands: list[Command]) -> list[str]:
     lines += _wrap(group.description_pl, "  ")
     products = resolve(group.products)
     if products:
-        lines.append("  Produkty:")
+        lines.append(message("cli.group_products_header", lang=language()))
         for name, summary in products:
             lines += _wrap(f"{name} - {summary}", "      ", "    ")
-    lines.append("  Komendy:")
+    lines.append(message("cli.group_commands_header", lang=language()))
     lines += _command_lines(commands, "    ")
     return lines
 
@@ -79,7 +78,7 @@ def format_list() -> str:
     for group in declarations.groups:
         commands = [c for c in declarations.commands if c.group == group.name]
         lines += [*_group_view(group, commands), ""]
-    lines += _wrap(_LIST_FOOTER, "")
+    lines += _wrap(localized(_LIST_FOOTER), "")
     return "\n".join(lines) + "\n"
 
 
@@ -108,18 +107,36 @@ def _param_lines(command: Command, indent: str) -> list[str]:
     params = command.params
     if not params:
         return []
-    header = ("FLAGA", "ARGUMENT", "RODZAJ", "WYMAGANY")
+    header = (
+        message("cli.param_header_flag", lang=language()),
+        "ARGUMENT",
+        message("cli.param_header_kind", lang=language()),
+        message("cli.param_header_required", lang=language()),
+    )
     rows = [
-        (_flag(p), p.api_argument or "-", p.kind, "tak" if p.required else "nie")
+        (
+            _flag(p),
+            p.api_argument or "-",
+            p.kind,
+            yes_no(p.required),
+        )
         for p in params
     ]
     widths = [max(len(row[i]) for row in (header, *rows)) for i in range(len(header))]
-    lines = ["Parametry:", _row(header, widths, indent)]
+    lines: list[str] = [
+        message("cli.parameters_header", lang=language()),
+        _row(header, widths, indent),
+    ]
     for cells, param in zip(rows, params, strict=True):
         lines.append(_row(cells, widths, indent))
         allowed = resolve(param.allowed)
         if allowed:
-            lines += _wrap("Dozwolone wartosci: " + ", ".join(allowed), indent + "    ")
+            lines += _wrap(
+                message(
+                    "cli.allowed_values", lang=language(), allowed=", ".join(allowed)
+                ),
+                indent + "    ",
+            )
         lines += _wrap(resolve(param.description_pl), indent + "    ")
     return lines
 
@@ -127,17 +144,23 @@ def _param_lines(command: Command, indent: str) -> list[str]:
 def _constraint_lines(command: Command) -> list[str]:
     if not command.constraints:
         return []
-    return ["Ograniczenia:", *(f"  - {c.message_pl}" for c in command.constraints)]
+    return [
+        message("cli.constraints_header", lang=language()),
+        *(f"  - {c.message_pl}" for c in command.constraints),
+    ]
 
 
 def _rule_lines(command: Command) -> list[str]:
     if not command.rules_pl:
         return []
-    return ["Zasady:", *(f"  - {rule}" for rule in command.rules_pl)]
+    return [
+        message("cli.rules_header", lang=language()),
+        *(f"  - {rule}" for rule in command.rules_pl),
+    ]
 
 
 def _example_lines(command: Command) -> list[str]:
-    lines = ["Przyklady:"]
+    lines: list[str] = [message("cli.examples_header", lang=language())]
     for example in command.examples:
         lines.append(f"  {example.title_pl}:")
         lines.append(f"    {example_command_line(command, example)}")
@@ -153,18 +176,32 @@ def format_command(command: Command) -> str:
     """
     lines = [f"{command.id}: {command.summary_pl}", ""]
     lines += _wrap(resolve(command.description_pl), "")
-    facts = [
-        f"rodzaj: {command.kind}",
-        f"funkcja: {command.function} -> {command.result_schema}",
+    facts: list[str] = [
+        message("cli.fact_kind", lang=language(), kind=command.kind),
+        message(
+            "cli.fact_function",
+            lang=language(),
+            function=command.function,
+            result_schema=command.result_schema,
+        ),
     ]
     if command.check_function is not None:
         facts.append(
-            f"sprawdzenie: {command.check_function} -> {command.check_result_schema}"
+            message(
+                "cli.fact_check",
+                lang=language(),
+                check_function=command.check_function,
+                check_result_schema=command.check_result_schema,
+            )
         )
     if command.effects:
-        facts.append(f"skutki: {', '.join(command.effects)}")
+        facts.append(
+            message(
+                "cli.fact_effects", lang=language(), effects=", ".join(command.effects)
+            )
+        )
     if command.project_task:
-        facts.append("komenda danych projektu")
+        facts.append(message("cli.fact_project_task", lang=language()))
     facts.append(f"operation_id: {command.operation_id}")
     lines += ["", *_wrap("; ".join(facts), "")]
     for block in (

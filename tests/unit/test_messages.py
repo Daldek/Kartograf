@@ -80,18 +80,6 @@ _PENDING = frozenset(
         "store.py",
         "store_documents.py",
         "testing.py",
-        # CLI: the texts it prints and its status lines.
-        "cli/availability_cmd.py",
-        "cli/cache_cmd.py",
-        "cli/catalog_cmd.py",
-        "cli/config_cmd.py",
-        "cli/download_cmd.py",
-        "cli/layers_cmd.py",
-        "cli/parse_cmd.py",
-        "cli/project_cmd.py",
-        "cli/soil_cmd.py",
-        "cli/sources_cmd.py",
-        "cli/store_cmd.py",
         # Command catalog: the Polish texts of the declarations and of the parser.
         "catalog/build.py",
         "catalog/cliparser.py",

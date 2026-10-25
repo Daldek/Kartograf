@@ -22,6 +22,7 @@ from typing import Any
 
 from kartograf.cli._args import library_arguments
 from kartograf.cli._json import command_id, emit_result, wants_json
+from kartograf.cli._language import language, localized
 from kartograf.download.data import DataReport, check_data, download_data
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
@@ -29,6 +30,7 @@ from kartograf.download.options import require_product
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message, reason
 from kartograf.notices import CACHE_DISABLED, SHEET_LIST, Notice
 from kartograf.serialization import Document
 
@@ -61,22 +63,48 @@ class _ProgressPrinter:
         if progress.status == "start":
             if progress.total > 1:  # a sheet hierarchy: "<code> w skali <scale>"
                 print(
-                    f"Pobieranie {progress.total} arkuszy z {progress.sheet} "
-                    f"({progress.message})"
+                    message(
+                        "cli.download_sheets_progress",
+                        lang=language(),
+                        total=progress.total,
+                        sheet=progress.sheet,
+                        message=progress.message,
+                    )
                 )
                 print()
             else:
-                print(f"Pobieranie {progress.sheet} ({progress.message})...")
+                print(
+                    message(
+                        "cli.download_sheet_progress",
+                        lang=language(),
+                        sheet=progress.sheet,
+                        message=progress.message,
+                    )
+                )
             return
         if progress.status == "tiles":
             if progress.current == 0:
                 print(
-                    f"Znaleziono kafli LAZ: {progress.total}. Pobieranie, "
-                    f"watki: {self.workers}..."
+                    message(
+                        "cli.laz_tiles_found",
+                        lang=language(),
+                        total=progress.total,
+                        workers=self.workers,
+                    )
                 )
                 print()
                 return
-            print(f"\r  {progress.current}/{progress.total} kafli", end="", flush=True)
+            print(
+                "\r"
+                + message(
+                    "cli.tiles_progress",
+                    lang=language(),
+                    current=progress.current,
+                    total=progress.total,
+                ),
+                end="",
+                flush=True,
+            )
             self.pending = True
             return
         bar_width = 30
@@ -108,8 +136,8 @@ class _ProgressPrinter:
     def _campaign_line(self, progress: DownloadProgress) -> None:
         """Print the campaign lines of a sheet.
 
-        ``Kampanie <arkusz> (do pobrania k z n): ...`` before the first flight download
-        of a sheet, then ``Pobieranie <arkusz> <etykieta> (k/n)...`` before each one;
+        ``Campaigns <sheet> (to download k of n): ...`` before the first flight download
+        of a sheet, then ``Downloading <sheet> <label> (k/n)...`` before each one;
         ends a pending bar line first.
         """
         if self.pending:
@@ -118,14 +146,26 @@ class _ProgressPrinter:
         self.used = True
         if progress.status == "campaigns":
             print(
-                f"  Kampanie {progress.sheet} (do pobrania {progress.current} z "
-                f"{progress.total}): {progress.message}",
+                message(
+                    "cli.campaigns_to_download",
+                    lang=language(),
+                    sheet=progress.sheet,
+                    current=progress.current,
+                    total=progress.total,
+                    message=progress.message,
+                ),
                 flush=True,
             )
         else:
             print(
-                f"  Pobieranie {progress.sheet} {progress.message} "
-                f"({progress.current}/{progress.total})...",
+                message(
+                    "cli.campaign_download_progress",
+                    lang=language(),
+                    sheet=progress.sheet,
+                    message=progress.message,
+                    current=progress.current,
+                    total=progress.total,
+                ),
                 flush=True,
             )
 
@@ -159,7 +199,7 @@ def _warn_cache_disabled(notice: Notice) -> None:
     if notice.message in _cache_warnings_shown:
         return
     _cache_warnings_shown.add(notice.message)
-    print(f"Warning: {notice.message}", file=sys.stderr, flush=True)
+    print(f"Warning: {localized(notice.message)}", file=sys.stderr, flush=True)
 
 
 def _print_notice(notice: Notice) -> None:
@@ -172,7 +212,7 @@ def _print_notice(notice: Notice) -> None:
         _warn_cache_disabled(notice)
         return
     prefix = "Info" if notice.level == "info" else "Warning"
-    print(f"{prefix}: {notice.message}", file=sys.stderr)
+    print(f"{prefix}: {localized(notice.message)}", file=sys.stderr)
 
 
 def notice_printer(args: argparse.Namespace) -> Callable[[Notice], None] | None:
@@ -275,7 +315,8 @@ def run_with_plan_file(
             )
         except OSError as e:
             raise ValidationError(
-                f"nie udalo sie odczytac planu {plan_file}: {e}", option="plan"
+                message("cli.plan_read_failed", plan_file=plan_file, error=reason(e)),
+                option="plan",
             ) from e
         except ValidationError as e:
             e.option = "plan"
@@ -283,15 +324,19 @@ def run_with_plan_file(
     if getattr(args, "check_updates", False) and plan_file:
         if Path(plan_file).is_dir():
             raise ValidationError(
-                f"--plan {plan_file}: to katalog - podaj plik planu, np. "
-                f"{Path(plan_file) / 'plan.json'}",
+                message(
+                    "cli.plan_is_directory",
+                    plan_file=plan_file,
+                    path=Path(plan_file) / "plan.json",
+                ),
                 option="plan",
             )
         directory = Path(plan_file).parent
         if not directory.is_dir():
             raise ValidationError(
-                f"--plan {plan_file}: katalog {directory} nie istnieje - "
-                "utworz go albo podaj inny plik planu",
+                message(
+                    "cli.plan_dir_missing", plan_file=plan_file, directory=directory
+                ),
                 option="plan",
             )
     rc = body(args)
@@ -308,11 +353,13 @@ def run_with_plan_file(
         check = bool(getattr(args, "check_updates", False))
         return emit_result(command_id(args), ctx.document, check=check)
     if wrote_plan:
-        print(f"Info: zapisano plan aktualizacji {plan_file}", file=sys.stderr)
+        print(
+            message("cli.plan_saved_info", lang=language(), plan_file=plan_file),
+            file=sys.stderr,
+        )
     elif getattr(args, "upgrade", False) and plan_file and _ran_nothing(ctx.document):
         print(
-            f"Info: plan {plan_file}: brak pozycji do wykonania (pozycje sa "
-            "aktualne albo juz wykonane)",
+            message("cli.plan_nothing_to_do", lang=language(), plan_file=plan_file),
             file=sys.stderr,
         )
     return rc
@@ -326,23 +373,29 @@ def _update_mode(args: argparse.Namespace) -> UpdateMode | None:
 
 
 _PLAN_TEXT = {
-    "current": "aktualne",
-    "missing": "do pobrania",
-    "unverifiable": "nie da sie sprawdzic bez pobrania",
+    "current": message("cli.status_current"),
+    "missing": message("cli.plan_text_missing"),
+    "unverifiable": message("cli.plan_text_unverifiable"),
 }
 
 
 def _plan_line(item: PlanItem) -> str:
+    text: str
     if item.status == "newer":
         signal = item.available_signal or {}
         available = (
             item.available_label or signal.get("etag") or signal.get("last_modified")
         )
-        text = f"nowsza: {available} (lokalna {item.local_label})"
+        text = message(
+            "cli.plan_newer",
+            lang=language(),
+            available=available,
+            local_label=item.local_label,
+        )
     elif item.status == "check_failed":
-        text = f"nie udalo sie sprawdzic: {item.error}"
+        text = message("cli.plan_check_failed", lang=language(), error=item.error)
     else:
-        text = _PLAN_TEXT[item.status]
+        text = localized(_PLAN_TEXT[item.status])
         label = item.local_label or item.available_label
         if label:
             text += f" ({label})"
@@ -369,20 +422,23 @@ def _report_stale(stale: Sequence[PlanItem]) -> int:
     """``--upgrade --plan``: positions whose source changed since the plan."""
     for item in stale:
         print(
-            f"Error: {item.store_path}: zrodlo zmienilo sie od planu "
-            f"({item.available_label or item.available_signal}) - sprawdz "
-            "ponownie (--check-updates)",
+            message(
+                "cli.plan_source_stale",
+                lang=language(),
+                store_path=item.store_path,
+                available_label=item.available_label or item.available_signal,
+            ),
             file=sys.stderr,
         )
     return 1 if stale else 0
 
 
 _STATUS_TEXT = {
-    "new": "nowa wersja",
-    "relabeled": "nowa etykieta",
-    "unchanged": "bez zmian",
-    "local": "lokalna wersja",
-    "reused": "uzyta ponownie",
+    "new": message("cli.status_new"),
+    "relabeled": message("cli.status_relabeled"),
+    "unchanged": message("cli.status_unchanged"),
+    "local": message("cli.status_local"),
+    "reused": message("cli.status_reused"),
 }
 
 
@@ -395,11 +451,16 @@ def _status_lines(
         status = file.status
         dirname = file.version_path.parent.name
         label = dirname.rsplit("_", 1)[0] if status != "new" else dirname
-        text = f"{sheet}: {_STATUS_TEXT.get(status, status)} {label}"
+        text = f"{sheet}: {localized(_STATUS_TEXT.get(status, status))} {label}"
         if status == "relabeled":
-            text += f" (plik identyczny z {file.same_as or 'istniejaca wersja'})"
+            text += message(
+                "cli.relabeled_same_as",
+                lang=language(),
+                same_as=file.same_as
+                or message("cli.existing_version", lang=language()),
+            )
         if status == "local" and newer is not None:
-            text += f"; dostepna nowsza {newer} (--upgrade)"
+            text += message("cli.newer_available", lang=language(), newer=newer)
             newer = None
         lines.append(text)
     return lines
@@ -410,12 +471,12 @@ def _status_line(unit: str, file: VersionedFile, update: UpdateMode | None) -> s
 
     ``unit`` is its path below ``--output``; a local version the default mode did not
     compare with the source (no cheap signal, or not asked: ADR-036 erratum 3) gets
-    ``(bez sprawdzania; --check-updates)``.
+    ``(not checked; --check-updates)``.
     """
     (line,) = _status_lines(unit, (file,), file.newer)
     unchecked = file.unverified in ("none", "unchecked")
     if file.status == "local" and unchecked and update is None:
-        line += " (bez sprawdzania; --check-updates)"
+        line += message("cli.unchecked_hint", lang=language())
     return line
 
 
@@ -445,14 +506,26 @@ def _print_version_summary(
 ) -> None:
     """Print the counters of the files of the request (spec 4.5).
 
-    ``uzyte ponownie`` (HSG, D33) only when a derived file was reused.
+    ``reused`` (HSG, D33) only when a derived file was reused.
     """
     counts = Counter(statuses)
-    reused = f"uzyte ponownie: {counts['reused']}, " if counts["reused"] else ""
+    reused = (
+        message("cli.summary_reused", lang=language(), counts_reused=counts["reused"])
+        if counts["reused"]
+        else ""
+    )
     print(
-        f"Nowe: {counts['new']}, nowa etykieta: {counts['relabeled']}, "
-        f"bez zmian: {counts['unchanged']}, lokalne: {counts['local']}, "
-        f"{reused}bledy: {failed} ({output_dir})"
+        message(
+            "cli.version_summary",
+            lang=language(),
+            counts_new=counts["new"],
+            counts_relabeled=counts["relabeled"],
+            counts_unchanged=counts["unchanged"],
+            counts_local=counts["local"],
+            reused=reused,
+            failed=failed,
+            output_dir=output_dir,
+        )
     )
 
 
@@ -492,7 +565,7 @@ def _data_notices(args: argparse.Namespace) -> Callable[[Notice], None] | None:
     def on_notice(notice: Notice) -> None:
         if notice.code == SHEET_LIST:
             if not quiet:
-                print(notice.message)
+                print(localized(notice.message))
                 print()
             return
         _print_notice(notice)
@@ -546,7 +619,7 @@ def _print_report(
             or (args.sheet is None and not getattr(args, "cutout", False))
         )
         # no files (the source or the index failed): the Error lines tell it
-        # all, a "Nowe: 0, ..., bledy: 0" summary would contradict them
+        # all, a "New: 0, ..., errors: 0" summary would contradict them
         if several and report.files:
             _print_version_summary(
                 [f.file.status for f in report.files],

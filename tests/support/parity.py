@@ -74,6 +74,7 @@ def run_both(
 def assert_notices_printed(stderr: str, notices) -> None:
     """Every data notice is on CLI stderr as whole line(s), in report order.
 
+    The CLI prints a notice in the language of the command line, Polish by default.
     The sheet list header (``SHEET_LIST``) goes to stdout and is not checked.
     """
     from kartograf.notices import SHEET_LIST
@@ -84,8 +85,9 @@ def assert_notices_printed(stderr: str, notices) -> None:
         if notice.code == SHEET_LIST:
             continue
         prefix = "Info" if notice.level == "info" else "Warning"
-        found = text.find(f"\n{prefix}: {notice.message}\n", position)
-        assert found >= 0, f"Not on stderr (whole line, in order): {notice.message!r}"
+        shown = notice.localized("pl").message
+        found = text.find(f"\n{prefix}: {shown}\n", position)
+        assert found >= 0, f"Not on stderr (whole line, in order): {shown!r}"
         position = found + 1
 
 

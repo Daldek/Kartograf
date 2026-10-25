@@ -17,7 +17,7 @@ for a text of the CLI).
 from collections.abc import Sequence
 
 from kartograf.config import human_language
-from kartograf.messages import Lang, localize
+from kartograf.messages import Lang, localize, message
 
 LANG_FLAG = "--lang"
 
@@ -42,6 +42,13 @@ def localized(text: str) -> str:
     text (the text of a foreign exception, a name) is returned as it is.
     """
     return localize(text, _language)
+
+
+def yes_no(value: bool) -> str:
+    """Return ``yes`` or ``no`` in the language of the command line."""
+    if value:
+        return message("cli.yes", lang=_language)
+    return message("cli.no", lang=_language)
 
 
 def language_of(argv: Sequence[str]) -> Lang:
