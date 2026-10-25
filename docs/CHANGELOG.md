@@ -290,12 +290,12 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - A CRS label with surrounding spaces (`" EPSG:5514 "`) no longer fails in the
   pinned transform with PROJ 9.8.
 
-### Data output (ADR-054, in progress)
+### Data output (ADR-054)
 
 The Nogat convention ECO-051 / DEV §19 gives every writing command two modes: plain files with
-`--output-dir` (`-o`) and the versioned store with `--root`. The work is on the branch
-`feature/data-output`; the entries below are the steps that have landed. The complete list of
-changes and the migration guide ("Migration guide: data output") are written with the last step.
+`--output-dir` (`-o`) and the versioned store with `--root`, and the default store when it
+names neither. The entries below are the steps of the branch `feature/data-output`, one commit
+each; "Migration guide: data output" at the end of this section lists what a caller changes.
 
 **Breaking**
 
@@ -426,6 +426,142 @@ changes and the migration guide ("Migration guide: data output") are written wit
   store: `inputs[]` is empty, nothing is reused, and its plan has the one target without
   asking the source. `kartograf.output.writes` (the decorator the managers share),
   `report_target` and `unit_of` are new.
+- The two targets in every interface (ADR-054 decisions 1, 11, 13 and 14): `output_dir` (`-o`,
+  `--output-dir`, path role `output`) and `root` (`--root`, path role `root`) are one optional
+  `one_of` group `target` of the catalog entry of each of the twelve data commands
+  (`elevation`, `imagery`, `landcover`, `soil` and `soil hsg`, and `boundaries`, `cadastre`,
+  `models3d`, `hydro`, `names`, `maps`, `geodesy` `download`); neither writes the default store.
+  The CLI, `run_command`, `check_command` (which also takes `force`), `validate_command`, the
+  project task functions and the MCP tools pass them to the library, which checks the pair:
+  both is `validation_error` (`exclusive_options`, `details.option` `root`, `details.options`
+  `["output_dir", "root"]`; the parser does not exclude them, so every interface answers with
+  the same document). With `output_dir`, `--upgrade`, `--plan` and `--all-campaigns` are
+  `store_only_option` naming `--root`; `--check --force` is a valid plan that lists `replace`,
+  `--check` and `--upgrade` still exclude each other in the parser and `--upgrade --force` is
+  one error line (exit 2). `project *` and `store init` are store-only and say so in their
+  catalog entry (rule `Store only: ...`); a project task takes no `output_dir`. The CLI prints
+  the status words `zapisano` and `zastapiono` (`written`, `replaced` with `--lang en`) and the
+  summary `Zapisane: N, zastapione: M, bledy: K (DIR)` (`Written: N, replaced: M, errors: K
+  (DIR)`) for a plain write, and the plan lines `do zapisania`, `do zastapienia (--force)` and
+  `konflikt: ...` (`to write`, `to replace (--force)`, `conflict: ...`); they are catalog
+  messages (ADR-053). The catalog texts, `AGENTS.md`, `llms.txt`, the MCP instructions and
+  `docs/USAGE.md` describe both modes.
+- MCP (ADR-054 decision 13, DEV-19.3): `output_dir` is checked like every path (absolute, inside
+  `--allow-dir`: `forbidden`, `details.reason` `outside_allowed_dirs`); the default store is
+  checked only when the call names neither target; `check` with `update=force` plans the
+  replacement on a server that writes, and a server that does not write answers `forbidden`
+  (`details.reason` `writes_disabled`) to any option of a run, as before.
+- A real command that is interrupted (tests drive `kartograf elevation download --output-dir` in
+  a process of its own): SIGINT ends it with exit 130 (`cancelled`) and SIGTERM with 143
+  (`terminated`), the staging directory is gone and a target that existed with `--force` is
+  whole; a plain write needs no hard link and no symlink.
+
+### Migration guide: data output (ADR-054, DEV §19)
+
+What a caller of Kartograf (Python, `kartograf`, MCP) or a reader of its files has to change. The
+entries above give the reasons and every detail; this is the list to follow. The names are those
+of the unreleased 0.8.0, so no earlier release has to keep working, no data is migrated and no
+alias exists.
+
+**The two targets and the default store (DEV-19.1, DEV-19.2).** `output_dir` (`--output-dir`,
+`-o`) writes plain files named as in the store, `root` (`--root`) writes the versioned store;
+`--force` replaces existing plain files; the two exclude each other (`validation_error`,
+`exclusive_options`). A command that names neither writes the store at the first of `--root`,
+`KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml` and `<data_dir>/kartograf`
+(`kartograf config show --json` names it and its source), never into the working directory. The
+MCP server writes only inside `--allow-dir` and with `--allow-writes`, so a default root outside
+the allowed directories is `forbidden`.
+
+| Old (0.8.0-dev) | New |
+|---|---|
+| `-o`, `--output DIR` as the store root of a command | `--root DIR` (store); `-o`, `--output-dir DIR` writes plain files |
+| `output_dir=` as the store of `download_data`, `download_collection`, `download_landcover`, `download_soil`, `calculate_hsg`, the track functions, their `check_*` and `validate_*` twins, `run_command`, `check_command`, `validate_command`, `init_project` | `root=`; `output_dir=` is the plain directory |
+| `DownloadManager(output_dir, provider)`, `LandCoverManager(output_dir, provider)`, `HSGCalculator(output_dir, provider)` | `DownloadManager(provider, *, root=None, output_dir=None, ...)` and the same for the others: the provider first, the targets keyword-only |
+| `Project.output_dir`, the key `output_dir` of `kartograf-project/1`, `StoreOverview.output_dir`, `StoreEntries.output_dir` | `root` (an old manifest is not read: `project init` again) |
+| `list_segments(output_dir)`, `list_partitions`, `iter_store`, `describe_store`, `list_store_entries` with `output_dir` | the same functions with `root` (optional: the default store) |
+| a command without `--output` fails ("required") | it writes the default store |
+| `--check-updates`, `check_updates` (CLI, `parse_command`, `format_command`, MCP argument) | `--check`, `check` (the plan `kartograf-plan/1` is the same document) |
+| `kartograf-plan/1` with `store`, items with `status` only | `mode`, `root`, `output_dir` (a plan file of 0.8.0-dev is not read); plain items have `action` (`write`, `replace`, `conflict`), `path`, `reason` |
+| `files[].file.{path, status, label, ...}` and `raw[]`, `inputs[]` likewise | `files[]` = `{unit, country, path, size_bytes, sha256, status}` (+ `label`, `version_path`, `newer`, `unverified`, `same_as` in the store) |
+| file statuses `local`, `reused` in documents | `unchanged` (the Python attribute `VersionedFile.status` keeps both words); plain: `written`, `replaced` |
+| reports without `mode` | `mode` (`plain` or `store`), `root` or `output_dir`, `skipped[]` (`{id, reason, message}`) |
+| a store without a marker | `kartograf-store.json` (`kartograf-store/1`: `schema`, `tool`, `created_at`, `producer_version`), written by the first write; `kartograf store init --root DIR` marks an existing 0.8.0-dev store |
+| sidecar `kartograf-meta/1` with `kartograf_version` | also `producer` and `producer_version` (optional; `kartograf_version` stays) |
+| a work file `.part` beside a target (plain mode did not exist) | staging `<dir>/.kartograf-incoming/<host>_<pid>_<token>/`, removed after every run (success, error, SIGINT, SIGTERM); older leftovers (24 h) are removed by the next run |
+
+**Plain mode (DEV-19.4 to DEV-19.11).** One file per unit named as in the store, in a flat
+directory (`N-34-130-D-d-2-4.asc`, `0208.zip`, `<coordinates>.tif`, `CTES96.laz`), no sidecar, no
+`versions/`, no standard path, no `full_sheet/`, no hard link: it works on FAT, exFAT and SMB. The
+whole list of targets is checked before the first byte: a name two files share is `conflict`
+(`duplicate_output_name`), a store of Kartograf or IMGWTools as the directory is `conflict`
+(`output_in_store`), an existing file without `--force` is `conflict` (`output_exists`); the error
+lists every path in `details.paths`. `--force` replaces each existing target with `os.replace` and
+deletes nothing else. The year options filter the flights as in the store. **PL sheets (NMT,
+NMPT, orthophotomaps) take the newest FULL flight, not the newest flight:** a file without a
+sidecar cannot say it is partial; a sheet without a full flight is skipped (warning
+`skipped_incomplete`, `skipped[]`), all skipped is `no_data` (`skipped_incomplete`, exit 11);
+`--full-sheet` is an `info` notice and `--all-campaigns` is store-only. BDOT10k `keep_raw` writes
+`<teryt>.gpkg` and `<teryt>.zip`; `soil hsg` fetches the SoilGrids inputs into the staging
+directory and writes only the HSG raster (`inputs[]` is empty).
+
+**Results (DEV-19.19).** Every writing command lists `files[]` with `size_bytes` and `sha256`
+(computed while the file is written) and the status `written` or `replaced` (plain) and `new`,
+`unchanged` or `relabeled` (store). `--check` plans each plain target as `write`, `replace` (with
+`--force`) or `conflict`; a plan with conflicts is `ok` (exit 0), only the run fails.
+
+**Errors** (codes of the registry; `details.reason` is the precision):
+
+| Code (CLI exit) | `details.reason` | When |
+|---|---|---|
+| `conflict` (4) | `output_exists` | a plain target exists and there is no `--force`; `details.paths` lists every such file |
+| `conflict` (4) | `duplicate_output_name` | two targets of one request have one name; `details.paths` |
+| `conflict` (4) | `output_in_store` | the directory is, lies in or would enter a store of Kartograf or IMGWTools (hint `--root`) |
+| `conflict` (4) | `nested_store` | the root lies in, holds or nests a store of any tool |
+| `conflict` (4) | `not_empty` | a new store in a directory with other files and no layout |
+| `store_unavailable` (8) | `no_marker` | a root that has the layout and no marker; hint `kartograf store init --root DIR` |
+| `data_error` (7) | `invalid_layout` | `store init` found a foreign file or an invalid sidecar (`details.problems`) |
+| `validation_error` (2) | `exclusive_options` | `output_dir` with `root` (`details.option` `root`, `details.options` both) |
+| `validation_error` (2) | `store_only_option` | `--upgrade`, `--plan`, `--all-campaigns` or a project task with `output_dir` (hint `--root`) |
+| `no_data` (14, units 11) | `skipped_incomplete` | every PL sheet of a plain request lacks a full flight |
+| `forbidden` (12) | `writes_disabled`, `outside_allowed_dirs` | an MCP run on a server that does not write, or a path (or the default root) outside `--allow-dir` |
+
+**Unchanged.** The store layout (`versions/`, the hard-linked standard path and `full_sheet/`), the
+sidecar `kartograf-meta/1` apart from the two optional fields, the read API apart from the name
+`root`, `kartograf-result/1`, the exit codes and the error registry, the project manifest apart
+from the key `root`, and the MCP tool names.
+
+**Per consumer** (checkouts of 2026-10-25; each changes with its pin):
+
+- **Archiwista** (`src/archiwista/adapter/kartograf/adapter.py`): `project.output_dir` (line 645)
+  is `project.root`, and the manifest key `output_dir` is `root`; the read API calls (`list_segments`
+  at 120 and 317, `iter_store` at 424) take `root` (a positional store keeps working, a keyword
+  changes); `probe` follows DEV-19.12 and DEV-19.13 (a root with the layout and no marker is
+  `store_unavailable`, `no_marker`; the read API itself does not require the marker); read the
+  marker fields and `producer`, `producer_version` of the sidecar; the statuses are `new`,
+  `unchanged`, `relabeled`. `docs/PLAN_v0.1.md` (lines 45-50, 826) quotes the old names.
+- **Retman** (`src/retman/tools/kartograf/`): `client.py:188`, `:195`, `:258` and `:273` pass
+  `output_dir=` (and the flag `--output-dir`) for the store: pass `root=` (`--root`); `store_dir`
+  need not stay required, since a default store exists; `handlers.py:84` and `:137` build
+  `DownloadManager(output_dir=...)`: `DownloadManager(provider, root=...)`; a step that writes into
+  its result folder can pass `output_dir` (plain files; `--force` where it may repeat) and read
+  `files[].path`; `check_updates` becomes `check`.
+- **Hydrolog:** no package dependency; `docs/INTEGRATION.md` (lines 410-452) calls
+  `download_soil(output_dir=...)` for plain files and `HSGCalculator()`: both are real now
+  (`output_dir` plain, `root` the store, neither the default store), and `AGENTS.md:143`
+  (`kartograf soil download ... --output-dir`) is a valid call. Read `files[].path` of `--json`;
+  with `--force` where the file may exist.
+- **Hydraulik** (worktree `poc-poznan-screening`, `docs/poc/2026-10-15-poc-design.md:101`): the
+  Kartograf calls of the proof of concept are the 0.7.x CLI: `kartograf elevation download ...
+  --output-dir DIR` writes plain files and `--root DIR` the store; read `files[].path` of `--json`.
+- **Hydrograf** (`backend`): `scripts/download_dem.py:130` builds `DownloadManager(output_dir=...)`,
+  `scripts/download_landcover.py:118` and `core/cn_calculator.py:242` build
+  `LandCoverManager(output_dir=..., ...)`: these name the store, so pass `root=` (the same
+  layout) with the provider first (`DownloadManager(provider, root=...)`,
+  `LandCoverManager(provider, root=...)`), or keep a directory as `output_dir=` for flat plain
+  files (another layout: `<sheet>.asc` without `versions/`); `HSGCalculator()` (`core/
+  cn_calculator.py:137`, `scripts/bootstrap.py:710`) now writes the default store unless it is
+  given `root=` or `output_dir=`. The other `output_dir=` of `bootstrap.py` (lines 560, 593, 644,
+  996) are Hydrograf's own functions and need no change.
 
 ### Breaking changes
 

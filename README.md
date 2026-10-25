@@ -92,6 +92,13 @@ The plan is `"check": true` with `result.schema` `kartograf-plan/1` and one item
 
 `result.files[].path` is the file below the store, listed with its `size_bytes` and `sha256`. An area, a country or another product is another option set: `kartograf commands schema --command "elevation download"`.
 
+Where the files go: `--root DIR` writes the versioned store (`versions/`, sidecars); `-o DIR` / `--output-dir DIR` writes plain files named as in the store, with no sidecar and no hard links (it works on FAT, exFAT and SMB; `--force` replaces existing files, and without it an existing file is a conflict before the first byte; PL sheets take the newest FULL flight). A command with neither option writes the default store (`KARTOGRAF_ROOT`, `[kartograf] root`, `<data_dir>/kartograf`). `--upgrade`, `--plan`, `--all-campaigns` and the `project` commands work only with a store. Details: [USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md) 1.12.
+
+```bash
+# plain files in ./dem, named as in the store; a rerun is a conflict, --force replaces them
+kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 -o ./dem
+```
+
 ### Python
 
 ```python

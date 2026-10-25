@@ -23,6 +23,7 @@ list of the public API: `src/kartograf/__init__.py` (`__all__`).
    - [1.9 CZ data: ZABAGED, Data50, Data250, RUIAN and HY-NET](#19-cz-data-zabaged-data50-data250-ruian-and-hy-net)
    - [1.10 Geographic names and topographic maps](#110-geographic-names-and-topographic-maps)
    - [1.11 3D mesh, trees, geodetic control networks and quasi-geoids](#111-3d-mesh-trees-geodetic-control-networks-and-quasi-geoids)
+   - [1.12 Plain files or the store (`--output-dir`, `--root`)](#112-plain-files-or-the-store---output-dir---root)
 2. [Python library](#2-python-library)
 3. [Download result](#3-download-result)
 4. [GUGiK campaigns](#4-gugik-campaigns)
@@ -1809,6 +1810,80 @@ signal (`--check`: `nie da sie sprawdzic bez pobrania`; new
 content with `--force`). The `models3d download` and `geodesy download` commands
 are suitable for a manifest (`kartograf project add <name> geodesy download
 --product control --network horizontal --teryt 1201`).
+
+### 1.12 Plain files or the store (`--output-dir`, `--root`)
+
+Every data command (`elevation`, `imagery`, `landcover`, `soil`, `soil hsg`, `boundaries`,
+`cadastre`, `models3d`, `hydro`, `names`, `maps`, `geodesy` `download`) writes in one of two
+ways (ADR-054, Nogat DEV §19):
+
+| Flag | Library | Writes |
+|---|---|---|
+| `-o`, `--output-dir DIR` | `output_dir=` | plain files named as in the store, flat, in `DIR` (created when missing) |
+| `--root DIR` | `root=` | the versioned store: `versions/`, sidecars, the hard-linked standard path |
+| neither | neither | the store at the first of `KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml` and `<data_dir>/kartograf` (section 10) |
+
+`--output-dir` and `--root` exclude each other (`validation_error`, `details.reason`
+`exclusive_options`). The commands whose input is the store, every `project` command and
+`store init`, take `--root` only.
+
+```bash
+# plain files: one NMT sheet as ./dem/N-34-130-D-d-2-4.asc and nothing else
+kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 -o ./dem
+# the same call again is a conflict (exit 4) before anything is fetched; --force replaces the file
+kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 -o ./dem --force
+# the plan: write, replace (with --force) or conflict for each target; exit 0 even with conflicts
+kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 -o ./dem --check
+# the versioned store of a place of your choice, and of the default place
+kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --root ./data
+kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007
+```
+
+**Plain mode.**
+
+- *Names.* A file has the name it has in the store: `<sheet>.<ext>` (`N-34-130-D-d-2-4.asc`),
+  `<unit><ext>` for a package (`0208.zip`, `1465.gpkg`), `<coordinates>.tif` for a SoilGrids layer
+  and the HSG raster, `<sheet>.laz` for a CZ point cloud. There is no sidecar, no `versions/`, no
+  standard path, no `full_sheet/` and no hard link, so a plain write works on FAT, exFAT and SMB.
+  `landcover download --keep-raw` writes `<teryt>.gpkg` and the original `<teryt>.zip`.
+- *Before the first byte* the whole list of targets is checked, and a failure writes nothing:
+  a name two files share is `conflict` (`duplicate_output_name`), a directory that is, or lies
+  in, a store of Kartograf or IMGWTools is `conflict` (`output_in_store`, the hint names
+  `--root`), an existing file without `--force` is `conflict` (`output_exists`). The error
+  lists every path in `details.paths`. A request over two countries (`--country auto`) is
+  checked as one list.
+- *Writing.* Each file goes to `DIR/.kartograf-incoming/<host>_<pid>_<token>/`, is verified
+  there and moves into place with `os.replace`; the staging directory is removed after success,
+  error, Ctrl-C (exit 130) and SIGTERM (exit 143), and leftovers older than 24 hours are removed
+  by the next run. `--force` replaces each existing target atomically and deletes nothing else.
+- *Plan.* `--check` lists each target as `do zapisania` (write), `do zastapienia (--force)`
+  (replace, only with `--force`) or `konflikt: ...` (conflict); `--lang en` prints `to write`,
+  `to replace (--force)` and `conflict: ...`. `--check --force` is a valid pair.
+  A plain plan fetches no data and asks no freshness signal; with `--root` the `--force` of a
+  plan has no effect.
+- *Options that need a store.* `--upgrade`, `--plan` and `--all-campaigns` with `--output-dir`
+  are `validation_error` (`store_only_option`) and name `--root`; `--full-sheet` is an `info`
+  notice (it has no effect). The year options filter the flights as in the store.
+- *PL sheets (NMT, NMPT, orthophotomaps) take the newest FULL flight, not the newest flight.* A
+  file without a sidecar cannot say it is partial, so a plain sheet comes from the newest flight
+  declared full within the year range. A sheet that has flights and none of them full is
+  skipped: the warning `skipped_incomplete` names it (with the hint `--root`, which takes the
+  newest flight, partial or not) and `skipped[]` of the result lists `{id, reason, message}`;
+  the other sheets are written. When every sheet is skipped the command fails with `no_data`
+  (`skipped_incomplete`, exit 11 as a result, 14 as an error of the plan).
+- *HSG.* `soil hsg --output-dir` fetches the clay, sand and silt inputs into the staging
+  directory and writes only the HSG raster; `inputs[]` is empty and nothing is reused.
+- *Result.* `files[]` = `{unit, country, path, size_bytes, sha256, status}` with the status
+  `written` or `replaced`; the report has `mode` `plain`, `root` `null` and `output_dir`. The
+  summary line is `Zapisane: N, zastapione: M, bledy: K (DIR)` (`Written: N, replaced: M,
+  errors: K (DIR)` with `--lang en`). Per-unit outcomes stay in `items[]` of the envelope.
+- *MCP.* `output_dir` is a path of the call like `root`: absolute and inside `--allow-dir`
+  (`forbidden`, `outside_allowed_dirs`). A call that names neither target needs the default
+  store inside `--allow-dir`. `check` with `update=force` plans the replacement on a server that
+  writes; a server that does not write answers `forbidden` (`writes_disabled`) to every option
+  of a run.
+
+The reasons of the errors above are listed in 9.3 and in the migration guide of the CHANGELOG.
 
 ---
 
@@ -3891,7 +3966,7 @@ and does not read a `.env` file ([.env.example](../.env.example) lists every var
 
 | Key | Variable | Default | Meaning |
 |---|---|---|---|
-| `root` | `KARTOGRAF_ROOT` | `<data_dir>/kartograf` | root of the store (DEV-19.2); `config show` reports it, the commands take the store from `--root` until the data-output change |
+| `root` | `KARTOGRAF_ROOT` | `<data_dir>/kartograf` | root of the store of a command that names neither `--root` nor `--output-dir` (DEV-19.2); `config show` reports it and its source |
 | `data_dir` | `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR` | user data directory of `nogat` | parent of the stores |
 | `cache_dir` | `KARTOGRAF_CACHE_DIR`, `NOGAT_CACHE_DIR` | user cache directory of `nogat` | parent of the caches: the metadata cache is `<cache_dir>/kartograf/metadata.db` |
 | `lang` | `KARTOGRAF_LANG`, `NOGAT_LANG` | `pl` | `pl` or `en`, and `--lang` on every command: the language of the text for people (the `Error:` line, the status lines); the `--json` document, the error line on stderr and the MCP server are English; the library texts move into the message catalog area by area (ADR-053, Next item 25) |

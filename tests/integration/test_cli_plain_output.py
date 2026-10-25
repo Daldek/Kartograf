@@ -6,8 +6,10 @@ line and its document, the plan, the options that need a store, the rule of the 
 sheets and the default store.
 """
 
+import errno
 import hashlib
 import json
+import os
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -350,3 +352,23 @@ def test_a_project_takes_no_output_dir_and_says_so(capsys, tmp_path, default_roo
     assert "--root" in document["hint"]
     manifest = json.loads((project / "kartograf-project.json").read_text())
     assert manifest["tasks"] == []
+
+
+def test_a_plain_write_needs_no_link_of_any_kind(capsys, tmp_path, monkeypatch):
+    """FAT, exFAT and SMB give no hard link and often no symlink (DEV-19.8)."""
+
+    def denied(*args, **kwargs):
+        raise OSError(errno.EPERM, "no links on this file system")
+
+    monkeypatch.setattr(os, "link", denied)
+    monkeypatch.setattr(os, "symlink", denied)
+    fake = FakeCampaignProvider(C14)
+    out = tmp_path / "out"
+
+    first = run_nmt(capsys, fake, "-o", out)
+    forced = run_nmt(capsys, fake, "-o", out, "--force")
+
+    assert (first[0], first[2]) == (0, "") and f"{G}.asc: zapisano" in first[1]
+    assert (forced[0], forced[2]) == (0, "") and f"{G}.asc: zastapiono" in forced[1]
+    assert os.stat(out / f"{G}.asc").st_nlink == 1
+    assert listing(out) == [f"{G}.asc"]

@@ -1928,6 +1928,29 @@ lists `{id, reason, message}` of units a plain write leaves out on purpose
 `store` of 0.8.0-dev is `root`; a plan file with `store` is not read, make a new one), and an item
 of a plain plan has `action` (`write`, `replace`, `conflict`), `path` and `reason`.
 
+**The target in the interfaces (ADR-054 decisions 1, 11, 13, 14).** The catalog declares the two
+targets once: `catalog/shared.py` `target(files, sheets=)` gives the two `Param`s (`output_dir`
+with path role `output` and short flag `-o`, `root` with path role `root`) and
+`target_constraints(campaigns=)` the optional `one_of` group `target` and the rule that
+`--upgrade`, `--plan` (and `--all-campaigns` of the sheet commands) exclude `output_dir`; every
+data command uses both, `update_params(plain=True)` lets `--force` leave the exclusive group so
+that `--check --force` parses (`--check` and `--upgrade` still exclude each other; the project
+commands keep the three-way group). The parser does not exclude `output_dir` and `root`: the
+library does (`resolve_target`), so the CLI, `run_command`, `check_command` and the MCP tools
+answer with one document. The CLI handlers pass `output_dir` and `root` to the library
+function as they are (`cli/_args.py` `target_arguments`) and print what the report says it
+wrote (`cli/download_cmd.py` `_written_to`: the output directory of a plain report, the store
+root of a store report). `run_command` and `check_command` take `output_dir`, `root` and (the
+check) `force`; the project task functions carry both, and a project task has no `output_dir`
+(`store_only_option`). The MCP server confines `output_dir` like every path option and checks
+the default root only for a call that names neither target (`_Toolbox._check_default_root`,
+`forbidden` with `details.reason` `outside_allowed_dirs`); the refusals of a server that does
+not write carry `writes_disabled`. `project *` and `store init` are store-only and say so in
+their catalog entry (rule `Store only: ...`). Interrupts are held by tests that run the real
+command in a process of its own (`tests/integration/test_cli_interrupt.py`,
+`tests/support/interrupt_driver.py`): SIGINT gives exit 130 and SIGTERM 143, the staging
+directory is removed and an existing target survives `--force` whole.
+
 ---
 
 ## 4. Flows per product
