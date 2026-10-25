@@ -34,6 +34,7 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.providers.pl.skorowidz_wfs import (
     GML_NS,
     INCOMPLETE,
@@ -126,7 +127,7 @@ def gfi_records(
         "I": _GFI_SIZE // 2,
         "J": _GFI_SIZE // 2,
     }
-    context = f"{parser.sheet}: warstwa {layer}"
+    context = message("transport.gfi_context", sheet=parser.sheet, layer=layer)
     response = get_with_retry(
         session,
         f"{source.endpoint}?{urlencode(params)}",
@@ -155,17 +156,23 @@ def records_from_gfi(
         # GUGiK sends text/html without a charset; the page is UTF-8
         text = content.decode("utf-8")
     except UnicodeDecodeError as e:
-        raise _incomplete(f"{context}: odpowiedz GFI nie jest UTF-8 ({e})") from e
+        raise _incomplete(
+            message("transport.gfi_not_utf8", context=context, error=reason(e))
+        ) from e
     if _OGC_REPORT.search(text):
         match = _OGC_TEXT.search(text)
         excerpt = " ".join((match[1] if match else text).split())[:200]
-        raise _incomplete(f"{context}: raport wyjatku OGC: {excerpt}")
+        raise _incomplete(
+            message("transport.gfi_ogc_exception", context=context, excerpt=excerpt)
+        )
     reader = _TableReader()
     reader.feed(text)
     reader.close()
     tables = [rows for rows in reader.tables if _row(rows, _SHEET_HEADER)]
     if not tables:
-        raise _incomplete(f"{context}: odpowiedz bez tabeli arkusza warstwy {layer}")
+        raise _incomplete(
+            message("transport.gfi_no_sheet_table", context=context, layer=layer)
+        )
     return [_map_links_record(rows, context) for rows in tables]
 
 
@@ -251,47 +258,69 @@ def records_from_wfs(
             records.append(_wfs_record(feature, source))
         except _Unusable as e:
             logger.warning(
-                "Indeks %s: obiekt %s pominiety (%s)", source.endpoint, fid, e
+                message(
+                    "transport.index_feature_skipped",
+                    endpoint=source.endpoint,
+                    fid=fid,
+                    error=reason(e),
+                )
             )
     return records
 
 
 class _Unusable(Exception):
-    """A WFS feature that cannot become a record (reason in Polish)."""
+    """A WFS feature that cannot become a record (the reason is a catalog message)."""
 
 
 def _wfs_record(feature: ET.Element, source: IndexSource) -> IndexRecord:
     raw = _feature_fields(feature)
     url = raw.get(source.url_field or "", "")
     if not url.startswith("https://"):
-        raise _Unusable(f"brak adresu HTTPS w polu {source.url_field}")
+        raise _Unusable(
+            message("transport.no_https_url_field", url_field=source.url_field)
+        )
     if source.unit_field is None:
         unit = PurePosixPath(urlparse(url).path).stem
         if not unit:
-            raise _Unusable(f"adres {url} bez nazwy pliku")
+            raise _Unusable(message("transport.url_no_filename", url=url))
     else:
         unit = raw.get(source.unit_field, "")
         if not unit:
-            raise _Unusable(f"brak pola {source.unit_field}")
+            raise _Unusable(
+                message("transport.missing_unit_field", unit_field=source.unit_field)
+            )
     parts = [raw[name] for name in source.label_fields if raw.get(name)]
     if not parts:
-        raise _Unusable(f"brak wartosci pol etykiety {', '.join(source.label_fields)}")
+        raise _Unusable(
+            message(
+                "transport.no_label_values", label_fields=", ".join(source.label_fields)
+            )
+        )
     try:
-        label = edition_label("_".join(parts), what=f"kafel {unit}")
+        label = edition_label(
+            "_".join(parts), what=message("transport.tile_unit_label", unit=unit)
+        )
     except DownloadError as e:
-        raise _Unusable(str(e)) from e
+        raise _Unusable(reason(e)) from e
     year: int | None = None
     if source.year_field is not None and (text := raw.get(source.year_field)):
         if not text.isdigit():
-            raise _Unusable(f"rok {text!r} w polu {source.year_field} nie jest liczba")
+            raise _Unusable(
+                message(
+                    "transport.year_not_number", text=text, year_field=source.year_field
+                )
+            )
         year = int(text)
     zone: str | None = None
     if source.zone_field is not None:
         zone = _zone_slot(raw.get(source.zone_field))
         if zone is None:
             raise _Unusable(
-                f"nieznany uklad {raw.get(source.zone_field)!r} "
-                f"w polu {source.zone_field}"
+                message(
+                    "transport.unknown_crs_in_field",
+                    value=raw.get(source.zone_field),
+                    zone_field=source.zone_field,
+                )
             )
     return IndexRecord(
         unit=unit, urls={"": url}, label=label, year=year, zone=zone, raw=raw
@@ -344,12 +373,20 @@ def _map_links_record(rows: list["_Row"], context: str) -> IndexRecord:
     try:
         unit = SheetParser(published).sheet
     except (ParseError, ValidationError) as e:
-        raise _incomplete(f"{context}: nieprawidlowe godlo {published!r}") from e
+        raise _incomplete(
+            message(
+                "transport.invalid_sheet_code", context=context, published=published
+            )
+        ) from e
     date_row = _row(rows, _DATE_HEADER)
     stated = date_row.text if date_row is not None else ""
     match = _BASE_DATE.fullmatch(stated)
     if match is None:
-        raise _incomplete(f"{context}: arkusz {published} bez daty stanu bazy")
+        raise _incomplete(
+            message(
+                "transport.sheet_no_state_date", context=context, published=published
+            )
+        )
     urls: dict[str, str] = {}
     for row in rows:
         for href in row.links:
@@ -357,11 +394,22 @@ def _map_links_record(rows: list["_Row"], context: str) -> IndexRecord:
             if kind is None:
                 continue
             if not href.startswith("https://"):
-                raise _incomplete(f"{context}: link {href!r} bez HTTPS")
+                raise _incomplete(
+                    message("transport.link_not_https", context=context, href=href)
+                )
             if urls.setdefault(kind, href) != href:
-                raise _incomplete(f"{context}: arkusz {published} ma dwa linki {kind}")
+                raise _incomplete(
+                    message(
+                        "transport.sheet_two_links",
+                        context=context,
+                        published=published,
+                        kind=kind,
+                    )
+                )
     if not urls:
-        raise _incomplete(f"{context}: arkusz {published} bez linku PDF/GeoTIFF")
+        raise _incomplete(
+            message("transport.sheet_no_link", context=context, published=published)
+        )
     raw = {"godlo": published, "stan_bazy": stated}
     raw.update({f"url_{kind.lower()}": href for kind, href in urls.items()})
     return IndexRecord(
@@ -391,16 +439,24 @@ def _row(rows: list["_Row"], header: str) -> "_Row | None":
 def _check_gfi_source(source: IndexSource) -> None:
     if source.kind != "wms_gfi" or source.parser != "map_links":
         raise ValidationError(
-            f"indeks {source.endpoint}: odczyt GFI wymaga kind='wms_gfi' i "
-            f"parser='map_links' (podano {source.kind!r}, {source.parser!r})"
+            message(
+                "transport.gfi_source_invalid",
+                endpoint=source.endpoint,
+                kind=source.kind,
+                parser=source.parser,
+            )
         )
 
 
 def _check_wfs_source(source: IndexSource) -> None:
     if source.kind != "wfs" or source.url_field is None:
         raise ValidationError(
-            f"indeks {source.endpoint}: odczyt WFS wymaga kind='wfs' i url_field "
-            f"(podano {source.kind!r}, {source.url_field!r})"
+            message(
+                "transport.wfs_source_invalid",
+                endpoint=source.endpoint,
+                kind=source.kind,
+                url_field=source.url_field,
+            )
         )
 
 

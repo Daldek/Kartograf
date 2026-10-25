@@ -634,7 +634,7 @@ class TestDiscoverTiles:
             patch("kartograf.transport.http.time.sleep"),
             pytest.raises(
                 DownloadError,
-                match="2024.*zerwane albo odrzucone.*wynik bylby niepelny",
+                match="2024.*connection broken or refused.*wynik bylby niepelny",
             ),
         ):
             p.discover_tiles(QUERY_BBOX, year=2024)

@@ -5142,7 +5142,7 @@ class TestCmdDownloadCz:
         assert result == 0
         err = capsys.readouterr().err
         assert "Error:" not in err
-        assert f"Warning: cache metadanych nieczytelny ({db})" in err
+        assert f"Warning: metadata cache unreadable ({db})" in err
 
     def test_tm33_sheet_writes_sidecar(self, tmp_path):
 
@@ -8596,7 +8596,7 @@ class TestUnreadableMetadataCache:
 
     @staticmethod
     def _cache_warnings(err: str) -> list[str]:
-        return [line for line in err.splitlines() if "cache metadanych" in line]
+        return [line for line in err.splitlines() if "metadata cache" in line]
 
     @pytest.mark.parametrize("workers", ["1", "4"])
     @pytest.mark.parametrize("quiet", [False, True], ids=["verbose", "quiet"])
@@ -8636,7 +8636,7 @@ class TestUnreadableMetadataCache:
         assert "file is not a database" in err
         warnings = self._cache_warnings(err)
         assert len(warnings) == 1
-        assert warnings[0].startswith(f"Warning: cache metadanych nieczytelny ({db})")
+        assert warnings[0].startswith(f"Warning: metadata cache unreadable ({db})")
         assert warnings[0].isascii()
         assert db.read_bytes().startswith(b"to nie jest baza")  # untouched
 
@@ -8673,7 +8673,7 @@ class TestUnreadableMetadataCache:
         ) in captured.out
         assert "Error:" not in captured.err
         assert len(self._cache_warnings(captured.err)) == 1
-        assert captured.err.startswith("Warning: cache metadanych nieczytelny (")
+        assert captured.err.startswith("Warning: metadata cache unreadable (")
 
     def test_warning_once_per_command_not_per_process(self, tmp_path, capsys):
         """Every command reports the broken cache again (dedup reset)."""

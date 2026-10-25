@@ -90,7 +90,7 @@ def test_cz_cadastral_map_selection_checked_before_any_request(tmp_path):
     selections of the CZ map (an area is a bbox or a geometry, CZ has no
     collection sheet areas)."""
     with pytest.raises(
-        ValidationError, match="^--format wymagane: SHP, DXF, DGN, VFK$"
+        ValidationError, match="^--format required: SHP, DXF, DGN, VFK$"
     ):
         validate_collection_request(product="map", ku="623164", output_dir=tmp_path)
     with pytest.raises(ValidationError, match="--ku to kod katastralniho uzemi"):

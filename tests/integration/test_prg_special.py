@@ -182,7 +182,7 @@ def test_special_area_leaves_out_census_districts(tmp_path, monkeypatch, frozen_
 def test_special_requires_selection_and_explicit_country_format(tmp_path):
     with pytest.raises(ValidationError, match="--bbox"):
         validate_collection_request(product="special", output_dir=tmp_path)
-    with pytest.raises(ValidationError, match="--format wymagane.*SHP, GML"):
+    with pytest.raises(ValidationError, match="--format required.*SHP, GML"):
         validate_collection_request(
             product="special",
             output_dir=tmp_path,

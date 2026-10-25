@@ -208,4 +208,4 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
     assert result.succeeded == [] and str(linked_version(std)) == before
     assert result.skipped == [G]
     assert result.files[G][0].path == std
-    assert "zerwane albo odrzucone polaczenie" in result.files[G][0].unverified
+    assert "connection broken or refused" in result.files[G][0].unverified

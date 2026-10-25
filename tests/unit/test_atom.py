@@ -162,13 +162,16 @@ def test_index_keyed_by_voivodeship():
 @pytest.mark.parametrize(
     "edit, message",
     [
-        (lambda xml: xml.replace(b'rel="alternate"', b'rel="related"'), "0 linkow"),
+        (
+            lambda xml: xml.replace(b'rel="alternate"', b'rel="related"'),
+            ("has 0 rel=alternate links"),
+        ),
         (
             lambda xml: xml.replace(
                 b"<category",
                 b'<link href="https://x/y.zip" rel="alternate" /><category',
             ),
-            "2 linkow",
+            "has 2 rel=alternate links",
         ),
     ],
 )
@@ -198,9 +201,9 @@ def test_crs_category_selects_file():
     service = FakeService()
     with pytest.raises(ValidationError, match="EPSG:5514, EPSG:3045"):
         resolve_atom_file(service, ZABAGED, key="", crs=None, cache=None)
-    with pytest.raises(ValidationError, match="dostepne: EPSG:5514, EPSG:3045"):
+    with pytest.raises(ValidationError, match="available: EPSG:5514, EPSG:3045"):
         resolve_atom_file(service, ZABAGED, key="", crs="EPSG:2180", cache=None)
-    with pytest.raises(ValidationError, match="jeden plik"):
+    with pytest.raises(ValidationError, match="has a single file"):
         resolve_atom_file(service, ORTO, key="CTES96", crs="EPSG:5514", cache=None)
     assert service.calls == []
 
@@ -325,7 +328,7 @@ def test_html_feed_is_download_error(feed, cache):
     """The ATOM host answers its HTML page with HTTP 200: never an index or
     a file (and nothing is cached)."""
     service = FakeService({**ROUTES, feed: "atom_root.html"})
-    with pytest.raises(DownloadError, match="nie jest feedem ATOM"):
+    with pytest.raises(DownloadError, match="is not an ATOM feed"):
         resolve_atom_file(service, ORTO, key="CTES96", crs=None, cache=cache)
     if feed == ORTO_SERVICE:
         assert cache.get_atom_entries(f"{ORTO_SERVICE}|{ORTO.entry_pattern}") is None
@@ -392,7 +395,7 @@ def test_fetch_atom_file_checks_feed_length(tmp_path):
     file = resolve_atom_file(FakeService(), ORTO, key="CTES96", crs=None, cache=None)
     target = tmp_path / "CTES96.zip"
 
-    with pytest.raises(DownloadError, match="przerwany transfer"):
+    with pytest.raises(DownloadError, match="interrupted transfer"):
         fetch_atom_file(service, file, target, timeout=5)
     assert not target.exists()
 

@@ -775,7 +775,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "format",
         None,
         ("TIFF", "PDF"),
-        "--format XYZ: niedostepne",
+        "--format XYZ: not available",
     ),
     _row(
         kartograf.download_collection,
@@ -803,7 +803,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "scale",
         None,
         _COLLECTIONS.collection_choice_values("topographic", "scale")["CZ"],
-        "--scale 1:1: niedostepne",
+        "--scale 1:1: not available",
     ),
     _row(
         kartograf.download_collection,
@@ -817,7 +817,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "sheet_system",
         None,
         ("sjtsk", "etrs89"),
-        "--sheet-system 1965: niedostepne",
+        "--sheet-system 1965: not available",
     ),
     _row(
         kartograf.download_collection,
@@ -839,7 +839,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "lod",
         None,
         ("1", "2"),
-        "--lod wymagane",
+        "--lod required",
     ),
     _row(
         kartograf.download_collection,
@@ -853,7 +853,7 @@ COLLECTION_OPTION_SCENARIOS = [
         "year",
         None,
         ("2017",),
-        "--year 2016: niedostepne dla --lod 2",
+        "--year 2016: not available for --lod 2",
     ),
     _row(
         kartograf.download_collection,
@@ -1155,7 +1155,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "format",
         None,
         ("GML", "SHP"),
-        "--format wymagane dla --year 2020",
+        "--format required for --year 2020",
     ),
     _row(
         kartograf.download_landcover,
@@ -1198,7 +1198,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "horizontal_crs",
         None,
         ("EPSG:5514", "EPSG:3045"),
-        "zbior nie jest publikowany w tym ukladzie",
+        "the dataset is not published in this CRS",
     ),
     _row(
         kartograf.download_landcover,

@@ -131,7 +131,7 @@ def test_truncated_asc_part_raises(tmp_path):
     src.write_bytes(body[: body.index(b"result.asc.aux.xml") - 200])
     dst = tmp_path / "part.asc"
 
-    with pytest.raises(DownloadError, match="urwana"):
+    with pytest.raises(DownloadError, match="truncated"):
         extract_multipart_asc(src, _content_type(NMT), dst)
 
     assert not dst.exists()

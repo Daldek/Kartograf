@@ -1644,7 +1644,7 @@ def test_a_cache_directory_that_cannot_be_made_does_not_stop_the_server(
 
     assert result.is_error is False
     assert seen[0].db_path == database and not database.exists()
-    assert "niedostepny do otwarcia lub zapisu" in caplog.text
+    assert "cannot be opened or written" in caplog.text
 
 
 @needs_mcp

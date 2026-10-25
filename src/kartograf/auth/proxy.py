@@ -32,6 +32,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from urllib.parse import urlparse
 
+from kartograf.messages import message, reason
+
 # Configure logging to stderr (stdout reserved for port number)
 logging.basicConfig(
     level=logging.INFO,
@@ -89,7 +91,7 @@ class CLMSCredentials:
             creds = json.loads(raw)
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in CLMS_CREDENTIALS: {e}")
-            self.env_error = f"CLMS_CREDENTIALS nie jest poprawnym JSON ({e})"
+            self.env_error = message("auth.clms_credentials_bad_json", error=reason(e))
             return False
 
         if (
@@ -101,10 +103,7 @@ class CLMSCredentials:
                 "CLMS_CREDENTIALS must be a JSON object with "
                 "'client_id' and 'private_key'"
             )
-            self.env_error = (
-                "CLMS_CREDENTIALS musi byc obiektem JSON z polami client_id "
-                "i private_key"
-            )
+            self.env_error = message("auth.clms_credentials_bad_shape")
             return False
 
         self._credentials = creds

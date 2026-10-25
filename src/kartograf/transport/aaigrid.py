@@ -26,6 +26,7 @@ from rasterio.io import DatasetReader
 
 from kartograf.exceptions import DownloadError
 from kartograf.interrupt import check_stop
+from kartograf.messages import message, reason
 from kartograf.transport.chunks import Chunk
 from kartograf.transport.mosaic import _GRID_TOL_PX
 
@@ -44,7 +45,7 @@ def _boundary(content_type: str) -> bytes:
     match = _BOUNDARY.search(content_type)
     if not match or "multipart/" not in content_type.lower():
         raise DownloadError(
-            f"WCS: odpowiedz nie jest multipart (Content-Type: {content_type!r})"
+            message("transport.not_multipart", content_type=content_type)
         )
     return (match.group(1) or match.group(2)).encode("ascii")
 
@@ -168,8 +169,11 @@ def extract_multipart_asc(src: Path, content_type: str, dst: Path) -> Path:
                             writer.close()
                         if not closed:
                             raise DownloadError(
-                                f"WCS: odpowiedz multipart urwana w czesci "
-                                f"{ASC_MEDIA_TYPE} ({src.name})"
+                                message(
+                                    "transport.multipart_truncated",
+                                    asc_media_type=ASC_MEDIA_TYPE,
+                                    name=src.name,
+                                )
                             )
                         found = True
                         break
@@ -180,8 +184,11 @@ def extract_multipart_asc(src: Path, content_type: str, dst: Path) -> Path:
         raise
     if not found:
         raise DownloadError(
-            f"WCS: brak czesci {ASC_MEDIA_TYPE} w odpowiedzi multipart; "
-            f"poczatek tresci: {_head(src)!r}"
+            message(
+                "transport.asc_part_missing",
+                asc_media_type=ASC_MEDIA_TYPE,
+                head=_head(src),
+            )
         )
     return dst
 
@@ -190,8 +197,13 @@ def _check_geometry(src: DatasetReader, expect: Chunk) -> None:
     """``DownloadError`` when the ASC header does not describe ``expect``."""
     if (src.width, src.height) != (expect.width, expect.height):
         raise DownloadError(
-            f"WCS: ASC ma ncols x nrows {src.width} x {src.height}, "
-            f"oczekiwano {expect.width} x {expect.height}"
+            message(
+                "transport.asc_size_mismatch",
+                width=src.width,
+                height=src.height,
+                expect_width=expect.width,
+                expect_height=expect.height,
+            )
         )
     step_x = (expect.bbox.max_x - expect.bbox.min_x) / expect.width
     step_y = (expect.bbox.max_y - expect.bbox.min_y) / expect.height
@@ -199,13 +211,24 @@ def _check_geometry(src: DatasetReader, expect: Chunk) -> None:
     tol = _GRID_TOL_PX * max(step_x, step_y)
     if abs(t.a - step_x) > tol or abs(-t.e - step_y) > tol:
         raise DownloadError(
-            f"WCS: ASC ma cellsize {t.a} x {-t.e}, oczekiwano {step_x} x {step_y}"
+            message(
+                "transport.asc_cellsize_mismatch",
+                cell_width=t.a,
+                cell_height=-t.e,
+                step_x=step_x,
+                step_y=step_y,
+            )
         )
     xll, yll = t.c, t.f + t.e * src.height
     if abs(xll - expect.bbox.min_x) > tol or abs(yll - expect.bbox.min_y) > tol:
         raise DownloadError(
-            f"WCS: ASC ma xllcorner/yllcorner {xll}/{yll}, oczekiwano "
-            f"{expect.bbox.min_x}/{expect.bbox.min_y}"
+            message(
+                "transport.asc_corner_mismatch",
+                xll=xll,
+                yll=yll,
+                min_x=expect.bbox.min_x,
+                min_y=expect.bbox.min_y,
+            )
         )
 
 
@@ -244,7 +267,9 @@ def asc_to_gtiff(
             dst.write(data, 1)
         os.replace(tmp, tif)
     except RasterioError as e:
-        raise DownloadError(f"WCS: nieczytelny plik ASC {asc.name}: {e}") from e
+        raise DownloadError(
+            message("transport.asc_unreadable", name=asc.name, error=reason(e))
+        ) from e
     finally:
         tmp.unlink(missing_ok=True)
         Path(f"{asc}.aux.xml").unlink(missing_ok=True)

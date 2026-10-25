@@ -330,7 +330,7 @@ def test_trees_size_notice_and_stream(tmp_path, router):
     assert meta["request"] == {"teryt": "3063"}
     assert meta["extra"]["version"]["label"] == "2023"
 
-    for choice, allowed in (({"lod": 2}, "dostepne: 1"), ({"year": 2024}, "2023")):
+    for choice, allowed in (({"lod": 2}, "available: 1"), ({"year": 2024}, "2023")):
         with pytest.raises(ValidationError) as error:
             download_collection(
                 product="trees",

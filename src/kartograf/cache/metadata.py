@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from kartograf.exceptions import CacheError
+from kartograf.messages import message
 
 if TYPE_CHECKING:
     from kartograf.core.bbox import BBox
@@ -209,27 +210,19 @@ class MetadataCache:
                 self._conn.close()
             self._conn = None
         if is_lock_error(error):
-            message = (
-                f"cache metadanych zablokowany przez inny proces "
-                f"({self._db_path}): {error} - praca bez cache do konca zadania"
-            )
+            text = message("cache.cache_locked", db_path=self._db_path, error=error)
         elif is_unwritable_error(error, self._db_path):
-            message = (
-                f"cache metadanych niedostepny do otwarcia lub zapisu "
-                f"({self._db_path}): {error} - praca bez cache; sprawdz "
-                f"uprawnienia katalogu i pliku"
+            text = message(
+                "cache.cache_unavailable", db_path=self._db_path, error=error
             )
         else:
-            message = (
-                f"cache metadanych nieczytelny ({self._db_path}): {error} - "
-                f"praca bez cache; uzyj `kartograf cache clear` albo usun plik"
-            )
-        self._error_message = message
+            text = message("cache.cache_unreadable", db_path=self._db_path, error=error)
+        self._error_message = text
         if self._on_disabled is not None:
-            self._on_disabled(message)
+            self._on_disabled(text)
         else:
-            logger.warning(message)
-        return message
+            logger.warning(text)
+        return text
 
     def _existing_connection(self) -> sqlite3.Connection | None:
         """Return the connection only if the database file already exists.

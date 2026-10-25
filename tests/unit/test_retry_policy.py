@@ -135,7 +135,7 @@ def test_exhausted_server_errors_keep_status(cls, download, suffix, tmp_path):
     provider = make_provider(cls, session=session)
     with (
         patch(_SLEEP) as sleep,
-        pytest.raises(DownloadError, match="po 3 probach") as exc_info,
+        pytest.raises(DownloadError, match="after 3 attempts") as exc_info,
     ):
         download(provider, tmp_path / "x.bin")
     assert session.get.call_count == cls.MAX_RETRIES

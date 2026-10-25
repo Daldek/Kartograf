@@ -129,7 +129,7 @@ class TestGetWithRetry:
         session.get.return_value = response
         with (
             patch("kartograf.transport.http.time.sleep") as sleep,
-            pytest.raises(DownloadError, match="warstwa 2026.*po 3 probach"),
+            pytest.raises(DownloadError, match="warstwa 2026.*after 3 attempts"),
         ):
             get_with_retry(
                 session,

@@ -17,15 +17,15 @@ def test_cache_that_cannot_be_opened_is_not_called_unreadable(tmp_path):
     blocker = tmp_path / "plik"
     blocker.write_text("to nie katalog", encoding="utf-8")  # the directory is a file
     message = _disabled_message(blocker / ".kartograf_cache.db")
-    assert "niedostepny do otwarcia lub zapisu" in message
-    assert "nieczytelny" not in message and "cache clear" not in message
+    assert "cannot be opened or written" in message
+    assert "unreadable" not in message and "cache clear" not in message
 
 
 def test_damaged_cache_is_still_called_unreadable(tmp_path):
     db = tmp_path / ".kartograf_cache.db"
     db.write_text("to nie baza", encoding="utf-8")
     message = _disabled_message(db)
-    assert "nieczytelny" in message and "cache clear" in message
+    assert "unreadable" in message and "cache clear" in message
 
 
 def test_clear_without_a_database_says_there_was_nothing_to_clear(
