@@ -158,6 +158,15 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
             }
         ],
     },
+    "kartograf-store-init/1": {
+        "schema": "kartograf-store-init/1",
+        "root": _STORE,
+        "marker": f"{_STORE}/kartograf-store.json",
+        "created": True,
+        "tool": "kartograf",
+        "created_at": "2026-10-25T10:00:00+00:00",
+        "producer_version": "0.8.0",
+    },
     "kartograf-store-entries/1": {
         "schema": "kartograf-store-entries/1",
         "root": _STORE,

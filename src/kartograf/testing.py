@@ -64,6 +64,7 @@ from kartograf.download.versions import (
     version_key,
 )
 from kartograf.exceptions import ValidationError
+from kartograf.marker import prepare_store
 from kartograf.messages import message
 from kartograf.project.manifest import (
     MANIFEST_NAME,
@@ -534,6 +535,7 @@ def build_fixture_store(
         )
     base.mkdir(parents=True, exist_ok=True)
     with _fixed_clock():
+        prepare_store(base)  # the marker, as the first write into a root writes it
         pl = _pl_file(
             base,
             PL_SHEET,

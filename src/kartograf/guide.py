@@ -93,8 +93,12 @@ _ERROR_ADVICE: Final[Mapping[str, str]] = {
     "source_unavailable": "network, HTTP or timeout: wait and retry the same call",
     "no_data": "the source has no data there (`details.reason`): change area or year",
     "store_unavailable": "the metadata cache is locked or unreadable: retry or "
-    "`--no-cache`",
-    "data_error": "a sidecar is unreadable or of another schema: see `details.path`",
+    "`--no-cache`; a store root without its marker (`details.reason` `no_marker`): "
+    "run `store init`",
+    "conflict": "the target cannot be written (`details.reason`): a store root "
+    "must be new or empty and never inside another store, see `hint`",
+    "data_error": "a sidecar is unreadable or of another schema: see `details.path`; "
+    "`invalid_layout`: see `details.problems`",
     "missing_dependency": "an extra is missing: install it as `hint` says",
     "forbidden": "MCP refused: a path outside `--allow-dir` or a write without "
     "`--allow-writes`",

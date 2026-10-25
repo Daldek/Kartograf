@@ -19,6 +19,7 @@ from kartograf.download.cz_cutout import (
     check_cz_cutout,
     download_cz_cutout,
 )
+from kartograf.marker import prepare_store
 from kartograf.notices import ALL_NODATA, Notice
 from tests.support.cz_fakes import route_of
 
@@ -372,6 +373,7 @@ def test_cz_cutout_upgrade_plan_excluded_missing_and_stale(tmp_path):
 
 
 def test_cz_cutout_legacy_plain_file_replaced_by_link(tmp_path):
+    prepare_store(tmp_path)
     from kartograf.download.storage import bbox_cutout_path
 
     legacy = bbox_cutout_path(tmp_path, "nmt/cz_dmr5g_evrf2007", B, ".tif")

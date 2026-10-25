@@ -37,6 +37,7 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.marker import prepare_store
 from kartograf.notices import LAZ_SUPERSEDED, Notice
 from kartograf.providers.pl.gugik_laz import (
     GugikLazProvider,
@@ -459,6 +460,7 @@ class TestRunLazDownload:
         ).std.exists()
 
     def test_laz_legacy_plain_file_replaced_by_link(self, tmp_path):
+        prepare_store(tmp_path)
         tile = _tile("N-33-131-B-a-1-1-4")
         storage = FileStorage(
             tmp_path, product="laz", resolution=None, vertical_crs="EVRF2007"

@@ -323,6 +323,30 @@ changes and the migration guide ("Migration guide: data output") are written wit
   store lies inside `--allow-dir` (`forbidden` otherwise). An empty `root` is a
   `validation_error` (`option` `root`), not the default.
 
+- The store has a marker, `kartograf-store.json` (ADR-054 decision 8, DEV-19.12 to DEV-19.14;
+  schema `kartograf-store/1` with `schema`, `tool`, `created_at`, `producer_version`). The
+  first publication of a version into a new root, or one without a file, writes it
+  (`kartograf.marker.prepare_store`); a download that fails leaves none behind. The checks run
+  before the first byte of a write and of a plan (`--check-updates` creates nothing): a root
+  that has the layout of a store (files in `nmt/`, `laz/`, `hsg/`..., of this version or of
+  0.7.x) and no marker is `store_unavailable` (`details.reason` `no_marker`, hint `kartograf
+  store init --root DIR`); a root that holds other files is `conflict` (`not_empty`); a store
+  never nests in another store of any tool (`nested_store`: markers of the ancestors, of the
+  root and below it, found by file name alone). `kartograf.testing` builds its stores with the
+  marker. The first write into an existing 0.8.0-dev store, or into a directory that holds
+  other files (a project folder, a cache), now fails: run `kartograf store init --root DIR` on
+  the store, or give a new or empty directory.
+- `kartograf store init [--root DIR]` (`init_store`, MCP `kartograf_store_init`, document
+  `kartograf-store-init/1`) writes the marker of a store; a root that has the layout and no
+  marker is verified first (the top level holds product directories of Kartograf only and every
+  sidecar is `kartograf-meta/1`: `data_error`, `invalid_layout` with `details.problems`) and its
+  files are not touched. It is a command that writes: a server that does not write
+  (`--allow-writes`) does not offer the tool.
+- Errors: `ConflictError` (registry `conflict`, exit code 4; `details.reason` is set per
+  instance: `nested_store`, `not_empty`), `StoreUnavailableError` (`store_unavailable`, reason
+  `no_marker`) and `InvalidLayoutError` (`data_error`, `invalid_layout`); `KartografError`
+  takes `reason=` for the classes that have several.
+
 ### Breaking changes
 
 - The default mode (without `--check-updates`/`--upgrade`) does not ask the source

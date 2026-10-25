@@ -169,7 +169,7 @@ def test_the_command_index_has_every_command_once_with_its_tool():
     index = text.split("## Command index")[1].split("## Typical flows")[0]
     lines = [line for line in index.splitlines() if line.startswith("- ")]
 
-    assert len(lines) == len(command_entries()) == 44
+    assert len(lines) == len(command_entries()) == 45
     for entry, line in zip(command_entries(), lines, strict=True):
         assert line.startswith(f"- `{entry.name}` (")
         assert line.endswith(f": {entry.summary}")

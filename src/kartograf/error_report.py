@@ -133,11 +133,38 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "the metadata cache is unavailable, locked or unreadable",
     ),
     ErrorCodeSpec(
+        "StoreUnavailableError",
+        "store_unavailable",
+        None,
+        8,
+        "the store root has the layout of a store but no kartograf-store.json "
+        "(reason no_marker: kartograf store init verifies the layout and writes it)",
+    ),
+    ErrorCodeSpec(
         "InvalidSidecarError",
         "data_error",
         "invalid_sidecar",
         7,
         "the kartograf-meta/1 sidecar is missing, unreadable or of another schema",
+    ),
+    ErrorCodeSpec(
+        "InvalidLayoutError",
+        "data_error",
+        "invalid_layout",
+        7,
+        "a root without a marker is not the layout of a Kartograf store, or the "
+        "marker is not a kartograf-store/1 document (details.problems lists what "
+        "is wrong)",
+    ),
+    ErrorCodeSpec(
+        "ConflictError",
+        "conflict",
+        None,
+        4,
+        "the target forbids the write (reasons: output_exists, "
+        "duplicate_output_name, output_in_store, nested_store, not_empty): an "
+        "output file that exists, two targets of one name, a plain directory in a "
+        "store, a store in another store or a store root that is not empty",
     ),
     ErrorCodeSpec(
         "MissingDependencyError",

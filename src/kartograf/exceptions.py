@@ -53,7 +53,9 @@ class KartografError(Exception):
         defined by every class itself.
     reason : str, optional
         Project-specific refinement of ``code`` (``invalid_sheet_code``,
-        ``no_coverage``); class attribute, reported as ``details.reason``.
+        ``no_coverage``), reported as ``details.reason``: a class attribute of a
+        class that has one reason, the ``reason`` argument of a class that has
+        several (``ConflictError``).
     exit_code : int
         Exit code of the CLI for this error: the registry's exit code of ``code``
         (set when the class is created).
@@ -74,7 +76,7 @@ class KartografError(Exception):
     """
 
     code: ClassVar[str] = "internal_error"
-    reason: ClassVar[str | None] = None
+    reason: str | None = None
     exit_code: ClassVar[int] = registry_exit_code("internal_error")
     DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ()
     DEFAULT_HINT: ClassVar[str | None] = None
@@ -84,9 +86,16 @@ class KartografError(Exception):
         super().__init_subclass__(**kwargs)
         cls.exit_code = registry_exit_code(cls.code)
 
-    def __init__(self, *args: object, hint: str | None = None) -> None:
+    def __init__(
+        self,
+        *args: object,
+        hint: str | None = None,
+        reason: str | None = None,
+    ) -> None:
         super().__init__(*args)
         self.hint = hint
+        if reason is not None:
+            self.reason = reason
 
     def localized(self, lang: Lang) -> str:
         """Return the text of the exception in ``lang``.
@@ -497,3 +506,127 @@ class MissingDependencyError(KartografError):
             hint = f'uv add "kartograf[{extra}]"'
         super().__init__(message, hint=hint)
         self.extra = extra
+
+
+class ConflictError(KartografError):
+    """
+    The state of the target forbids the write (ERR registry ``conflict``, ADR-054).
+
+    Raised before the first byte of a write: an output file that exists (``--force``
+    replaces it), two targets of one name, a plain directory that is or lies in a
+    store, a store inside another store, a store root that is not empty. A plan
+    (``--check``) does not raise it: it lists the conflict.
+
+    Attributes
+    ----------
+    reason : str
+        ``output_exists``, ``duplicate_output_name``, ``output_in_store``,
+        ``nested_store`` or ``not_empty`` (``details.reason``).
+    path : Path, optional
+        The directory or root the error is about.
+    paths : tuple[str, ...], optional
+        Every target that is in conflict, not only the first.
+
+    Examples
+    --------
+    >>> raise ConflictError(
+    ...     "2 targets exist",
+    ...     reason="output_exists",
+    ...     paths=["out/a.asc", "out/b.asc"],
+    ... )
+    """
+
+    code = "conflict"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("path", "paths")
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str,
+        path: Path | None = None,
+        paths: Sequence[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint, reason=reason)
+        self.path = path
+        self.paths = _names(paths, "paths")
+
+
+class StoreUnavailableError(KartografError):
+    """
+    A store root that cannot be written as it is (ERR registry ``store_unavailable``).
+
+    Raised for a root that has the layout of a store but no marker
+    (``kartograf-store.json``): ``kartograf store init`` verifies the layout and
+    writes the marker.
+
+    Attributes
+    ----------
+    reason : str
+        ``no_marker`` (``details.reason``).
+    path : Path, optional
+        The store root.
+
+    Examples
+    --------
+    >>> raise StoreUnavailableError(
+    ...     "data has the layout of a store but no kartograf-store.json",
+    ...     reason="no_marker",
+    ...     path=Path("data"),
+    ... )
+    """
+
+    code = "store_unavailable"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("path",)
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str,
+        path: Path | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint, reason=reason)
+        self.path = path
+
+
+class InvalidLayoutError(KartografError):
+    """
+    A root that is not the layout of a Kartograf store (``kartograf store init``).
+
+    Raised when a root without a marker is verified before one is written, and when a
+    marker is not a ``kartograf-store/1`` document.
+
+    Attributes
+    ----------
+    path : Path
+        The store root.
+    problems : tuple[str, ...]
+        What is wrong, at most 20 entries.
+
+    Examples
+    --------
+    >>> raise InvalidLayoutError(
+    ...     "data is not a Kartograf store: 1 problem",
+    ...     path=Path("data"),
+    ...     problems=["unexpected entry 'notes.txt' at the top level"],
+    ... )
+    """
+
+    code = "data_error"
+    reason = "invalid_layout"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("path", "problems")
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        path: Path,
+        problems: Sequence[str],
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.path = path
+        self.problems = _names(problems, "problems")

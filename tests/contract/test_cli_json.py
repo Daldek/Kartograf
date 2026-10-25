@@ -605,6 +605,7 @@ def _offline_lines(project: Path, base: Path) -> dict[str, list[str]]:
             *("store", "sidecar", "--path"),
             str(next(store.rglob("*.asc"), store / "none.asc")),
         ],
+        "store init": ["store", "init", "--root", str(base / "marked")],
         "commands list": ["commands", "list"],
         "commands schema": ["commands", "schema", "--command", "sheet parse"],
         "commands guide": ["commands", "guide", "--format", "llms"],

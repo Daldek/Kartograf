@@ -23,6 +23,7 @@ from kartograf.download.cz_sheets import (
     download_cz_sheet,
 )
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.marker import prepare_store
 from kartograf.notices import ALL_NODATA, UNVERIFIED_LOCAL, Notice
 from kartograf.providers.cuzk.raster import CzRasterRoute
 from kartograf.sources.descriptor import TransportKind
@@ -276,6 +277,7 @@ def test_cz_sheet_plan_omitted_item_keeps_local_without_probe(tmp_path):
 
 
 def test_cz_sheet_legacy_plain_file_replaced_by_link(tmp_path):
+    prepare_store(tmp_path)
     provider = SheetProvider(sm5=False)
     path = tmp_path / "nmt/cz_dmr5g_bpv/302/5550/302_5550.tif"
     _write_raster(path, value=99)

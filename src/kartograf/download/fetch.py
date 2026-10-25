@@ -38,6 +38,7 @@ from kartograf.download.versions import (
     version_key,
 )
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.marker import lenient_store, prepare_store
 from kartograf.notices import CHECK_FAILED, UNVERIFIED_LOCAL, NoticeSink
 from kartograf.sources.descriptor import SignalKind
 from kartograf.sources.edition import Edition
@@ -194,7 +195,14 @@ def _prune_empty(start: Path, stop: Path) -> None:
 
 
 def new_staging(slot: FileSlot) -> Path:
-    """Private staging path of one download of the slot (D19)."""
+    """Private staging path of one download of the slot (D19).
+
+    The root is checked before the first byte (``lenient_store``: a nested store, the
+    layout of a store without its marker, a root that holds other files, ADR-054);
+    the marker is written when the first version is published (``store_file``), so
+    a download that fails leaves no marker behind.
+    """
+    lenient_store(slot.root)
     return new_incoming_dir(slot.versions_base) / slot.name
 
 
@@ -405,6 +413,7 @@ def store_file(
         Version, sidecar or link failure.
     """
     try:
+        prepare_store(slot.root)
         digest = read_content(staged, ext=slot.ext, coverage=coverage)
         commit = commit_version(
             staged,
@@ -528,6 +537,7 @@ def inspect_version(
     """
     if signal == "metadata" and edition is None:
         raise ValidationError("sygnal metadata: wymagane edition=")
+    lenient_store(slot.root)
     local = local_version(slot)
     label, remote = available
     status: ItemStatus

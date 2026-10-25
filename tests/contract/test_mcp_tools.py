@@ -40,7 +40,7 @@ ENTRIES = {entry.name: entry for entry in command_entries()}
 TOOL_COMMANDS = [command for command in CATALOG.values() if command.family]
 DATA_COMMANDS = [command for command in CATALOG.values() if command.project_task]
 CHECKED = [command for command in TOOL_COMMANDS if command.supports_check]
-WRITING = {"project init", "project add", "project remove"}
+WRITING = {"project init", "project add", "project remove", "store init"}
 CORE = {
     "commands list",
     "commands schema",
@@ -88,7 +88,7 @@ def _text(spec) -> str:
 def test_every_command_with_a_family_is_one_tool_in_the_order_of_the_catalog():
     expected = [command.operation_id for command in TOOL_COMMANDS]
 
-    assert len(expected) == 39
+    assert len(expected) == 40
     assert list(WRITES) == expected
     # the commands of the cache and the settings are no tools
     assert {c.id for c in CATALOG.values() if not c.family} == {
@@ -133,7 +133,7 @@ def test_the_families_are_those_of_the_catalog_with_core_apart():
         "availability": 1,
         "data": 12,
         "project": 6,
-        "store": 3,
+        "store": 4,
         "core": 10,
     }
     for spec in WRITES.values():
@@ -191,8 +191,9 @@ def test_a_server_without_writes_offers_plans_and_hides_the_writes_without_a_che
     # a family limits what is hidden too
     assert hidden_tools(("core",), allow_writes=False) == {}
     assert set(hidden_tools(("project",), allow_writes=False)) == {
-        _name(command) for command in WRITING
+        _name(command) for command in WRITING if command.startswith("project")
     }
+    assert set(hidden_tools(("store",), allow_writes=False)) == {"kartograf_store_init"}
 
 
 def test_the_commands_that_write_and_have_a_check_are_plans_without_writes():
@@ -533,7 +534,7 @@ def test_tools_module_needs_neither_mcp_nor_jsonschema():
         "import sys\n"
         "sys.modules['mcp'] = None\n"
         "import kartograf.catalog.tools as tools\n"
-        "assert len(tools.tool_specs(allow_writes=True)) == 39\n"
+        "assert len(tools.tool_specs(allow_writes=True)) == 40\n"
         "assert 'jsonschema' not in sys.modules\n"
     )
 

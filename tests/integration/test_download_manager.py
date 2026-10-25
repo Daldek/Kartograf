@@ -14,6 +14,7 @@ import pytest
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.marker import prepare_store
 from kartograf.providers.pl.gugik import GugikProvider
 
 
@@ -297,6 +298,7 @@ class TestDownloadManagerDownloadSheet:
 
     def test_download_sheet_overwrite_existing(self, tmp_path, mock_provider):
         """Test of overwriting an existing file."""
+        prepare_store(tmp_path)
         manager = DownloadManager(root=tmp_path, provider=mock_provider)
 
         # Create existing ASC file

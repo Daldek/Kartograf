@@ -31,6 +31,7 @@ from kartograf.download.laz import LazDownloadResult
 from kartograf.download.manager import DownloadProgress, DownloadResult
 from kartograf.download.options import pl_file_variant
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.marker import prepare_store
 from kartograf.messages import Lang
 from kartograf.notices import Notice
 from kartograf.providers.pl.gugik import GugikProvider
@@ -3172,7 +3173,9 @@ class TestSheetListExitCode:
         )  # Warsaw - deep inside PL, auto-split will not touch CZ
         mock_find.return_value = list(self._SHEETS)
         provider = _SheetProvider({"-1": "no_coverage"})
-        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
+        storage = FileStorage(
+            tmp_path / "store", resolution="1m", vertical_crs="EVRF2007"
+        )
         with patch(
             "kartograf.download.data._create_provider_and_storage",
             return_value=(provider, storage),
@@ -5616,6 +5619,7 @@ class TestCmdDownloadCz:
 
     def test_legacy_plain_sheet_is_replaced_by_version(self, tmp_path):
 
+        prepare_store(tmp_path)
         target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
         target.parent.mkdir(parents=True)
         target.write_bytes(b"stare")
@@ -5857,7 +5861,9 @@ class TestCmdDownloadCz:
         ok = _cz_provider_mock()
         ok.download_bbox.side_effect = self._real_tif_writer(-9999.0)
         with patch(_CZ_FACTORY_PATCH, return_value=ok):
-            assert _cmd_download_cz(_cz_args(tmp_path, sheet=None), bbox=bbox) == 0
+            assert (
+                _cmd_download_cz(_cz_args(tmp_path / "a", sheet=None), bbox=bbox) == 0
+            )
         assert log.disabled is False
 
         failing = _cz_provider_mock()
@@ -5912,6 +5918,7 @@ class TestCmdDownloadCz:
         self, tmp_path, capsys
     ):
 
+        prepare_store(tmp_path)
         provider = _cz_provider_mock()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         target = (

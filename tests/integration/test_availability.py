@@ -784,7 +784,7 @@ def test_check_asks_the_index_despite_cached_records(tmp_path):
     newest = next(c for c in report.combinations if c.complete)
     (hint,) = newest.download_hint
     kwargs = {
-        **_arguments(hint, tmp_path),
+        **_arguments(hint, tmp_path / "store"),
         "cache": MetadataCache(tmp_path / "cache.db"),
     }
     asked = []

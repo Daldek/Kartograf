@@ -40,6 +40,7 @@ from kartograf.error_report import error_report
 from kartograf.exceptions import ValidationError
 from kartograf.hydrology.hsg import HsgReport
 from kartograf.landcover.manager import LandCoverReport, SoilReport
+from kartograf.marker import StoreInit
 from kartograf.notices import Notice
 from kartograf.project.model import (
     FileCheck,
@@ -475,6 +476,17 @@ def _store_overview() -> Document:
     return StoreOverview(STORE, (describe_segment(SEGMENT),))
 
 
+def _store_init() -> Document:
+    return StoreInit(
+        STORE,
+        STORE / "kartograf-store.json",
+        True,
+        "kartograf",
+        "2026-10-25T10:00:00+00:00",
+        "0.8.0",
+    )
+
+
 def _store_entries() -> Document:
     return StoreEntries(STORE, SEGMENT, (SHEET,), 10, False, (_store_entry(),))
 
@@ -574,6 +586,7 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-cache/1": (_cache,),
     "kartograf-config/1": (_config,),
     "kartograf-store-overview/1": (_store_overview,),
+    "kartograf-store-init/1": (_store_init,),
     "kartograf-store-entries/1": (_store_entries,),
     "kartograf-store-sidecar/1": (_store_sidecar,),
     "kartograf-sheet/1": (_sheet_info,),
@@ -680,6 +693,15 @@ CONTRACT: dict[str, list[str]] = {
         "store",
     ],
     "kartograf-store-overview/1": ["schema", "root", "segments"],
+    "kartograf-store-init/1": [
+        "schema",
+        "root",
+        "marker",
+        "created",
+        "tool",
+        "created_at",
+        "producer_version",
+    ],
     "kartograf-store-entries/1": [
         "schema",
         "root",

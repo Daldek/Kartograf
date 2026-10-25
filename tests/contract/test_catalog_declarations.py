@@ -311,6 +311,7 @@ def test_project_cache_parse_catalog_sheet_search_and_store_commands_are_declare
         "store overview",
         "store entries",
         "store sidecar",
+        "store init",
     ]
     assert [g.name for g in _DECLARED.groups if g.name in ("project", "cache")] == [
         "project",

@@ -63,6 +63,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef, new_incoming_dir
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.marker import lenient_store
 from kartograf.notices import Notice, NoticeSink
 from kartograf.sources.descriptor import AtomFilesParams, SignalKind
 from kartograf.sources.edition import Edition
@@ -363,6 +364,7 @@ def _download(
     file = release()  # the label before the transfer (D30)
     version = VersionRef(file.edition, "edition")
     image = slots[_IMAGE]
+    lenient_store(image.root)
     archive = new_incoming_dir(image.versions_base) / f"{sheet}.zip"
     stored: dict[str, VersionedFile] = {}
     try:

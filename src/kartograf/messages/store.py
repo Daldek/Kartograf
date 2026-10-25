@@ -89,4 +89,13 @@ MESSAGES = {
         "segment jest wymagany: <produkt>/<wariant> (otrzymano {segment!r}); segmenty "
         "magazynu: describe_store",
     ),
+    # ``cli.store_cmd``: ``store init``.
+    "init_written": Text(
+        "Wrote the store marker {marker}",
+        "Zapisano znacznik magazynu {marker}",
+    ),
+    "init_present": Text(
+        "The store has its marker already: {marker}",
+        "Magazyn ma juz swoj znacznik: {marker}",
+    ),
 }

@@ -653,10 +653,12 @@ class TestCommandLevel:
         with patch(
             "kartograf.core.geometry.get_overall_bbox", return_value=BBOX
         ) as envelope:
-            by_geometry = _soil(tmp_path, FakeSoilGrids("2.0")).download(
+            by_geometry = _soil(tmp_path / "store", FakeSoilGrids("2.0")).download(
                 geometry=shp, **CLAY
             )
-        by_bbox = _soil(tmp_path, FakeSoilGrids("2.0")).download(bbox=BBOX, **CLAY)
+        by_bbox = _soil(tmp_path / "store", FakeSoilGrids("2.0")).download(
+            bbox=BBOX, **CLAY
+        )
         assert envelope.call_args.kwargs["target_crs"] == "EPSG:2180"
         assert by_geometry.files[0].file.path == by_bbox.files[0].file.path
         assert by_bbox.files[0].file.status == "local"
@@ -670,7 +672,7 @@ class TestCommandLevel:
         with patch(
             "kartograf.core.geometry.get_overall_bbox", return_value=BBOX
         ) as envelope:
-            area = _soil(tmp_path, FakeSoilGrids("2.0")).download(
+            area = _soil(tmp_path / "store", FakeSoilGrids("2.0")).download(
                 geometry=gpkg, on_notice=seen.append, **CLAY
             )
         expected = Notice(
