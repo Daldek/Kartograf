@@ -13,7 +13,7 @@ Command groups: <!-- kartograf:group_names -->.
 ## Documentation
 
 - [AGENTS.md](https://raw.githubusercontent.com/Daldek/Kartograf/main/AGENTS.md): the full guide for agents: interfaces, envelope, error codes, command index, typical flows
-- [README.md](https://raw.githubusercontent.com/Daldek/Kartograf/main/README.md): what Kartograf is for, installation and quick start (Polish)
+- [README.md](https://raw.githubusercontent.com/Daldek/Kartograf/main/README.md): what Kartograf is for, installation and quick start
 - [Usage](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/USAGE.md): task-oriented guide to the CLI, the library and the MCP server
 - [Architecture](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/ARCHITECTURE.md): modules, store layout, sidecar, command catalog
 - [Scope](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/SCOPE.md): what is in and out of scope

@@ -1187,7 +1187,7 @@ def validate_request(task: SimpleNamespace) -> None:
     sheets, the choices a voivodeship file variant (NMT 100 m) does not
     take. Narrows ``task.min_year``/``max_year``. Types of library arguments
     first (``year="2018"``, ``cutout="no"``: ``ValidationError``, no
-    conversion; STANDARDS 11.2).
+    conversion).
     """
     validate_area_choice(task.sheet, task.bbox, task.geometry, task.layer)
     for flag, name in (

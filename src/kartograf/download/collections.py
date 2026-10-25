@@ -1471,7 +1471,7 @@ def _resolve(
     """
     if args["bbox"] is not None:  # the CLI parses --bbox first: the same first error
         args["bbox"] = validate_request_bbox(args["bbox"])
-    # library calls only: the CLI parses its flags (STANDARDS 11.2)
+    # library calls only: the CLI parses its flags
     require_bool(args["whole_country"], "--whole-country")
     for name in ("lod", "year"):
         if args[name] is not None:

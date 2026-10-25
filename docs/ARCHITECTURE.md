@@ -4,7 +4,7 @@
 a specific day. Package version: `src/kartograf/__init__.py` (`__version__`);
 changes per release: `docs/CHANGELOG.md`; current state of work: `docs/PROGRESS.md`;
 user guide (CLI and library examples): `docs/USAGE.md`;
-conventions and workflow: `docs/DEVELOPMENT_STANDARDS.md`.
+rules for work on the code: `CLAUDE.md`.
 Measurements and verifications on live services, which the sections
 below refer to, are dated in the text, and their reports are in `docs/research/`
 (names with the date `RRRR-MM-DD-<topic>`).
@@ -571,7 +571,7 @@ kartograf/
 │   │                    # validation of choices: product, country, format, resolution and CRS
 │   │                    # (from the variant registry), system, scale, years, LAZ options,
 │   │                    # CZ orthophoto (cz_orto_option_error) and orthophoto cutout; texts as in --help
-│   ├── arguments.py     # Type checking of library arguments (STANDARDS 11.2): require_int,
+│   ├── arguments.py     # Type checking of library arguments (rules for code in CLAUDE.md): require_int,
 │   │                    # require_str, require_bool, require_codes
 │   ├── availability.py  # Availability report (ADR-041, section 4.9): check_availability (PL, CZ, auto),
 │   │                    # AvailabilityReport (kartograf-availability/1)/AvailabilityCombination/AvailabilityArea
@@ -3930,12 +3930,41 @@ of ADR-046 (D22) no longer holds (ADR-052, decision 9); `list_commands()` and a 
 tests enforce this (`tests/contract/test_mcp_tools.py`, the AGI-5.13 gate test in
 `tests/integration/test_mcp_server.py`). Usage and client configuration: USAGE 9.6.
 
-**New command through the catalog.** A declaration in `catalog/commands/<module>.py` (`Command` with
-`function`/`check_function` from `kartograf.__all__`, `result_schema`, `family`, `core`, parameters,
-constraints and examples), a handler in `cli/_handlers.py::HANDLERS` (collection group: name
-in `COLLECTION_GROUPS`), for a data command an entry in `project/commands.py::COMMANDS`; the MCP tool
-arises from the declaration by itself (`catalog/tools.py`: name, descriptions, schema, annotations from `effects`), and a
-contract test guards its 600-character description. Step-by-step recipe: DEVELOPMENT_STANDARDS 17.2.
+**New command through the catalog.** Six steps:
+
+1. **Declaration** in `catalog/commands/<group>.py`: `COMMANDS` (`Command`: `id`, `summary`,
+   `kind`, `function` and `check_function` from `kartograf.__all__`, `result_schema`, `family`
+   and `core` (the MCP family), `effects`, `project_task`, `params`, `constraints`, `examples`)
+   and `GROUPS`. Modules are found by name (`declared()`); a collection group uses
+   `collection_commands` and `collection_group` (`catalog/commands/_collection.py`). A `Param`
+   has `name`, `kind`, `flag`, `argument` (the name of the function argument), `required`,
+   `task=True` for the options that choose data (they go into the project manifest), `allowed`
+   as a provider from the registry (not a copy of the list) and its description. The CLI
+   parser, the `COMMANDS` of projects, the MCP schemas and `kartograf commands list` are built
+   from it.
+2. **Library function** at command level in `kartograf.__all__`: keyword-only arguments, a
+   result `Document` with its own schema (the rules of `serialization.py`), a `check_*`
+   counterpart, validation without network shared with the download, and `ValidationError`
+   with `option` and `allowed`.
+3. **CLI handler** in `cli/_handlers.py::HANDLERS` (a collection group: its name in
+   `COLLECTION_GROUPS`): `library_arguments(args)` turns the flags into arguments, the handler
+   calls the function and prints the result (`--json`: `to_json()`; text: the rendering of
+   the document).
+4. **Project:** a data command needs an entry in `project/commands.py::COMMANDS`: validation
+   without network shared with the download, the calls of the download and of `check_*`, and
+   an adapter from the whole result to the pins (`VersionedFile`, with the input and raw files
+   where there are any). The task options are the `task=True` params. A new product of an
+   existing command needs no new entry.
+5. **MCP:** the tool arises from the declaration (`catalog/tools.py`): the description from
+   `summary`, `description` and `rules` (at most 600 characters), the schema from the
+   descriptions, values, bounds and examples of the options, the annotations from `effects`;
+   nothing else is written, and a contract test guards the description.
+6. **Tests:** the catalog contract tests (`tests/contract/test_catalog_declarations.py`:
+   parser flags equal the catalog, the signature of the function, examples through
+   `validate_command`, constraints), a project task test (pin the result, check against the
+   pins, restore with the same SHA-256), a CLI = API scenario in `tests/contract/test_parity*.py`,
+   the row of the document in `tests/contract/test_json_contract.py` and `--json` in
+   `tests/contract/test_cli_json.py`.
 
 ---
 
@@ -4013,6 +4042,24 @@ pinned `VersionedFile`s. Add a project task test for this command
 (pinning, checking and restoring); a new product of an existing command does not
 require a new entry in the table (ADR-040, manifest spec section 5).
 
+**A new land cover or soil provider.** A class in `providers/` (a national one in the
+subpackage of its country, `providers/pl/`) derived from `LandCoverProvider`
+(`providers/base.py`) that implements the abstract members (`name`, `base_url` and
+`download_by_bbox`). `download_by_sheet` is inherited (sheet code, bbox in EPSG:2180,
+`download_by_bbox`): override it only when the source has a sheet track of its own;
+`download_by_admin_unit` (TERYT) is optional and raises `NotImplementedError` by default.
+Then: the descriptor in `sources/registry.py` and `descriptor_key` in the provider (storage
+directory and sidecar), the provider in `PROVIDERS` of `landcover/manager.py`, the export in
+`kartograf/__init__.py` (`__all__`), offline tests with fixtures recorded from real answers,
+and the product in the choices of `--product`: the declaration
+`catalog/commands/landcover.py` (`download` and `list-layers`) reads them from the registry
+(`LANDCOVER_PRODUCTS`) and `cli/landcover_cmd.py` maps the arguments.
+
+An extension of the **PL sheet parsers** touches `core/sheet_parser.py` for PL-1992 (a
+pattern in `PATTERNS`, the division of sheets in `get_children()`) or `core/parser_2000.py`
+for PL-2000, and tests of the hierarchy (`get_parent`, `get_children`, `get_all_descendants`)
+in `tests/unit/test_sheet_parser.py`, `test_parser_2000.py` and `test_parser_registry.py`.
+
 **A new collection product (ADR-042).** A unit package (county,
 voivodeship, national file), area objects from WFS 2.0 / ArcGIS REST or
 a file from the CUZK ATOM feed is a descriptor entry with `AccessChannel.params`
@@ -4028,8 +4075,28 @@ and `collection_group` (`catalog/commands/_collection.py`), the group name in `C
 (`cli/_handlers.py`) and a project entry (the paragraph above); a new
 product of an existing group = only a new `--product` choice from the registry. A new
 protocol (e.g. OGC API Features) extends `FeatureBBoxParams.protocol`
-together with the first product. Checklist: `docs/DEVELOPMENT_STANDARDS.md`
-17.5.
+together with the first product.
+
+Checklist: (1) the `SourceDescriptor` in `sources/registry.py` (key and `storage_subdir` by
+the naming convention of section 3.3 rule 10, enforced by `TestNamingConvention`), or a new
+channel of an existing descriptor (the BDOT10k archive). (2) The parameters of the channel:
+`url_template` takes only the tokens `{teryt}`, `{woj}`, `{sheet}`, `{ku}` and `{theme}`
+(`None`: the URL comes from the index record, `IndexSource`); all variants of a channel have
+the same keys in `choice` (for example `("lod", "year")`) and different values; `file_kind`
+(`zip`, `tiff`, `pdf`, `txt`) is checked by the first bytes; the protocol agrees with the
+transport of the channel (WFS: `wfs`, ARCGIS_QUERY: `arcgis`, OGC_API_FEATURES: `ogcapi`,
+DIRECT_FILES: `UnitPackageParams` or `AtomFilesParams`); `url_template` and `endpoint` start
+with `https://`; `page_size` is not larger than the page limit of the service
+(`CountDefault` or `maxRecordCount`, checked at the download). (3) The channels of one
+capability may share a kind (for example a WFS per network) when they declare the same
+CRSs: the sidecar reads the CRSs from the first channel of the capability (ADR-043 D6); the
+channel and the variant select the values of the options in `choice` (ADR-043 D5); the
+`update_signal` follows the signal of the source (`none` for GUGiK packages and WFS results,
+`index` for a channel with an `IndexSource`). (4) The inventory of signals in
+`tests/unit/test_sources_registry.py` (`CHANNEL_SIGNALS`). (5) Small fixtures from real
+answers under `tests/fixtures/` (`feature_bbox/` with `*.headers.json`). (6) A group needs
+its `catalog/commands` module, its name in `COLLECTION_GROUPS` and an entry of
+`project/commands.py::COMMANDS`.
 
 ---
 

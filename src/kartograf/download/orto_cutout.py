@@ -121,8 +121,8 @@ def orto_cutout_error(
 
     ``None`` = valid.
 
-    Texts name the CLI flags (``download_data`` passes them 1:1, STANDARDS
-    11); the coverages and pixels are listed from the registry; ``option`` and
+    Texts name the CLI flags (``download_data`` passes them 1:1); the coverages
+    and pixels are listed from the registry; ``option`` and
     ``allowed`` name the argument and its values.
     """
     error = cutout_choice_error(key, coverage, resolution)

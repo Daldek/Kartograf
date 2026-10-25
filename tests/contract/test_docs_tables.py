@@ -172,7 +172,7 @@ def test_usage_quotes_the_instructions_of_the_server():
 def test_claude_md_has_the_agent_rule_and_points_to_the_generated_guides():
     text = _read(CLAUDE)
 
-    rule = _section(text, "Agenci z innych repozytoriow")
+    rule = _section(text, "Rules for agents of other repositories")
 
     for needed in (
         "scripts/gate.sh",
@@ -183,6 +183,30 @@ def test_claude_md_has_the_agent_rule_and_points_to_the_generated_guides():
         "kartograf-mcp",
     ):
         assert needed in rule, needed
-    assert "scripts/gate.sh" in _section(text, "Zasady pracy")
+    assert "scripts/gate.sh" in _section(text, "Critical rules")
     assert (ROOT / "scripts" / "gate.sh").is_file()
     assert (ROOT / "llms.txt").is_file() and (ROOT / "AGENTS.md").is_file()
+
+
+def test_claude_md_follows_the_documentation_standard():
+    text = _read(CLAUDE)
+    titles = [title for _, level, title in _headings(text.splitlines()) if level == 2]
+
+    assert len(text.splitlines()) <= 200  # DOC-1.7
+    assert titles == [
+        "Critical rules",
+        "Rules for code",
+        "Environment and commands",
+        "Rules for agents of other repositories",
+        "Code map (`src/kartograf/`)",
+        "Documentation map",
+        "Session workflow",
+        "Cross-project context",
+        "Deviations",
+    ]
+    assert "https://github.com/Daldek/Nogat/blob/main/ecosystem.yaml" in text
+    assert "DEVELOPMENT_STANDARDS.md" not in text  # DEV-1.3: a link by URL only
+    assert not (DOCS / "DEVELOPMENT_STANDARDS.md").exists()
+    for line in _section(text, "Deviations").splitlines()[1:]:
+        if line.strip():
+            assert re.match(r"- (DEV|DOC|AGI|ERR|REL|ECO)", line), line
