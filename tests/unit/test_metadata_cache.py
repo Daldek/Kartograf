@@ -380,7 +380,7 @@ class TestStrictMode:
         from kartograf.exceptions import CacheError
 
         cache = self._broken(tmp_path, strict=True)
-        with pytest.raises(CacheError, match="cache metadanych"):
+        with pytest.raises(CacheError, match="metadata cache unreadable"):
             cache.get_teryt(1.0, 2.0)
 
     def test_strict_raises_on_every_later_call(self, tmp_path):
@@ -1540,7 +1540,7 @@ class TestUnreadableDatabase:
         warnings = _cache_warnings(caplog)
         assert len(warnings) == 1
         message = warnings[0].getMessage()
-        assert "cache metadanych nieczytelny" in message
+        assert "metadata cache unreadable" in message
         assert str(cache_path) in message
         assert str(c.error) in message
         assert "kartograf cache clear" in message
@@ -1588,7 +1588,7 @@ class TestUnreadableDatabase:
         c.close()
 
         assert len(seen) == 1
-        assert seen[0].startswith(f"cache metadanych nieczytelny ({cache_path})")
+        assert seen[0].startswith(f"metadata cache unreadable ({cache_path})")
         assert _cache_warnings(caplog) == []
 
     def test_locked_database_disables_with_lock_message(
@@ -1606,8 +1606,8 @@ class TestUnreadableDatabase:
         warnings = _cache_warnings(caplog)
         assert len(warnings) == 1
         message = warnings[0].getMessage()
-        assert "zablokowany przez inny proces" in message
-        assert "usun plik" not in message
+        assert "locked by another process" in message
+        assert "delete the file" not in message
 
     @pytest.mark.parametrize("make_broken", BROKEN_DBS)
     def test_many_threads_one_warning(self, cache_path, caplog, make_broken):

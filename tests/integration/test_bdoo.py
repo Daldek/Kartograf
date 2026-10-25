@@ -145,9 +145,9 @@ def test_class_pattern_reads_the_recorded_file_names(name, year):
 @pytest.mark.parametrize(
     ("options", "message"),
     [
-        ({}, f"--year wymagane: {YEARS}$"),
+        ({}, f"--year required: {YEARS}$"),
         # the source answers 404 for 2014 and 2016-2020 (packages.json)
-        ({"year": 2018}, f"--year 2018: niedostepne; dostepne: {YEARS}$"),
+        ({"year": 2018}, f"--year 2018: not available; available: {YEARS}$"),
         ({"year": "2023"}, "--year musi byc liczba calkowita"),
     ],
 )
@@ -300,7 +300,7 @@ def test_bdoo_package_without_class_files_is_not_data(bdoo, monkeypatch, tmp_pat
     result = bdoo.download(teryt="12", year=2023)
     assert not result.ok and result.files == ()
     assert [(f.unit, f.kind) for f in result.failed] == [("12", "download")]
-    assert "paczka bez plikow klas obiektow" in result.failed[0].error
+    assert "package has no feature class files" in result.failed[0].error
     assert not list(tmp_path.rglob("*.zip"))
 
 
@@ -373,7 +373,7 @@ def test_bdoo_layers_class_absent(bdoo, monkeypatch, tmp_path):
     missing = bdoo.download(teryt="12", year=2023, layers=["PTWP"])
     assert not missing.ok and missing.files == ()
     assert [(f.unit, f.kind) for f in missing.failed] == [("12", "no_coverage")]
-    assert "nie ma plikow klas PTWP" in missing.failed[0].error
+    assert "package has no files for classes PTWP" in missing.failed[0].error
     assert not (tmp_path / "landcover/pl_bdoo_2023_ptwp").exists()
 
 

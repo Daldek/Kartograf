@@ -296,7 +296,7 @@ class TestRetryPropagation:
         session.get.side_effect = requests_lib.RequestException("padlo")
         with (
             patch("kartograf.transport.http.time.sleep") as mock_sleep,
-            pytest.raises(DownloadError, match="3 probach"),
+            pytest.raises(DownloadError, match="after 3 attempts"),
         ):
             CuzkClient(session=session).fetch_file(
                 "http://x/CTES96.zip", tmp_path / "CTES96.zip"
@@ -580,7 +580,7 @@ class TestExportImage:
             patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 4),
             patch.object(CuzkClient, "MAX_EXPORT_PIXELS", 4_000_000),
             patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
-            pytest.raises(DownloadError, match="mozaik"),
+            pytest.raises(DownloadError, match="mosaic"),
         ):
             client.export_image(
                 DMR5G,

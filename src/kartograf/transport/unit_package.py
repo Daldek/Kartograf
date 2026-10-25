@@ -48,7 +48,8 @@ from typing import Any
 import requests
 
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
-from kartograf.notices import FILES, cli_flag, count_text
+from kartograf.messages import message, reason
+from kartograf.notices import cli_flag
 from kartograf.sources.descriptor import FileKind, PackageVariant, UnitPackageParams
 from kartograf.transport.http import download_to, response_signal
 
@@ -67,10 +68,10 @@ FILE_SUFFIX: dict[FileKind, str] = {
 }
 # Kind of the expected file in messages ("zamiast <...>", "oczekiwano <...>").
 _KIND_TEXT: dict[FileKind, str] = {
-    "zip": "paczki ZIP",
-    "tiff": "pliku TIFF",
-    "pdf": "pliku PDF",
-    "txt": "pliku tekstowego",
+    "zip": message("transport.kind_zip"),
+    "tiff": message("transport.kind_tiff"),
+    "pdf": message("transport.kind_pdf"),
+    "txt": message("transport.kind_txt"),
 }
 
 
@@ -108,7 +109,10 @@ def _values(variants: list[PackageVariant], key: str) -> list[str]:
 
 
 def select_variant(
-    params: UnitPackageParams, *, subject: str = "tego produktu", **choice: str | None
+    params: UnitPackageParams,
+    *,
+    subject: str = message("transport.default_subject"),
+    **choice: str | None,
 ) -> PackageVariant:
     """Return the published variant of a choice (``None`` values = not chosen).
 
@@ -131,8 +135,17 @@ def select_variant(
     foreign = sorted(set(given) - set(keys))
     if foreign:
         raise ValidationError(
-            f"{cli_flag(foreign[0])} nie dotyczy {subject}"
-            + (f" (wybory: {', '.join(cli_flag(k) for k in keys)})" if keys else ""),
+            message(
+                "transport.flag_not_applicable",
+                cli_flag=cli_flag(foreign[0]),
+                subject=subject,
+                choices_note=message(
+                    "transport.choices_note",
+                    cli_flags=", ".join(cli_flag(k) for k in keys),
+                )
+                if keys
+                else "",
+            ),
             option=foreign[0],
         )
     candidates = list(params.variants)
@@ -142,10 +155,19 @@ def select_variant(
             continue
         allowed = _values(candidates, key)
         if given[key] not in allowed:
-            where = f" dla {', '.join(context)}" if context else ""
+            where = (
+                message("transport.where_context", context=", ".join(context))
+                if context
+                else ""
+            )
             raise ValidationError(
-                f"{cli_flag(key)} {given[key]}: niedostepne{where}; dostepne: "
-                f"{', '.join(allowed)}",
+                message(
+                    "transport.variant_not_available",
+                    cli_flag=cli_flag(key),
+                    given_value=given[key],
+                    where=where,
+                    allowed=", ".join(allowed),
+                ),
                 option=key,
                 allowed=tuple(allowed),
             )
@@ -156,13 +178,22 @@ def select_variant(
     for key in keys:
         allowed = _values(candidates, key)
         if len(allowed) > 1:
-            where = f" dla {', '.join(context)}" if context else ""
+            where = (
+                message("transport.where_context", context=", ".join(context))
+                if context
+                else ""
+            )
             raise ValidationError(
-                f"{cli_flag(key)} wymagane{where}: {', '.join(allowed)}",
+                message(
+                    "transport.choice_required",
+                    cli_flag=cli_flag(key),
+                    where=where,
+                    allowed=", ".join(allowed),
+                ),
                 option=key,
                 allowed=tuple(allowed),
             )
-    raise AssertionError(f"Warianty kanalu nie sa rozroznialne: {candidates}")
+    raise AssertionError(f"Channel variants are not distinguishable: {candidates}")
 
 
 def package_url(
@@ -187,7 +218,9 @@ def package_url(
     """
     template = variant.url_template
     if template is None:
-        raise ValueError("Wariant bez szablonu URL - adres daje rekord indeksu")
+        raise ValueError(
+            "Variant without URL template - the address comes from the index record"
+        )
     values = {
         "teryt": teryt,
         "woj": teryt[:2] if teryt else None,
@@ -199,7 +232,7 @@ def package_url(
         {token for token in _TOKEN.findall(template) if values.get(token) is None}
     )
     if missing:
-        raise ValueError(f"Szablon {template} wymaga {', '.join(missing)}")
+        raise ValueError(f"Template {template} requires {', '.join(missing)}")
     return template.format(**{key: value or "" for key, value in values.items()})
 
 
@@ -221,8 +254,12 @@ def index_url(variant: PackageVariant, urls: Mapping[str, str], *, unit: str) ->
     file_format = dict(variant.choice).get("format")
     if file_format is None or file_format not in urls:
         raise DownloadError(
-            f"{unit}: rekord indeksu bez pliku {file_format or '?'} "
-            f"(sa: {', '.join(sorted(urls)) or 'brak'})"
+            message(
+                "transport.index_record_no_file",
+                unit=unit,
+                file_format=file_format or "?",
+                urls=", ".join(sorted(urls)) or message("transport.none_found"),
+            )
         )
     return urls[file_format]
 
@@ -236,8 +273,12 @@ def reject_documents(
         content_type = str(response.headers.get("Content-Type", "")).lower()
         if "html" in content_type or "xml" in content_type:
             raise DownloadError(
-                f"{url}: zrodlo zwrocilo dokument ({content_type}) zamiast "
-                f"{_KIND_TEXT[kind]}"
+                message(
+                    "transport.unexpected_document_type",
+                    url=url,
+                    content_type=content_type,
+                    expected_kind=_KIND_TEXT[kind],
+                )
             )
 
     return validate
@@ -291,9 +332,14 @@ def fetch_package(
         )
     except DownloadError as e:
         if e.status_code == 404:
-            what = "paczki" if kind == "zip" else "pliku"
+            what = (
+                message("transport.what_package")
+                if kind == "zip"
+                else message("transport.what_file")
+            )
             raise NoCoverageError(
-                f"Zrodlo nie publikuje {what} {url} (HTTP 404)", status_code=404
+                message("transport.source_not_published", what=what, url=url),
+                status_code=404,
             ) from e
         raise
     kept: tuple[str, ...] = ()
@@ -302,7 +348,12 @@ def fetch_package(
         expected = signal.get("content_length")
         if expected is not None and expected != size:
             raise DownloadError(
-                f"{url}: pobrano {size} z {expected} bajtow (przerwany transfer)"
+                message(
+                    "transport.transfer_interrupted",
+                    url=url,
+                    size=size,
+                    expected=expected,
+                )
             )
         if kind == "zip":
             member, kept = _check_archive(
@@ -326,7 +377,9 @@ def _check_content(url: str, path: Path, kind: FileKind) -> None:
         with open(path, "rb") as stream:
             head = stream.read(_HEAD_BYTES)
     except OSError as e:
-        raise DownloadError(f"{url}: nie udalo sie odczytac pliku: {e}") from e
+        raise DownloadError(
+            message("transport.file_read_failed", url=url, error=reason(e))
+        ) from e
     if kind == "tiff":
         valid = head[:4] in _TIFF_MAGIC
     elif kind == "pdf":
@@ -335,8 +388,12 @@ def _check_content(url: str, path: Path, kind: FileKind) -> None:
         valid = _is_text(head)
     if not valid:
         raise DownloadError(
-            f"{url}: oczekiwano {_KIND_TEXT[kind]}, a plik zaczyna sie od "
-            f"{head[:16]!r} - to nie sa oczekiwane dane"
+            message(
+                "transport.unexpected_file_head",
+                url=url,
+                kind_text=_KIND_TEXT[kind],
+                head=head[:16],
+            )
         )
 
 
@@ -378,8 +435,12 @@ def _check_archive(
             ]
             if missing:
                 raise DownloadError(
-                    f"{url}: paczka bez plikow {', '.join(missing)} "
-                    f"({count_text(len(files), *FILES)}) - to nie sa oczekiwane dane"
+                    message(
+                        "transport.package_missing_files",
+                        url=url,
+                        missing=", ".join(missing),
+                        files_count=len(files),
+                    )
                 )
             if params.class_pattern is not None:
                 kept = _class_members(
@@ -387,15 +448,21 @@ def _check_archive(
                 )
                 return None, kept
             if classes:
-                raise ValueError(f"{url}: wybor klas bez class_pattern kanalu")
+                raise ValueError(
+                    f"{url}: class selection without the channel's class_pattern"
+                )
             if params.unpack is None:
                 return None, ()
             suffix = params.unpack.lower()
             chosen = [info for info in files if info.filename.lower().endswith(suffix)]
             if len(chosen) != 1:
                 raise DownloadError(
-                    f"{url}: oczekiwano dokladnie jednego pliku {params.unpack} "
-                    f"w paczce, jest {len(chosen)}"
+                    message(
+                        "transport.unpack_count_mismatch",
+                        url=url,
+                        unpack=params.unpack,
+                        chosen_count=len(chosen),
+                    )
                 )
             if params.unpack_layers:
                 _unpack_checked_layers(url, archive, chosen[0], staged, params)
@@ -405,9 +472,13 @@ def _check_archive(
     except (zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError) as e:
         # BadZipFile: directory or CRC; zlib.error/EOFError: corrupt or cut
         # compressed data; NotImplementedError: unsupported compression
-        raise DownloadError(f"{url}: uszkodzona paczka ZIP: {e}") from e
+        raise DownloadError(
+            message("transport.atom_zip_corrupt", url=url, error=reason(e))
+        ) from e
     except OSError as e:
-        raise DownloadError(f"{url}: nie udalo sie odczytac paczki: {e}") from e
+        raise DownloadError(
+            message("transport.package_read_failed", url=url, error=reason(e))
+        ) from e
 
 
 def _class_members(
@@ -431,8 +502,7 @@ def _class_members(
             found.append((info, match.group("code")))
     if not found:
         raise DownloadError(
-            f"{url}: paczka bez plikow klas obiektow ({count_text(len(files), *FILES)})"
-            " - to nie sa oczekiwane dane"
+            message("transport.package_no_class_files", url=url, files_count=len(files))
         )
     if not classes:
         return ()
@@ -440,8 +510,9 @@ def _class_members(
     kept = tuple(code for code in classes if code in present)
     if not kept:
         raise NoCoverageError(
-            f"{url}: paczka nie ma plikow klas {', '.join(classes)} (brak "
-            "obiektow tych klas w jednostce)"
+            message(
+                "transport.package_classes_absent", url=url, classes=", ".join(classes)
+            )
         )
     _write_members(archive, [info for info, code in found if code in kept], staged)
     return kept
@@ -505,8 +576,12 @@ def _unpack_checked_layers(
         missing = [layer for layer in params.unpack_layers if layer not in found]
         if missing:
             raise DownloadError(
-                f"{url}: GeoPackage bez warstw {', '.join(missing)} (sa: "
-                f"{', '.join(sorted(found)) or 'brak'}) - to nie sa oczekiwane dane"
+                message(
+                    "transport.gpkg_missing_layers",
+                    url=url,
+                    missing=", ".join(missing),
+                    found=", ".join(sorted(found)) or message("transport.none_found"),
+                )
             )
         shutil.move(str(local), staged)
     finally:
@@ -519,5 +594,7 @@ def _gpkg_layers(url: str, path: Path) -> set[str]:
         with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as db:
             rows = db.execute("SELECT table_name FROM gpkg_contents").fetchall()
     except sqlite3.DatabaseError as e:
-        raise DownloadError(f"{url}: plik w paczce nie jest GeoPackage: {e}") from e
+        raise DownloadError(
+            message("transport.not_geopackage", url=url, error=reason(e))
+        ) from e
     return {str(name) for (name,) in rows}

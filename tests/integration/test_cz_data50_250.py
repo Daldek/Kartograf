@@ -222,9 +222,11 @@ def test_whole_country_crs(data, monkeypatch, tmp_path):
     body = zip_bytes(NATIONAL[data.name]["members"])
     fake = serve(monkeypatch, data, body)
     manager = LandCoverManager(tmp_path, data.name, cache=False)
-    with pytest.raises(ValidationError, match="wymagane .*: EPSG:5514, EPSG:3045$"):
+    with pytest.raises(ValidationError, match="required .*: EPSG:5514, EPSG:3045$"):
         manager.download(whole_country=True)
-    with pytest.raises(ValidationError, match="EPSG:2180: zbior nie jest publikowany"):
+    with pytest.raises(
+        ValidationError, match=("EPSG:2180: the dataset is not published")
+    ):
         manager.download(whole_country=True, horizontal_crs="EPSG:2180")
     assert fake.calls == []
 

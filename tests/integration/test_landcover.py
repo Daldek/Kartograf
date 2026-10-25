@@ -691,7 +691,7 @@ class TestBdot10kRetryAndIO:
         mock_session.get.side_effect = requests.RequestException("fail")
         provider = Bdot10kProvider(session=mock_session)
 
-        with pytest.raises(DownloadError, match="po 3 probach"):
+        with pytest.raises(DownloadError, match="after 3 attempts"):
             provider.download_by_admin_unit("1465", tmp_path / "out.shp", format="SHP")
         assert mock_session.get.call_count == 3
         assert list(tmp_path.iterdir()) == []
@@ -1092,7 +1092,7 @@ class TestCorineProviderDownload:
         mock_session.get.side_effect = requests.RequestException("timeout")
         provider = CorineProvider(session=mock_session, use_proxy=False)
 
-        with pytest.raises(DownloadError, match="po 3 probach"):
+        with pytest.raises(DownloadError, match="after 3 attempts"):
             provider._download_via_wms(self._BBOX, tmp_path / "t.png", 2018, 30)
         assert mock_session.get.call_count == 3
 

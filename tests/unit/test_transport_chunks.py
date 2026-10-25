@@ -92,7 +92,7 @@ class TestAlignBbox:
         assert aligned.min_y == pytest.approx(181.4 - 91 * 2.0)
 
     def test_align_rejects_pixel_size_other_than_grid_step(self):
-        with pytest.raises(ValidationError, match="kroku siatki"):
+        with pytest.raises(ValidationError, match="source grid step"):
             align_bbox(BBox(0, 0, 10, 10, "X"), 0.5, GUGIK_1M)
 
 
@@ -140,7 +140,7 @@ class TestPlanChunks:
         assert all(c.width * c.height <= 1_000_000 for c in chunks)
         assert sum(c.width for c in chunks if c.bbox.max_y == bbox.max_y) == 2502
         assert sum(c.height for c in chunks if c.bbox.min_x == bbox.min_x) == 1202
-        with pytest.raises(ValidationError, match="wielokrotnoscia"):
+        with pytest.raises(ValidationError, match="is not a multiple of"):
             plan_chunks(bbox, 2501, 1202, 1.0, ChunkLimits(10, 10, 100), multiple=2)
 
 
@@ -199,7 +199,7 @@ class TestFetchChunks:
             path.write_bytes(b"II*\x00" + b"\x00" * 64)
 
         out = tmp_path / "m.tif"
-        with pytest.raises(DownloadError, match="zszyc"):
+        with pytest.raises(DownloadError, match="failed to stitch"):
             fetch_chunks(chunks, bbox, out, fetch)
         assert not out.exists()
         assert list(tmp_path.glob("*.part*")) == []

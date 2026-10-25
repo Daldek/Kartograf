@@ -254,7 +254,7 @@ def test_check_source_grid_reports_shift_of_every_off_grid_source(tmp_path):
 def test_check_source_grid_rejects_mixed_resolution(tmp_path):
     a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10)
     b = _write_lattice_tile(tmp_path / "b.tif", 0, 0, 12, 10, res=0.5)
-    with pytest.raises(ValidationError, match="rozdzielczosci"):
+    with pytest.raises(ValidationError, match="inconsistent source resolutions"):
         check_source_grid([a, b])
 
 
@@ -274,7 +274,7 @@ def test_check_source_grid_rejects_rotated_source(tmp_path):
         transform=Affine(1.0, 0.1, 0.0, 0.1, -1.0, 4.0),
     ) as dst:
         dst.write(np.ones((4, 4), dtype="float32"), 1)
-    with pytest.raises(ValidationError, match="obrocona"):
+    with pytest.raises(ValidationError, match="rotated source grid"):
         check_source_grid([path])
 
 
@@ -368,7 +368,7 @@ def test_wrapping_rejects_multiband_source(tmp_path):
         transform=from_origin(0, 4, 1, 1),
     ) as dst:
         dst.write(np.ones((2, 4, 4), dtype="float32"))
-    with pytest.raises(ValidationError, match="pasm"):
+    with pytest.raises(ValidationError, match="bands"):
         mosaic_and_crop(
             [path], BBox(0, 0, 4, 4, "EPSG:2180"), tmp_path / "o.tif", dtype="float32"
         )
@@ -392,7 +392,7 @@ def test_wrapping_rejects_type_without_vrt_name(tmp_path):
         dst.write(np.ones((1, 4, 4), dtype=source_dtype))
     with rasterio.open(path) as src:
         assert src.dtypes[0] == source_dtype  # test sanity check
-    with pytest.raises(ValidationError, match="typ pasma"):
+    with pytest.raises(ValidationError, match="band type"):
         mosaic_and_crop(
             [path],
             BBox(0, 0, 4, 4, "EPSG:2180"),

@@ -152,5 +152,5 @@ def test_a_cache_directory_that_cannot_be_made_disables_the_cache(
         assert isinstance(cache.error.__cause__, OSError)
 
     assert [notice.code for notice in notices] == [CACHE_DISABLED]
-    assert "niedostepny do otwarcia lub zapisu" in notices[0].message
+    assert "cannot be opened or written" in notices[0].message
     assert notices[0].message.isascii()

@@ -184,10 +184,10 @@ def test_proxy_names_why_the_variable_is_unusable(monkeypatch):
     credentials = CLMSCredentials()
     assert credentials.is_available is False
     assert credentials.env_error is not None
-    assert "nie jest poprawnym JSON" in credentials.env_error
+    assert "is not valid JSON" in credentials.env_error
     assert "not json" not in credentials.env_error  # never the value
     monkeypatch.setenv("CLMS_CREDENTIALS", "{}")
-    assert "client_id i private_key" in (CLMSCredentials().env_error or "") or (
+    assert "client_id and private_key" in (CLMSCredentials().env_error or "") or (
         CLMSCredentials().is_available is False
     )
 

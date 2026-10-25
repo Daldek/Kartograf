@@ -82,6 +82,7 @@ import requests
 
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError
+from kartograf.messages import message, reason
 from kartograf.sources.descriptor import FeatureBBoxParams, FeatureLayer
 from kartograf.transport.http import get_with_retry
 
@@ -221,10 +222,10 @@ def fetch_features(
     code = _check_request(params, bbox)
     layers = tuple(layers)
     if not layers:
-        raise ValueError("Brak warstw do pobrania")
+        raise ValueError("No layers to download")
     names = [layer.name for layer in layers]
     if len(set(names)) != len(names):
-        raise ValueError(f"Powtorzone nazwy warstw: {names}")
+        raise ValueError(f"Duplicate layer names: {names}")
     if params.protocol == "ogcapi":
         return _ogcapi_features(
             session, endpoint, params, layers, bbox, Path(pages_dir), timeout
@@ -266,7 +267,7 @@ def fetch_features(
                 layer_dir,
                 timeout,
             )
-        logger.info("%s: %s obiektow, %s stron", context, total, len(pages.pages))
+        logger.info(f"{context}: {total} features, {len(pages.pages)} pages")
         result.append(pages)
     return FeaturePages(tuple(result))
 
@@ -338,16 +339,25 @@ def _page_loop(
         seen.update(ids)
         if len(seen) > total:
             raise DownloadError(
-                f"{context}: strony daja {len(seen)} roznych obiektow, "
-                f"a zapytanie o liczbe {total} (dane zmienily sie w trakcie)"
+                message(
+                    "transport.pages_count_mismatch",
+                    context=context,
+                    seen_count=len(seen),
+                    total=total,
+                )
             )
         if len(seen) == total:
             return tuple(pages)
         start += page_size
         if rows < page_size or (start >= total and len(seen) == before):
             raise DownloadError(
-                f"{context}: niepelna odpowiedz - {len(seen)} z {total} obiektow "
-                f"(koniec stron na pozycji {start - page_size + rows})"
+                message(
+                    "transport.incomplete_response",
+                    context=context,
+                    seen_count=len(seen),
+                    total=total,
+                    end_position=start - page_size + rows,
+                )
             )
 
 
@@ -358,34 +368,32 @@ def _check_request(params: FeatureBBoxParams, bbox: BBox) -> str:
     for OGC API Features; programmer errors are ``ValueError``.
     """
     if params.page_size <= 0:
-        raise ValueError(f"page_size musi byc dodatnie: {params.page_size}")
+        raise ValueError(f"page_size must be positive: {params.page_size}")
     if params.protocol == "ogcapi":
         if not _is_crs84(params.native_crs):
             raise ValueError(
-                f"Kanal OGC API Features wymaga ukladu OGC:CRS84, "
-                f"nie {params.native_crs!r}"
+                f"The OGC API Features channel requires OGC:CRS84, not "
+                f"{params.native_crs!r}"
             )
         if not _is_crs84(bbox.crs):
             raise ValueError(
-                f"bbox w ukladzie {bbox.crs!r}, oczekiwano {params.native_crs!r}"
+                f"bbox in CRS {bbox.crs!r}, expected {params.native_crs!r}"
             )
         if params.axis_order != "xy":
-            raise ValueError("bbox OGC API Features ma zawsze kolejnosc osi lon,lat")
+            raise ValueError("The OGC API Features bbox always has lon,lat axis order")
         return "CRS84"
     code = _epsg_code(params.native_crs)
     if code is None:
-        raise ValueError(f"Uklad natywny {params.native_crs!r} nie jest kodem EPSG")
+        raise ValueError(f"Native CRS {params.native_crs!r} is not an EPSG code")
     if _epsg_code(bbox.crs) != code:
-        raise ValueError(
-            f"bbox w ukladzie {bbox.crs!r}, oczekiwano {params.native_crs!r}"
-        )
+        raise ValueError(f"bbox in CRS {bbox.crs!r}, expected {params.native_crs!r}")
     if params.protocol == "arcgis":
         if not params.order_field:
-            raise ValueError("Kanal ArcGIS wymaga order_field (orderByFields)")
+            raise ValueError("The ArcGIS channel requires order_field (orderByFields)")
         if params.axis_order != "xy":
-            raise ValueError("Obwiednia ArcGIS ma zawsze kolejnosc osi x,y")
+            raise ValueError("The ArcGIS envelope always has x,y axis order")
     elif params.protocol != "wfs":
-        raise ValueError(f"Nieznany protokol {params.protocol!r}")
+        raise ValueError(f"Unknown protocol {params.protocol!r}")
     return code
 
 
@@ -419,8 +427,11 @@ def _no_coverage(
     params: FeatureBBoxParams, endpoint: str, layers: tuple[FeatureLayer, ...]
 ) -> NoCoverageError:
     return NoCoverageError(
-        f"{_service(params, endpoint)}: brak obiektow w obszarze "
-        f"(warstwy: {', '.join(layer.source for layer in layers)})"
+        message(
+            "transport.no_features_in_area",
+            service=_service(params, endpoint),
+            sources=", ".join(layer.source for layer in layers),
+        )
     )
 
 
@@ -466,15 +477,26 @@ def _xml_root(response: requests.Response, context: str) -> ET.Element:
         return ET.fromstring(response.content)
     except ET.ParseError as e:
         raise DownloadError(
-            f"{context}: odpowiedz nie jest dokumentem XML "
-            f"({_content_type(response)}): {e}"
+            message(
+                "transport.response_not_xml",
+                context=context,
+                content_type=_content_type(response),
+                error=reason(e),
+            )
         ) from e
 
 
 def _service_error(root: ET.Element, context: str) -> DownloadError:
     """Error of an unexpected document (``ows:ExceptionReport``, XHTML page)."""
     text = " ".join(t.strip() for t in root.itertext() if t.strip())[:300]
-    return DownloadError(f"{context}: blad uslugi ({_local(root.tag)}): {text}")
+    return DownloadError(
+        message(
+            "transport.service_error_tag",
+            context=context,
+            tag=_local(root.tag),
+            message=text,
+        )
+    )
 
 
 def _check_capabilities(
@@ -510,13 +532,22 @@ def _check_capabilities(
     for layer in layers:
         if layer.source not in default_crs:
             raise DownloadError(
-                f"{context}: usluga nie publikuje typu obiektow {layer.source}"
+                message(
+                    "transport.feature_type_not_published",
+                    context=context,
+                    source=layer.source,
+                )
             )
         declared = default_crs[layer.source]
         if _epsg_code(declared) != code:
             raise DownloadError(
-                f"{context}: uklad domyslny {layer.source} to {declared!r}, "
-                f"oczekiwano {params.native_crs}"
+                message(
+                    "transport.default_crs_mismatch",
+                    context=context,
+                    source=layer.source,
+                    declared=declared,
+                    native_crs=params.native_crs,
+                )
             )
     limits = []
     for constraint in root.iter(f"{_OWS}Constraint"):
@@ -525,8 +556,12 @@ def _check_capabilities(
             limits.append(int(value))
     if limits and params.page_size > min(limits):
         raise DownloadError(
-            f"{context}: usluga zwraca najwyzej {min(limits)} obiektow na strone, "
-            f"a kanal zada {params.page_size}"
+            message(
+                "transport.page_size_over_limit",
+                context=context,
+                min_limits=min(limits),
+                page_size=params.page_size,
+            )
         )
 
 
@@ -594,7 +629,7 @@ def _wfs_hits(
     matched = root.get("numberMatched", "")
     if not _DIGITS.fullmatch(matched):
         raise DownloadError(
-            f"{context}: usluga nie podala liczby obiektow (numberMatched={matched!r})"
+            message("transport.wfs_hits_missing", context=context, matched=matched)
         )
     return int(matched)
 
@@ -660,16 +695,27 @@ def _scan_page(
                 depth -= 1
     except ET.ParseError as e:
         raise DownloadError(
-            f"{context}: odpowiedz nie jest dokumentem XML ({content_type}): {e}"
+            message(
+                "transport.response_not_xml",
+                context=context,
+                content_type=content_type,
+                error=reason(e),
+            )
         ) from e
     returned = root.get("numberReturned", "")
     if not _DIGITS.fullmatch(returned) or int(returned) != members:
         raise DownloadError(
-            f"{context}: niepelna strona (numberReturned={returned!r}, "
-            f"obiektow {members})"
+            message(
+                "transport.incomplete_page",
+                context=context,
+                returned=returned,
+                members=members,
+            )
         )
     if len(ids) != members:
-        raise DownloadError(f"{context}: element wfs:member bez obiektu")
+        raise DownloadError(
+            message("transport.member_without_feature", context=context)
+        )
     return members, ids
 
 
@@ -683,7 +729,12 @@ def _feature_id(feature: ET.Element, id_field: str, context: str) -> str:
     value = (value or "").strip()
     if not value:
         raise DownloadError(
-            f"{context}: obiekt {_local(feature.tag)} bez identyfikatora {id_field}"
+            message(
+                "transport.feature_without_id",
+                context=context,
+                local=_local(feature.tag),
+                id_field=id_field,
+            )
         )
     return value
 
@@ -708,16 +759,29 @@ def _service_json(
         payload = json.loads(response.content)
     except (ValueError, UnicodeDecodeError) as e:
         raise DownloadError(
-            f"{context}: odpowiedz nie jest JSON ({_content_type(response)}): {e}"
+            message(
+                "transport.response_not_json",
+                context=context,
+                content_type=_content_type(response),
+                error=reason(e),
+            )
         ) from e
     if not isinstance(payload, dict):
-        raise DownloadError(f"{context}: odpowiedz nie jest obiektem JSON")
+        raise DownloadError(
+            message("transport.response_not_json_object", context=context)
+        )
     error = payload.get("error")
     if error is not None:
-        message = error.get("message") if isinstance(error, dict) else error
+        detail = error.get("message") if isinstance(error, dict) else error
         details = error.get("details") if isinstance(error, dict) else None
         raise DownloadError(
-            f"{context}: blad uslugi {service}: {message} {details or ''}"
+            message(
+                "transport.service_error",
+                context=context,
+                service=service,
+                message=detail,
+                details=details or "",
+            )
         )
     return payload
 
@@ -760,21 +824,34 @@ def _arcgis_layer(
         and isinstance(field.get("type"), str)
         for field in fields
     ):
-        raise DownloadError(f"{context}: opis warstwy bez listy pol (fields)")
+        raise DownloadError(message("transport.layer_no_fields", context=context))
     names = {field["name"] for field in fields}
     for required in (layer.id_field, params.order_field):
         if required not in names:
-            raise DownloadError(f"{context}: warstwa nie ma pola {required}")
+            raise DownloadError(
+                message(
+                    "transport.layer_missing_field", context=context, required=required
+                )
+            )
     wkid = _layer_wkid(info)
     if wkid != code:
         raise DownloadError(
-            f"{context}: uklad warstwy EPSG:{wkid}, oczekiwano {params.native_crs}"
+            message(
+                "transport.layer_crs_mismatch",
+                context=context,
+                wkid=wkid,
+                native_crs=params.native_crs,
+            )
         )
     limit = info.get("maxRecordCount")
     if isinstance(limit, int) and params.page_size > limit:
         raise DownloadError(
-            f"{context}: usluga zwraca najwyzej {limit} obiektow na strone, "
-            f"a kanal zada {params.page_size}"
+            message(
+                "transport.arcgis_page_over_limit",
+                context=context,
+                limit=limit,
+                page_size=params.page_size,
+            )
         )
     return response.content
 
@@ -807,7 +884,9 @@ def _arcgis_count(
     )
     count = _service_json(response, context, "ArcGIS").get("count")
     if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-        raise DownloadError(f"{context}: usluga nie podala liczby obiektow ({count!r})")
+        raise DownloadError(
+            message("transport.arcgis_count_missing", context=context, count=count)
+        )
     return count
 
 
@@ -845,14 +924,19 @@ def _arcgis_page(
     payload = _service_json(response, context, "ArcGIS")
     features = payload.get("features")
     if payload.get("type") != "FeatureCollection" or not isinstance(features, list):
-        raise DownloadError(f"{context}: odpowiedz nie jest kolekcja GeoJSON")
+        raise DownloadError(message("transport.response_not_geojson", context=context))
     ids: list[Hashable] = []
     for feature in features:
         properties = feature.get("properties") if isinstance(feature, dict) else None
         value = properties.get(layer.id_field) if isinstance(properties, dict) else None
         if isinstance(value, bool) or not isinstance(value, str | int | float):
             raise DownloadError(
-                f"{context}: obiekt bez identyfikatora {layer.id_field} ({value!r})"
+                message(
+                    "transport.feature_no_identifier",
+                    context=context,
+                    id_field=layer.id_field,
+                    value=value,
+                )
             )
         ids.append(value)
     return target, len(features), ids
@@ -892,11 +976,8 @@ def _ogcapi_features(
             session, endpoint, params, layer, bbox, layer_dir, timeout
         )
         logger.info(
-            "%s (%s): %s obiektow, %s stron",
-            _service(params, endpoint),
-            layer.source,
-            pages.matched,
-            len(pages.pages),
+            f"{_service(params, endpoint)} ({layer.source}): {pages.matched} "
+            f"features, {len(pages.pages)} pages",
         )
         result.append(pages)
     if not any(layer_pages.matched for layer_pages in result):
@@ -918,12 +999,16 @@ def _check_collections(
     )
     collections = _service_json(response, context, "OGC API").get("collections")
     if not isinstance(collections, list):
-        raise DownloadError(f"{context}: odpowiedz bez listy kolekcji (collections)")
+        raise DownloadError(message("transport.no_collections_list", context=context))
     published = {item.get("id") for item in collections if isinstance(item, dict)}
     missing = [layer.source for layer in layers if layer.source not in published]
     if missing:
         raise DownloadError(
-            f"{context}: usluga nie publikuje kolekcji {', '.join(missing)}"
+            message(
+                "transport.collections_not_published",
+                context=context,
+                missing=", ".join(missing),
+            )
         )
 
 
@@ -946,7 +1031,9 @@ def _ogcapi_layer(
     pages: list[Path] = []
 
     def fetch(page_url: str, query: dict[str, str] | None) -> _OgcapiPage:
-        description = f"{context} (strona {len(pages)})"
+        description = message(
+            "transport.ogcapi_page_description", context=context, pages_count=len(pages)
+        )
         response = get_with_retry(
             session, page_url, timeout=timeout, description=description, params=query
         )
@@ -962,23 +1049,42 @@ def _ogcapi_layer(
         seen.update(ids)
         if len(seen) > total:
             raise DownloadError(
-                f"{context}: strony daja {len(seen)} roznych obiektow, "
-                f"a numberMatched {total} (dane zmienily sie w trakcie)"
+                message(
+                    "transport.ogcapi_count_mismatch",
+                    context=context,
+                    seen_count=len(seen),
+                    total=total,
+                )
             )
         if len(seen) == total:
             return LayerPages(layer, total, tuple(pages), None, ())
         if len(seen) == before or link is None:
-            reason = "brak nowych obiektow" if len(seen) == before else "brak next"
+            reason = (
+                message("transport.reason_no_new_features")
+                if len(seen) == before
+                else message("transport.no_next_link")
+            )
             raise DownloadError(
-                f"{context}: niepelna odpowiedz - {len(seen)} z {total} obiektow "
-                f"(strona {len(pages) - 1}: {reason})"
+                message(
+                    "transport.ogcapi_incomplete_response",
+                    context=context,
+                    seen_count=len(seen),
+                    total=total,
+                    page_index=len(pages) - 1,
+                    reason=reason,
+                )
             )
         url = _next_url(url, link, endpoint, context)
         matched, ids, link = fetch(url, None)
         if matched != total:
             raise DownloadError(
-                f"{context}: numberMatched strony {len(pages) - 1} to {matched}, "
-                f"a pierwszej {total} (dane zmienily sie w trakcie)"
+                message(
+                    "transport.ogcapi_matched_changed",
+                    context=context,
+                    page_index=len(pages) - 1,
+                    matched=matched,
+                    total=total,
+                )
             )
 
 
@@ -1013,17 +1119,21 @@ def _ogcapi_page(
     payload = _service_json(response, context, "OGC API")
     features = payload.get("features")
     if payload.get("type") != "FeatureCollection" or not isinstance(features, list):
-        raise DownloadError(f"{context}: odpowiedz nie jest kolekcja GeoJSON")
+        raise DownloadError(message("transport.response_not_geojson", context=context))
     matched = payload.get("numberMatched")
     if not _is_count(matched):
         raise DownloadError(
-            f"{context}: usluga nie podala liczby obiektow (numberMatched={matched!r})"
+            message("transport.wfs_hits_missing", context=context, matched=matched)
         )
     returned = payload.get("numberReturned")
     if not _is_count(returned) or returned != len(features):
         raise DownloadError(
-            f"{context}: niepelna strona (numberReturned={returned!r}, "
-            f"obiektow {len(features)})"
+            message(
+                "transport.ogcapi_incomplete_page",
+                context=context,
+                returned=returned,
+                features_count=len(features),
+            )
         )
     ids = [_ogcapi_id(feature, layer.id_field, context) for feature in features]
     return matched, ids, _next_link(payload, context)
@@ -1048,7 +1158,12 @@ def _ogcapi_id(feature: object, id_field: str, context: str) -> Hashable:
         or (isinstance(value, str) and not value.strip())
     ):
         raise DownloadError(
-            f"{context}: obiekt bez identyfikatora {id_field} ({value!r})"
+            message(
+                "transport.feature_no_identifier",
+                context=context,
+                id_field=id_field,
+                value=value,
+            )
         )
     return value
 
@@ -1063,7 +1178,7 @@ def _next_link(payload: dict[str, Any], context: str) -> str | None:
     if links is None:
         return None
     if not isinstance(links, list):
-        raise DownloadError(f"{context}: pole links nie jest lista")
+        raise DownloadError(message("transport.links_not_list", context=context))
     hrefs = {
         link["href"]
         for link in links
@@ -1073,7 +1188,13 @@ def _next_link(payload: dict[str, Any], context: str) -> str | None:
         and _json_media(link.get("type"))
     }
     if len(hrefs) > 1:
-        raise DownloadError(f"{context}: kilka linkow next: {', '.join(sorted(hrefs))}")
+        raise DownloadError(
+            message(
+                "transport.multiple_next_links",
+                context=context,
+                hrefs=", ".join(sorted(hrefs)),
+            )
+        )
     return hrefs.pop() if hrefs else None
 
 
@@ -1092,7 +1213,14 @@ def _next_url(current: str, href: str, endpoint: str, context: str) -> str:
     """
     url = urljoin(current, href)
     if _origin(url) != _origin(endpoint):
-        raise DownloadError(f"{context}: link next spoza uslugi {endpoint}: {url}")
+        raise DownloadError(
+            message(
+                "transport.next_link_foreign_origin",
+                context=context,
+                endpoint=endpoint,
+                url=url,
+            )
+        )
     return url
 
 

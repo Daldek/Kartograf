@@ -21,6 +21,7 @@ from rasterio.transform import Affine
 
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import ValidationError
+from kartograf.messages import Message, message
 from kartograf.transform.raster import VRT_TYPES, vrt_xml
 
 # Tolerance in pixels: matching grids and bboxes lying on a grid line
@@ -59,14 +60,18 @@ class SourceGrid:
     reference: Affine
     off_grid: tuple[OffGridSource, ...]
 
-    def describe_off_grid(self, total: int, noun: str = "zrodel") -> str:
+    def describe_off_grid(self, total: int) -> Message:
         """Describe ``off_grid``: count, largest offset, up to 10 names."""
         worst = max(max(abs(s.dx_px), abs(s.dy_px)) for s in self.off_grid)
         names = ", ".join(s.path.name for s in self.off_grid[:10])
         more = " ..." if len(self.off_grid) > 10 else ""
-        return (
-            f"{len(self.off_grid)} z {total} {noun} lezy na innej siatce pikseli "
-            f"niz pozostale (maks. przesuniecie {worst:.3f} px): {names}{more}"
+        return message(
+            "transport.off_grid_sources",
+            off_grid_count=len(self.off_grid),
+            total=total,
+            worst=worst,
+            names=names,
+            more=more,
         )
 
 
@@ -107,10 +112,14 @@ def _source_grid(paths: list[Path], transforms: list[Affine]) -> SourceGrid:
     """
     for path, t in zip(paths, transforms, strict=True):
         if t.b != 0 or t.d != 0:
-            raise ValidationError(f"obrocona siatka zrodla {path.name}")
+            raise ValidationError(
+                message("transport.rotated_source_grid", name=path.name)
+            )
     res_set = {(t.a, -t.e) for t in transforms}
     if len(res_set) > 1:
-        raise ValidationError(f"niezgodne rozdzielczosci zrodel: {sorted(res_set)}")
+        raise ValidationError(
+            message("transport.source_resolution_mismatch", res_set=sorted(res_set))
+        )
     rx, ry = transforms[0].a, -transforms[0].e
     keys = [(_phase_key(t.c, rx), _phase_key(t.f, ry)) for t in transforms]
     majority = Counter(keys).most_common(1)[0][0]
@@ -132,7 +141,7 @@ def check_source_grid(paths: Sequence[Path]) -> SourceGrid:
     (rotation/skew in the transform), differing resolutions.
     """
     if not paths:
-        raise ValidationError("check_source_grid: brak rastrow wejsciowych")
+        raise ValidationError(message("transport.check_grid_no_inputs"))
     resolved = [Path(p) for p in paths]
     transforms = []
     for path in resolved:
@@ -190,7 +199,7 @@ def mosaic_and_crop(
     mixed types end in ``ValidationError`` asking for ``dtype=``.
     """
     if not inputs:
-        raise ValidationError("mosaic_and_crop: brak rastrow wejsciowych")
+        raise ValidationError(message("transport.mosaic_no_inputs"))
 
     output_path = Path(output_path)
     paths = [Path(p) for p in inputs]
@@ -216,32 +225,40 @@ def mosaic_and_crop(
     crs_set = {str(m["crs"]) for m in metas}
     if len(crs_set) > 1:
         raise ValidationError(
-            f"mosaic_and_crop: niezgodne CRS wejsc: {sorted(crs_set)}"
+            message("transport.mosaic_crs_mismatch", crs_set=sorted(crs_set))
         )
     if len(res_set) > 1:
         raise ValidationError(
-            f"mosaic_and_crop: niezgodne rozdzielczosci wejsc: {sorted(res_set)}"
+            message("transport.mosaic_resolution_mismatch", res_set=sorted(res_set))
         )
     if dtype is None:
         dtype_set = {m["dtype"] for m in metas}
         if len(dtype_set) > 1:
             raise ValidationError(
-                "mosaic_and_crop: zrodla maja rozne typy pasm "
-                f"({', '.join(sorted(dtype_set))}) - podaj dtype="
+                message(
+                    "transport.mosaic_band_type_mismatch",
+                    dtype_set=", ".join(sorted(dtype_set)),
+                )
             )
     if wrap:
         for path, meta in zip(paths, metas, strict=True):
             if meta["count"] != 1:
                 raise ValidationError(
-                    f"mosaic_and_crop: zrodlo {path.name} ma {meta['count']} "
-                    "pasm - owijanie w VRT (dtype) obsluguje tylko "
-                    "rastry jednopasmowe"
+                    message(
+                        "transport.vrt_single_band_only",
+                        name=path.name,
+                        band_count=meta["count"],
+                    )
                 )
             band_type = dtype or meta["dtype"]
             if band_type not in VRT_TYPES:
                 raise ValidationError(
-                    f"mosaic_and_crop: typ pasma {band_type!r} (zrodlo "
-                    f"{path.name}) spoza obslugiwanych: {sorted(VRT_TYPES)}"
+                    message(
+                        "transport.mosaic_band_type_unsupported",
+                        band_type=band_type,
+                        name=path.name,
+                        vrt_types=sorted(VRT_TYPES),
+                    )
                 )
 
     bounds = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)

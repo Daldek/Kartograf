@@ -29,6 +29,7 @@ from rasterio.transform import Affine
 
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.transport.mosaic import _snap_outward, mosaic_and_crop
 
 
@@ -89,8 +90,11 @@ def align_bbox(
 
     if not math.isclose(pixel_size, grid.step, rel_tol=1e-9):
         raise ValidationError(
-            f"align_bbox: piksel {pixel_size} rozny od kroku siatki zrodla "
-            f"{grid.step} (przeprobkowanie po stronie uslugi nie jest obslugiwane)"
+            message(
+                "transport.pixel_grid_step_mismatch",
+                pixel_size=pixel_size,
+                grid_step=grid.step,
+            )
         )
     ref = Affine(grid.step, 0.0, grid.origin_x, 0.0, -grid.step, grid.origin_y)
     min_x, min_y, max_x, max_y = _snap_outward(
@@ -131,7 +135,12 @@ def plan_chunks(
     """
     if width % multiple or height % multiple:
         raise ValidationError(
-            f"plan_chunks: {width} x {height} px nie jest wielokrotnoscia {multiple}"
+            message(
+                "transport.chunk_size_not_multiple",
+                width=width,
+                height=height,
+                multiple=multiple,
+            )
         )
     if (
         width <= limits.max_width
@@ -217,8 +226,12 @@ def fetch_chunks(
         except Exception as e:  # noqa: BLE001 - rasterio/GDAL have no common base
             output_path.unlink(missing_ok=True)
             raise DownloadError(
-                f"nie udalo sie zszyc {len(parts)} kawalkow mozaiki "
-                f"w {output_path}: {e}"
+                message(
+                    "transport.mosaic_stitch_failed",
+                    parts_count=len(parts),
+                    output_path=output_path,
+                    error=reason(e),
+                )
             ) from e
     finally:
         for part in parts:

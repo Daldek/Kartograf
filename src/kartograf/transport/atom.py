@@ -54,7 +54,7 @@ import requests
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
-from kartograf.notices import FILES, count_text
+from kartograf.messages import message, reason
 from kartograf.sources.descriptor import AtomFilesParams
 from kartograf.sources.edition import edition_label
 from kartograf.transport.http import download_to, get_with_retry, response_signal
@@ -156,21 +156,23 @@ def check_atom_crs(params: AtomFilesParams, crs: str | None) -> None:
     if not params.crs:
         if crs is not None:
             raise ValidationError(
-                f"--horizontal-crs {crs}: zbior ma jeden plik (uklad wynika ze zrodla)",
+                message("transport.crs_single_file", crs=crs),
                 option="horizontal_crs",
             )
         return
     if crs is None:
         raise ValidationError(
-            f"--horizontal-crs wymagane (plik publikowany w kilku ukladach): "
-            f"{', '.join(params.crs)}",
+            message("transport.crs_required_multi", crs=", ".join(params.crs)),
             option="horizontal_crs",
             allowed=tuple(params.crs),
         )
     if crs not in params.crs:
         raise ValidationError(
-            f"--horizontal-crs {crs}: zbior nie jest publikowany w tym ukladzie; "
-            f"dostepne: {', '.join(params.crs)}",
+            message(
+                "transport.crs_not_published",
+                crs=crs,
+                available_crs=", ".join(params.crs),
+            ),
             option="horizontal_crs",
             allowed=tuple(params.crs),
         )
@@ -207,8 +209,12 @@ def _alternate(element: ET.Element, context: str) -> ET.Element:
     ]
     if len(links) != 1:
         raise DownloadError(
-            f"{context}: wpis {element.findtext(f'{_ATOM}id')!r} ma {len(links)} "
-            "linkow rel=alternate, oczekiwano jednego"
+            message(
+                "transport.atom_alternate_links",
+                context=context,
+                entry_id=element.findtext(f"{_ATOM}id"),
+                links_count=len(links),
+            )
         )
     return links[0]
 
@@ -217,16 +223,24 @@ def _updated(element: ET.Element, context: str) -> str:
     updated = (element.findtext(f"{_ATOM}updated") or "").strip()
     if not _DATE.match(updated):
         raise DownloadError(
-            f"{context}: wpis {element.findtext(f'{_ATOM}id')!r} bez daty "
-            f"<updated> ({updated!r})"
+            message(
+                "transport.atom_entry_no_updated",
+                context=context,
+                entry_id=element.findtext(f"{_ATOM}id"),
+                updated=updated,
+            )
         )
     return updated
 
 
 def _not_a_feed(context: str, content_type: str, detail: str) -> DownloadError:
     return DownloadError(
-        f"{context}: odpowiedz nie jest feedem ATOM ({content_type or 'brak typu'}): "
-        f"{detail}"
+        message(
+            "transport.response_not_atom_feed",
+            context=context,
+            content_type=content_type or message("transport.no_content_type"),
+            detail=detail,
+        )
     )
 
 
@@ -251,8 +265,13 @@ def _parse_service(
                 key = next((groups[g] for g in _KEY_GROUPS if g in groups), "")
                 if key in entries:
                     raise DownloadError(
-                        f"{context}: dwa zbiory dla {key or 'jedynego zbioru'} "
-                        f"({entries[key].dataset_feed}, {ident})"
+                        message(
+                            "transport.atom_duplicate_dataset",
+                            context=context,
+                            key_value=key or message("transport.atom_only_dataset"),
+                            dataset_feed=entries[key].dataset_feed,
+                            ident=ident,
+                        )
                     )
                 entries[key] = AtomEntry(
                     key=key,
@@ -268,11 +287,19 @@ def _parse_service(
         raise _not_a_feed(context, content_type, str(e)) from e
     if not entries:
         raise DownloadError(
-            f"{context}: feed nie ma zbiorow pasujacych do {params.entry_pattern!r}"
+            message(
+                "transport.atom_no_matching_dataset",
+                context=context,
+                entry_pattern=params.entry_pattern,
+            )
         )
     if single_dataset(params) and len(entries) != 1:
         raise DownloadError(
-            f"{context}: oczekiwano jednego zbioru, jest {len(entries)}"
+            message(
+                "transport.atom_expected_one_dataset",
+                context=context,
+                entries_count=len(entries),
+            )
         )
     return entries
 
@@ -331,8 +358,10 @@ def _index(
     )
     if response.status_code == 304:
         if stored is None or not etag:
-            raise DownloadError(f"{context}: HTTP 304 bez zapytania warunkowego")
-        logger.debug("%s: 304, indeks bez zmian", context)
+            raise DownloadError(
+                message("transport.atom_unexpected_304", context=context)
+            )
+        logger.debug(f"{context}: 304, index unchanged")
         if cache is not None:
             cache.set_atom_entries(key, etag, stored[1])
         return _from_payload(stored[1]), True
@@ -343,7 +372,7 @@ def _index(
         cache.set_atom_entries(
             key, new_etag if isinstance(new_etag, str) else None, _payload(index)
         )
-    logger.info("%s: %s zbiorow", context, len(index))
+    logger.info(f"{context}: {len(index)} datasets")
     return index, True
 
 
@@ -406,16 +435,23 @@ def _select(
         if not chosen:
             published = sorted({code for _, codes in found for code in codes})
             raise DownloadError(
-                f"{context}: brak pliku w ukladzie {crs} (feed: "
-                f"{', '.join(published) or 'bez kategorii ukladu'})"
+                message(
+                    "transport.atom_no_file_in_crs",
+                    context=context,
+                    crs=crs,
+                    published=", ".join(published)
+                    or message("transport.atom_no_crs_category"),
+                )
             )
     else:
         chosen = [element for element, _ in found]
     if len(chosen) != 1:
         raise DownloadError(
-            f"{context}: {count_text(len(chosen), *FILES)} zbioru bez "
-            "rozstrzygniecia "
-            "(oczekiwano jednego)"
+            message(
+                "transport.atom_ambiguous_dataset",
+                context=context,
+                chosen_count=len(chosen),
+            )
         )
     (element,) = chosen
     link = _alternate(element, context)
@@ -473,7 +509,11 @@ def resolve_atom_file(
     entry = index.get(key)
     if entry is None:
         raise NoCoverageError(
-            f"ATOM {params.service_feed}: brak zbioru {key!r} w feedzie uslugi"
+            message(
+                "transport.atom_dataset_not_in_feed",
+                service_feed=params.service_feed,
+                dataset_key=key,
+            )
         )
     context = f"ATOM {entry.dataset_feed}"
     try:
@@ -487,7 +527,11 @@ def resolve_atom_file(
         renewed = index.get(key)
         if renewed is None:
             raise NoCoverageError(
-                f"ATOM {params.service_feed}: brak zbioru {key!r} w feedzie uslugi"
+                message(
+                    "transport.atom_dataset_not_in_feed",
+                    service_feed=params.service_feed,
+                    dataset_key=key,
+                )
             ) from e
         entry = renewed
         context = f"ATOM {entry.dataset_feed}"
@@ -526,8 +570,13 @@ def fetch_atom_file(
         if expected is not None and expected != size:
             staged.unlink(missing_ok=True)
             raise DownloadError(
-                f"{file.url}: pobrano {size} z {expected} bajtow wg {source} "
-                "(przerwany transfer)"
+                message(
+                    "transport.atom_truncated_download",
+                    url=file.url,
+                    size=size,
+                    expected=expected,
+                    source=source,
+                )
             )
     return signal
 
@@ -565,9 +614,12 @@ def unpack_members(
             wrong = {s: len(infos) for s, infos in found.items() if len(infos) != 1}
             if wrong:
                 raise DownloadError(
-                    f"{url}: paczka bez jednoznacznych plikow "
-                    + ", ".join(f"{s} ({n})" for s, n in wrong.items())
-                    + f" - czlony: {', '.join(i.filename for i in zf.infolist())}"
+                    message(
+                        "transport.atom_package_ambiguous_files",
+                        url=url,
+                        mismatches=", ".join(f"{s} ({n})" for s, n in wrong.items()),
+                        filenames=", ".join(i.filename for i in zf.infolist()),
+                    )
                 )
             for stored, (info,) in found.items():
                 target = Path(target_dir) / f"{stem}{stored}"
@@ -576,7 +628,9 @@ def unpack_members(
     except (zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError) as e:
         for unpacked in paths.values():
             unpacked.path.unlink(missing_ok=True)
-        raise DownloadError(f"{url}: uszkodzona paczka ZIP: {e}") from e
+        raise DownloadError(
+            message("transport.atom_zip_corrupt", url=url, error=reason(e))
+        ) from e
     except BaseException:
         for unpacked in paths.values():
             unpacked.path.unlink(missing_ok=True)

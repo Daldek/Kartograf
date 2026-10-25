@@ -51,6 +51,9 @@ POLISH = re.compile(
     r"|(?-i:\bGodl[ao]\b)",
     re.IGNORECASE,
 )
+# Polish words that are data, not text: the header cell of a GUGiK response that the
+# code compares with what the service sent.
+DOMAIN = frozenset({"god\u0142o"})
 SCOPES = ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
 # The generated registry of the Nogat standard carries the Polish titles of its codes.
 GENERATED = frozenset({"_errors.py"})
@@ -153,17 +156,6 @@ _PENDING = frozenset(
         "sources/registry.py",
         "sources/sidecar.py",
         "sources/variants.py",
-        # Transforms, transports, cache, auth.
-        "auth/proxy.py",
-        "cache/metadata.py",
-        "transport/aaigrid.py",
-        "transport/atom.py",
-        "transport/chunks.py",
-        "transport/feature_bbox.py",
-        "transport/http.py",
-        "transport/index_records.py",
-        "transport/mosaic.py",
-        "transport/unit_package.py",
     }
 )
 
@@ -292,7 +284,10 @@ def test_polish_literals_stay_only_in_the_catalog_and_the_pending_files():
     found = {
         name
         for name, tree in sources()
-        if any(POLISH.search(node.value) for node in string_values(tree))
+        if any(
+            POLISH.search(node.value) and node.value not in DOMAIN
+            for node in string_values(tree)
+        )
     }
     assert found - _PENDING == set(), "a Polish text belongs in kartograf.messages"
     assert _PENDING - found == set(), "no Polish literal left: drop the file"

@@ -28,6 +28,7 @@ from urllib3.exceptions import NameResolutionError
 
 from kartograf.exceptions import DownloadError
 from kartograf.interrupt import Stopped, check_stop, current_stop
+from kartograf.messages import message, reason
 
 logger = logging.getLogger(__name__)
 
@@ -104,19 +105,19 @@ def failure_reason(exc: requests.RequestException | None) -> str:
     stays in the cause chain (``KARTOGRAF_DEBUG=1``).
     """
     if exc is None:  # retries=0: no attempt was made
-        return "bez proby"
+        return message("transport.no_attempt")
     status = http_status(exc)
     if status is not None:
         return f"HTTP {status}"
     if isinstance(exc, requests.Timeout):
-        return "przekroczony czas odpowiedzi"
+        return message("transport.response_timeout")
     reason = getattr(exc.args[0], "reason", None) if exc.args else None
     if isinstance(reason, NameResolutionError):
-        return "brak sieci albo DNS (nieznana nazwa serwera)"
+        return message("transport.dns_failure")
     if isinstance(
         exc, requests.ConnectionError | requests.exceptions.ChunkedEncodingError
     ):
-        return "zerwane albo odrzucone polaczenie"
+        return message("transport.connection_broken")
     return type(exc).__name__
 
 
@@ -220,23 +221,35 @@ def get_with_retry(
             last_error = exc
             if not is_retryable(exc):
                 raise http_failure(
-                    f"{context}: HTTP {http_status(exc)} (bez ponowien): {exc}", exc
+                    message(
+                        "transport.http_error_no_retry",
+                        context=context,
+                        http_status=http_status(exc),
+                        error=reason(exc),
+                    ),
+                    exc,
                 ) from exc
             if attempt < retries - 1:
                 delay = retry_wait(exc, backoff_delay(attempt))
                 logger.warning(
-                    "%s: proba %s/%s nieudana (%s); ponowienie za %ss",
-                    context,
-                    attempt + 1,
-                    retries,
-                    failure_reason(exc),
-                    delay,
+                    message(
+                        "transport.attempt_failed_retrying",
+                        context=context,
+                        attempt=attempt + 1,
+                        retries=retries,
+                        failure_reason=failure_reason(exc),
+                        delay=delay,
+                    ),
                 )
                 logger.debug("%s: %r", context, exc)
                 _pause(delay)
     raise http_failure(
-        f"{context}: pobranie nieudane po {retries} probach "
-        f"({failure_reason(last_error)})",
+        message(
+            "transport.download_failed_retries",
+            context=context,
+            retries=retries,
+            failure_reason=failure_reason(last_error),
+        ),
         last_error,
     ) from last_error
 
@@ -292,23 +305,35 @@ def head_signal(
             last_error = exc
             if not is_retryable(exc):
                 raise http_failure(
-                    f"{context}: HTTP {http_status(exc)} (bez ponowien): {exc}", exc
+                    message(
+                        "transport.http_error_no_retry",
+                        context=context,
+                        http_status=http_status(exc),
+                        error=reason(exc),
+                    ),
+                    exc,
                 ) from exc
             if attempt < retries - 1:
                 delay = retry_wait(exc, backoff_delay(attempt))
                 logger.warning(
-                    "%s: proba %s/%s nieudana (%s); ponowienie za %ss",
-                    context,
-                    attempt + 1,
-                    retries,
-                    failure_reason(exc),
-                    delay,
+                    message(
+                        "transport.attempt_failed_retrying",
+                        context=context,
+                        attempt=attempt + 1,
+                        retries=retries,
+                        failure_reason=failure_reason(exc),
+                        delay=delay,
+                    ),
                 )
                 logger.debug("%s: %r", context, exc)
                 _pause(delay)
     raise http_failure(
-        f"{context}: sprawdzenie nieudane po {retries} probach "
-        f"({failure_reason(last_error)})",
+        message(
+            "transport.check_failed_retries",
+            context=context,
+            retries=retries,
+            failure_reason=failure_reason(last_error),
+        ),
         last_error,
     ) from last_error
 
@@ -375,7 +400,7 @@ def download_to(
     for attempt in range(retries):
         check_stop()
         try:
-            logger.debug("Pobieranie %s (proba %s/%s)", context, attempt + 1, retries)
+            logger.debug(f"Downloading {context} (attempt {attempt + 1}/{retries})")
             response = session.get(url, stream=True, timeout=timeout)
             response.raise_for_status()
             if validate is not None:
@@ -387,31 +412,41 @@ def download_to(
                 saved = save(response, output_path)
             else:
                 saved = _write_atomic(response, output_path, chunk_size)
-            logger.info("Pobrano %s -> %s", context, saved)
+            logger.info(f"Downloaded {context} -> {saved}")
             return saved
         except requests.RequestException as e:
             last_error = e
             if not is_retryable(e):
                 raise http_failure(
-                    f"Nie udalo sie pobrac {context}: "
-                    f"HTTP {http_status(e)} (bez ponowien): {e}",
+                    message(
+                        "transport.download_http_no_retry",
+                        context=context,
+                        http_status=http_status(e),
+                        error=reason(e),
+                    ),
                     e,
                 ) from e
             if attempt < retries - 1:
                 wait = retry_wait(e, backoff_delay(attempt))
                 logger.warning(
-                    "Pobranie %s nieudane (proba %s/%s: %s); ponowienie za %ss",
-                    context,
-                    attempt + 1,
-                    retries,
-                    failure_reason(e),
-                    wait,
+                    message(
+                        "transport.download_failed_retrying",
+                        context=context,
+                        attempt=attempt + 1,
+                        retries=retries,
+                        failure_reason=failure_reason(e),
+                        wait=wait,
+                    ),
                 )
                 logger.debug("%s: %r", context, e)
                 _pause(wait)
 
     raise http_failure(
-        f"Nie udalo sie pobrac {context} po {retries} probach "
-        f"({failure_reason(last_error)})",
+        message(
+            "transport.download_gave_up",
+            context=context,
+            retries=retries,
+            failure_reason=failure_reason(last_error),
+        ),
         last_error,
     ) from last_error
