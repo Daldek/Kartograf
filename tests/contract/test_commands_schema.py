@@ -1,7 +1,7 @@
 """``kartograf-commands/1`` and ``kartograf-command-list/1`` of the real declarations
 (AGI-2.4, AGI-4.1, DOC-1.7): every command validates against the vendored Nogat schema,
 the documents stay within the page budget and every example call parses with the real
-parser."""
+parser and is the canonical line of its call."""
 
 import json
 import shlex
@@ -11,7 +11,7 @@ import jsonschema
 import pytest
 from referencing import Registry, Resource
 
-from kartograf import command_schema, list_commands
+from kartograf import command_schema, format_command, list_commands, parse_command
 from kartograf.catalog.cliparser import parse_command_line
 from kartograf.catalog.commands import declared
 from kartograf.cli._parser import create_parser
@@ -76,6 +76,19 @@ def test_the_call_of_every_example_parses_with_the_real_parser(name):
         assert words[0] == "kartograf", example.call
         parsed = parse_command_line(parser, words[1:])
         assert parsed._command_id == name, example.call
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_the_call_of_every_example_is_the_line_format_command_writes(name):
+    """An example is canonical: the line ``format_command`` writes for the call it
+    reads back into, the order of the flags too, so a tool that exchanges lines
+    (Archiwista) compares them as text."""
+    (entry,) = command_schema(name).commands
+
+    for example in entry.examples:
+        call = parse_command(example.call)
+        line = format_command(call.command, call.options, run=call.run)
+        assert line == example.call
 
 
 @pytest.mark.parametrize("name", NAMES)

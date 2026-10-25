@@ -2151,6 +2151,14 @@ from the key `root`, and the MCP tool names.
 
 ### Fixed
 
+- Every example of the catalog is the line `format_command` writes for its call, the order of
+  the flags too (AGI-2.1), so a tool that exchanges command lines compares them as text
+  (request of Archiwista). The second example of `project add` wrote the flags of its data
+  command as declared, `kartograf project add gleby soil hsg --sheet N-34-130-D --depth 0-5cm`,
+  while `format_command` writes them in the order of the parameters; `kartograf-commands/1`,
+  the `--help` of `project add` and the hints that quote it now say `... soil hsg --depth 0-5cm
+  --sheet N-34-130-D`. A contract test reads every example of `kartograf-commands/1` back and
+  compares the line `format_command` writes with its text.
 - A plain plan (`--check` with `--output-dir`, `check_*(output_dir=)`, MCP `check`) keeps a
   position whose source could not be checked as `check_failed`, as the store does (DEV-19.10,
   ADR-054 decision 6 erratum). `plain_items` judged it as a target: the status `missing`, the

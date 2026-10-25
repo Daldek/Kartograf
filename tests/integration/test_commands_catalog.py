@@ -122,17 +122,15 @@ def test_validate_and_format_command_take_the_line_of_every_offline_command(
 
 @pytest.mark.parametrize("command", list(CATALOG.values()), ids=lambda c: c.id)
 def test_every_example_of_the_catalog_is_a_call_of_the_layer(command):
-    """The line of each declared example is read, written back and accepted: the
-    options of a call are options of the schema of the command."""
+    """The line of each declared example is read and accepted: the options of a call
+    are options of the schema of the command."""
     names = {option.name for option in declared_options(command)}
     assert command.examples
     for example in command.examples:
         call = parse_command(example_command_line(command, example))
-        written = format_command(call.command, call.options, run=call.run)
 
         assert call.command == command.id
         assert set(call.options) <= names
-        assert parse_command(written) == call
         assert (
             validate_command(call.command, call.options, **_targets(call.run)) is None
         )

@@ -3079,7 +3079,7 @@ cd ~/projekty/wisla
 kartograf project init --root ~/dane/kartograf
 kartograf project add teren elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --year 2022
 kartograf project add pokrycie landcover download --product bdot10k --teryt 1465
-kartograf project add gleby soil hsg --sheet N-34-130-D --depth 0-5cm
+kartograf project add gleby soil hsg --depth 0-5cm --sheet N-34-130-D
 kartograf project download
 kartograf project status
 kartograf project verify
