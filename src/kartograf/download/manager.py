@@ -9,7 +9,6 @@ Supports parallel downloads via ThreadPoolExecutor when workers > 1.
 
 import concurrent.futures
 import copy
-import functools
 import logging
 import os
 import shutil
@@ -17,7 +16,7 @@ import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Concatenate, Literal, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
 import requests
 
@@ -93,7 +92,7 @@ from kartograf.notices import (
     count_text,
     size_text,
 )
-from kartograf.output import plain_of, preflight, resolve_target, store_only, writing
+from kartograf.output import plain_of, preflight, resolve_target, store_only, writes
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
 from kartograf.sources.registry import get_source
@@ -522,33 +521,6 @@ def incomplete_text(sheet: str, record: SkorowidzRecord) -> str:
     except DownloadError:
         flight = record.url
     return message("output.skipped_incomplete", sheet=sheet, flight=flight)
-
-
-def _writes[**P, R](
-    method: Callable[Concatenate["DownloadManager", P], R],
-) -> Callable[Concatenate["DownloadManager", P], R]:
-    """Run a public method of a manager made with ``output_dir`` in its plain write.
-
-    The call opens the write (``writing``: the staging directory, SIGTERM) and works
-    on a copy of the manager whose storage is the handle root of that write, so
-    every slot it builds is a slot of the plain write; a manager of a store calls
-    the method as it is.
-    """
-
-    @functools.wraps(method)
-    def wrapper(self: "DownloadManager", *args: P.args, **kwargs: P.kwargs) -> R:
-        if self._output_dir is None:
-            return method(self, *args, **kwargs)
-        options = cast(dict[str, Any], kwargs)
-        with writing(
-            output_dir=self._output_dir,
-            update=options.get("update"),
-            plan=options.get("plan"),
-            all_campaigns=self._all_campaigns,
-        ) as handle:
-            return method(self._on(handle), *args, **kwargs)
-
-    return cast(Callable[Concatenate["DownloadManager", P], R], wrapper)
 
 
 class DownloadManager:
@@ -992,7 +964,7 @@ class DownloadManager:
     # Download by sheet code → ASC
     # =========================================================================
 
-    @_writes
+    @writes
     def download_sheet(
         self,
         sheet: str,
@@ -1073,7 +1045,7 @@ class DownloadManager:
             SheetParser(sheet), self._sheet_scale
         )
 
-    @_writes
+    @writes
     def download_hierarchy(
         self,
         sheet: str,
@@ -1140,7 +1112,7 @@ class DownloadManager:
             return self.expand_sheets(sheets, self._sheet_scale)
         return list(dict.fromkeys(SheetParser(sheet).sheet for sheet in sheets))
 
-    @_writes
+    @writes
     def download_sheets(
         self,
         sheets: list[str],
@@ -1170,7 +1142,7 @@ class DownloadManager:
         )
         return self._download_many(leaves, update, on_progress, self._workers)
 
-    @_writes
+    @writes
     def inspect_sheets(self, sheets: list[str]) -> list[SheetInspection]:
         """Freshness of the leaf sheets WITHOUT downloading (spec 4.1, 4.4).
 
@@ -1241,7 +1213,7 @@ class DownloadManager:
                 return list(executor.map(inspect, leaves))
         return [inspect(sheet) for sheet in leaves]
 
-    @_writes
+    @writes
     def check_sheets(
         self,
         sheets: list[str],

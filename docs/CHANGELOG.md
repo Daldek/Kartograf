@@ -393,8 +393,7 @@ changes and the migration guide ("Migration guide: data output") are written wit
   `check_data(output_dir=, force=)` run the check of the whole request first, so a request over
   two countries is judged as one list; the reports have `mode` `plain`, `output_dir` and the
   file statuses `written` and `replaced`, and a check lists `action`, `path` and `reason` of each
-  target (a conflict is a result). The collections, land cover and HSG follow in the next
-  steps.
+  target (a conflict is a result).
 - PL sheets in plain mode (ADR-054 decision 5, DEV-19.4; adopted from D12 and D13 of the
   template branch): `DownloadManager(provider, output_dir=...)` and `download_data(output_dir=)`
   write one file per sheet, `<sheet>.<ext>`, taken from the newest flight DECLARED FULL
@@ -411,6 +410,22 @@ changes and the migration guide ("Migration guide: data output") are written wit
   applies to plain mode only. `DownloadResult` has `written`, `replaced` and `incomplete`,
   `YearRangeCheck` and `SheetInspection` an `incomplete` entry, and `NoCoverageError` takes an
   instance `reason`.
+- Plain mode of the collections, land cover, soil and HSG (ADR-054 decisions 3, 11 and 12):
+  `download_collection`, `download_landcover`, `download_soil`, `calculate_hsg` and their
+  `check_*` twins take `output_dir` beside `root`; the `check_*` functions also take `force`, so
+  that a plan lists `replace` for an existing file (in the store `force` of a check has no
+  effect). `LandCoverManager(provider, *, root=None, output_dir=None, cache=True)` and
+  `HSGCalculator(provider=None, *, root=None, output_dir=None, cache=True)` take it too. A unit
+  is one file, `<unit><ext>`, in one flat directory (`0208.zip`, `1465.gpkg`,
+  `<coordinates>.tif`); the request is judged as a whole before the first byte, as for the
+  other tracks. BDOT10k with `keep_raw` writes the GPKG and the original package, `<teryt>.gpkg`
+  and `<teryt>.zip` (`raw[]` lists the ZIP; no sidecar says which package a GPKG came from).
+  SoilGrids and CORINE files have no edition label in plain mode, and no edition is asked.
+  `calculate_hsg(output_dir=)` fetches the clay, sand and silt inputs into private directories
+  of the staging directory (`Staging.scratch`) and writes only the HSG raster, named as in the
+  store: `inputs[]` is empty, nothing is reused, and its plan has the one target without
+  asking the source. `kartograf.output.writes` (the decorator the managers share),
+  `report_target` and `unit_of` are new.
 
 ### Breaking changes
 
