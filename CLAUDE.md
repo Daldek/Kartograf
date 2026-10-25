@@ -113,7 +113,6 @@ The place of Kartograf in the ecosystem, its dependencies and consumers: https:/
 ## Deviations
 
 - DEV-7.3: mypy checks `tests/` with an override that allows unannotated test functions (`[[tool.mypy.overrides]]` for `tests.*` in `pyproject.toml`).
-- DEV-19.1, DEV-19.2, Z7: the data-output convention is not adopted yet: `--output` is the store root, `--check-updates` is not `--check`, and there is no `--root`, plain mode or store marker (PROGRESS, Next 4).
 - AGI-3.8, AGI-5.1: no `kartograf mcp`; the console script `kartograf-mcp` starts the server (ADR-052, decision 10; PROGRESS, Next 2).
 - AGI-4.1: the domain JSON Schemas are not published in `src/kartograf/schemas` (PROGRESS, Next 2).
 - DEV-2.1, ECO-005: the texts of the files in `_PENDING` of `tests/unit/test_messages.py` are Polish ASCII until their area moves into the message catalog (ADR-053, PROGRESS Next 25), and `docs/research` and `docs/superpowers` are Polish records (PROGRESS, Next 26).
