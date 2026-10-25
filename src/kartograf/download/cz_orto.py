@@ -80,7 +80,7 @@ logger = logging.getLogger(__name__)
 _KEY = "cz.cuzk.orto"
 _TRACK: Track = "cz_orto"
 _SIGNAL: SignalKind = "metadata"
-# Read timeout of a sheet ZIP (16-64 MB; STANDARDS 13.4).
+# Read timeout of a sheet ZIP (16-64 MB; DEV-13.2).
 ZIP_TIMEOUT = 120
 # CRS georeferenced by each world file. Measured 2026-10-16 on CTES96, CTES86
 # and AS91: the origin of the TM33N/TM34N file is the S-JTSK origin

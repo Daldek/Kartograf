@@ -1,92 +1,121 @@
-# Instrukcje dla Claude Code
+# Kartograf: instructions for Claude Code
 
-Kartograf pobiera dane przestrzenne z publicznych uslug GUGiK (PL), CUZK (CZ),
-Copernicus i ISRIC (NMT/NMPT, ortofotomapa, LAZ, BDOT10k, CORINE, SoilGrids,
-HSG) i zapisuje je w ukladzie `data/` z sidecarem metadanych. Dziala jako CLI
-`kartograf`, biblioteka Python i serwer MCP `kartograf-mcp` (interfejs dla
-agentow AI: `llms.txt`, `kartograf commands list --json`); jest czescia toolchainu
-hydrologicznego (Hydrograf, Hydrolog, IMGWTools). Wprowadzenie: `README.md`;
-zakres: `docs/SCOPE.md`.
+Kartograf downloads official spatial data of Poland (GUGiK) and Czechia (CUZK), with Copernicus CORINE and ISRIC SoilGrids (NMT/NMPT, orthophoto, LAZ, BDOT10k, SoilGrids, HSG and more), and saves every file as a version in a store with a metadata sidecar. One command catalog drives the CLI `kartograf`, the Python library and the MCP server `kartograf-mcp`.
 
-## Zasady pracy (krytyczne)
+Profile: `tool` (DEV §1). What it is for: `README.md`; scope: `docs/SCOPE.md`. Requirements are cited by ID (DEV, DOC, AGI, ERR, REL) from the [Nogat standard 2.1](https://github.com/Daldek/Nogat/tree/main/standards); this repository holds no copy of it (DEV-1.3).
 
-Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
+## Critical rules
 
-- Python wylacznie z `.venv`: `.venv/bin/python`, `.venv/bin/kartograf`
-  (STANDARDS 6.1; zmienne srodowiskowe: 6.2).
-- Pobrane dane zapisuj poza repo i poza `/tmp`, zawsze z jawnym `--output`;
-  cache metadanych SQLite lezy w katalogu cache uzytkownika
-  (`<cache_dir>/kartograf/metadata.db`, nigdy w biezacym katalogu), ustawienia
-  pokazuje `kartograf config show` (STANDARDS 6.4, `docs/USAGE.md` 10).
-- Testy sa offline: `-m "not live"`; testy `live` tylko swiadomie
-  (STANDARDS 6.3, 10.4).
-- Brama przed commitem/merge: `scripts/gate.sh` (ruff check, ruff format
-  --check, mypy, pytest offline; dziala tez z worktree) musi byc zielona
-  (STANDARDS 6.3, 8.3, 18).
-- Praca na `develop` (albo galezi krotkotrwalej z `develop`); Conventional
-  Commits z opisem po polsku, docstringi i komentarze po angielsku,
-  dokumentacja po polsku (STANDARDS 1.1, 2, 9.4).
-- Commity bez stopki `Co-Authored-By` (decyzja uzytkownika 2026-10-09;
-  stopki w starszej historii zostaja). Autor: `Daldek <git@debever.pl>`.
-- Na koniec sesji OBOWIAZKOWO zaktualizuj `docs/PROGRESS.md`; zmiany
-  dopisuj na biezaco do `docs/CHANGELOG.md` (STANDARDS 15).
-- `docs/DECISIONS.md` ma konce linii CRLF — zachowaj je przy edycji
-  (STANDARDS 5.5).
+- Python only from the project environment: `uv sync --locked --all-extras`, then `uv run ...` or `.venv/bin/python` (DEV-6.2, DEV-6.3).
+- `scripts/gate.sh` (ruff format, ruff check, mypy, offline tests with coverage, commit checks; also works from a worktree) is green before every commit (DEV-7.6). Tests are offline (`-m "not live"`, no network: `tests/conftest.py` fails a test that opens a socket); `live` tests only on purpose (DEV-10.1 to DEV-10.3).
+- Downloaded data goes outside the repository and outside `/tmp`, always with an explicit `--output`. The metadata cache is in the user cache directory (`<cache_dir>/kartograf/metadata.db`), never in the current directory; `kartograf config show` reports every setting. If the data directory is unavailable, stop and ask. Tests write only in `tmp_path`.
+- Git (DEV-3, DEV-4): work on `develop` or a topic branch `<type>/<topic>` from it; English Conventional Commits, author `Daldek <git@debever.pl>`, no `Co-Authored-By` trailer or other AI attribution. Without the author's approval in the session: no merge into `develop` or `main`, no tag, no force-push of a shared branch, no release entry (DEV-3.3).
+- English for code, docstrings, comments, log messages, documentation, commits and ADRs (DEV-2.1). Polish only in output for people, from the message catalogue once it exists (PROGRESS, Next 25).
+- Secrets only from environment variables. CLMS credentials (`CLMS_CREDENTIALS`) are read only by the Auth Proxy subprocess (`kartograf.auth.proxy`), never by the main process (DEV-13.1).
+- Every HTTP request has a timeout and goes through `transport/http.py` (`download_to`, `get_with_retry`, `head_signal`: retries, backoff, atomic writes); providers have no retry loops of their own (DEV-13.2).
+- UTF-8, LF, final newline (DEV-14.1). `docs/DECISIONS.md` is LF too.
+- Generated files are never edited by hand: `AGENTS.md` and `llms.txt` (`kartograf commands guide --format agents|llms`), `src/kartograf/_errors.py` (`scripts/generate_errors.py`), `src/kartograf/_output_schema.py` (`scripts/generate_output_schema.py`) and the tables of `docs/USAGE.md` 9.3 and 9.6 (`scripts/generate_docs.py`). After a change of the catalog, the error registry or a template in `src/kartograf/_data/agents/`, regenerate them; contract tests compare them byte for byte.
+- A decision with alternatives is an ADR (`docs/decisions/NNNN-slug.md`, indexed in `docs/DECISIONS.md`). The change goes into `docs/CHANGELOG.md` in the same commit (DOC-7.2); `docs/PROGRESS.md` is updated before the last commit of a session (DEV-17.3).
 
-## Agenci z innych repozytoriow
+## Rules for code
 
-Dotyczy agentow pracujacych w Hydrografie, Archiwiscie, IMGWTools i innych
-repozytoriach, ktorzy edytuja Kartografa:
+- The CLI only translates: a handler in `src/kartograf/cli/` turns flags into the arguments of one library function and prints its result. No data logic there: no validation of values, no choice of countries, sheets or campaigns, no `parent_request`, no reading of sidecars to decide (ADR-037; `tests/contract/test_cli_translation.py`).
+- A command is a declaration in `src/kartograf/catalog/commands/<group>.py`. The CLI parser, the options of project tasks and the MCP tools are built from it, and the library and `catalog` never import `kartograf.cli` or `mcp` (ADR-046).
+- Command-level functions take keyword-only arguments, check their types before any network or write (`download/arguments.py`) and have no default that changes which data is chosen (product, variant, resolution, vertical CRS, area, output): a missing value is an error that names the option and its allowed values (ADR-044).
+- Every exception is a `KartografError` subclass with its own registry `code` and a `reason` (ADR-049). Invalid input is `ValidationError` (a sheet code `ParseError`), never `ValueError`; validators set `option`, `options` and `allowed` (the API argument, not the flag); keep the chain with `raise ... from err`; carry facts as attributes, not in the text.
+- Data messages are `Notice(level, code, text)` in the `notices` of the result (`notices.py`); the library does not print. Results are `@dataclass(frozen=True)` with the `Document` mixin (`serialization.py`): a new document is a class, a row in `tests/contract/test_json_contract.py` and a row in ARCHITECTURE 3.6; schemas `/1` only grow (ADR-046).
+- Logging: `logging.getLogger(__name__)`, `%`-style arguments, never an f-string; the library does not call `print` or configure handlers (DEV-12).
+- Tests: `test_<unit>_<scenario>[_<expected>]`, arrange-act-assert, recorded server answers in `tests/fixtures/`, a flag or a track needs a CLI = API scenario in `tests/contract/test_parity*.py` (DEV-10.5, ADR-037).
 
-- zmiany wylacznie na galezi odchodzacej od `develop` (`feat/<temat>`,
-  `fix/<temat>`); nigdy na `develop` ani `main`;
-- bez merge do `develop`/`main`, bez push do nich i bez tagow;
-- bez wpisow wydania (nowy naglowek `## [x.y.z] - data` w
-  `docs/CHANGELOG.md`, zmiana `__version__`, tag) bez zgody uzytkownika;
-  zmiane opisuje sie w sekcji nadchodzacego wydania (`## [Unreleased]`, gdy
-  ostatnie wydanie jest otagowane) i w commicie;
-- przed tagiem OBOWIAZKOWY przeglad: `git log develop..<galaz>`, przeglad
-  diffu przez uzytkownika i `scripts/gate.sh` zielony; tag dopiero po jawnej
-  zgodzie uzytkownika;
-- interfejs maszynowy Kartografa: `AGENTS.md` i `llms.txt` (przewodnik dla agentow),
-  `kartograf commands list --json` (komendy, parametry, dozwolone wartosci,
-  przyklady), `--json` w kazdej komendzie (dokumenty `kartograf-*/1`, blad
-  `kartograf-error/1`, kody wyjscia z rejestru bledow Nogat) i serwer MCP `kartograf-mcp`
-  (`kartograf[mcp]`); opis: `docs/USAGE.md`, sekcja 9;
-- `AGENTS.md` i `llms.txt` sa generowane z katalogu komend (`kartograf commands guide
-  --format agents`, `--format llms`): nie edytuj ich recznie, po zmianie katalogu,
-  rejestru bledow albo szablonow w `src/kartograf/_data/agents/` wygeneruj je ponownie
-  (przekierowaniem do pliku); reguly pracy nad kodem sa w tym pliku.
+## Environment and commands
 
-## Mapa dokumentacji
+```bash
+uv sync --locked --all-extras             # .venv, Python 3.12 or newer
+scripts/gate.sh                           # the whole gate, about 9 minutes
+uv run pytest tests -m "not live" -q      # offline tests; scope them with a path or -k
+uv run pytest tests -m live               # network tests, on purpose only
+uv run ruff format . && uv run ruff check . && uv run mypy src tests
+uv run kartograf commands list --json     # run the CLI (python -m kartograf works too)
+```
 
-| Czego szukasz | Gdzie |
+Settings and variables (`KARTOGRAF_*`, `NOGAT_*`, `NOGAT_CONFIG`, `CLMS_CREDENTIALS`): README, "Settings, directories and backup", and `.env.example`. `KARTOGRAF_DEBUG=1` prints the traceback of an unexpected error. Timeouts are constants of the providers (`grep -rn "_TIMEOUT =" src/kartograf/providers`).
+
+## Rules for agents of other repositories
+
+For agents of Hydrograf, Archiwista, Retman, IMGWTools and others that edit Kartograf:
+
+- change it only on a branch from `develop` (`feat/<topic>`, `fix/<topic>`), never on `develop` or `main`; no merge into them, no push to them, no tag;
+- no release entry (a new `## [x.y.z] - date` heading in `docs/CHANGELOG.md`, a new `__version__`, a tag) without the author's approval; describe the change under `## [Unreleased]` and in the commit;
+- before a tag the review is mandatory: `git log develop..<branch>`, the author reads the diff and `scripts/gate.sh` is green; the tag comes only after the author agrees;
+- the machine interface of Kartograf: `AGENTS.md` and `llms.txt` (the guide for agents), `kartograf commands list --json` (commands, options, allowed values, examples), `--json` on every command (documents `kartograf-*/1`, errors `kartograf-error/1`, exit codes of the Nogat error registry) and the MCP server `kartograf-mcp` (`kartograf[mcp]`); described in `docs/USAGE.md` 9;
+- `AGENTS.md` and `llms.txt` are generated (`kartograf commands guide --format agents`, `--format llms`): do not edit them by hand; the rules for work on the code are in this file.
+
+## Code map (`src/kartograf/`)
+
+```
+__init__.py        public API (__all__): the only supported import surface (AGI-7.1)
+cli/               argparse front end; handlers translate flags to library calls
+catalog/           command declarations (commands/<group>.py), parser, documents, MCP tools
+commands.py        parse_command, validate_command, format_command, run_command, check_command
+download/          data.py (download_data/check_data), collections.py, manager.py (sheets,
+                   campaigns, versions), availability.py, laz.py, cutouts, cz_*.py, storage.py
+sources/           registry.py (source descriptors, channels, licences), variants.py
+providers/         pl/ (GUGiK), cuzk/, corine.py, soilgrids.py: talk to one source
+transport/         engines shared by products: http.py, unit_package, feature_bbox, atom, chunks
+transform/         pinned CRS transforms (crs.py), GeoPackage writer, raster warp
+core/              sheet parsers (PL-1992, PL-2000, CZ), bbox, geometry
+landcover/         BDOT10k, CORINE and SoilGrids orchestration
+hydrology/         hsg.py: hydrologic soil groups from SoilGrids
+project/           project manifest kartograf-project.json: model, operations, commands
+store.py           read API of the store (iter_store, read_sidecar, ...); store_*.py documents
+cache/  auth/      metadata cache (SQLite WAL); CLMS Auth Proxy
+mcp_server.py      MCP server on the catalog (extra mcp); guide.py generates AGENTS.md, llms.txt
+exceptions.py  error_report.py  envelope.py  notices.py  serialization.py  config.py
+_errors.py  _output_schema.py   generated; _data/agents/ holds the guide templates
+testing.py         producer fixtures for consumers (DEV-10.6)
+```
+
+Layers and dependencies: `docs/ARCHITECTURE.md` 2. Tests: `tests/unit`, `tests/integration`, `tests/contract` (interfaces, generated files, registry), `tests/support`, `tests/fixtures`.
+
+## Documentation map
+
+| You need | Read |
 |---|---|
-| Stan prac, ostatnia sesja, backlog | `docs/PROGRESS.md` |
-| Workflow sesji, kolejnosc lektury | `docs/DEVELOPMENT_STANDARDS.md` 15 |
-| Srodowisko, zmienne (`KARTOGRAF_*`, `NOGAT_*`, `CLMS_CREDENTIALS`), `nogat.toml`, komendy testow/lint/mypy | `docs/USAGE.md` 10; `.env.example`; STANDARDS 6.1-6.3, 8.3 |
-| Gdzie zapisywac pobrane dane | STANDARDS 6.4 |
-| Git, commity, jezyk, testy, wyjatki, timeouty i retry (zasady) | STANDARDS 1-2, 9.4, 10-11, 13.4 |
-| Roadmapa do v1.0.0 (podprojekty, kolejnosc, zasady) | `docs/SCOPE.md` 3.3 |
-| Katalog produktow GUGiK/CUZK (statusy, probki, pulapki uslug) i plany podprojektu 3 (A-E, grupy CLI, raport dostepnosci) | `docs/research/2026-10-13-katalog-produktow/raport.md`; `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md` |
-| Zakres, co jest poza nim, ograniczenia techniczne (timeouty per provider, CZ, `--country auto`), zaleznosci | `docs/SCOPE.md` 2, 3.1, 3.2, 4.2 |
-| Wymagania produktowe (warstwy BDOT10k, parametry SoilGrids, lata CORINE) | `docs/PRD.md` |
-| Moduly i zaleznosci miedzy warstwami | `docs/ARCHITECTURE.md` 2 |
-| Deskryptory zrodel, sidecar `kartograf-meta/1`, `extra.parent_request` | ARCHITECTURE 3.1, 3.2, 3.4 |
-| Uklad `data/`, wersje `versions/` (dawniej `kampanie/`), dowiazania i `full_sheet/` | ARCHITECTURE 3.3 |
-| Odczyt magazynu bez zapisu (Archiwista): `iter_store`, `list_segments`, `list_partitions` (czesci segmentu), `read_sidecar`, obrysy, koszt na wpis, watki | ARCHITECTURE 3.3.1; ADR-045 (errata 2) |
-| Godlo PL, skorowidz GUGiK, `MetadataCache`/`--force`, kampanie (`--all-campaigns`, `--min-year`, `--full-sheet`, I-1) | ARCHITECTURE 4.1 |
-| Lista arkuszy PL (R5, kody wyjscia), WCS `download_bbox` (siatka zrodla, kawalki `transport/chunks.py`, ADR-034) | ARCHITECTURE 4.2 |
-| Wycinek `--cutout --horizontal-crs`, `--sheet-system` (ADR-027, ADR-038) | ARCHITECTURE 4.3 |
-| CZ (CUZK), `--country auto` | ARCHITECTURE 4.4-4.6 |
-| LAZ (ADR-029) | ARCHITECTURE 4.7 |
-| Land cover, BDOT10k, CORINE, SoilGrids, HSG | ARCHITECTURE 4.8 |
-| CLI = API: `download_data`/`check_data`, `Notice`, wspolny cache, testy zgodnosci (CLI tylko tlumaczy) | STANDARDS 7.3; ARCHITECTURE 4 (wstep); ADR-037 |
-| Interfejs dla agentow AI: dokumenty JSON `kartograf-*/1`, `--json`, kody wyjscia i bledow, katalog komend, serwer MCP, `llms.txt` | `docs/USAGE.md` 9; ARCHITECTURE 3.6, 4.11; STANDARDS 7.3 (Z8-Z11); ADR-046; spec `docs/superpowers/specs/2026-10-18-agent-interface-design.md` |
-| Nowa komenda albo grupa CLI (deklaracja w katalogu komend) | STANDARDS 17.2; ARCHITECTURE 4.11 |
-| Jedna komenda bramy (ruff, ruff format, mypy, pytest offline; tez z worktree) | `scripts/gate.sh`; STANDARDS 6.3 |
-| Nowe zrodlo albo kraj; nowy provider pokrycia terenu | ARCHITECTURE 5; STANDARDS 17 |
-| Przyklady CLI i biblioteki, wynik pobrania, kampanie, CLMS, znane problemy | `docs/USAGE.md` 1-7 |
-| Decyzje i ich erraty (indeks na poczatku pliku) | `docs/DECISIONS.md` |
-| Historia zmian per wydanie | `docs/CHANGELOG.md` |
-| Pelna lista opcji CLI / publiczne API | `kartograf <grupa> <komenda> --help` albo `kartograf commands list --json` / `kartograf/__init__.py` (`__all__`) |
+| State, backlog, last session | `docs/PROGRESS.md` |
+| Scope, limits, roadmap to 1.0, dependencies | `docs/SCOPE.md` 2, 3, 4 |
+| Product requirements (BDOT10k layers, SoilGrids parameters, CORINE years) | `docs/PRD.md` |
+| Modules and layers; source descriptors and sidecar `kartograf-meta/1` | `docs/ARCHITECTURE.md` 2, 3.1, 3.2, 3.4 |
+| Store layout, `versions/`, hard links, `full_sheet/`; read API for Archiwista | ARCHITECTURE 3.3, 3.3.1; ADR-036, ADR-045 |
+| JSON documents `kartograf-*/1` | ARCHITECTURE 3.6; `docs/USAGE.md` 9 |
+| Flows: sheets and campaigns, WCS cutout, CZ, LAZ, land cover, collections | ARCHITECTURE 4.1 to 4.10 |
+| Command catalog, errors, MCP server; adding a command | ARCHITECTURE 4.11; ADR-046, ADR-049, ADR-052 |
+| Adding a source, a country, a provider or a collection product | ARCHITECTURE 5 |
+| Examples, results, campaigns, CLMS, known problems | `docs/USAGE.md` 1 to 7 |
+| Environment, variables, `nogat.toml`, MCP configuration | README; `.env.example`; USAGE 9.6, 10 |
+| Decisions and their errata (index at the top) | `docs/DECISIONS.md`, `docs/decisions/` |
+| Changes per release | `docs/CHANGELOG.md` |
+| The full list of options; the public API | `kartograf <group> <command> --help`, `kartograf commands list --json`; `kartograf.__all__` |
+| The agent interface and the Nogat standard | `AGENTS.md`, `llms.txt`; https://github.com/Daldek/Nogat/tree/main/standards |
+
+## Session workflow
+
+1. Start: read this file and `docs/PROGRESS.md`; `git status` and `git log --oneline -10`; confirm the branch; find the sections of SCOPE, ARCHITECTURE and PRD that the task touches; ask when something is unclear (DEV-17.1).
+2. A change of a public interface, or across several modules, starts with a plan in `docs/plans/YYYY-MM-DD-slug.md` that the author approves (DEV-17.4).
+3. Write the test first for a defect (offline, a recorded answer as the fixture), then fix it; run the offline suite, because nothing else may break. A download defect: find the provider, then the shared transport (`transport/http.py`), not a retry in the provider.
+4. Commit in small steps, each with its documentation, after `scripts/gate.sh` is green; the CHANGELOG entry goes under `## [Unreleased]`.
+5. End: update `docs/PROGRESS.md` (state, what is in progress with file and context, the next steps) and commit it (DEV-17.3).
+6. A need in another project is a GitHub issue there, labelled `request`; change only this repository (DEV-17.5).
+
+## Cross-project context
+
+The place of Kartograf in the ecosystem, its dependencies and consumers: https://github.com/Daldek/Nogat/blob/main/ecosystem.yaml (entry `Kartograf`). Hydrograf uses its library, Archiwista reads its store, Retman reads its catalog, Hydraulik calls its CLI, Hydrolog reads its files, and IMGWTools shares the store design without importing it.
+
+## Deviations
+
+- DEV-7.3: mypy checks `tests/` with an override that allows unannotated test functions (`[[tool.mypy.overrides]]` for `tests.*` in `pyproject.toml`).
+- DEV-19.1, DEV-19.2, Z7: the data-output convention is not adopted yet: `--output` is the store root, `--check-updates` is not `--check`, and there is no `--root`, plain mode or store marker (PROGRESS, Next 4).
+- AGI-3.8, AGI-5.1: no `kartograf mcp`; the console script `kartograf-mcp` starts the server (ADR-052, decision 10; PROGRESS, Next 2).
+- AGI-4.1: the domain JSON Schemas are not published in `src/kartograf/schemas` (PROGRESS, Next 2).
+- DEV-2.1, ECO-005: library messages and `error_report` hints are Polish ASCII until the message catalogue lands, and `docs/research` and `docs/superpowers` are Polish records (PROGRESS, Next 25 and 26).
+- DEV-13.7, DEV-16.2, DEV-3.6, DEV-4.2: `SECURITY.md`, `CONTRIBUTING.md`, `docs/CLA.md`, `CONTRIBUTORS.md`, the GitHub rulesets and the single author identity of the history are the author's steps (PROGRESS, Next 3).
+- REL: the distribution is `kartograf`, not `nogat-kartograf`; no `server.json` yet (PROGRESS, Next 5).

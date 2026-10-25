@@ -73,7 +73,7 @@ PRODUCT = "contours"
 _TRACK: Track = "cz_sheet"
 _SIGNAL: SignalKind = "http"
 _SM5_CRS = "EPSG:5514"
-# Timeouts of a sheet ZIP (about 1.5 MB) and of its HEAD (STANDARDS 13.4).
+# Timeouts of a sheet ZIP (about 1.5 MB) and of its HEAD (DEV-13.2).
 ZIP_TIMEOUT = 60
 HEAD_TIMEOUT = 30
 

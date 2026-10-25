@@ -2346,7 +2346,7 @@ class TestRegistryVariantsCli:
 
     @patch("kartograf.download.data.DownloadManager")
     def test_nmpt_requires_resolution(self, mock_manager_cls, tmp_path, capsys):
-        """NMPT has several grids, so no default (STANDARDS 11.2): the CLI and
+        """NMPT has several grids, so no default (ADR-004): the CLI and
         the API reject a missing resolution with the same text naming the
         registry grids."""
         rc = main(

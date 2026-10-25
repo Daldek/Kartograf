@@ -378,8 +378,8 @@ def variant_error(
     resolution, TIN/TTN). ``vertical_crs=None`` checks only what does not
     depend on the height system - the caller reports a missing
     ``--vertical-crs`` itself. Texts name the CLI flags (the CLI passes them
-    1:1, STANDARDS 11); ``option`` and ``allowed`` of the error are the
-    argument and the registry values the text lists (STANDARDS 11.1).
+    1:1); ``option`` and ``allowed`` of the error are the
+    argument and the registry values the text lists.
     """
     name = _PRODUCT_NAMES.get(product, product.upper())
     found = variants(product=product, country=country)

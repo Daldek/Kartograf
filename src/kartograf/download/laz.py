@@ -434,7 +434,7 @@ def _selected(
 
     The ``LAZ_SUPERSEDED`` notice is emitted right after the selection; an
     empty selection raises ``NoCoverageError`` after that notice. Library
-    argument types are checked first (STANDARDS 11.2).
+    argument types are checked first.
     """
     for name, value in (
         ("year", year),

@@ -530,7 +530,7 @@ def check_availability(
     request = _validated(
         product, country, sheet, bbox, geometry, layer, year, min_year, max_year
     )
-    require_bool(force, "--force")  # library calls only (STANDARDS 11.2)
+    require_bool(force, "--force")  # library calls only
     sink = NoticeSink(on_notice)
     layer_name = (
         resolve_geometry_layer(request.geometry, layer, sink)

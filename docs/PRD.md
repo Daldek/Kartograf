@@ -61,11 +61,11 @@ The following are added in the target state (v1.0.0, section 8):
 
 | Goal | Target | Status |
 |-----|--------|--------|
-| Test coverage (core) | >= 80% | Gate threshold `fail_under = 60` in `pyproject.toml`; measurement: `pytest -m "not live" --cov=kartograf` |
+| Test coverage (core) | >= 80% | Gate threshold `fail_under = 80` in `pyproject.toml`; measurement: `pytest -m "not live" --cov=kartograf` |
 | Offline tests | Tests without network (`conftest.py` blocks non-loopback sockets) | Network tests have the `live` marker |
 | Reliability | >= 95% success rate | No automatic measurement of success rate in the code |
 | Performance | Download < 60s | No guarantee: timeout and task time depend on the source and the number of files (section 7) |
-| Code quality | ruff (check + format), mypy without new debt | Gate described in `docs/DEVELOPMENT_STANDARDS.md` |
+| Code quality | ruff (check + format), mypy without new debt | The gate: `scripts/gate.sh` (`CLAUDE.md`) |
 
 ### 2.2 Integration Goals
 

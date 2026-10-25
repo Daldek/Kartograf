@@ -1,4 +1,4 @@
-"""Library argument types (STANDARDS 11.2): a value of a wrong type is a
+"""Library argument types (rules for code in CLAUDE.md): a value of a wrong type is a
 ``ValidationError`` before any network or file access, never converted and
 never a late ``TypeError``/``ValueError`` from a provider (backlog "Do
 0.8.0", 2026-10-15). The CLI parses its flags itself, so it never reaches

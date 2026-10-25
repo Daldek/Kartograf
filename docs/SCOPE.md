@@ -629,7 +629,7 @@ from kartograf import (
 # CLI groups (ADR-039, ADR-042 D9): boundaries, cadastre, models3d — each
 # with download and list-sources; library: download_collection/check_collection
 # (= CLI, ADR-037), `collection` plan track. A new collection product = a descriptor
-# entry with channel parameters, no provider (DEVELOPMENT_STANDARDS 17.5).
+# entry with channel parameters, no provider (ARCHITECTURE 5).
 # CZ products of these groups (RUIAN, geomorphology, cadastral map): section 2.14.
 
 # PRG boundaries — `boundaries download --product admin` (pl.gugik.prg):
@@ -872,7 +872,7 @@ from kartograf import (
 # `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`
 # (KB-1..KB-5 of Archiwista). Files for agents: the generated `AGENTS.md` and `llms.txt`, `kartograf/py.typed`,
 # `scripts/gate.sh`, `python -m kartograf`; rules for agents from other repositories:
-# CLAUDE.md. New command = a declaration in `src/kartograf/catalog/commands/` (STANDARDS 17.2).
+# CLAUDE.md. New command = a declaration in `src/kartograf/catalog/commands/` (ARCHITECTURE 4.11).
 ```
 
 ---
@@ -958,7 +958,7 @@ from kartograf import (
   HTTP 429 and 5xx are retried — other 4xx (e.g. 404) end immediately with DownloadError.status_code;
   pause 2 s, then 4 s, Retry-After extends it to a max of 60 s; a single
   place for all providers: transport/http.py (download_to,
-  get_with_retry; constants and details: DEVELOPMENT_STANDARDS 13.4)
+  get_with_retry; constants and details: the module itself)
 - Synchronous download within a single file (parallelism only
   between files, via ThreadPoolExecutor/--workers; default 4 workers
   in the CLI and download_data(workers=4), 1 in DownloadManager(workers=1))
@@ -1260,7 +1260,7 @@ kartograf/
 ├── download/              # Download: library download command (data.py) and tracks
 │   ├── data.py               # download_data/check_data = `kartograf elevation download` / `imagery download` (ADR-037)
 │   ├── options.py            # Task choice validation (texts as in --help; variants from the registry)
-│   ├── arguments.py          # Library argument type checks (require_int/str/bool/codes, timeout; STANDARDS 11.2)
+│   ├── arguments.py          # Library argument type checks (require_int/str/bool/codes, timeout; CLAUDE.md)
 │   ├── availability.py       # Availability report: check_availability, AvailabilityReport (ADR-041)
 │   ├── collections.py        # download_collection/check_collection = `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download` (ADR-042); area limit; landcover collections
 │   ├── cz_orto.py            # CZ orthophoto: download_cz_orto_sheet/check_cz_orto_sheet (ADR-042 D13)

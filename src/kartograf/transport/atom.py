@@ -63,7 +63,7 @@ from kartograf.transport.unit_package import reject_documents, unpack_member
 logger = logging.getLogger(__name__)
 
 # Read timeouts (s): the service feed (ORTOFOTO 23.7 MB answered in 3.2 s on
-# 2026-10-15, but GUGiK ATOM feeds had 120 s timeouts - STANDARDS 13.4) and
+# 2026-10-15, but GUGiK ATOM feeds had 120 s timeouts - DEV-13.2) and
 # one dataset feed (about 1.4 KB).
 SERVICE_FEED_TIMEOUT = 120
 DATASET_FEED_TIMEOUT = 60

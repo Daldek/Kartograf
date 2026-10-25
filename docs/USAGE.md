@@ -2826,7 +2826,7 @@ of its parent. The main application never sees private keys or the token —
 the proxy downloads the data itself, and the token goes only to the hosts `*.copernicus.eu`
 and `*.eea.europa.eu` (a presigned download link on another `https` host
 is forwarded without the token, an `http` address is rejected). Details: PRD 3.6,
-DEVELOPMENT_STANDARDS 14.3.
+CLAUDE.md (critical rules).
 
 **Without configuration:** CORINE automatically downloads a PNG preview via WMS
 (the sidecar then gets `extra.fallback = "wms_png"`).
@@ -3847,10 +3847,10 @@ Results. A result is the envelope kartograf-result/1: status (ok, partial, faile
 - **`kartograf/py.typed`** (PEP 561): the consumer's `mypy` sees the library's types instead of
   `import-untyped`.
 - **`scripts/gate.sh`**: a single gate command before reporting readiness (ruff, ruff format,
-  mypy, offline pytest; also works from a worktree) - STANDARDS 6.3.
+  mypy, offline pytest; also works from a worktree; DEV-7.6).
 - Rules for agents from other repositories working on the Kartograf code (a branch from `develop`, no
-  merge, push or tags without consent, review before a tag): `CLAUDE.md`, section "Agenci z innych
-  repozytoriow".
+  merge, push or tags without consent, review before a tag): `CLAUDE.md`, section "Rules for agents of
+  other repositories".
 
 ---
 

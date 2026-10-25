@@ -1,4 +1,4 @@
-"""Type checks of library call arguments (STANDARDS 11.2, 0.8.0).
+"""Type checks of library call arguments (rules for code in CLAUDE.md, 0.8.0).
 
 The CLI parses its flags into numbers, switches and lists before calling the
 library, so these checks only ever fire for library callers. Values are

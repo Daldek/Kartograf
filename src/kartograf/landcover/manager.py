@@ -1016,7 +1016,7 @@ class LandCoverManager:
                     f"{' albo '.join(owners)}",
                     option=name,
                 )
-        # library calls only: the CLI parses its flags (STANDARDS 11.2)
+        # library calls only: the CLI parses its flags
         if options.get("year") is not None:
             require_int(options["year"], "--year")
         if options.get("layers") is not None:
@@ -1424,7 +1424,7 @@ class LandCoverManager:
                     f"{' albo '.join(products)}",
                     option=name,
                 )
-        # library calls only: the CLI parses its flags (STANDARDS 11.2)
+        # library calls only: the CLI parses its flags
         if kwargs.get("year") is not None:
             require_int(kwargs["year"], "--year")
         if kwargs.get("layers") is not None:

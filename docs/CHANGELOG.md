@@ -234,6 +234,25 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - The rule of `CLAUDE.md` for the agents of other repositories no longer says "do not create
   `AGENTS.md`": the generated `AGENTS.md` and `llms.txt` are the interface of an agent that
   uses Kartograf.
+- `README.md` is English and follows the 14 sections of DOC-2.1 (at most 400 lines, a summary of
+  at most 400 characters, absolute links, an Install line per interface from Git, a Quick
+  start with the shape of every output, a Capabilities table, MCP configuration for Claude
+  Code, Cursor, Codex and VS Code, Related tools, the five most common errors and the table
+  of variables with the backup notes). `tests/contract/test_readme.py` checks the order, the
+  budgets, the links, the names in the table, and runs every example: the command lines as
+  written, the Python blocks and the MCP call, against the fake index of the download tests.
+- `CLAUDE.md` is English within 200 lines and follows DOC-3.1: critical rules, rules for
+  code, environment and commands, the rules for agents of other repositories, a code map, a
+  documentation map, the session workflow, the link to the entry of Kartograf in the Nogat
+  `ecosystem.yaml`, and a `Deviations` section (DEV-1.2). Its section for other repositories is
+  "Rules for agents of other repositories" (it was "Agenci z innych repozytoriow").
+- `docs/DEVELOPMENT_STANDARDS.md` is deleted (DEV-1.3: a project holds no copy of the Nogat
+  standard). Its project rules are in `CLAUDE.md`, and its recipes for a new command, a land
+  cover provider, a PL sheet parser and a collection product are in `docs/ARCHITECTURE.md`
+  4.11 and 5. Entries of this changelog and of `docs/DECISIONS.md` that cite
+  `DEVELOPMENT_STANDARDS` or `STANDARDS x.y` cite the deleted document (ADR-009 is
+  superseded by ADR-048).
+- `llms.txt` no longer calls the README Polish.
 
 **Fixed**
 

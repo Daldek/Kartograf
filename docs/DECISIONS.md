@@ -30,7 +30,7 @@ each relation is recorded on both sides.
 | [ADR-006](#adr-006-landcoverprovider-as-a-separate-hierarchy-from-baseprovider) | LandCoverProvider as a separate hierarchy from BaseProvider | 2026-01-18 | Accepted |
 | [ADR-007](#adr-007-migration-from-black--flake8-to-ruff) | Migration from black + flake8 to ruff | 2026-02-03 | Accepted |
 | [ADR-008](#adr-008-condensing-progressmd-from-785-to-80-lines) | Condensing PROGRESS.md from 785 to ~80 lines | 2026-02-03 | Accepted |
-| [ADR-009](#adr-009-expanding-development_standards-and-implementation_prompt) | Expanding DEVELOPMENT_STANDARDS and IMPLEMENTATION_PROMPT | 2026-02-03 | Accepted |
+| [ADR-009](#adr-009-expanding-development_standards-and-implementation_prompt) | Expanding DEVELOPMENT_STANDARDS and IMPLEMENTATION_PROMPT | 2026-02-03 | Superseded by [ADR-048](#adr-048-adoption-of-the-nogat-standard-21-layout-tooling-and-versions) |
 | [ADR-010](#adr-010-the-find_sheets_for_bbox-algorithm--hierarchical-clipping-without-wfs) | The find_sheets_for_bbox algorithm — hierarchical clipping without WFS | 2026-02-07 | Accepted |
 | [ADR-011](#adr-011-gugiknmptprovider-inherits-from-gugikprovider) | GugikNmptProvider inherits from GugikProvider | 2026-02-07 | Accepted |
 | [ADR-012](#adr-012-gugikortoprovider-as-a-separate-class-does-not-inherit-from-gugikprovider) | GugikOrtoProvider as a separate class (does not inherit from GugikProvider) | 2026-02-07 | Accepted |
@@ -69,7 +69,7 @@ each relation is recorded on both sides.
 | [ADR-045](#adr-045-public-store-reading-api-for-archiwista) | Public store-reading API for Archiwista | 2026-10-18 | Accepted — amended by [ADR-046](#adr-046-interface-for-ai-agents-json-documents-error-codes-command-catalog-and-mcp-server) (MCP tools for reading the store; erratum 1); erratum 2: segment parts (`list_partitions`, `partition`) and the `skip_versions` mapping without listing known version directories (relaxes visibility of changes in them); erratum 3: `Sidecar.unit` and the LAZ tile outline, ZTM sheet, `link_target` of an independent copy, `file_footprint` without an exception for a source without a CRS operation (E2E test 0.8.0) |
 | [ADR-046](#adr-046-interface-for-ai-agents-json-documents-error-codes-command-catalog-and-mcp-server) | Interface for AI agents: JSON documents, error codes, command catalog and MCP server | 2026-10-18 | Accepted; amends [ADR-037](#adr-037-cli-and-api-consistency) (command result as a JSON document, `--json`, error and exit codes), [ADR-039](#adr-039-cli-command-groups-by-data-type) (command declarations in the catalog), [ADR-040](#adr-040-project-manifest-and-pinned-versions) (data command options from the catalog) and [ADR-045](#adr-045-public-store-reading-api-for-archiwista) (MCP tools for reading the store); erratum 3: exit code 143 (`terminated`), `failed[].kind`, stderr in `--json`, `hint` from call arguments (E2E test 0.8.0) |
 | [ADR-047](#adr-047-sheet-and-campaign-details-in-the-availability-report-kd-1-kd-2) | Sheet and campaign details in the availability report (KD-1, KD-2) | 2026-10-19 | Accepted; amends [ADR-041](#adr-041-product-variant-registry-wfs-sheet-index-for-nmtnmpt-and-availability-report) (`full_m2`, `sheet_records`, `campaign_coverage`); erratum 1: `AvailabilityRecord.full_sheet`, LAZ limitation and CZ exception in the field documentation; erratum 2: area without land: `complete` unchanged, `no_land` signal (E2E test 0.8.0) |
-| [ADR-048](#adr-048-adoption-of-the-nogat-standard-21-layout-tooling-and-versions) | Adoption of the Nogat standard 2.1: layout, tooling and versions | 2026-10-24 | Accepted |
+| [ADR-048](#adr-048-adoption-of-the-nogat-standard-21-layout-tooling-and-versions) | Adoption of the Nogat standard 2.1: layout, tooling and versions | 2026-10-24 | Accepted; supersedes [ADR-009](#adr-009-expanding-development_standards-and-implementation_prompt) |
 | [ADR-049](decisions/0049-nogat-error-registry-mapping.md) | Error codes and exit codes follow the Nogat registry | 2026-10-24 | Accepted |
 | [ADR-050](decisions/0050-nogat-user-environment.md) | User environment: nogat.toml, variables, user directories and `config show` | 2026-10-24 | Accepted |
 | [ADR-051](decisions/0051-result-envelope-and-outcome-exit-codes.md) | Result envelope kartograf-result/1, outcome exit codes 10 and 11, error document on stderr | 2026-10-24 | Accepted |
@@ -247,7 +247,7 @@ today to a segment TEMPLATE, not to a directory name.
 ## ADR-009: Expanding DEVELOPMENT_STANDARDS and IMPLEMENTATION_PROMPT
 
 **Date:** 2026-02-03
-**Status:** Accepted
+**Status:** Superseded by ADR-048 (2026-10-25: `docs/DEVELOPMENT_STANDARDS.md` is deleted, DEV-1.3; see erratum 2)
 
 **Context:** During the standardisation of the documentation, both files were initially deprecated (replaced by short notes). However, the full content is needed — the AI agent and developers need detailed instructions in the project context, not only references to shared/standards.
 
@@ -269,6 +269,15 @@ is an introduction to the project, and the usage details (CLI and library
 examples, download result, campaigns, CLMS) are in `docs/USAGE.md`.
 The self-containment principle of DEVELOPMENT_STANDARDS from the decision still holds;
 the part concerning `IMPLEMENTATION_PROMPT.md` is outdated.
+
+**Erratum 2 (2026-10-25, ADR-048):** `docs/DEVELOPMENT_STANDARDS.md` is deleted
+(DEV-1.3: a project holds no copy of the Nogat standard). What was project-specific in it
+moved: the critical rules, the rules for code (the CLI only translates, the catalog is the
+source of commands, no default that chooses data, errors with registry codes), the session
+workflow, the place of downloaded data and the commands are in `CLAUDE.md`; the recipes
+for a new command, provider, PL parser and collection product are in `ARCHITECTURE.md` 4.11
+and 5. The text of this decision, and every later entry that cites `DEVELOPMENT_STANDARDS`
+or `STANDARDS x.y`, describes the document as it was and is not rewritten.
 
 ---
 
@@ -4370,7 +4379,7 @@ without a download hint; the rejected alternative `complete = false` for
 ## ADR-048: Adoption of the Nogat standard 2.1: layout, tooling and versions
 
 **Date:** 2026-10-24
-**Status:** Accepted
+**Status:** Accepted; supersedes ADR-009 (the deleted `docs/DEVELOPMENT_STANDARDS.md`)
 
 **Context:** Kartograf follows the Nogat standard 2.1 before the data-output
 work. The agent-doable items of phase 2 of the adoption plan (structure and
@@ -4402,6 +4411,13 @@ variants of the gate and CI.
 the tag `v0.8.0` exists (`kartograf>=0.8.0` rejects a development version).
 Phases 3 and 4 of the adoption change codes, exit codes and JSON documents
 (ERR §4, AGI-4.2) and are breaking changes of the unreleased 0.8.0 (ECO-020).
+
+**Erratum 1 (2026-10-25, step e3 of the adoption):** `README.md` follows the order of DOC-2.1
+in English and `CLAUDE.md` follows DOC-3.1 in English, with a `Deviations` section (DEV-1.2);
+`tests/contract/test_readme.py` runs the examples of the README (DOC-2.6). The file
+`docs/DEVELOPMENT_STANDARDS.md` is deleted because DEV-1.3 forbids a copy of the standard in a
+project, and its project rules moved to `CLAUDE.md` and `ARCHITECTURE.md` 4.11 and 5, so
+ADR-009 is superseded.
 
 ## New ADR template
 

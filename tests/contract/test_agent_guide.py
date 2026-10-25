@@ -15,16 +15,15 @@ from pathlib import Path
 import pytest
 
 import kartograf
-from kartograf import agent_guide, parse_command, validate_command
+from kartograf import agent_guide
 from kartograf import guide as guide_module
 from kartograf.catalog.build import command_entries
-from kartograf.catalog.cliparser import build_parser, parse_command_line
-from kartograf.catalog.commands import declared
 from kartograf.cli.commands import main
 from kartograf.error_report import ERROR_CODES, EXIT_CODES
 from kartograf.exceptions import ValidationError
 from kartograf.guide import BLOCK_BEGIN, BLOCK_END, GUIDE_FORMATS, inject_block
 from kartograf.serialization import SCHEMAS
+from tests.support.command_lines import check_command_line
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 AGENTS = ROOT / "AGENTS.md"
@@ -51,25 +50,6 @@ def _quoted_commands(text: str) -> list[str]:
         for line in re.findall(r"`(kartograf [^`]+)`", text)
         if "<" not in line and "..." not in line
     ]
-
-
-def _check_line(line: str) -> None:
-    """Parse a ``kartograf ...`` line like the CLI, and validate a data command."""
-    words = shlex.split(line)[1:]
-    declarations = declared()
-    parser = build_parser(declarations.commands, declarations.groups, usage_errors=True)
-    parsed = parse_command_line(parser, words)
-    data = {c.id for c in declarations.commands if c.project_task}
-    if getattr(parsed, "_command_id", None) in data:
-        call = parse_command(words)
-        output_dir = call.run.get("output_dir")
-        if output_dir is not None:
-            assert Path(str(output_dir)).is_absolute(), line
-        validate_command(
-            call.command,
-            call.options,
-            output_dir=None if output_dir is None else str(output_dir),
-        )
 
 
 # -- the files are the output of the generator ------------------------------------
@@ -259,7 +239,7 @@ def test_every_command_line_of_a_guide_is_read_by_the_parser(path, least):
 
     assert len(lines) >= least
     for line in lines:
-        _check_line(line)
+        check_command_line(line)
 
 
 def test_the_lines_of_the_flows_and_the_block_are_json_and_absolute():
@@ -274,7 +254,7 @@ def test_the_lines_of_the_flows_and_the_block_are_json_and_absolute():
         assert "--json" in words, line
         if "--output" in words:
             assert Path(words[words.index("--output") + 1]).is_absolute(), line
-        _check_line(line)
+        check_command_line(line)
 
 
 # -- a stale example stops the generator ----------------------------------------------
