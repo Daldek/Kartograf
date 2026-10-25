@@ -14,7 +14,8 @@ imported between the tools (``STORE_MARKERS``).
   (``not_empty``);
 - ``lenient_store`` makes the same checks for a plan or a read and creates nothing;
 - ``init_store`` is ``kartograf store init``: it verifies the layout of a root that has
-  one and no marker, then writes the marker;
+  one and no marker, then writes the marker; ``check_store`` is ``store init --check``,
+  the plan of that write;
 - a store never nests in another store, whichever tool wrote it: the ancestors of the
   root, the root itself (the marker of the other tool) and what lies below it are
   looked at (``conflict``, ``nested_store``).
@@ -30,7 +31,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from kartograf import _clock
 from kartograf._version import build_version
@@ -43,11 +44,15 @@ from kartograf.exceptions import (
 from kartograf.messages import message
 from kartograf.serialization import Document
 
+if TYPE_CHECKING:
+    from kartograf.download.plan import UpdatePlan
+
 __all__ = [
     "MARKER",
     "MARKER_SCHEMA",
     "STORE_MARKERS",
     "StoreInit",
+    "check_store",
     "has_layout",
     "init_store",
     "lenient_store",
@@ -591,3 +596,63 @@ def init_store(
         fields.get("created_at", stamp),
         fields.get("producer_version", ""),
     )
+
+
+def check_store(root: str | os.PathLike[str] | None = None) -> "UpdatePlan":
+    """
+    Plan ``init_store`` without writing anything: ``kartograf store init --check``.
+
+    The plan has one position of the track ``store``: the marker, ``missing`` with the
+    action ``write`` when ``init_store`` would write it (a new, missing or empty root,
+    or a root of the layout of a store that passes the verification), ``current`` when
+    the root has it. A root that ``init_store`` refuses as a ``conflict``
+    (``nested_store``, ``not_empty``) is the one position of that conflict, and the plan
+    is ``ok``: only the run fails (DEV-19.10); every other refusal is raised, as the
+    run raises it.
+
+    Parameters
+    ----------
+    root : str or os.PathLike, optional
+        Store root; it need not exist. Default: the store root of the settings
+        (DEV-19.2).
+
+    Returns
+    -------
+    UpdatePlan
+        The plan of the store at ``root`` (``kartograf-plan/1``); nothing is created.
+
+    Raises
+    ------
+    InvalidLayoutError
+        The layout of a root without a marker is not that of a Kartograf store
+        (``details.problems``), or the existing marker is not a ``kartograf-store/1``
+        document.
+    """
+    from kartograf.config import resolve_root
+    from kartograf.download.plan import PlanItem, conflict_plan, new_plan
+
+    path = _absolute(resolve_root(root))
+    try:
+        state = _inspect(path)
+        if state == "foreign":
+            raise _not_empty(path)
+        if state == "layout":
+            _verify_layout(path)
+    except ConflictError as refusal:
+        return conflict_plan(path, refusal)
+    marked = state == "marked"
+    marker = PlanItem(
+        track="store",
+        segment="",
+        hierarchy="",
+        name=MARKER,
+        unit=str(path),
+        local_label=None,
+        local_sha256=None,
+        available_label=None,
+        available_signal=None,
+        status="current" if marked else "missing",
+        action=None if marked else "write",
+        path=path / MARKER,
+    )
+    return new_plan(path, [marker])

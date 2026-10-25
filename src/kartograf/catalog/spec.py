@@ -74,6 +74,11 @@ FAMILIES: Final[tuple[str, ...]] = get_args(Family)
 # option of every command with a ``check_function``, though no function takes it as an
 # argument; ``--check`` on the command line (DEV-19.10).
 CHECK_OPTION: Final = "check"
+# The write targets of a command (DEV-19.1): a call gives them by name beside its
+# options (``run_command(..., root=)``); they are no key of ``tasks[].options``.
+TARGET_OPTIONS: Final = ("output_dir", "root")
+# The options of a run: a plan (``check``) has none of them.
+RUN_OPTIONS: Final = ("update", "plan", "workers", "summary")
 # At most this many tools make the ``core`` family (AGI-5.12).
 CORE_MAX: Final = 10
 # Sheet systems a ``sheet`` parameter may accept (``SheetInfo.system``): the ids
@@ -494,6 +499,23 @@ class Command:
         In the order of the parameters (the order of the keys of a manifest).
         """
         return {param.name: param.kind for param in self.params if param.task}
+
+    @property
+    def call_options(self) -> tuple[Param, ...]:
+        """Return the parameters a call gives as its options (AGI-2.1).
+
+        The arguments of the library function that are neither a write target
+        (``TARGET_OPTIONS``), nor an option of a run (``RUN_OPTIONS``), nor the constant
+        of the command (``fixed``); in the order of the declaration. Of a project task
+        these are the keys of ``tasks[].options`` (``task_options``).
+        """
+        return tuple(
+            param
+            for param in self.params
+            if param.api_argument is not None
+            and param.fixed is None
+            and param.name not in (*TARGET_OPTIONS, *RUN_OPTIONS)
+        )
 
 
 @dataclass(frozen=True)

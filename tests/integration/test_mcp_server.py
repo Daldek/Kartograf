@@ -405,7 +405,7 @@ def test_list_tools_equals_tool_specs(mode, tmp_path):
     tools = run_session(scenario, **arguments)
     specs = tool_specs(allow_writes=mode == "writes")
 
-    assert len(tools) == (40 if mode == "writes" else 36)
+    assert len(tools) == (40 if mode == "writes" else 37)
     assert [t.name for t in tools] == [s.name for s in specs]
     for tool, spec in zip(tools, specs, strict=True):
         assert tool.title == spec.title
@@ -1597,7 +1597,7 @@ def test_tools_flag_selects_families(monkeypatch):
 
     names = run_session(scenario, server=server)
 
-    assert len(names) == 33  # 17 + 1 + 12 + 3: the plans of the data tools
+    assert len(names) == 34  # 17 + 1 + 12 + 4: the plans of the data tools
     assert names == [s.name for s in tool_specs(families, allow_writes=False)]
 
 
@@ -1806,7 +1806,7 @@ def test_the_gate_of_agi_5_13_over_stdio(tmp_path):
     names = [tool.name for tool in listed]
     assert names == [tool.name for tool in again]  # deterministic (AGI-5.2)
     assert names == [s.name for s in tool_specs(allow_writes=False)]
-    assert len(set(names)) == len(names) == 36
+    assert len(set(names)) == len(names) == 37
     for tool in listed:
         assert re.fullmatch(r"kartograf_[a-z0-9_]+", tool.name) and len(tool.name) <= 48
         hints = tool.annotations  # AGI-5.4: the title and the four hints are set
@@ -1978,7 +1978,7 @@ def test_stdio_stdout_has_only_protocol_frames():
     assert by_id[1]["instructions"] == INSTRUCTIONS
     # the keys of the protocol are camelCase; the five hints are always set
     tools = {t["name"]: t for t in by_id[2]["tools"]}
-    assert len(tools) == 36
+    assert len(tools) == 37
     plan = tools["kartograf_elevation_download"]
     assert plan["annotations"] == {
         "title": plan["title"],

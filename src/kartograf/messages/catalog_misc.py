@@ -356,8 +356,9 @@ MESSAGES = {
         "jest dla magazynu 0.8.0-dev.",
     ),
     "store_init_rule_1": Text(
-        "Run it once on a store that fails with `no_marker`.",
-        "Uruchom raz na magazynie, ktory konczy sie bledem no_marker.",
+        "Run it once on a store that fails with `no_marker`; `check` plans it.",
+        "Uruchom raz na magazynie, ktory konczy sie bledem no_marker; --check "
+        "planuje zapis.",
     ),
     "store_init_rule_2": Text(
         "Store only: only a store has a marker, so there is no `output_dir`.",
@@ -366,6 +367,17 @@ MESSAGES = {
     "example_mark_store_data": Text(
         "Mark the store in ./data",
         "Oznacz magazyn w ./data",
+    ),
+    "store_init_check_description": Text(
+        "Plan without effects: say whether the marker would be written, the store has "
+        "it already, or the root is a conflict (inside another store, or holding other "
+        "files); nothing is written.",
+        "Sprawdz bez zapisu: czy znacznik zostalby zapisany, czy magazyn ma go juz, "
+        "czy katalog jest konfliktem (w innym magazynie albo z innymi plikami)",
+    ),
+    "example_check_marker_store_data": Text(
+        "Plan the marker of the store in ./data without writing it",
+        "Sprawdz znacznik magazynu w ./data bez zapisu",
     ),
     "cache_group_summary": Text(
         "Manage the metadata cache",

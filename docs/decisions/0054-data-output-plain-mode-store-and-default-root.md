@@ -197,6 +197,10 @@ Hydrograf (`DownloadManager(root=...)`) and Hydraulik (`--output-dir`, `files[].
 migration guide of the CHANGELOG and in PROGRESS. The first write into an existing 0.8.0-dev store fails with
 `no_marker` until `kartograf store init` is run on it.
 
+**Erratum 1 (2026-10-25, ADR-052 erratum 1):** the gap to AGI-2.1 that decision 14 keeps open is closed in part:
+`validate_command`, `check_command` and `run_command` take every command of the catalog, and `store init` has a
+`--check` (`check_store`).
+
 **Open questions:**
 - Whether a plain `--force` should compare the source signal before it replaces a file (it replaces on
   `--force` only, as DEV-19.9 says).

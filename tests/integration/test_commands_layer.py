@@ -25,7 +25,7 @@ from kartograf import (
 from kartograf.catalog.commands import declared
 from kartograf.catalog.formatting import example_command_line
 from kartograf.exceptions import ConflictError, UsageError
-from kartograf.project.commands import COMMANDS, data_commands_text
+from kartograf.project.commands import COMMANDS
 from kartograf.serialization import encode
 from tests.integration.test_hsg import RasterSoilGrids
 from tests.integration.test_manager_campaigns import REC, FakeCampaignProvider
@@ -72,7 +72,7 @@ def test_parse_command_takes_the_whole_line_with_its_program_name():
 
 
 def test_parse_command_with_only_the_program_name_is_an_empty_line():
-    with pytest.raises(UsageError, match="give a data command"):
+    with pytest.raises(UsageError, match="give a command"):
         parse_command("kartograf")
 
 
@@ -215,29 +215,21 @@ def test_usage_error_names_the_command_the_line_named(line, command):
 
 
 @pytest.mark.parametrize(
-    "line",
+    ("line", "command"),
     [
-        "sheet parse N-34",
-        "sheet parse",
-        "commands list",
-        "elevation availability --bbox 1,2,3,4",
-        "elevation list-sources",
-        "soil list-layers",
-        "project status",
-        "cache stats",
+        ("sheet parse N-34", "sheet parse"),
+        ("commands list", "commands list"),
+        ("elevation availability --bbox 1,2,3,4", "elevation availability"),
+        ("elevation list-sources", "elevation list-sources"),
+        ("soil list-layers", "soil list-layers"),
+        ("project status", "project status"),
+        ("cache stats", "cache stats"),
     ],
 )
-def test_parse_command_rejects_non_data_commands(line):
-    with pytest.raises(ValidationError) as caught:
-        parse_command(line)
-
-    error = caught.value
-    assert not isinstance(error, UsageError)
-    assert str(error) == (
-        f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}"
-    )
-    assert (error.option, error.allowed) == ("command", tuple(COMMANDS))
-    assert len(error.allowed) == 12
+def test_parse_command_reads_the_line_of_a_command_that_is_no_data_command(
+    line, command
+):
+    assert parse_command(line).command == command
 
 
 def test_validate_command_is_offline_and_names_the_option(tmp_path, monkeypatch):
@@ -264,27 +256,6 @@ def test_validate_command_is_offline_and_names_the_option(tmp_path, monkeypatch)
     assert missing.value.option == "vertical_crs"
     assert no_area.value.options == ("sheet", "bbox", "geometry")
     assert (unknown.value.option, wrong_form.value.option) == ("root", "year")
-
-
-@pytest.mark.parametrize(
-    "call",
-    [
-        lambda name: validate_command(name, {}),
-        lambda name: format_command(name, {}),
-        lambda name: run_command(name, {}, root="."),
-        lambda name: check_command(name, {}, root="."),
-    ],
-    ids=["validate", "format", "run", "check"],
-)
-@pytest.mark.parametrize(
-    "name", ["elevation list-sources", "no such command", "sheet parse"]
-)
-def test_unknown_command_names_the_option(call, name):
-    with pytest.raises(ValidationError) as caught:
-        call(name)
-
-    assert caught.value.option == "command"
-    assert caught.value.allowed == tuple(COMMANDS)
 
 
 def test_format_command_rejects_options_that_do_not_belong():

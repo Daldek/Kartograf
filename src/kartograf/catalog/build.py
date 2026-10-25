@@ -15,6 +15,7 @@ that has a check; a flag only the CLI has (``--json``, ``--quiet``, ``--upgrade`
 
 import functools
 from collections.abc import Sequence
+from typing import Final
 
 from kartograf.catalog.commands import declared
 from kartograf.catalog.excerpts import EXCERPTS
@@ -85,6 +86,25 @@ def is_option(command: Command, param: Param) -> bool:
 def declared_options(command: Command) -> tuple[Param, ...]:
     """Return the parameters of a command that are its options, in declaration order."""
     return tuple(param for param in command.params if is_option(command, param))
+
+
+# The options whose declared values are only the usual ones: the function takes more
+# (``command_schema`` also takes the ``operation_id`` of a command). The schema of an
+# MCP tool does not list them (the names of the commands are in
+# ``kartograf_commands_list``, and a second copy in every ``tools/list`` is waste) and
+# ``validate_command`` does not check them.
+OPEN_VALUES: Final = frozenset({("commands schema", "command")})
+
+
+def allowed_values(command: Command, option: OptionEntry) -> list[str | int] | None:
+    """Return the values an option is limited to, or ``None`` when it takes any.
+
+    The ``enum`` of the option in the catalog document, except for the options of
+    ``OPEN_VALUES``.
+    """
+    if not option.enum or (command.id, option.name) in OPEN_VALUES:
+        return None
+    return [entry.value for entry in option.enum]
 
 
 def one_of_constraints(command: Command) -> tuple[Constraint, ...]:
@@ -333,6 +353,21 @@ def list_commands() -> CommandList:
     return _list()
 
 
+def unknown_command(command: object) -> ValidationError:
+    """Return the error of a command that is not given or is not in the catalog.
+
+    ``option`` is ``command`` and ``allowed`` the names of the commands.
+    """
+    return ValidationError(
+        message("catalog.no_command")
+        if command is None
+        else message("catalog.unknown_command", command=command),
+        option="command",
+        allowed=tuple(entry.name for entry in _entries()),
+        hint=message("catalog.commands_list_hint"),
+    )
+
+
 def command_schema(command: str) -> CommandCatalog:
     """Return the description of one command: ``kartograf commands schema --json``.
 
@@ -360,13 +395,5 @@ def command_schema(command: str) -> CommandCatalog:
     if isinstance(command, str):
         found = next((e for e in entries if command in (e.name, e.operation_id)), None)
     if found is None:
-        names = tuple(entry.name for entry in entries)
-        raise ValidationError(
-            message("catalog.no_command")
-            if command is None
-            else message("catalog.unknown_command", command=command),
-            option="command",
-            allowed=names,
-            hint=message("catalog.commands_list_hint"),
-        )
+        raise unknown_command(command)
     return CommandCatalog(TOOL, _version(), (found,))

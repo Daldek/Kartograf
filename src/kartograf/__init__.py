@@ -34,8 +34,8 @@ has a stable ``code``, an ``exit_code`` and a ``hint``). ``list_commands`` and
 ``command_schema`` describe the commands (the list, and one command with its options
 and allowed values);
 ``parse_command``, ``validate_command``, ``format_command``, ``run_command``
-and ``check_command`` work on a data command as data: the last two return the
-``kartograf-result/1`` envelope (``CommandResult``: ``status``, ``items``,
+and ``check_command`` work on every command of the catalog as data: the last two
+return the ``kartograf-result/1`` envelope (``CommandResult``: ``status``, ``items``,
 ``notices`` and the report as ``result``), as the CLI ``--json`` prints it. Other
 reports of the document family: ``describe_sheet``, ``find_sheets``, ``list_sources``,
 ``list_layers``, ``get_cache_info``, ``get_cache_path``, ``clear_cache``,
@@ -232,7 +232,7 @@ from kartograf.landcover.manager import (
     download_landcover,
     download_soil,
 )
-from kartograf.marker import StoreInit, init_store
+from kartograf.marker import StoreInit, check_store, init_store
 from kartograf.notices import Notice
 from kartograf.project import (
     FileCheck,
@@ -450,6 +450,7 @@ __all__ = [
     "SegmentInfo",
     "describe_store",
     "init_store",
+    "check_store",
     "StoreInit",
     "StoreOverview",
     "list_store_entries",
