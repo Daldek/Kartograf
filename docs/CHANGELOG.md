@@ -2151,6 +2151,15 @@ from the key `root`, and the MCP tool names.
 
 ### Fixed
 
+- `kartograf-mcp` writes nothing but protocol messages to stdout, also when the client leaves
+  (the stdio transport of MCP). While the server serves, the SDK points file descriptor 1 at
+  stderr, so a `print` of the library goes there; but a client starts the server without
+  `PYTHONUNBUFFERED`, so stdout is block-buffered, and the text that Python still held was
+  flushed at exit, after the SDK had restored the descriptor: a line that is no JSON-RPC message
+  reached the client. The server flushes stdout before the SDK restores it, as Hydrolog does,
+  and the text goes to stderr (found by the final integration run of the data output). The
+  stdio test starts the server without `PYTHONUNBUFFERED`; it passed only where the shell had
+  set it.
 - A store root that a write refuses is the error of the command, not the failure of every unit
   (DEV-19.13, DEV-19.14, AGI-4.3, ADR-054 decision 8). A root with the layout of a store and no
   marker (`store_unavailable`, `no_marker`), a root that holds other files (`conflict`,
