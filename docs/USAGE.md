@@ -3420,7 +3420,7 @@ failed units; the result lists them (`items`) and no error document is written.
 | Code | `details.reason` | Exception | Exit | When |
 |---|---|---|---|---|
 | `internal_error` | - | `KartografError` | 1 | package error without a more precise class |
-| `validation_error` | `invalid_input` | `ValidationError` | 2 | wrong value or combination of arguments, a missing required argument, an invalid input file (plan, manifest, geometry) |
+| `validation_error` | `invalid_input` | `ValidationError` | 2 | wrong value or combination of arguments, a missing required argument, an invalid input file (plan, manifest, geometry); reasons that refine it: exclusive_options (output_dir with root) and store_only_option (an option that needs the store, with output_dir) |
 | `validation_error` | `usage` | `UsageError` | 2 | wrong use of a command: unknown command or flag, a missing positional argument, a value outside the allowed choices |
 | `validation_error` | `invalid_sheet_code` | `ParseError` | 2 | the sheet code is not a PL or CZ code or lies outside the nomenclature |
 | `validation_error` | `invalid_config` | `ConfigError` | 2 | the user settings cannot be used: nogat.toml is unreadable, not UTF-8 text, not valid TOML or has a section that is not a table, or a setting has a value that is not valid |

@@ -161,6 +161,9 @@ class ValidationError(KartografError):
         (``("sheet", "bbox")``).
     allowed : tuple[str, ...], optional
         Allowed values of ``option``.
+    reason : str
+        ``invalid_input`` unless the raising code names another one for the
+        instance (``exclusive_options``, ``store_only_option``; ADR-054).
 
     Examples
     --------
@@ -182,8 +185,9 @@ class ValidationError(KartografError):
         options: Sequence[str] | None = None,
         allowed: Sequence[str] | None = None,
         hint: str | None = None,
+        reason: str | None = None,
     ) -> None:
-        super().__init__(message, hint=hint)
+        super().__init__(message, hint=hint, reason=reason)
         self.option = option
         self.options = _names(options, "options")
         self.allowed = _names(allowed, "allowed")
