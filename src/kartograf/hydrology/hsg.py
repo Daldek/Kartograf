@@ -15,6 +15,8 @@ Reference:
 - SCS-CN method for runoff estimation
 """
 
+import contextlib
+import copy
 import logging
 import tempfile
 from collections.abc import Callable
@@ -36,6 +38,15 @@ from kartograf.download.data import (
 from kartograf.exceptions import ValidationError
 from kartograf.messages import message
 from kartograf.notices import ALL_NODATA, Notice, NoticeSink
+from kartograf.output import (
+    Staging,
+    plain_of,
+    preflight,
+    report_target,
+    resolve_target,
+    unit_of,
+    writes,
+)
 from kartograf.serialization import Document
 
 if TYPE_CHECKING:
@@ -476,6 +487,7 @@ class HSGCalculator:
         provider: "SoilGridsProvider | None" = None,
         *,
         root: str | Path | None = None,
+        output_dir: str | Path | None = None,
         cache: "MetadataCache | bool" = True,
     ) -> None:
         """
@@ -489,18 +501,39 @@ class HSGCalculator:
         root : str or Path, optional
             Store root (``--root``); created only when a file is written.
             Default: the store root of the settings (``store_root()``).
+        output_dir : str or Path, optional
+            Write the HSG raster as a plain file into this directory instead (the
+            SoilGrids inputs are fetched to the staging directory and not kept;
+            ``update="force"`` replaces an existing file). ``root`` is then the
+            output directory.
         cache : MetadataCache or bool
             ``True`` = default metadata cache in the current directory, a
             ``MetadataCache`` = that cache, ``False`` = none (default provider).
         """
-        self._root = resolve_root(root)
-        if self._root.suffix.lower() in (".tif", ".tiff"):
-            raise ValidationError(
-                message("hydrology.root_is_store_dir"),
-                option="root",
-            )
+        self._output_dir: Path | None = None
+        if output_dir is not None:
+            self._output_dir = resolve_target(output_dir=output_dir, root=root).path
+            self._root = self._output_dir
+        else:
+            self._root = resolve_root(root)
+            if self._root.suffix.lower() in (".tif", ".tiff"):
+                raise ValidationError(
+                    message("hydrology.root_is_store_dir"),
+                    option="root",
+                )
         self._provider = provider
         self._cache = cache
+
+    def _on(self, handle: Path) -> "HSGCalculator":
+        """Return a copy of this calculator that writes where a plain write says.
+
+        The copy shares the provider and the cache; its store root is ``handle``, the
+        handle root of the plain write of one call.
+        """
+        view = copy.copy(self)
+        view._root = handle
+        view._output_dir = None
+        return view
 
     @property
     def provider(self) -> "SoilGridsProvider":
@@ -511,6 +544,7 @@ class HSGCalculator:
 
         return SoilGridsProvider()
 
+    @writes
     def calculate_hsg(
         self,
         *,
@@ -537,6 +571,7 @@ class HSGCalculator:
         report = self._calculate(selection, depth, _HSG_STAT, update, plan, sink)
         return replace(report, notices=sink.notices)
 
+    @writes
     def check_hsg(
         self,
         *,
@@ -545,6 +580,7 @@ class HSGCalculator:
         geometry: str | Path | None = None,
         layer: str | None = None,
         depth: str | None,
+        force: bool = False,
         on_notice: "Callable[[Notice], None] | None" = None,
     ) -> "UpdatePlan":
         """Return the plan of ``calculate_hsg`` without downloading or computing.
@@ -633,12 +669,13 @@ class HSGCalculator:
 
     # -------------------------------------------------------------------------
 
-    def _manager(self) -> "LandCoverManager":
+    def _manager(self, root: Path | None = None) -> "LandCoverManager":
         from kartograf.landcover.manager import LandCoverManager
 
+        where = self._root if root is None else root
         if self._provider is None:  # by name: the manager attaches the cache
-            return LandCoverManager("soilgrids", cache=self._cache, root=self._root)
-        return LandCoverManager(self._provider, root=self._root)
+            return LandCoverManager("soilgrids", cache=self._cache, root=where)
+        return LandCoverManager(self._provider, root=where)
 
     def _slot(self, selection: dict[str, Any], depth: str, stat: str) -> "FileSlot":
         from kartograf.download.storage import unit_slot
@@ -655,8 +692,17 @@ class HSGCalculator:
     def _check(
         self, selection: dict[str, Any], depth: str, stat: str, sink: "NoticeSink"
     ) -> "UpdatePlan":
+        from kartograf.download.fetch import inspect_version
         from kartograf.download.plan import new_plan
+        from kartograf.landcover.store import selection_unit
 
+        if plain_of(self._root) is not None:  # the inputs are not kept: one target
+            unit = selection_unit(
+                bbox=selection.get("bbox_obj"), sheet=selection.get("sheet")
+            )
+            slot = self._slot(selection, depth, stat)
+            item = inspect_version(slot, track=_HSG_TRACK, unit=unit, signal="none")
+            return new_plan(self._root, [item])
         inputs = self._input_items(selection, depth, stat, sink)
         return new_plan(
             self._root, [*inputs, self._hsg_item(selection, depth, stat, inputs)]
@@ -745,6 +791,11 @@ class HSGCalculator:
         unit = selection_unit(
             bbox=selection.get("bbox_obj"), sheet=selection.get("sheet")
         )
+        write = plain_of(self._root)
+        if write is not None:
+            return self._calculate_plain(
+                write, slot, unit, selection, depth, update, sink
+            )
         planned_hsg = True
         stale: list[Any] = []
         if plan is not None:
@@ -797,6 +848,7 @@ class HSGCalculator:
                     logger.debug("HSG %s: %s", unit, e)
                     failed.append(UnitFailure(unit, country, str(e), "download"))
         files = (UnitFile(unit, country, hsg),) if hsg is not None else ()
+        stored, plain = report_target(self._root)
         return HsgReport(
             files=files,
             inputs=tuple(inputs),
@@ -804,8 +856,83 @@ class HSGCalculator:
             stale=tuple(stale),
             notices=(),
             ok=not failed and not stale,
-            root=self._root,
+            root=stored,
+            output_dir=plain,
         )
+
+    def _calculate_plain(
+        self,
+        write: Staging,
+        slot: "FileSlot",
+        unit: str,
+        selection: dict[str, Any],
+        depth: str,
+        update: "UpdateMode | None",
+        sink: "NoticeSink",
+    ) -> HsgReport:
+        """Write the HSG of one selection as a plain file (DEV-19.18).
+
+        The SoilGrids inputs are fetched into private directories of the staging
+        directory and removed with it: only the HSG raster reaches the output
+        directory, under its slot name. An input that failed leaves the HSG out.
+        """
+        from kartograf.exceptions import DownloadError
+        from kartograf.sources.registry import get_source
+
+        preflight(self._root, [slot.name])
+        country = get_source(_SOILGRIDS).country
+        files: list[VersionedFile] = []
+        failed: list[UnitFailure] = []
+        hsg: VersionedFile | None = None
+        with contextlib.ExitStack() as stack:
+            for prop in HSG_INPUTS:
+                inputs = stack.enter_context(write.scratch())
+                report = self._manager(inputs.handle).download(
+                    **_where(selection),
+                    update=update,
+                    property=prop,
+                    depth=depth,
+                    stat=_HSG_STAT,
+                    on_notice=sink.add,
+                )
+                files += [i.file for i in report.files]
+                failed += [replace(i, unit=f"{prop} {i.unit}") for i in report.failed]
+            if not failed and len(files) == len(HSG_INPUTS):
+                try:
+                    hsg = self._compute_plain(slot, files, sink)
+                except DownloadError as e:
+                    logger.debug("HSG %s: %s", unit, e)
+                    failed.append(UnitFailure(unit, country, str(e), "download"))
+        return HsgReport(
+            files=(UnitFile(unit, country, hsg),) if hsg is not None else (),
+            inputs=(),
+            failed=tuple(failed),
+            stale=(),
+            notices=(),
+            ok=not failed,
+            output_dir=write.directory,
+        )
+
+    def _compute_plain(
+        self, slot: "FileSlot", files: "list[VersionedFile]", sink: "NoticeSink"
+    ) -> "VersionedFile":
+        """Compute the HSG of the staged inputs and move it into the output folder."""
+        from kartograf.download.fetch import (
+            discard_staging,
+            new_staging,
+            store_plain_file,
+        )
+
+        staged = new_staging(slot)
+        try:
+            _, empty = _classify_files(files, staged)
+        except BaseException:
+            discard_staging(staged, slot)
+            raise
+        stored = store_plain_file(slot, staged)
+        if empty:
+            _warn_empty(sink, unit_of(stored.path, self._root))
+        return stored
 
     def _reuse_or_compute(
         self,
@@ -822,8 +949,6 @@ class HSGCalculator:
         computed HSG without a single class - every input cell is a gap -
         gets ``extra.all_nodata`` and the ``ALL_NODATA`` warning).
         """
-        import rasterio
-
         from kartograf.download.fetch import (
             discard_staging,
             link_version,
@@ -844,19 +969,7 @@ class HSGCalculator:
         label = "+".join(sorted({f.label for f in files}))
         staged = new_staging(slot)
         try:
-            arrays, nodatas = [], []
-            for f in files:
-                with rasterio.open(f.version_path) as src:
-                    arrays.append(src.read(1).astype(np.float64))
-                    nodatas.append(src.nodata)
-                    if len(arrays) == 1:  # grid of clay = grid of the result
-                        profile = src.profile.copy()
-            logger.info("Classifying HSG...")
-            hsg = _classify_hsg(
-                arrays[0], arrays[1], arrays[2], (nodatas[0], nodatas[1], nodatas[2])
-            )
-            empty = not hsg.any()
-            _write_hsg_geotiff(staged, hsg, profile)
+            profile, empty = _classify_files(files, staged)
         except BaseException:
             discard_staging(staged, slot)
             raise
@@ -910,27 +1023,23 @@ class HSGCalculator:
             signal="metadata",
         )
         if empty:
-            sink.emit(
-                "warning",
-                ALL_NODATA,
-                message(
-                    "hydrology.hsg_all_nodata",
-                    relative_to=stored.path.relative_to(self._root).as_posix(),
-                ),
-            )
+            _warn_empty(sink, unit_of(stored.path, self._root))
         return stored
 
 
 def _calculator(
-    root: str | Path | None, cache: "MetadataCache | bool"
+    root: str | Path | None,
+    cache: "MetadataCache | bool",
+    output_dir: str | Path | None = None,
 ) -> HSGCalculator:
-    """Return the calculator of the store ``root`` (the default store without it)."""
-    return HSGCalculator(root=root, cache=cache)
+    """Return the calculator of the store ``root`` or of the plain ``output_dir``."""
+    return HSGCalculator(root=root, output_dir=output_dir, cache=cache)
 
 
 def calculate_hsg(
     *,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     sheet: str | None = None,
     bbox: "BBox | None" = None,
     geometry: str | Path | None = None,
@@ -966,6 +1075,13 @@ def calculate_hsg(
     Statistics of any HSG raster: ``hsg_statistics``; rasters outside the
     store: ``hsg_from_rasters``.
 
+    ``output_dir`` writes the HSG raster as a plain file named as in the store
+    (``<coordinates or sheet>.tif``) and nothing else: the SoilGrids inputs are fetched
+    into the staging directory and removed with it, nothing is reused, and a file of
+    that name that exists is a ``conflict`` before the first byte unless
+    ``update="force"``. It excludes ``root``, ``update="upgrade"`` and ``plan``;
+    ``report.inputs`` is empty.
+
     Returns
     -------
     HsgReport
@@ -991,7 +1107,7 @@ def calculate_hsg(
     >>> hsg.path, hsg.status  # data/hsg/.../N-34-130-D.tif, "new"
     >>> hsg_statistics(hsg.path)["B"]["percent"]
     """
-    report = _calculator(root, cache).calculate_hsg(
+    report = _calculator(root, cache, output_dir).calculate_hsg(
         sheet=sheet,
         bbox=bbox,
         geometry=geometry,
@@ -1009,11 +1125,13 @@ def calculate_hsg(
 def check_hsg(
     *,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     sheet: str | None = None,
     bbox: "BBox | None" = None,
     geometry: str | Path | None = None,
     layer: str | None = None,
     depth: str | None = None,
+    force: bool = False,
     cache: "MetadataCache | bool" = True,
     on_notice: "Callable[[Notice], None] | None" = None,
 ) -> "UpdatePlan":
@@ -1030,12 +1148,13 @@ def check_hsg(
     ValidationError
         Invalid or missing choice (as ``calculate_hsg``).
     """
-    return _calculator(root, cache).check_hsg(
+    return _calculator(root, cache, output_dir).check_hsg(
         sheet=sheet,
         bbox=bbox,
         geometry=geometry,
         layer=layer,
         depth=depth,
+        force=force,
         on_notice=on_notice,
     )
 
@@ -1388,3 +1507,38 @@ def _local_only(slot: "FileSlot") -> "VersionedFile | None":
         return None
     link_version(slot.std, local, refresh=False)
     return local_file(slot.std, local)
+
+
+def _classify_files(
+    files: "list[VersionedFile]", staged: Path
+) -> tuple[dict[str, Any], bool]:
+    """Write the HSG of the clay, sand and silt rasters to ``staged``.
+
+    Returns the profile of the clay raster (the grid of the result) and whether the
+    result has no class at all (every input cell is a gap).
+    """
+    import rasterio
+
+    arrays, nodatas = [], []
+    profile: dict[str, Any] = {}
+    for f in files:
+        with rasterio.open(f.version_path) as src:
+            arrays.append(src.read(1).astype(np.float64))
+            nodatas.append(src.nodata)
+            if len(arrays) == 1:  # grid of clay = grid of the result
+                profile = src.profile.copy()
+    logger.info("Classifying HSG...")
+    hsg = _classify_hsg(
+        arrays[0], arrays[1], arrays[2], (nodatas[0], nodatas[1], nodatas[2])
+    )
+    _write_hsg_geotiff(staged, hsg, profile)
+    return profile, not hsg.any()
+
+
+def _warn_empty(sink: NoticeSink, shown: str) -> None:
+    """Warn that a computed HSG has no class: every input cell is a gap."""
+    sink.emit(
+        "warning",
+        ALL_NODATA,
+        message("hydrology.hsg_all_nodata", relative_to=shown),
+    )

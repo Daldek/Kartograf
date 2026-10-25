@@ -146,6 +146,7 @@ from kartograf.notices import (
     names_text,
     size_text,
 )
+from kartograf.output import preflight, report_target, unit_of, writing
 from kartograf.providers.pl.bdot10k import WOJEWODZTWO_NAMES
 from kartograf.providers.pl.prg import discover_teryts_for_bbox
 from kartograf.serialization import Document
@@ -3092,6 +3093,7 @@ def download_collection(
     *,
     product: str | None,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     country: str | None = None,
     teryt: str | None = None,
     ku: str | None = None,
@@ -3137,7 +3139,11 @@ def download_collection(
     ``<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>[-<temat>]|ku/<kod>|<arkusz>|<strefa>/<kafel>}``
     with versions in ``versions/`` (ADR-042 D8, ADR-043). ``update``/``plan``
     as in every store command (``plan`` from ``check_collection`` with
-    ``update="upgrade"``); ``workers`` = units downloaded in parallel;
+    ``update="upgrade"``); ``output_dir`` writes the unit files as plain files
+    (``<unit><ext>`` in one directory, named as in the store: no sidecar, no version,
+    no link; ``update="force"`` replaces existing files, a conflict stops before the
+    first byte; it excludes ``root``, ``update="upgrade"`` and ``plan``);
+    ``workers`` = units downloaded in parallel;
     ``cache`` = metadata cache of the PRG powiat query, of the CUZK sheet
     index and of the ATOM feed index (``True``: default file in the current
     directory, ``False``: none); ``on_progress`` receives the progress of
@@ -3176,16 +3182,18 @@ def download_collection(
     """
     sink = NoticeSink(on_notice)
     validate_update(update, check="check_collection")
-    request = _resolve(_choices(locals()), sink)
-    files, failed, stale = run_request(
-        request,
-        update=update,
-        plan=plan,
-        workers=workers,
-        cache=cache,
-        sink=sink,
-        on_progress=on_progress,
-    )
+    with writing(output_dir=output_dir, root=root, update=update, plan=plan) as store:
+        request = _resolve({**_choices(locals()), "root": store}, sink)
+        files, failed, stale = run_request(
+            request,
+            update=update,
+            plan=plan,
+            workers=workers,
+            cache=cache,
+            sink=sink,
+            on_progress=on_progress,
+        )
+        stored, plain = report_target(request.root)
     ok = not stale and (not failed or _auto_partial_success(request, failed, sink))
     return CollectionReport(
         files=files,
@@ -3193,7 +3201,8 @@ def download_collection(
         stale=stale,
         notices=sink.notices,
         ok=ok,
-        root=request.root,
+        root=stored,
+        output_dir=plain,
     )
 
 
@@ -3526,6 +3535,7 @@ def run_request(
         cache, force=refreshes_cache(update), on_notice=sink.add
     ) as metadata:
         jobs, unlisted = _jobs(request, sink, metadata, update is None and plan is None)
+        preflight(request.root, [job.slot.name for job in jobs])
         planned: set[_SLOT_KEY] | None = None
         stale: tuple[PlanItem, ...] = ()
         if plan is not None:
@@ -3596,7 +3606,7 @@ def run_request(
             failed.append(outcome)
         elif outcome is not None:
             files.append(UnitFile(job.unit, job.country, outcome))
-            unit = outcome.path.relative_to(request.root).as_posix()
+            unit = unit_of(outcome.path, request.root)
             emit_file_notices(sink, unit, outcome, update)
     return tuple(files), tuple(failed), stale
 
@@ -3629,6 +3639,7 @@ def check_collection(
     *,
     product: str | None,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     country: str | None = None,
     teryt: str | None = None,
     ku: str | None = None,
@@ -3645,6 +3656,7 @@ def check_collection(
     sheet_system: str | None = None,
     network: str | Mapping[str, str] | None = None,
     horizontal_crs: str | None = None,
+    force: bool = False,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
@@ -3658,9 +3670,13 @@ def check_collection(
     with ``ETag`` (``http``) are compared by ``HEAD``, files of an ATOM feed
     by the edition of the feed, files of an index record (signal ``index``)
     by the record's label. The units of an area are asked as for a download
-    (PRG powiats, sheet grid or index, tile index, RUIAN).
+    (PRG powiats, sheet grid or index, tile index, RUIAN). With
+    ``output_dir`` the positions are the targets of a plain write (``action``,
+    ``path``, ``reason``; ``force`` makes an existing file ``replace``) and nothing
+    is asked of the source.
     """
     sink = NoticeSink(on_notice)
-    request = _resolve(_choices(locals()), sink)
-    plan = plan_request(request, cache=cache, sink=sink)
+    with writing(output_dir=output_dir, root=root, force=force) as store:
+        request = _resolve({**_choices(locals()), "root": store}, sink)
+        plan = plan_request(request, cache=cache, sink=sink)
     return replace(plan, notices=sink.notices)

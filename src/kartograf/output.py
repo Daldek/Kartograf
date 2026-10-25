@@ -23,6 +23,7 @@ imported from another tool (DEV-19.11, DEV-19.12; ``kartograf.marker``).
 """
 
 import contextlib
+import functools
 import hashlib
 import os
 import secrets
@@ -30,11 +31,11 @@ import shutil
 import socket
 import threading
 import time
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
-from typing import Final, Literal
+from typing import Any, Final, Literal, Protocol, Self, cast
 
 from kartograf.config import resolve_root
 from kartograf.exceptions import ConflictError, ValidationError
@@ -46,6 +47,7 @@ __all__ = [
     "STAGING",
     "FileResult",
     "Mode",
+    "PlainWriter",
     "PlanEntry",
     "Staging",
     "Target",
@@ -54,8 +56,11 @@ __all__ = [
     "plan_plain",
     "preflight",
     "refuse",
+    "report_target",
     "resolve_target",
     "store_only",
+    "unit_of",
+    "writes",
     "writing",
 ]
 
@@ -501,6 +506,24 @@ class Staging:
         if staged.parent.parent == self.path:
             shutil.rmtree(staged.parent, ignore_errors=True)
 
+    def scratch(self) -> "Staging":
+        """
+        Open a private plain write inside this one for files that are not kept.
+
+        A derived product (the HSG) fetches inputs that no caller asked for: the
+        returned write is used like this one (``with write.scratch() as inputs:``,
+        its ``handle`` as the store root of a track), but its directory is a private
+        directory of this staging directory, so its files are removed with it and
+        nothing of them reaches the output directory. A target that exists is
+        replaced: the directory is new.
+
+        Returns
+        -------
+        Staging
+            The write, not yet entered.
+        """
+        return Staging(self.stage_directory(), force=True)
+
 
 _OPEN: dict[Path, Staging] = {}
 _OPEN_LOCK = threading.Lock()
@@ -638,3 +661,89 @@ def writing(
         raise store_only("--all-campaigns")
     with Staging(target.path, force=force or update == "force") as write:
         yield write.handle
+
+
+def report_target(root: str | os.PathLike[str]) -> tuple[Path | None, Path | None]:
+    """
+    Say where a report of what a track wrote tells it wrote (``kartograf-download/1``).
+
+    Parameters
+    ----------
+    root : str or os.PathLike
+        What the track took as the store root.
+
+    Returns
+    -------
+    tuple of (Path or None, Path or None)
+        ``(root, None)`` for a store, ``(None, output_dir)`` for a plain write.
+    """
+    write = plain_of(root)
+    if write is None:
+        return Path(root), None
+    return None, write.directory
+
+
+def unit_of(path: Path, root: str | os.PathLike[str]) -> str:
+    """
+    Name a file as a message does: below the store root or the output directory.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        A file a track wrote.
+    root : str or os.PathLike
+        What the track took as the store root.
+
+    Returns
+    -------
+    str
+        The POSIX path of ``path`` below the store root, or below the output directory
+        when ``root`` is the handle root of a plain write.
+    """
+    write = plain_of(root)
+    base = Path(root) if write is None else write.directory
+    return path.relative_to(base).as_posix()
+
+
+class PlainWriter(Protocol):
+    """
+    A class that writes plain files when it is made with ``output_dir`` (`writes`).
+
+    ``_output_dir`` is the directory of the plain files, None for a store. ``_on``
+    returns a copy of the object whose store root is ``handle``, the handle root of
+    the write of one call.
+    """
+
+    _output_dir: Path | None
+
+    def _on(self, handle: Path) -> Self:
+        """Return a copy that writes where the plain write says."""
+        ...
+
+
+def writes[F: Callable[..., Any]](method: F) -> F:
+    """
+    Run a public method of an object made with ``output_dir`` in its plain write.
+
+    The call opens the write (`writing`: the staging directory, SIGTERM) and works on
+    a copy of the object whose store root is the handle root of that write, so every
+    slot it builds is a slot of the plain write; an object of a store calls the method
+    as it is. The write replaces existing files with ``update="force"`` or
+    ``force=True`` of the call; ``update="upgrade"`` and a ``plan`` are refused
+    (`store_only`), and so is ``_all_campaigns`` of the object.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self: PlainWriter, *args: Any, **kwargs: Any) -> Any:
+        if self._output_dir is None:
+            return method(self, *args, **kwargs)
+        with writing(
+            output_dir=self._output_dir,
+            update=kwargs.get("update"),
+            plan=kwargs.get("plan"),
+            all_campaigns=getattr(self, "_all_campaigns", False),
+            force=bool(kwargs.get("force")),
+        ) as handle:
+            return method(self._on(handle), *args, **kwargs)
+
+    return cast(F, wrapper)

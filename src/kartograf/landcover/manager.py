@@ -28,6 +28,7 @@ BDOO, Data50, Data250) on its requests - both on the plan track
 ``landcover``.
 """
 
+import copy
 import logging
 import os
 import re
@@ -121,6 +122,14 @@ from kartograf.notices import (
     Notice,
     NoticeSink,
     names_text,
+)
+from kartograf.output import (
+    plain_of,
+    preflight,
+    report_target,
+    resolve_target,
+    unit_of,
+    writes,
 )
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.corine import CorineProvider
@@ -447,6 +456,7 @@ def _landcover_report(
     root: Path,
 ) -> LandCoverReport:
     """Build the report of one request: ``ok`` = no failure and no stale position."""
+    stored, plain = report_target(root)
     return LandCoverReport(
         files=tuple(files),
         raw=tuple(raw),
@@ -454,7 +464,8 @@ def _landcover_report(
         stale=tuple(stale),
         notices=sink.notices,
         ok=not failed and not stale,
-        root=root,
+        root=stored,
+        output_dir=plain,
     )
 
 
@@ -596,6 +607,12 @@ class LandCoverManager:
     ----------
     root : str or Path
         Store root (``--root``); created only when a file is written.
+    output_dir : str or Path, optional
+        Write plain files, named as in the store, into this directory instead
+        (``download``: the data files and, with ``keep_raw``, the original ZIPs; no
+        sidecar, no version, no link; ``update="force"`` replaces existing files and a
+        conflict stops before the first byte). Excludes ``root``, ``update="upgrade"``
+        and ``plan``.
     provider : LandCoverProvider or str
         Provider instance or name: "bdot10k" (Polish topographic vectors),
         "corine" (European land cover raster), "soilgrids" (soil rasters),
@@ -615,6 +632,7 @@ class LandCoverManager:
         provider: LandCoverProvider | str,
         *,
         root: str | Path | None = None,
+        output_dir: str | Path | None = None,
         cache: MetadataCache | bool = True,
     ):
         """
@@ -632,16 +650,35 @@ class LandCoverManager:
             Store root. It is not created here: the directory appears only
             when a download writes its first file. Default: the store root of
             the settings (``store_root()``).
+        output_dir : str or Path, optional
+            The directory of a plain write (see the class). ``root`` is then the
+            output directory.
         cache : MetadataCache or bool
             Cache for providers created by name (see the class docstring);
             opened per ``download``/``check`` call.
         """
-        self._root = resolve_root(root)
+        self._output_dir: Path | None = None
+        if output_dir is not None:
+            self._output_dir = resolve_target(output_dir=output_dir, root=root).path
+            self._root = self._output_dir
+        else:
+            self._root = resolve_root(root)
         self._cache = cache
         self._provider: LandCoverProvider
         self._provider_name: str | None = None
         self._collection: str | None = None
         self.set_provider(provider)
+
+    def _on(self, handle: Path) -> "LandCoverManager":
+        """Return a copy of this manager that writes where a plain write says.
+
+        The copy shares the provider and the cache; its store root is ``handle``, the
+        handle root of the plain write of one call.
+        """
+        view = copy.copy(self)
+        view._root = handle
+        view._output_dir = None
+        return view
 
     @staticmethod
     def _get_provider_by_name(
@@ -750,6 +787,7 @@ class LandCoverManager:
     # Download / check (command level)
     # =========================================================================
 
+    @writes
     def download(
         self,
         *,
@@ -766,7 +804,7 @@ class LandCoverManager:
         **options: Any,
     ) -> LandCoverReport:
         """
-        Download the files of one request into the store.
+        Download the files of one request into the store, or as plain files.
 
         Exactly one of ``teryt``, ``sheet``, ``bbox``, ``geometry`` (the
         collection sources also ``whole_country``); ``options`` are the
@@ -854,6 +892,7 @@ class LandCoverManager:
                     jobs, parent = self._area_jobs(
                         bbox=bbox, sheet=sheet, kwargs=options
                     )
+                preflight(self._root, [job.slot.name for job in jobs])
                 planned, stale = self._planned(
                     lambda: [self._inspect(job) for job in jobs], update, plan
                 )
@@ -894,6 +933,7 @@ class LandCoverManager:
                     found.append(UnitFile(outcome.unit, country, file))
         return _landcover_report(files, raw, failed, stale, sink, self._root)
 
+    @writes
     def check(
         self,
         *,
@@ -902,6 +942,7 @@ class LandCoverManager:
         bbox: BBox | None = None,
         geometry: str | Path | None = None,
         layer: str | None = None,
+        force: bool = False,
         on_notice: Callable[[Notice], None] | None = None,
         **options: Any,
     ) -> UpdatePlan:
@@ -917,6 +958,11 @@ class LandCoverManager:
         ``keep_raw`` adds the raw ZIP position of the same unit. The source
         is always asked: the metadata cache opened here is refreshed, never
         read (an instance ``MetadataCache`` too: its file, refreshing).
+
+        With ``output_dir`` the positions are the targets of a plain write (``action``,
+        ``path``, ``reason``) and nothing is asked of the source but the units of an
+        area (PRG, the index of the feed); ``force`` makes an existing file a
+        ``replace`` instead of a conflict.
         """
         sink = NoticeSink(on_notice)
         _canonical_options(options)
@@ -1111,6 +1157,7 @@ class LandCoverManager:
         """
         teryts, parent = self._area_teryts(bbox, sheet, sink)
         jobs = {t: self._jobs(teryt=t, kwargs=options) for t in teryts}
+        preflight(self._root, [j.slot.name for group in jobs.values() for j in group])
         planned, stale = self._planned(
             lambda: [self._inspect(job) for group in jobs.values() for job in group],
             update,
@@ -1217,6 +1264,7 @@ class LandCoverManager:
         else:
             teryts, parent = self._area_teryts(bbox, sheet, sink)
         jobs = self._archive_jobs(teryts, options, parent=parent)
+        preflight(self._root, [job.slot.name for job in jobs])
         planned, stale = self._planned(
             lambda: [self._inspect_archive(job) for job in jobs], update, plan
         )
@@ -1531,7 +1579,7 @@ class LandCoverManager:
         self, file: VersionedFile, update: UpdateMode | None, sink: NoticeSink
     ) -> None:
         """Report signal failures and unchecked local versions of a store file."""
-        unit = file.path.relative_to(self._root).as_posix()
+        unit = unit_of(file.path, self._root)
         emit_file_notices(sink, unit, file, update)
 
     def _content_params(self, kwargs: dict[str, Any]) -> dict[str, object]:
@@ -1798,7 +1846,8 @@ class LandCoverManager:
         """
         provider = self._provider
         key = self._descriptor_key()
-        version = job.version()  # the edition BEFORE the download (D30)
+        plain = plain_of(job.slot.root) is not None  # a plain file has no edition label
+        version = None if plain else job.version()  # the edition BEFORE the download
         request = self._request(job, kwargs)
         horizontal_crs = None
         extra: dict[str, Any] = {}
@@ -1809,7 +1858,7 @@ class LandCoverManager:
                 "EPSG:3857" if year in CorineProvider.EEA_YEARS else "EPSG:4326"
             )
             extra.update(_PREVIEW_NOTE)
-        if job.edition is not None:
+        if job.edition is not None and not plain:
             extra["edition"] = job.edition().to_extra()
         if isinstance(provider, SoilGridsProvider):
             extra["units"] = units_for(kwargs["property"], kwargs["stat"]).to_extra()
@@ -1860,7 +1909,7 @@ class LandCoverManager:
                 ALL_NODATA,
                 message(
                     "landcover.raster_all_nodata",
-                    raster_path=file.path.relative_to(self._root).as_posix(),
+                    raster_path=unit_of(file.path, self._root),
                 ),
             )
         return file
@@ -1962,13 +2011,16 @@ class LandCoverManager:
                 discard_staging(staged, main.slot)
                 raise
             result[1] = raw_file
-            main_extra["source_files"] = [
-                {
-                    "name": "package",
-                    "file": raw_file.version_path.relative_to(self._root).as_posix(),
-                    "sha256": raw_file.sha256,
-                }
-            ]
+            if plain_of(self._root) is None:  # a plain file has no sidecar to name it
+                main_extra["source_files"] = [
+                    {
+                        "name": "package",
+                        "file": raw_file.version_path.relative_to(
+                            self._root
+                        ).as_posix(),
+                        "sha256": raw_file.sha256,
+                    }
+                ]
         result[0] = store_file(
             main.slot,
             staged,
@@ -2045,27 +2097,33 @@ def _given(arguments: dict[str, Any], names: Sequence[str]) -> dict[str, Any]:
 
 
 def _landcover_manager(
-    product: str | None, root: str | Path | None, cache: MetadataCache | bool
+    product: str | None,
+    root: str | Path | None,
+    cache: MetadataCache | bool,
+    output_dir: str | Path | None = None,
 ) -> LandCoverManager:
     """Return the manager of ``product`` in the store ``root``.
 
     The product is checked first, without network.
     """
     chosen = require_landcover_product(product)
-    return LandCoverManager(chosen, root=root, cache=cache)
+    return LandCoverManager(chosen, root=root, output_dir=output_dir, cache=cache)
 
 
 def _soil_manager(
-    root: str | Path | None, cache: MetadataCache | bool
+    root: str | Path | None,
+    cache: MetadataCache | bool,
+    output_dir: str | Path | None = None,
 ) -> LandCoverManager:
-    """Return the SoilGrids manager of the store ``root``."""
-    return LandCoverManager("soilgrids", root=root, cache=cache)
+    """Return the SoilGrids manager of the store ``root`` or of ``output_dir``."""
+    return LandCoverManager("soilgrids", root=root, output_dir=output_dir, cache=cache)
 
 
 def download_landcover(
     *,
     product: str | None,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     teryt: str | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
@@ -2086,7 +2144,10 @@ def download_landcover(
 ) -> LandCoverReport:
     """Download land cover data (``landcover download``) into the version store.
 
-    The store is ``root``.
+    The store is ``root``; ``output_dir`` writes plain files named as in the store
+    instead (the data files and, with ``keep_raw``, the original ZIPs; no sidecar, no
+    version, no link; ``update="force"`` replaces existing files and a conflict stops
+    before the first byte; it excludes ``root``, ``update="upgrade"`` and ``plan``).
 
     Parameter names and values are the flags of the command in
     ``snake_case``; every data choice is explicit. ``product``:
@@ -2161,7 +2222,7 @@ def download_landcover(
     ... )
     >>> [item.unit for item in area.files], area.failed, area.ok
     """
-    manager = _landcover_manager(product, root, cache)
+    manager = _landcover_manager(product, root, cache, output_dir)
     return manager.download(
         teryt=teryt,
         sheet=sheet,
@@ -2181,6 +2242,7 @@ def check_landcover(
     *,
     product: str | None,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     teryt: str | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
@@ -2192,6 +2254,7 @@ def check_landcover(
     layers: Sequence[str] | None = None,
     keep_raw: bool = False,
     horizontal_crs: str | None = None,
+    force: bool = False,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
@@ -2217,7 +2280,7 @@ def check_landcover(
     DownloadError
         The PRG powiat query of an area failed.
     """
-    manager = _landcover_manager(product, root, cache)
+    manager = _landcover_manager(product, root, cache, output_dir)
     return manager.check(
         teryt=teryt,
         sheet=sheet,
@@ -2225,6 +2288,7 @@ def check_landcover(
         geometry=geometry,
         layer=layer,
         on_notice=on_notice,
+        force=force,
         **_given(locals(), _LANDCOVER_CHOICES),
     )
 
@@ -2269,6 +2333,7 @@ def validate_landcover_request(
 def download_soil(
     *,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -2298,6 +2363,8 @@ def download_soil(
     labelled by the SoilGrids edition (e.g. ``2.0``). ``update``/``plan``
     (from ``check_soil``), ``cache`` (SoilGrids capabilities) and
     ``on_notice`` as in ``download_landcover``.
+    ``output_dir`` writes the raster as a plain file (``<coordinates or sheet>.tif``)
+    as in ``download_landcover``.
 
     Returns
     -------
@@ -2318,7 +2385,7 @@ def download_soil(
     ... )
     >>> report.files[0].file.label  # the SoilGrids edition, e.g. 2.0
     """
-    report = _soil_manager(root, cache).download(
+    report = _soil_manager(root, cache, output_dir).download(
         sheet=sheet,
         bbox=bbox,
         geometry=geometry,
@@ -2335,12 +2402,14 @@ def download_soil(
         notices=report.notices,
         ok=report.ok,
         root=report.root,
+        output_dir=report.output_dir,
     )
 
 
 def check_soil(
     *,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -2348,6 +2417,7 @@ def check_soil(
     property: str | None = None,
     depth: str | None = None,
     stat: str | None = None,
+    force: bool = False,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
@@ -2361,12 +2431,13 @@ def check_soil(
     ValidationError
         Invalid or missing choice (as ``download_soil``).
     """
-    return _soil_manager(root, cache).check(
+    return _soil_manager(root, cache, output_dir).check(
         sheet=sheet,
         bbox=bbox,
         geometry=geometry,
         layer=layer,
         on_notice=on_notice,
+        force=force,
         **_given(locals(), _SOIL_CHOICES),
     )
 
