@@ -17,7 +17,7 @@ Wynik w skrocie: 52 scenariusze: 41 zgodnych z oczekiwaniem, 11 z odchyleniami. 
 
 - Binarka: `<scratch>/venv/bin/kartograf` (Python 3.13.5, kartograf 0.8.0, pyproj 3.8.0 / PROJ 9.8.1, rasterio 1.5.2, pyogrio 0.13.0).
   Ani repo `.venv`, ani `python -m` z drzewa zrodel. cwd = `cwd-A` (swiezy `.kartograf_cache.db` lokalnie). Brak `CLMS_CREDENTIALS`.
-- Dane: wylacznie `<katalog-danych>` (udzial SMB/cifs `agent-tmp`, montowany **bez `serverino`**, `cache=strict`, `actimeo=1`) - ok. 882 MB unikalnych wersji (559 plikow, limit 1,5 GB).
+- Dane: wylacznie `<katalog-danych>` (udzial SMB/cifs `<scratch-dir>`, montowany **bez `serverino`**, `cache=strict`, `actimeo=1`) - ok. 882 MB unikalnych wersji (559 plikow, limit 1,5 GB).
   Pliki geometrii testowej (GPKG/SHP, `ogr2ogr`) tylko w cwd.
 - Siec: online (wspolbiezne zapytania innych agentow do tych samych uslug). Offline = `unshare -rn`.
 - Niestabilnosc uslug (nie bledy Kartografa): CUZK openzu HTTP 503 raz (`CZ-force-nmt`; powtorzenie OK), timeout PRG WFS raz (availability geometrii 53,6 s po ponowieniu), WCS GUGiK 7,8-91 s na zadanie 1 zapytania (tez dla wycinka 3x3 m: 91 s).
@@ -94,7 +94,7 @@ Brak. Dane zweryfikowane niezaleznie: wycinki WCS PL (501x501 i wielokawalkowy 1
 ### P2 (funkcja zawodzi albo wprowadza w blad w typowym przypadku)
 
 **P2-1. Sciezka standardowa cofa sie na starszy lot na udziale SMB bez `serverino` (naruszenie gwarancji "nigdy nie cofa sie").**
-- Powtorzenie (magazyn na cifs bez `serverino`, jak `agent-tmp`; dwa kolejne uruchomienia w odstepie < 1 s):
+- Powtorzenie (magazyn na cifs bez `serverino`, jak `<scratch-dir>`; dwa kolejne uruchomienia w odstepie < 1 s):
   `kartograf elevation download --sheet N-33-58-A-c-1-3 --product nmt --resolution 0.5m --vertical-crs EVRF2007 --full-sheet -o <katalog-danych>/pom-fs-A2`
   (std -> 2025, sha `84458fd0`; `full_sheet/` -> 2022, sha `78b8e279`), a zaraz potem to samo z `--max-year 2022`.
 - Zaobserwowano: po drugim uruchomieniu plik w sciezce standardowej ma sha `78b8e279` (lot 2022); w wyniku tylko `lokalna wersja 2022-09-04_79054`, bez `Info: ... dowiazanie nigdy nie cofa sie`. Powtorzone 2/2; kontrola z przerwa 3 s: std zostaje `84458fd0`, jest `Warning:` i `Info: 1 dowiazan wskazuje lokalny lot spoza tego zadania` (zgodnie z USAGE 4.1).
