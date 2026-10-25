@@ -1846,12 +1846,14 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
   and the HSG raster, `<sheet>.laz` for a CZ point cloud. There is no sidecar, no `versions/`, no
   standard path, no `full_sheet/` and no hard link, so a plain write works on FAT, exFAT and SMB.
   `landcover download --keep-raw` writes `<teryt>.gpkg` and the original `<teryt>.zip`.
+- *Before the first request* the directory is looked at: one that is, or lies in, a store of
+  Kartograf or IMGWTools is `conflict` (`output_in_store`, `details.paths` the directory, the hint
+  names `--root`), and nothing is asked of the source.
 - *Before the first byte* the whole list of targets is checked, and a failure writes nothing:
-  a name two files share is `conflict` (`duplicate_output_name`), a directory that is, or lies
-  in, a store of Kartograf or IMGWTools is `conflict` (`output_in_store`, the hint names
-  `--root`), an existing file without `--force` is `conflict` (`output_exists`). The error
-  lists every path in `details.paths`. A request over two countries (`--country auto`) is
-  checked as one list.
+  a name two files share is `conflict` (`duplicate_output_name`), a subdirectory that a unit
+  would enter and that holds a store marker is `conflict` (`output_in_store`), an existing file
+  without `--force` is `conflict` (`output_exists`). The error lists every path in
+  `details.paths`. A request over two countries (`--country auto`) is checked as one list.
 - *Writing.* Each file goes to `DIR/.kartograf-incoming/<host>_<pid>_<token>/`, is verified
   there and moves into place with `os.replace`; the staging directory is removed after success,
   error, Ctrl-C (exit 130) and SIGTERM (exit 143), and leftovers older than 24 hours are removed
@@ -1882,6 +1884,17 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
   store inside `--allow-dir`. `check` with `update=force` plans the replacement on a server that
   writes; a server that does not write answers `forbidden` (`writes_disabled`) to every option
   of a run.
+
+**A store root that cannot be written** is the error of the command, before any request, in
+every data command and in `project download`, and not a failed unit of each sheet or file: a
+root that has the layout of a store and no `kartograf-store.json` is `store_unavailable`
+(`no_marker`, exit 8, the hint is `kartograf store init --root DIR`), a root that holds other
+files is `conflict` (`not_empty`, exit 4), and a root that lies in, holds or has below it a
+store of Kartograf or IMGWTools is `conflict` (`nested_store`, exit 4). `--check` lists a root
+that is a `conflict` as the one position of the track `store` (`action` `conflict`, `reason`,
+the root as `path`): the plan is `ok`, exits 0 and asks nothing; the plan of a root without its
+marker fails as the run does (exit 8). An `output_dir` that is, or lies in, a store is refused
+the same way (`output_in_store`).
 
 The reasons of the errors above are listed in 9.3 and in the migration guide of the CHANGELOG.
 

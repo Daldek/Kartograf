@@ -2106,6 +2106,32 @@ from the key `root`, and the MCP tool names.
 
 ### Fixed
 
+- A store root that a write refuses is the error of the command, not the failure of every unit
+  (DEV-19.13, DEV-19.14, AGI-4.3, ADR-054 decision 8). A root with the layout of a store and no
+  marker (`store_unavailable`, `no_marker`), a root that holds other files (`conflict`,
+  `not_empty`) and a root that lies in, holds or has below it a store of any tool (`conflict`,
+  `nested_store`) was met by the first unit of work, after the index of the sheets had been
+  asked, and a list of sheets fetched in parallel reported it as one failed unit with the code
+  `source_unavailable` (kind `download`, exit 11): the registry code, the reason, the hint and
+  the exit code (8 or 4) were lost (found by Retman). Now every track looks at the root before
+  any request: the sheets (one, a list, an area), the LAZ tiles, the PL and CZ cutouts, the CZ
+  sheets, LAZ, orthophotos and contours, the collections, land cover, soil, the HSG and
+  `project download` (`kartograf.output.guard_store`, called by `writing` and by the public
+  methods of `DownloadManager`, `LandCoverManager` and `HSGCalculator`; `download_data` and
+  `download_collection` judge the request first, so an invalid one is still a
+  `validation_error`). The error document is the last line of stderr and the exit code is the
+  registry's. An `output_dir` that is, or lies in, a store is refused the same way before the
+  index is asked (`conflict`, `output_in_store`, `details.paths` the directory). `--check`
+  (`check_*`, `check_command`, MCP `check`, `DownloadManager.check_sheets`,
+  `LandCoverManager.check`, `HSGCalculator.check_hsg`) lists a root that is a `conflict`
+  instead of raising, as IMGWTools does for `nested_store`: one position of the new track
+  `store` with the action `conflict`, the `reason` (`nested_store`, `not_empty`), the root as
+  `path`, `error` with the text and the status `unverifiable`; the plan is `ok` (exit 0) and
+  asks nothing. The plan of a root without its marker still fails with `store_unavailable`, as
+  the run does. `check_project` lists a `conflict` entry (`FileCheck.status`) of every selected
+  task. `Track` has the value `store`, `PinStatus` the value `conflict`, and
+  `kartograf.marker.store_refusal`, `kartograf.output.guard_store`,
+  `kartograf.output.directory_refusal` and `kartograf.download.plan.refusal_plan` are new.
 - UX review 0.8.0 messages: an unknown flag reported by a command
   (its `usage`) with the list of commands that have it and a hint about common
   mistakes (`landcover --source`/`-s` -> `--product`, `soil download

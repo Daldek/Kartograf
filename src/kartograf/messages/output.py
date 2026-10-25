@@ -37,6 +37,10 @@ MESSAGES = {
         "{count} sciezek wyjsciowych jest magazynem albo lezy w magazynie (pierwsza: "
         "{first})",
     ),
+    "directory_in_store": Text(
+        "the output directory {path} is, or lies in, the store {store}",
+        "katalog wyjsciowy {path} jest magazynem albo lezy w magazynie {store}",
+    ),
     "output_in_store_hint": Text(
         "Use --root to write the store, or choose a directory outside every store",
         "Uzyj --root, aby zapisac magazyn, albo wybierz katalog poza kazdym magazynem",

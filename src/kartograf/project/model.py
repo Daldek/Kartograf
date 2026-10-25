@@ -32,6 +32,7 @@ PinStatus = Literal[
     "removed",
     "unverifiable",
     "check_failed",
+    "conflict",
 ]
 
 
@@ -177,7 +178,10 @@ class FileCheck:
 
     ``status``: ``ok``/``missing``/``corrupt`` (``get_project_status``,
     ``verify_project``) or ``current``/``newer``/``added``/``removed``/
-    ``unverifiable``/``check_failed``/``missing`` (``check_project``).
+    ``unverifiable``/``check_failed``/``missing`` (``check_project``). The status
+    ``conflict`` is the one entry of a task whose store root a write would refuse
+    (``check_project``, DEV-19.14): nothing was checked, ``unit`` and ``path`` are
+    empty (``path`` is the store root in a document) and ``detail`` says why.
     ``detail``: the reason with a remedy, ``None`` when nothing to do.
 
     ``path`` is the standard path relative to the store; in a project

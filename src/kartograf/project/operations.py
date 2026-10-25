@@ -29,8 +29,10 @@ from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import PlanItem
 from kartograf.download.versions import read_version
-from kartograf.exceptions import KartografError, ValidationError
+from kartograf.exceptions import ConflictError, KartografError, ValidationError
+from kartograf.marker import store_refusal
 from kartograf.notices import PROJECT_GEOMETRY_CHANGED, Notice, NoticeSink
+from kartograf.output import guard_store
 from kartograf.project.commands import TaskFiles, project_command, task_command
 from kartograf.project.manifest import (
     MANIFEST_NAME,
@@ -425,6 +427,10 @@ def download_project(
     ValidationError
         Invalid manifest, unknown task name, unknown mode, ``workers`` not an
         integer >= 1 or a missing store directory (before any network access).
+    ConflictError, StoreUnavailableError, InvalidLayoutError
+        The store of the project is refused (nested in another store, not empty and
+        no store, no marker, an unreadable marker): the error of the command, before
+        any task or request.
     """
     if update not in _UPDATE_MODES:
         raise ValidationError(
@@ -438,6 +444,7 @@ def download_project(
     project, state = read_manifest(project_dir)
     _require_store(project)
     selected = _select(project, tasks)
+    guard_store(project.root)
     sink = NoticeSink(on_notice)
     results = tuple(
         _download_task(
@@ -1064,6 +1071,21 @@ def check_project(
     project = open_project(project_dir)
     _require_store(project)
     selected = _select(project, tasks)
+    refusal = store_refusal(project.root)
+    if refusal is not None:
+        if not isinstance(refusal, ConflictError):
+            raise refusal
+        # the plan lists what the run refuses: one entry of every selected task
+        return ProjectCheck(
+            project,
+            tuple(
+                FileCheck(task.name, "", "", "conflict", None, None, str(refusal))
+                for task in selected
+            ),
+            (),
+            (),
+            True,
+        )
     sink = NoticeSink(on_notice)
     checked: list[FileCheck] = []
     missing_tasks: list[str] = []

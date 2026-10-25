@@ -3203,7 +3203,7 @@ class TestSheetListExitCode:
                     "--geometry",
                     str(shp_file),
                     "--root",
-                    str(tmp_path),
+                    str(tmp_path / "store"),
                 ]
             )
 
@@ -3428,7 +3428,7 @@ class TestCmdDownloadGeometry:
                 "--geometry",
                 str(shp_file),
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -3475,7 +3475,7 @@ class TestCmdDownloadGeometry:
                 "--layer",
                 "my_layer",
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -3520,7 +3520,7 @@ class TestCmdDownloadGeometry:
                 "--geometry",
                 str(gpkg_file),
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -3582,7 +3582,7 @@ class TestCmdDownloadGeometry:
                     "--geometry",
                     str(path),
                     "--root",
-                    str(tmp_path),
+                    str(tmp_path / "store"),
                 ]
             )
             == 0
@@ -3780,7 +3780,7 @@ class TestCmdDownloadGeometry:
                 "--workers",
                 "1",
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
             ]
         )
 
@@ -4221,7 +4221,7 @@ class TestDownloadGeometrySystem:
                 "--scale",
                 "1:2000",
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -4268,7 +4268,7 @@ class TestDownloadGeometrySystem:
                 "--geometry",
                 str(shp_file),
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -6631,7 +6631,7 @@ class TestCountryDispatch:
                     "--horizontal-crs",
                     "EPSG:5514",
                     "--root",
-                    str(tmp_path),
+                    str(tmp_path / "store"),
                     "-q",
                 ]
             )
@@ -6673,7 +6673,7 @@ class TestCountryDispatch:
                     "--horizontal-crs",
                     "EPSG:5514",
                     "--root",
-                    str(tmp_path),
+                    str(tmp_path / "store"),
                     "-q",
                 ]
             )
@@ -6723,7 +6723,7 @@ class TestCountryDispatch:
                     "--horizontal-crs",
                     "EPSG:5514",
                     "--root",
-                    str(tmp_path),
+                    str(tmp_path / "store"),
                     "-q",
                 ]
             )
@@ -6759,7 +6759,7 @@ class TestCountryDispatch:
                 "--horizontal-crs",
                 "EPSG:3045",
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -7983,7 +7983,7 @@ class TestAutoSplitGeometry:
                 "--horizontal-crs",
                 "EPSG:5514",
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -8038,7 +8038,7 @@ class TestAutoSplitGeometry:
                 "--geometry",
                 str(geometry_file),
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -8091,7 +8091,7 @@ class TestAutoSplitGeometry:
                 "--geometry",
                 str(geometry_file),
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -8134,7 +8134,7 @@ class TestAutoSplitGeometry:
                     "--geometry",
                     str(geometry_file),
                     "--root",
-                    str(tmp_path),
+                    str(tmp_path / "store"),
                     "-q",
                 ]
             )
@@ -8174,7 +8174,7 @@ class TestAutoSplitGeometry:
                 "--horizontal-crs",
                 "EPSG:5514",
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -8218,7 +8218,7 @@ class TestAutoSplitGeometry:
                 "--horizontal-crs",
                 "EPSG:5514",
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )
@@ -9456,7 +9456,7 @@ class TestCampaignOptions:
                 "--year",
                 "2025",
                 "--root",
-                str(tmp_path),
+                str(tmp_path / "store"),
                 "-q",
             ]
         )

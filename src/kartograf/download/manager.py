@@ -54,6 +54,7 @@ from kartograf.download.plan import (
     PlanItem,
     UpdatePlan,
     new_plan,
+    plans,
     require_store,
     select_planned,
     store_id,
@@ -729,6 +730,11 @@ class DownloadManager:
         return view
 
     @property
+    def _store_root(self) -> Path:
+        """Return the store root (a handle root inside a plain write)."""
+        return self._storage.root
+
+    @property
     def vertical_crs(self) -> str | None:
         """Actual provider vertical CRS, or None for data without heights."""
         return self._vertical_crs
@@ -1213,7 +1219,7 @@ class DownloadManager:
                 return list(executor.map(inspect, leaves))
         return [inspect(sheet) for sheet in leaves]
 
-    @writes
+    @plans
     def check_sheets(
         self,
         sheets: list[str],

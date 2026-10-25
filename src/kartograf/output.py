@@ -40,7 +40,7 @@ from typing import Any, Final, Literal, Protocol, Self, cast
 from kartograf.config import resolve_root
 from kartograf.exceptions import ConflictError, ValidationError
 from kartograf.interrupt import sigterm_interrupts
-from kartograf.marker import STORE_MARKERS, store_around
+from kartograf.marker import STORE_MARKERS, lenient_store, store_around
 from kartograf.messages import message
 
 __all__ = [
@@ -52,6 +52,8 @@ __all__ = [
     "Staging",
     "Target",
     "digest_of",
+    "directory_refusal",
+    "guard_store",
     "plain_of",
     "plan_plain",
     "preflight",
@@ -60,6 +62,7 @@ __all__ = [
     "resolve_target",
     "store_only",
     "unit_of",
+    "wrapping",
     "writes",
     "writing",
 ]
@@ -605,6 +608,66 @@ def store_only(option: str) -> ValidationError:
     )
 
 
+def guard_store(root: str | os.PathLike[str]) -> None:
+    """
+    Refuse a store root that a write would refuse, before its first request.
+
+    Every command that writes the store calls this before any request or unit of
+    work, so the refusal is the error of the command, with its own registry code and
+    ``details.reason``, and not the failure of each unit (DEV-19.13, DEV-19.14).
+    Nothing is created. The handle root of a plain write is no store root: nothing
+    happens for it.
+
+    Parameters
+    ----------
+    root : str or os.PathLike
+        What a track takes as the store root; it need not exist.
+
+    Raises
+    ------
+    ConflictError
+        ``nested_store`` (inside another store, holding one, or with one below it) or
+        ``not_empty`` (neither empty nor the layout of a store).
+    StoreUnavailableError
+        ``no_marker``: the layout of a store without its marker.
+    InvalidLayoutError
+        The marker is not a ``kartograf-store/1`` document.
+    """
+    if plain_of(root) is None:
+        lenient_store(root)
+
+
+def directory_refusal(directory: Path) -> ConflictError | None:
+    """
+    Return the error of an output directory that is, or lies in, a store, or None.
+
+    The directory alone says it (DEV-19.11): its ancestors, or it, hold the marker of a
+    store of any tool, so the refusal needs no list of targets, and so no request.
+    ``details.reason`` is ``output_in_store``, ``details.paths`` is the directory and
+    the hint names ``--root``. The directory need not exist.
+
+    Parameters
+    ----------
+    directory : pathlib.Path
+        The output directory of a plain write.
+
+    Returns
+    -------
+    ConflictError or None
+        The error, or None when the directory is no store and lies in none.
+    """
+    store = store_around(directory)
+    if store is None:
+        return None
+    return ConflictError(
+        message("output.directory_in_store", path=directory, store=store),
+        reason="output_in_store",
+        path=directory,
+        paths=[str(directory)],
+        hint=message("output.output_in_store_hint"),
+    )
+
+
 @contextlib.contextmanager
 def writing(
     *,
@@ -614,6 +677,7 @@ def writing(
     plan: object | None = None,
     all_campaigns: bool = False,
     force: bool = False,
+    guard: bool = True,
 ) -> Iterator[Path]:
     """
     Open the write of one request and give what its tracks take as the store root.
@@ -633,6 +697,11 @@ def writing(
     force : bool, optional
         Replace existing files, as ``update="force"`` does (the plan of a check, which
         has no update mode).
+    guard : bool, optional
+        Refuse a store root that a write would refuse (`guard_store`), or an output
+        directory that is, or lies in, a store (`directory_refusal`), before the block
+        runs. A check passes False and plans the refusal itself, and a request that is
+        judged first (a dry validation) looks at the target itself.
 
     Yields
     ------
@@ -645,12 +714,17 @@ def writing(
     ValidationError
         Both targets are given (`resolve_target`), or ``output_dir`` is given with
         ``update="upgrade"``, a ``plan`` or ``all_campaigns`` (`store_only`).
+    ConflictError, StoreUnavailableError, InvalidLayoutError
+        The store root or the output directory is refused (`guard_store`,
+        `directory_refusal`), unless ``guard`` is False.
     """
     if root is not None and plain_of(root) is not None:
         yield Path(root)
         return
     target = resolve_target(output_dir=output_dir, root=root)
     if target.mode == "store":
+        if guard:
+            guard_store(target.path)
         yield target.path
         return
     if update == "upgrade":
@@ -659,6 +733,8 @@ def writing(
         raise store_only("--plan")
     if all_campaigns:
         raise store_only("--all-campaigns")
+    if guard and (refusal := directory_refusal(target.path)) is not None:
+        raise refusal
     with Staging(target.path, force=force or update == "force") as write:
         yield write.handle
 
@@ -711,7 +787,7 @@ class PlainWriter(Protocol):
 
     ``_output_dir`` is the directory of the plain files, None for a store. ``_on``
     returns a copy of the object whose store root is ``handle``, the handle root of
-    the write of one call.
+    the write of one call; ``_store_root`` is the store root the object writes to.
     """
 
     _output_dir: Path | None
@@ -720,22 +796,39 @@ class PlainWriter(Protocol):
         """Return a copy that writes where the plain write says."""
         ...
 
+    @property
+    def _store_root(self) -> Path:
+        """Return the store root: the handle root inside a plain write."""
+        ...
 
-def writes[F: Callable[..., Any]](method: F) -> F:
+
+def wrapping[F: Callable[..., Any]](
+    method: F, *, refusal: Callable[[Path], Any] | None = None
+) -> F:
     """
     Run a public method of an object made with ``output_dir`` in its plain write.
 
     The call opens the write (`writing`: the staging directory, SIGTERM) and works on
     a copy of the object whose store root is the handle root of that write, so every
     slot it builds is a slot of the plain write; an object of a store calls the method
-    as it is. The write replaces existing files with ``update="force"`` or
-    ``force=True`` of the call; ``update="upgrade"`` and a ``plan`` are refused
+    as it is, after its store root has been looked at: a root that a write would
+    refuse (`guard_store`) is the error of the call, before the method makes a request
+    or does a unit of work. The write replaces existing files with ``update="force"``
+    or ``force=True`` of the call; ``update="upgrade"`` and a ``plan`` are refused
     (`store_only`), and so is ``_all_campaigns`` of the object.
+
+    ``refusal`` is for a method that plans: ``refusal(root)`` returns what the call
+    returns instead of running the method for a refused store root (its plan), or
+    None; it raises the refusals that no plan lists.
     """
 
     @functools.wraps(method)
     def wrapper(self: PlainWriter, *args: Any, **kwargs: Any) -> Any:
         if self._output_dir is None:
+            if refusal is None:
+                guard_store(self._store_root)
+            elif (planned := refusal(self._store_root)) is not None:
+                return planned
             return method(self, *args, **kwargs)
         with writing(
             output_dir=self._output_dir,
@@ -743,7 +836,17 @@ def writes[F: Callable[..., Any]](method: F) -> F:
             plan=kwargs.get("plan"),
             all_campaigns=getattr(self, "_all_campaigns", False),
             force=bool(kwargs.get("force")),
+            guard=refusal is None,  # a planning method lists the conflicts it finds
         ) as handle:
             return method(self._on(handle), *args, **kwargs)
 
     return cast(F, wrapper)
+
+
+def writes[F: Callable[..., Any]](method: F) -> F:
+    """
+    Wrap a public method that writes (`wrapping`).
+
+    A store root that a write would refuse is the error of the call.
+    """
+    return wrapping(method)

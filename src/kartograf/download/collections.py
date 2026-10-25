@@ -118,6 +118,7 @@ from kartograf.download.plan import (
     Track,
     UpdatePlan,
     new_plan,
+    refusal_plan,
     require_store,
     select_planned,
     store_id,
@@ -146,7 +147,7 @@ from kartograf.notices import (
     names_text,
     size_text,
 )
-from kartograf.output import preflight, report_target, unit_of, writing
+from kartograf.output import guard_store, preflight, report_target, unit_of, writing
 from kartograf.providers.pl.bdot10k import WOJEWODZTWO_NAMES
 from kartograf.providers.pl.prg import discover_teryts_for_bbox
 from kartograf.serialization import Document
@@ -3182,8 +3183,11 @@ def download_collection(
     """
     sink = NoticeSink(on_notice)
     validate_update(update, check="check_collection")
-    with writing(output_dir=output_dir, root=root, update=update, plan=plan) as store:
+    with writing(
+        output_dir=output_dir, root=root, update=update, plan=plan, guard=False
+    ) as store:
         request = _resolve({**_choices(locals()), "root": store}, sink)
+        guard_store(store)  # the request is judged first, then nothing is asked
         files, failed, stale = run_request(
             request,
             update=update,
@@ -3676,7 +3680,9 @@ def check_collection(
     is asked of the source.
     """
     sink = NoticeSink(on_notice)
-    with writing(output_dir=output_dir, root=root, force=force) as store:
+    with writing(output_dir=output_dir, root=root, force=force, guard=False) as store:
         request = _resolve({**_choices(locals()), "root": store}, sink)
-        plan = plan_request(request, cache=cache, sink=sink)
+        plan = refusal_plan(store)
+        if plan is None:
+            plan = plan_request(request, cache=cache, sink=sink)
     return replace(plan, notices=sink.notices)

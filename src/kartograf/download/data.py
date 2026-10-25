@@ -115,7 +115,7 @@ from kartograf.download.options import (
     validate_request,
 )
 from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, ImageCutoutResult
-from kartograf.download.plan import PlanItem, UpdatePlan, plain_items
+from kartograf.download.plan import PlanItem, UpdatePlan, conflict_plan, plain_items
 from kartograf.exceptions import (
     DownloadError,
     KartografError,
@@ -123,6 +123,7 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.marker import store_refusal
 from kartograf.messages import message
 from kartograf.notices import (
     AUTO_NARROWED_TO_CZ,
@@ -146,7 +147,7 @@ from kartograf.notices import (
     NoticeSink,
     count_text,
 )
-from kartograf.output import Mode, Staging, plain_of, refuse, writing
+from kartograf.output import Mode, Staging, directory_refusal, plain_of, refuse, writing
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
@@ -541,13 +542,27 @@ def _start(
         plan=plan,
         all_campaigns=kwargs["all_campaigns"],
         force=force,
+        guard=False,  # the request is judged first: see the refusal below
     ) as root:
         task = _task(**{**kwargs, "root": root})
         write = plain_of(root)
         if write is None:
             run.root = task.root
+            refusal = store_refusal(task.root)
         else:
             run.output_dir = write.directory
+            # a check lists the target of every file, a conflict of the directory too
+            refusal = None if check else directory_refusal(write.directory)
+        if refusal is not None:
+            # A request that is invalid is invalid, whatever its target; then the
+            # refusal comes before any request (DEV-19.11, DEV-19.13, DEV-19.14): the
+            # error of the command, or, for a check, the plan that lists it.
+            _validate(task)
+            if not check:
+                raise refusal
+            run.plans.append(conflict_plan(task.root, refusal))
+            return run, 0
+        if write is not None:
             if task.full_sheet:  # a plain write takes the newest full flight anyway
                 run.sink.emit(
                     "info", FULL_SHEET_REDUNDANT, message("output.full_sheet_redundant")
@@ -781,7 +796,11 @@ def validate_data_request(
     TransformError
         No safe pinned operation for the request area.
     """
-    task = _task(**_selection_kwargs(locals()))
+    _validate(_task(**_selection_kwargs(locals())))
+
+
+def _validate(task: SimpleNamespace) -> None:
+    """Run every check of a request that comes before its first request (a dry run)."""
     run = _Run(
         sink=NoticeSink(None),
         update=None,

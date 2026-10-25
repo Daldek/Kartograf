@@ -401,6 +401,8 @@ _CONFLICT_TEXT = {
     "output_exists": message("cli.plan_conflict_output_exists"),
     "duplicate_output_name": message("cli.plan_conflict_duplicate_output_name"),
     "output_in_store": message("cli.plan_conflict_output_in_store"),
+    "nested_store": message("cli.plan_conflict_nested_store"),
+    "not_empty": message("cli.plan_conflict_not_empty"),
 }
 
 

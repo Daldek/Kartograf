@@ -26,6 +26,7 @@ from kartograf.marker import (
     prepare_store,
     store_around,
     store_below,
+    store_refusal,
 )
 
 SEGMENT = Path("nmt") / "pl_1992_1m_evrf2007"
@@ -198,6 +199,36 @@ def test_a_plan_refuses_a_root_that_a_write_would_refuse(tmp_path):
         lenient_store(tmp_path)
 
     assert caught.value.reason == "not_empty"
+
+
+def test_the_refusal_of_a_root_is_returned_as_the_error_a_write_is_refused_with(
+    tmp_path,
+):
+    seed_layout(tmp_path / "layout")
+    (tmp_path / "busy").mkdir()
+    (tmp_path / "busy" / "notes.txt").write_text("mine")
+    (tmp_path / "marked").mkdir()
+    (tmp_path / "marked" / MARKER).write_text("{}")
+    (tmp_path / "marked" / "inner").mkdir()
+    (tmp_path / "bad").mkdir()
+    (tmp_path / "bad" / MARKER).write_text("not json")
+
+    found = {
+        name: store_refusal(tmp_path / name)
+        for name in ("layout", "busy", "marked/inner", "bad", "new")
+    }
+
+    assert {
+        name: (type(error), error.reason if error else None)
+        for name, error in found.items()
+    } == {
+        "layout": (StoreUnavailableError, "no_marker"),
+        "busy": (ConflictError, "not_empty"),
+        "marked/inner": (ConflictError, "nested_store"),
+        "bad": (InvalidLayoutError, "invalid_layout"),
+        "new": (type(None), None),
+    }
+    assert not (tmp_path / "new").exists()
 
 
 # -- a store never nests -------------------------------------------------------------

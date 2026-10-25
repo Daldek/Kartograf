@@ -56,6 +56,7 @@ from kartograf.download.plan import (
     PlanItem,
     UpdatePlan,
     new_plan,
+    refusal_plan,
     require_store,
     select_planned,
     store_id,
@@ -530,9 +531,12 @@ def check_laz_area(
     """
     bbox = _validate_area(bbox, sheet)
     sink = NoticeSink(on_notice)
-    with (
-        writing(output_dir=output_dir, root=root, all_campaigns=all_campaigns) as store,
-        _selected(
+    with writing(
+        output_dir=output_dir, root=root, all_campaigns=all_campaigns, guard=False
+    ) as store:
+        if (refused := refusal_plan(store)) is not None:
+            return refused
+        with _selected(
             bbox,
             sheet,
             vertical_crs=vertical_crs,
@@ -546,9 +550,8 @@ def check_laz_area(
             cache=cache,
             force=True,
             sink=sink,
-        ) as (selected_provider, selection, _area),
-    ):
-        return _check_selection(selection, provider=selected_provider, root=store)
+        ) as (selected_provider, selection, _area):
+            return _check_selection(selection, provider=selected_provider, root=store)
 
 
 def download_laz_area(
