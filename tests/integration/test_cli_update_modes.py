@@ -1,4 +1,4 @@
-"""CLI ``elevation download``: --check-updates / --upgrade / --force / --plan
+"""CLI ``elevation download``: --check / --upgrade / --force / --plan
 (spec 4.2-4.5)."""
 
 import json
@@ -46,8 +46,8 @@ def _run(fake, out, *argv):
 @pytest.mark.parametrize(
     "flags",
     [
-        ("--check-updates", "--upgrade"),
-        ("--check-updates", "--force"),
+        ("--check", "--upgrade"),
+        ("--check", "--force"),
         ("--upgrade", "--force"),
     ],
 )
@@ -81,28 +81,28 @@ def test_default_reports_newer_upgrade_downloads_it(tmp_path, capsys):
     assert fake.downloads == [REC["83233"].url, REC["84183"].url]
 
 
-def test_check_updates_prints_report_and_downloads_nothing(tmp_path, capsys):
+def test_check_prints_report_and_downloads_nothing(tmp_path, capsys):
     fake = FakeCampaignProvider({"newest": [REC["83233"]]})
     assert _run(fake, tmp_path, "--sheet", G, "-q") == 0
     capsys.readouterr()
     fake.records = {"newest": [REC["84183"]]}
-    assert _run(fake, tmp_path, "--sheet", G, "--check-updates", "-q") == 0
+    assert _run(fake, tmp_path, "--sheet", G, "--check", "-q") == 0
     out = capsys.readouterr().out
     assert out == (f"{G_PATH}: nowsza: 2025-10-21_84183 (lokalna 2025-04-27_83233)\n")
     assert fake.downloads == [REC["83233"].url]
 
 
-def test_check_updates_failure_is_partial_success_code(tmp_path, capsys):
+def test_check_failure_is_partial_success_code(tmp_path, capsys):
     from tests.integration.test_manager_campaigns import _transport_error
 
     fake = FakeCampaignProvider(C14)
     fake.resolve_error = _transport_error(G, 503)
-    assert _run(fake, tmp_path, "--sheet", G, "--check-updates") == 11
+    assert _run(fake, tmp_path, "--sheet", G, "--check") == 11
     assert f"{G_PATH}: nie udalo sie sprawdzic: " in capsys.readouterr().out
 
 
-def test_check_updates_index_failure_names_no_download(tmp_path, capsys):
-    """Live test 0.8.0: an unreachable WFS index under ``--check-updates``
+def test_check_index_failure_names_no_download(tmp_path, capsys):
+    """Live test 0.8.0: an unreachable WFS index under ``--check``
     ends the line with the fact ("wynik bylby niepelny") - no "ponow
     pobranie" of a download that never ran (download summaries add it)."""
     offline = Mock(spec=requests.Session)
@@ -112,7 +112,7 @@ def test_check_updates_index_failure_names_no_download(tmp_path, capsys):
         patch("kartograf.transport.http.time.sleep"),
     ):
         grid = ["--resolution", "1m", "--vertical-crs", "EVRF2007"]
-        argv = ["--sheet", G, "--root", str(tmp_path), "--check-updates"]
+        argv = ["--sheet", G, "--root", str(tmp_path), "--check"]
         rc = main(["elevation", "download", "--product", "nmt", *grid, *argv])
     assert rc == 11
     line = next(
@@ -122,11 +122,11 @@ def test_check_updates_index_failure_names_no_download(tmp_path, capsys):
     assert line.endswith(" - the result would be incomplete")
 
 
-def test_check_updates_writes_plan_file_and_upgrade_executes_it(tmp_path, capsys):
+def test_check_writes_plan_file_and_upgrade_executes_it(tmp_path, capsys):
     fake = FakeCampaignProvider(C14)
     plan = tmp_path / "plan.json"
     out = tmp_path / "data"
-    assert _run(fake, out, "--sheet", G, "--check-updates", "--plan", str(plan)) == 0
+    assert _run(fake, out, "--sheet", G, "--check", "--plan", str(plan)) == 0
     payload = json.loads(plan.read_text(encoding="utf-8"))
     assert payload["schema"] == "kartograf-plan/1"
     assert payload["store"] == str(out.resolve())
@@ -150,7 +150,7 @@ def test_plan_file_in_missing_directory_is_one_error_line(tmp_path, capsys):
         tmp_path / "data",
         "--sheet",
         G,
-        "--check-updates",
+        "--check",
         "--plan",
         str(plan),
     )
@@ -169,7 +169,7 @@ def test_plan_file_that_is_a_directory_is_one_error_line(tmp_path, capsys):
     plan = tmp_path / "plany"
     plan.mkdir()
     fake = FakeCampaignProvider(C14)
-    args = ["--sheet", G, "--check-updates", "--plan", str(plan)]
+    args = ["--sheet", G, "--check", "--plan", str(plan)]
     assert _run(fake, tmp_path / "data", *args) == 2
     assert capsys.readouterr().err.startswith(f"Error: --plan {plan}: to katalog")
     assert fake.resolve_calls == []  # no index query before the error
@@ -181,7 +181,7 @@ def test_upgrade_plan_that_runs_nothing_says_so(tmp_path, capsys):
     fake = FakeCampaignProvider({"newest": [REC["83233"]]})
     plan, out = tmp_path / "plan.json", tmp_path / "data"
     assert _run(fake, out, "--sheet", G, "-q") == 0  # a local version
-    assert _run(fake, out, "--sheet", G, "--check-updates", "--plan", str(plan)) == 0
+    assert _run(fake, out, "--sheet", G, "--check", "--plan", str(plan)) == 0
     capsys.readouterr()
     assert _run(fake, out, "--sheet", G, "--upgrade", "--plan", str(plan)) == 0
     captured = capsys.readouterr()
@@ -189,7 +189,7 @@ def test_upgrade_plan_that_runs_nothing_says_so(tmp_path, capsys):
     assert f"Info: plan {plan}: brak pozycji do wykonania" in captured.err
 
     fake.records = {"newest": [REC["84183"]]}  # a newer flight: the plan has work
-    assert _run(fake, out, "--sheet", G, "--check-updates", "--plan", str(plan)) == 0
+    assert _run(fake, out, "--sheet", G, "--check", "--plan", str(plan)) == 0
     capsys.readouterr()
     assert _run(fake, out, "--sheet", G, "--upgrade", "--plan", str(plan)) == 0
     executed = capsys.readouterr()
@@ -202,7 +202,7 @@ def test_upgrade_plan_that_runs_nothing_says_so(tmp_path, capsys):
 def test_upgrade_plan_of_other_store_is_error(tmp_path, capsys):
     fake = FakeCampaignProvider(C14)
     plan = tmp_path / "plan.json"
-    _run(fake, tmp_path / "a", "--sheet", G, "--check-updates", "--plan", str(plan))
+    _run(fake, tmp_path / "a", "--sheet", G, "--check", "--plan", str(plan))
     capsys.readouterr()
     rc = _run(fake, tmp_path / "b", "--sheet", G, "--upgrade", "--plan", str(plan))
     assert rc == 2
@@ -276,7 +276,7 @@ TRACKS = {
 }
 
 
-@pytest.mark.parametrize("flag", ["--check-updates", "--upgrade"])
+@pytest.mark.parametrize("flag", ["--check", "--upgrade"])
 @pytest.mark.parametrize("track", sorted(TRACKS))
 def test_update_flags_accepted_for_every_download_track(tmp_path, capsys, track, flag):
     cz = _cz_provider_mock()
@@ -295,14 +295,14 @@ def test_update_flags_accepted_for_every_download_track(tmp_path, capsys, track,
     assert rc == 0, err
     assert "Error:" not in err
     prg.assert_not_called()
-    if flag == "--check-updates":  # checking never downloads
+    if flag == "--check":  # checking never downloads
         assert laz.calls == []
         cz.download.assert_not_called()
         cz.download_bbox.assert_not_called()
         pl_run.assert_not_called()
 
 
-def test_check_updates_auto_writes_merged_plan(tmp_path, capsys):
+def test_check_auto_writes_merged_plan(tmp_path, capsys):
     plan = tmp_path / "plan.json"
     out = tmp_path / "out"
     with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()), _no_pl_wcs():
@@ -313,7 +313,7 @@ def test_check_updates_auto_writes_merged_plan(tmp_path, capsys):
             "--cutout",
             "--horizontal-crs",
             "EPSG:3045",
-            "--check-updates",
+            "--check",
             "--plan",
             str(plan),
         )
@@ -332,7 +332,7 @@ def test_upgrade_plan_executes_only_planned_tracks(tmp_path, capsys):
     cz = _cz_provider_mock()
     argv = (*BORDER, *AUTO, "--cutout", "--horizontal-crs", "EPSG:3045")
     with patch(_CZ_FACTORY_PATCH, return_value=cz), _no_pl_wcs() as prg:
-        _download(out, *argv, "--check-updates", "--plan", str(plan))
+        _download(out, *argv, "--check", "--plan", str(plan))
         payload = json.loads(plan.read_text(encoding="utf-8"))
         payload["items"] = [i for i in payload["items"] if i["track"] == "cz_cutout"]
         plan.write_text(json.dumps(payload), encoding="utf-8")
@@ -354,7 +354,7 @@ def test_status_line_local_none_hint(tmp_path, capsys):
         assert _download(tmp_path, "--sheet", "302_5550", *CZ_2M) == 0
     out = capsys.readouterr().out
     assert out.startswith(f"{CZ_2M_PATH}: lokalna wersja ")
-    assert out.rstrip().endswith("(bez sprawdzania; --check-updates)")
+    assert out.rstrip().endswith("(bez sprawdzania; --check)")
     cz.download.assert_called_once()
 
 
@@ -384,7 +384,7 @@ def test_sm5_check_failed_exit_code_default_asks_nothing(tmp_path, capsys):
         assert _download(tmp_path, *sm5, "-q") == 0
         cz.file_signal.side_effect = DownloadError("HEAD 503")
         capsys.readouterr()
-        assert _download(tmp_path, *sm5, "--check-updates") == 11
+        assert _download(tmp_path, *sm5, "--check") == 11
         assert f"{SM5_PATH}: nie udalo sie sprawdzic: HEAD 503" in (
             capsys.readouterr().out
         )
@@ -393,7 +393,7 @@ def test_sm5_check_failed_exit_code_default_asks_nothing(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "Warning:" not in captured.err
     assert captured.out.startswith(f"{SM5_PATH}: lokalna wersja ")
-    assert "(bez sprawdzania; --check-updates)" in captured.out
+    assert "(bez sprawdzania; --check)" in captured.out
     assert cz.file_signal.call_count == heads
     cz.download.assert_called_once()
 

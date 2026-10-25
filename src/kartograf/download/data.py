@@ -304,7 +304,7 @@ class _Run:
     def refresh(self) -> bool:
         """Return True when the metadata cache is refreshed, not read.
 
-        Metadata cache refreshed, not read: the check (``--check-updates``
+        Metadata cache refreshed, not read: the check (``--check``
         always asks the source), ``--upgrade`` and ``--force``.
         """
         return self.check or refreshes_cache(self.update)
@@ -1581,7 +1581,7 @@ def _no_coverage_warning(
     """Report sheets without GUGiK data (``NO_COVERAGE_SOME``).
 
     ``NO_COVERAGE_SOME``: sheets without GUGiK data of a request that goes on
-    with the others (R5) - the download and ``--check-updates`` say it the same
+    with the others (R5) - the download and ``--check`` say it the same
     way; ``outcome`` is what became of the rest (``pobrano 3``,
     ``sprawdzono 3``), ``prefix`` the view direction (``kierunek n: ``).
     """

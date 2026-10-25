@@ -165,7 +165,7 @@ def test_parse_command_puts_the_flags_of_the_run_apart_from_the_options():
         "elevation download --nope",
         "elevation download --product",
         "elevation download --bbox-crs EPSG:9999",
-        "elevation download --check-updates --upgrade",
+        "elevation download --check --upgrade",
         f"{NMT} --help",
         "--version",
         "download --product nmt",

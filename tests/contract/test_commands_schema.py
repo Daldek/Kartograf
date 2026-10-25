@@ -84,8 +84,6 @@ def test_every_option_is_an_argument_of_the_function_or_the_plan_option(name):
     (entry,) = command_schema(name).commands
     arguments = {p.api_argument for p in command.params if p.api_argument}
 
-    assert {o.name for o in entry.options} <= arguments | {"check_updates"}
-    assert ("check_updates" in {o.name for o in entry.options}) == (
-        command.supports_check
-    )
+    assert {o.name for o in entry.options} <= arguments | {"check"}
+    assert ("check" in {o.name for o in entry.options}) == (command.supports_check)
     assert (entry.check == name) == command.supports_check

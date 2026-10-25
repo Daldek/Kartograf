@@ -41,7 +41,7 @@ class CommandRow:
         The command changes nothing outside the process.
     check : str, optional
         The command that plans this one without effects: the command itself with the
-        option ``check_updates``; ``None`` when it has no plan.
+        option ``check``; ``None`` when it has no plan.
     """
 
     name: str
@@ -247,7 +247,7 @@ class CommandEntry:
         What the command changes.
     check : str, optional
         The command that plans this one without effects (``name`` itself with the option
-        ``check_updates``).
+        ``check``).
     families : tuple of str
         The MCP tool families (``core`` among them for the main tasks).
     rules : tuple of str

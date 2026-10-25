@@ -352,6 +352,12 @@ changes and the migration guide ("Migration guide: data output") are written wit
   descriptor too. The typed `Sidecar` of the read API has both fields; a sidecar written
   earlier has neither key, and the view reports `kartograf` and the value of
   `kartograf_version` (`raw` stays as it is).
+- `--check` replaces `--check-updates` (ADR-054 decision 6, DEV-19.10, AGI-3.4): the CLI flag of
+  every command that plans, the library and catalog option (`check` instead of `check_updates`
+  in `parse_command`, `format_command`, `run` of the pinned command lines), the argument of the
+  MCP tools (`check: true` plans without writing) and the project commands. The plan is the
+  same document (`kartograf-plan/1`), and no alias is kept. Consumers that pass `check_updates`
+  to an MCP tool or `--check-updates` to the CLI change the name.
 
 ### Breaking changes
 

@@ -249,7 +249,7 @@ and ZTM (2.15), Bodove pole and QGZU-2013 (2.16).
 - Two vertical CRSs (selection required since 0.8.0): EVRF2007 (2018+), KRON86 (legacy, 2010-2019)
 - Parallel download (--workers); tiles as versions in the store
   (ADR-036 D26): a tile with a local version is not downloaded again,
-  a newer flight (different files) is downloaded by default; --check-updates,
+  a newer flight (different files) is downloaded by default; --check,
   --upgrade, --force, --plan
 - Library: download_data(product="laz", ...) (= CLI) or
   download_laz_area (bbox in any CRS; selection + download + sidecars,
@@ -430,7 +430,7 @@ kartograf geodesy download --product geoid --country pl --whole-country --root .
 kartograf geodesy list-sources
 kartograf project init --root ~/dane/kartograf # project manifest with a shared store
 kartograf project add teren elevation download --product nmt --sheet <sheet_code> --resolution 1m --vertical-crs EVRF2007
-kartograf project download                 # pin task versions; --check-updates/--upgrade/--force
+kartograf project download                 # pin task versions; --check/--upgrade/--force
 kartograf project status                   # existence and size, without reading data
 kartograf project verify                   # SHA-256 of files and sidecars
 kartograf cache stats|clear|path           # metadata cache (SQLite)
@@ -541,7 +541,7 @@ from kartograf import (
   (version sidecar written once, exclusive write), standard path =
   hard link to the latest local version (no copies and no symlinks; a file
   system with hard links is required); `kampanie/` from 0.7.x without migration;
-  modes `--check-updates`/`--upgrade`/`--force`, plan `kartograf-plan/1`
+  modes `--check`/`--upgrade`/`--force`, plan `kartograf-plan/1`
   for every track `elevation download`, `imagery download`, `landcover download`, `soil download` and `soil hsg`
   and `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download`
   (track `collection`) (freshness signal per channel: sheet index (Polish skorowidz) or index
@@ -694,7 +694,7 @@ from kartograf import (
   CRS 1992 or 2000/<zone>; heights EPSG:9651); tile = file of one record
   (a module from several works = several files), --year filters records
 - version label = date and work report number from the record, freshness signal index
-  (--check-updates without download)
+  (--check without download)
 
 # 3D tree models — `models3d download --product trees` (pl.gugik.trees, 0.8.0):
 - CityGML LoD1 2023 (EPSG:2180, no vertical CRS): county package
@@ -708,10 +708,10 @@ from kartograf import (
   one — no defaults affecting the data
 - --country pl|cz|auto required with --bbox/--geometry, with --teryt only pl;
   models3d PL only
-- --check-updates | --upgrade | --force, --plan, --workers (default 1), -q;
+- --check | --upgrade | --force, --plan, --workers (default 1), -q;
   project task entries (`kartograf project add <name> boundaries download ...`)
 - freshness signal none (GUGiK provides no ETag/Last-Modified, the WFS result
-  is a snapshot; exception: mesh — index): --check-updates reports „nie da się
+  is a snapshot; exception: mesh — index): --check reports „nie da się
   sprawdzić bez pobrania”, new content is obtained with --force (same content = no
   change, different = new version)
 - version label: year of 3D models (e.g. 2024), mesh — date and work
@@ -917,7 +917,7 @@ from kartograf import (
 # Interface for AI agents (ADR-046) — out of scope for 0.8.0:
 - HTTP transport of the MCP server (stdio only)
 - Cancelling downloads (KC) and a uniform `on_progress` for all functions (KC-2); MCP
-  tools without progress: `kartograf_soil_download`, `kartograf_soil_hsg` and plans (`check_updates`)
+  tools without progress: `kartograf_soil_download`, `kartograf_soil_hsg` and plans (`check`)
 - Download size estimate (KH), `command_for_file` (KB-6), `find_admin_units` (KB-7)
 
 # Later — other countries:
@@ -1109,7 +1109,7 @@ from kartograf import (
 - EGiB of an area: gaps in counties without integration with the aggregate service,
   restricted attributes = `brak_uprawnien`
 - Freshness signal none (outside channels with an index, CUZK `ETag` and the ATOM
-  feed): --check-updates does not detect newer data, only --force gives new content
+  feed): --check does not detect newer data, only --force gives new content
 - Timeouts: 60 s per WFS query, 120 s per package, 30 s for HEAD
   and PRG query (SERVICE_TIMEOUT, PACKAGE_TIMEOUT, PROBE_TIMEOUT
   in download/collections.py)
@@ -1163,7 +1163,7 @@ publication (QGIS plugin repository, public instance of the web GUI).
 | # | Subproject | Scope | Depends on |
 |---|------------|--------|-----------|
 | 1 | Versioned store | done (0.8.0, ADR-036): immutable versions for all products (previously only PL NMT/NMPT/orthophoto campaigns); plans 1/3 (PL sheets), 2/3 (LAZ, CZ, cutouts) and 3/3 (land cover, HSG), products of plans C-E in the store from the start (live E2E: `docs/research/2026-10-12-store-e2e/raport.md`); CLMS with credentials not verified live | — |
-| 2 | Project manifest | done (0.8.0): file `kartograf-project.json` (`kartograf-project/1`) in the project directory — tasks (data commands of the ADR-039 groups with options) and pinned versions of files from the store with SHA-256 checksums; CLI group `project`: `init`, `add`, `remove`, `download` (also `--check-updates`, `--upgrade`, `--force`), `status`, `verify`; restoring data on a new store only with identical checksums. E2E: `docs/research/2026-10-15-project-e2e/raport.md`. Spec: `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`; plan: `docs/superpowers/plans/2026-10-15-manifest-projektu.md`; ADR-040 | 1; CLI command groups (ADR-039) |
+| 2 | Project manifest | done (0.8.0): file `kartograf-project.json` (`kartograf-project/1`) in the project directory — tasks (data commands of the ADR-039 groups with options) and pinned versions of files from the store with SHA-256 checksums; CLI group `project`: `init`, `add`, `remove`, `download` (also `--check`, `--upgrade`, `--force`), `status`, `verify`; restoring data on a new store only with identical checksums. E2E: `docs/research/2026-10-15-project-e2e/raport.md`. Spec: `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`; plan: `docs/superpowers/plans/2026-10-15-manifest-projektu.md`; ADR-040 | 1; CLI command groups (ADR-039) |
 | 3 | GUGiK catalogue and ready-to-use data | done (0.8.0, plans A-E, user decision 2026-10-15): GUGiK and ČÚZK products from the catalogue, each versioned and with a sidecar, with a cutout where the service provides one (sections 2.1-2.16). A: `elevation` PL — variant registry, NMT/NMPT grids in all GUGiK resolutions, GUGiK archives as source files, WFS sheet index, availability report (ADR-041); B: `elevation` CZ — DMP OK/1G, TM33 ETRS89 tiles, ČÚZK LAZ, CZ report; C: BDOT10k archive, PRG, EGiB, 3D building models (ADR-042); D: CZ orthophoto, PL orthophoto cutout, ZABAGED, RUIAN, HY-NET (ADR-042 D12-D17); E: GUGiK images, CZ contours, NMT 100 m, names, maps, addresses and special PRG boundaries, RCN, BDOO, Data50/250, geomorphology, CZ cadastral map, 3D mesh, trees, control networks, quasi-geoids (ADR-043). Outside 0.8.0: VKM, archival CUZK orthophoto (section 3.1). Inventory: `docs/research/2026-10-13-katalog-produktow/raport.md`; spec: `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`; plans: `docs/superpowers/plans/2026-10-15-plan-{a,b,c,d,e}-*.md` | 1; CLI command groups (0.8.0) |
 | 4 | QGIS plugin | download from within QGIS for an area from the map or a layer; repository: this one or a separate one, to be decided in the spec | 2, partly 3 |
 | 5 | Web GUI | local data manager: browser for the store and project manifests, information about newer data | 2 |
@@ -1374,7 +1374,7 @@ pyogrio >= 0.10        # Vector GDAL: writing GPKG of collection area results (A
   PL land (PRG mask) nodata -9999
 - GUGiK campaigns: --all-campaigns, --year/--min-year/--max-year; versions
   in versions/, standard path as a hard link to the latest;
-  --check-updates/--upgrade/--force and the update plan (ADR-036)
+  --check/--upgrade/--force and the update plan (ADR-036)
 - LAZ: tile selection by area coverage (ADR-029), API download_laz_area
 - PRG boundaries, EGiB and 3D building models are downloaded by TERYT
   and area (download_collection), the BDOT10k archive by TERYT and area

@@ -117,7 +117,7 @@ def _params() -> tuple[Param, ...]:
             path_role="root",
         ),
         Param(
-            "check_updates",
+            "check",
             "flag",
             "Plan without effects.",
             argument=None,
@@ -311,7 +311,7 @@ def test_a_row_of_the_list_is_short_and_says_what_the_command_does_to_the_world(
         "summary": "Download NMT and NMPT",
         "families": ("data", "core"),
         "read_only": False,
-        "check": "elevation download",  # the plan is the command with check_updates
+        "check": "elevation download",  # the plan is the command with check
     }
     assert (rows["cache clear"].read_only, rows["cache clear"].families) == (False, ())
     assert (rows["sheet parse"].read_only, rows["sheet parse"].check) == (True, None)
@@ -396,16 +396,16 @@ def test_an_option_has_an_argument_of_the_function_or_is_the_plan_option(synthet
         "limit",
         "all_campaigns",
         "root",
-        "check_updates",  # no function takes it, the command has a check
+        "check",  # no function takes it, the command has a check
     }
-    assert [p.name for p in declared_options(command)][-1] == "check_updates"
+    assert [p.name for p in declared_options(command)][-1] == "check"
     # without a check the plan option is no option; a fixed argument never is
     sources = _commands()[1]
     assert not any(is_option(sources, p) for p in sources.params)
     without_check = dataclasses.replace(
         command, check_function=None, check_result_schema=None
     )
-    assert "check_updates" not in {p.name for p in declared_options(without_check)}
+    assert "check" not in {p.name for p in declared_options(without_check)}
 
 
 def test_the_options_of_a_command_are_typed_and_bounded(synthetic):
@@ -421,7 +421,7 @@ def test_the_options_of_a_command_are_typed_and_bounded(synthetic):
         "limit",
         "all_campaigns",
         "root",
-        "check_updates",
+        "check",
     ]
     assert (options["product"].type, options["product"].required) == ("string", True)
     assert options["bbox"].type == "array" and options["bbox"].items == "number"
@@ -436,8 +436,8 @@ def test_the_options_of_a_command_are_typed_and_bounded(synthetic):
     assert options["sheet"].examples == ("N-34-130-D-d-2-4",)
     assert options["root"].path_role == "root"
     assert options["product"].path_role is None
-    assert options["check_updates"].type == "boolean"
-    assert options["check_updates"].description == "Plan without effects."
+    assert options["check"].type == "boolean"
+    assert options["check"].description == "Plan without effects."
 
 
 def test_the_choice_of_the_area_is_the_one_of_group(synthetic):

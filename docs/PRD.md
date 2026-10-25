@@ -586,7 +586,7 @@ kartograf soil hsg --sheet N-34-130-D --root ./data --depth 0-5cm
 kartograf soil hsg --sheet N-34-130-D --summary --root ./data --depth 0-5cm
 kartograf soil hsg --bbox 450000,550000,460000,560000 --root ./data --depth 0-5cm
 kartograf soil hsg --geometry area.gpkg --layer catchments --root ./data --depth 0-5cm
-kartograf soil hsg --sheet N-34-130-D --root ./data --depth 0-5cm --check-updates --plan plan.json
+kartograf soil hsg --sheet N-34-130-D --root ./data --depth 0-5cm --check --plan plan.json
 ```
 
 ---
@@ -771,7 +771,7 @@ marks which one is "current".
   without hard links = error). The link is moved only to a newer version,
   never backwards; the target is recorded in the sidecar (`extra.link`, `extra.link_target`).
   By default a newer campaign is not downloaded automatically (`Info:`,
-  `--upgrade`); `--check-updates` reports without downloading.
+  `--upgrade`); `--check` reports without downloading.
 - A second link `<segment>/full_sheet/<hierarchy>/<sheet code>.<ext>`
   (ADR-033) to the newest local flight marked in the sheet index as
   full (`calyArkuszWypelnionyTrescia = TAK`, full = within the borders of Poland);
@@ -862,7 +862,7 @@ task area as a single GeoPackage from WFS.
   geometries of units intersecting the area (no clipping), EPSG:2180,
   `boundaries/pl_prg_<level>/bbox/<coords>.gpkg`; completeness from the service's feature
   count, GPKG bytes reproducible within one GDAL version.
-- Freshness signal `none`: `--check-updates` reports "cannot be checked
+- Freshness signal `none`: `--check` reports "cannot be checked
   without downloading", new content only through `--force` (same
   content = unchanged, different = new version); version label = download date.
 
@@ -1021,7 +1021,7 @@ from WCS for a PL area, both in the version store.
   of an area from the CUZK index; four CUZK ZIP files 1:1 in `orto/cz_sjtsk/`
   (`<sheet_code>.jpg`, `.jgw` EPSG:5514, `.TM33N.jgw`, `.TM34N.jgw`); only the
   current annual edition (archived CUZK orthophotos are paid); the release from the ATOM
-  feed is the version label and the `--check-updates` signal.
+  feed is the version label and the `--check` signal.
 - PL cutout (`--cutout --horizontal-crs EPSG:2180`): `--coverage
   standard|high` and `--resolution 0.1m|0.25m|0.5m|1m` required; RGB from WCS
   without resampling, grid aligned to the pixel, chunks up to 200 x 200 m

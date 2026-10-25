@@ -519,7 +519,7 @@ class TestDownloadArchive:
         assert _downloads(session) == []
 
     def test_check_data_plans_the_index_sheet(self, tmp_path):
-        """``--check-updates`` of an archive plans the 1:25000 sheet of the
+        """``--check`` of an archive plans the 1:25000 sheet of the
         index (one item, not its 1:10000 sheets) without downloading."""
         session = _gugik_session(wfs_fixture(RECORDED), {TBD_URL: ARCHIVE})
         with patch(SESSION_FACTORY, return_value=session):

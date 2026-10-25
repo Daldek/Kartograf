@@ -148,7 +148,7 @@ def collection_commands(
     area); ``sheet``: the group has ``--sheet`` (``False``: no PL sheet area);
     ``sheet_help`` and ``sheet_systems`` describe the sheet codes of a group with
     CZ map sheets; ``whole_country``: the group has ``--whole-country`` with this
-    help; ``check``: the source signals in ``--check-updates``; ``workers``: the
+    help; ``check``: the source signals in ``--check``; ``workers``: the
     help of ``--workers`` (``None`` for a group whose request is one file; no
     flag); ``content``: the content parameters of the group, from its products;
     ``constraints``: the rules besides the area choice.
@@ -250,7 +250,7 @@ def collection_commands(
         "wykonaj zapisany plan",
         force="Pobierz ponownie kazdy plik zadania; ta sama tresc = bez "
         "zmian, inna = nowa wersja; nic nie jest nadpisywane",
-        plan="Z --check-updates: zapisz plan aktualizacji (kartograf-plan/1); "
+        plan="Z --check: zapisz plan aktualizacji (kartograf-plan/1); "
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)",
     )
     if workers is not None:

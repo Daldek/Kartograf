@@ -522,7 +522,7 @@ def check_laz_area(
 
     The tile selection queries the WFS (as the download does); no LAZ bytes
     are transferred. Raises the same errors as the download's selection.
-    The source is always asked (``--check-updates``): the metadata cache is
+    The source is always asked (``--check``): the metadata cache is
     refreshed, never read.
     """
     root = resolve_root(root)

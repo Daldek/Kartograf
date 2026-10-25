@@ -600,7 +600,7 @@ def test_laz_sheet(tmp_path):
 
 @pytest.mark.usefixtures("frozen_clock")
 def test_check_plan_upgrade(tmp_path):
-    """``--check-updates --plan`` = ``check_data``; ``--upgrade --plan`` =
+    """``--check --plan`` = ``check_data``; ``--upgrade --plan`` =
     ``download_data(update="upgrade", plan=...)`` - same plan items and store."""
     fake = FakeCampaignProvider(C14)
     sheet_args = ["--sheet", G, "--resolution", "1m", "--vertical-crs", "EVRF2007"]
@@ -622,7 +622,7 @@ def test_check_plan_upgrade(tmp_path):
                 "--product",
                 "nmt",
                 *sheet_args,
-                "--check-updates",
+                "--check",
                 "--plan",
                 str(plan_file),
             ],
@@ -728,7 +728,7 @@ def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
         "-q",
     ]
     if check:
-        argv.append("--check-updates")
+        argv.append("--check")
     operation = check_data if check else download_data
     run = run_both(argv, lambda out: operation(root=out, **options), tmp_path)
     assert run.cli_code == 2
@@ -999,7 +999,7 @@ def test_orto_cutout(tmp_path):
 @pytest.mark.usefixtures("frozen_clock")
 def test_cz_orto_check_plan_upgrade(tmp_path, monkeypatch):
     """Track ``cz_orto``: a new release of the sheet in the feed gives the
-    same plan (``--check-updates --plan`` = ``check_data``) and the same
+    same plan (``--check --plan`` = ``check_data``) and the same
     store after ``--upgrade --plan`` (world files relabeled, a new JPEG)."""
     fake = FakeCuzk()
     monkeypatch.setattr(cz_orto, "_session", lambda: fake)
@@ -1013,7 +1013,7 @@ def test_cz_orto_check_plan_upgrade(tmp_path, monkeypatch):
     fake.release("CTES96", "2025", "2026-03-02T08:00:00+02:00", image)
     plan_file = tmp_path / "plan.json"
     checked = run_both(
-        [*CZ_ORTO_ARGS, "--check-updates", "--plan", str(plan_file)],
+        [*CZ_ORTO_ARGS, "--check", "--plan", str(plan_file)],
         lambda out: check_data(root=out, **CZ_ORTO),
         tmp_path,
     )
@@ -1103,7 +1103,7 @@ def test_upgrade_with_stale_plan(tmp_path):
     sheet = ["--sheet", G, *PL_SHEET_ARGS]
     with _pl_store(fake):
         checked = run_both(
-            ["elevation", "download", "--product", "nmt", *sheet, "--check-updates"]
+            ["elevation", "download", "--product", "nmt", *sheet, "--check"]
             + ["--plan", str(plan_file)],
             lambda out: check_data(product="nmt", root=out, sheet=G, **PL_SHEET_KW),
             tmp_path,

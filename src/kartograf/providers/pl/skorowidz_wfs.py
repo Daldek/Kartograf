@@ -67,7 +67,7 @@ URN_2180 = "urn:ogc:def:crs:EPSG::2180"
 # (one type per query when an answer of several types needs more pages).
 PAGE_SIZE = 1000
 # The fact only: the remedy depends on the caller (download summaries add
-# "ponow pobranie", a ``--check-updates`` line names no download).
+# "ponow pobranie", a ``--check`` line names no download).
 INCOMPLETE = message("providers.incomplete_result")
 # Half side (m) of the query square around a sheet centre (sheet lookup).
 QUERY_HALF_M = 10.0

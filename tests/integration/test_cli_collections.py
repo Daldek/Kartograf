@@ -94,7 +94,7 @@ def test_flags_map_to_download_collection_kwargs(tmp_path):
     assert (kwargs["workers"], kwargs["update"], kwargs.get("level")) == (1, None, None)
 
 
-def test_check_updates_calls_check_collection_and_writes_plan(tmp_path):
+def test_check_calls_check_collection_and_writes_plan(tmp_path):
     plan_file = tmp_path / "plan.json"
     plan = new_plan(tmp_path, [])
     with patch(_CHECK, return_value=plan) as check, patch(_DOWNLOAD) as download:
@@ -106,7 +106,7 @@ def test_check_updates_calls_check_collection_and_writes_plan(tmp_path):
                 "map",
                 "--teryt",
                 "1261",
-                "--check-updates",
+                "--check",
                 "--plan",
                 str(plan_file),
                 "--root",

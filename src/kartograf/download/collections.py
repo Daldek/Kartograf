@@ -3368,7 +3368,7 @@ def _volume_error(
         f"{size} - limit "
         f"jednego zadania to {VOLUME_FILES} plikow i {VOLUME_BYTES // 10**9} GB. "
         f"Zawez obszar (--bbox, --sheet, --geometry){unit} albo wykonaj plan "
-        "z czescia pozycji (--check-updates --plan PLIK, potem --upgrade --plan "
+        "z czescia pozycji (--check --plan PLIK, potem --upgrade --plan "
         "PLIK)",
         options=("sheet", "bbox", "geometry"),
     )
@@ -3608,7 +3608,7 @@ def plan_request(
 
     Update plan of a validated request (no data downloaded). The source is
     always asked: the metadata cache (PRG units, indexes, feeds) is
-    refreshed, never read (``--check-updates``). A country of an area in PL
+    refreshed, never read (``--check``). A country of an area in PL
     and CZ (``auto``) whose units could not be found is a ``CHECK_FAILED``
     warning, and the plan of the other one an ``AUTO_PARTIAL_SUCCESS`` one.
     """

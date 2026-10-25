@@ -10,7 +10,7 @@ library and answers with the envelope ``kartograf-result/1`` of its command
 ``isError``. Everything the server says is English (AGI-9.2).
 
 The server starts read only. Without ``--allow-writes`` a command that writes and has
-a check only plans (``check_updates`` is true, the options of a run are refused with
+a check only plans (``check`` is true, the options of a run are refused with
 ``forbidden``) and ``project init``, ``project add`` and ``project remove`` answer
 ``forbidden``; ``--allow-writes`` needs ``--allow-dir``. With ``--allow-dir`` every
 path of a call must lie inside one of the directories (``forbidden`` otherwise), also
@@ -100,7 +100,7 @@ MAX_NETWORK_CALLS = 4
 _PATH_HINT = "Give an absolute path, for example /home/ola/data/kartograf."
 _WRITES_HINT = (
     "Start kartograf-mcp with --allow-writes and --allow-dir DIR to run and write; "
-    "check_updates=true plans without writing."
+    "check=true plans without writing."
 )
 
 
@@ -159,7 +159,7 @@ def build_instructions(
     updates = (
         "Updates. update omitted fetches what is missing, update=upgrade fetches newer "
         "content when the source signals it, update=force fetches again; a version is "
-        "never overwritten. check_updates=true plans without fetching: its plan (the "
+        "never overwritten. check=true plans without fetching: its plan (the "
         "result of the envelope, kartograf-plan/1) runs later with update=upgrade and "
         "plan."
     )
@@ -169,7 +169,7 @@ def build_instructions(
     else:
         state = (
             "This server does not write: a command that writes only plans "
-            "(check_updates is true; update, plan, workers and summary are "
+            "(check is true; update, plan, workers and summary are "
             "forbidden), and "
             f"{_tool('project init')}, {_tool('project add')}, "
             f"{_tool('project remove')} and {_tool('store init')} are unavailable. "
@@ -460,7 +460,7 @@ class _Toolbox:
         ForbiddenError
             A plan-only tool was asked to run, or a path lies outside ``--allow-dir``.
         ValidationError
-            An argument breaks the schema or the rule of paths, or ``check_updates``
+            An argument breaks the schema or the rule of paths, or ``check``
             is combined with an option of a run.
         """
         self._refuse_writes(spec, arguments)
@@ -554,14 +554,14 @@ class _Toolbox:
 
     @staticmethod
     def _no_run_options(spec: ToolSpec, arguments: Mapping[str, Any]) -> None:
-        """Refuse an option of a run next to ``check_updates``: it fetches nothing."""
+        """Refuse an option of a run next to ``check``: it fetches nothing."""
         for name in RUN_OPTIONS:
             if name in arguments and _given(arguments[name]):
                 raise ValidationError(
-                    f"check_updates plans without fetching: {name} belongs to a run",
+                    f"check plans without fetching: {name} belongs to a run",
                     option=name,
                     options=(CHECK_OPTION, name),
-                    hint="Drop check_updates to run, or drop update, plan, workers "
+                    hint="Drop check to run, or drop update, plan, workers "
                     "and summary to plan.",
                 )
 
@@ -916,7 +916,7 @@ def _parser() -> argparse.ArgumentParser:
         "--allow-writes",
         action="store_true",
         help="the tools that write do write (only in the --allow-dir directories, "
-        "which is then required); without this flag they plan (check_updates)",
+        "which is then required); without this flag they plan (check)",
     )
     caching = parser.add_mutually_exclusive_group()
     caching.add_argument(

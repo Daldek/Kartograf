@@ -46,7 +46,7 @@ def _landcover_task(args: argparse.Namespace) -> int:
     """Plan or download: the report as text or, with ``--json``, as a document."""
     arguments = {**library_arguments(args), "root": store_dir(args)}
     on_notice = notice_printer(args)
-    if args.check_updates:
+    if args.check:
         return _report_plan(args, check_landcover(**arguments, on_notice=on_notice))
     update = _update_mode(args)
     on_progress = progress_printer(args, args.workers)

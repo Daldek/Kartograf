@@ -129,7 +129,7 @@ _PARAMS = (
         description_pl="Katalog magazynu (wymagany)",
     ),
     Param(
-        "check_updates",
+        "check",
         "flag",
         "Sprawdz",
         argument=None,
@@ -470,13 +470,13 @@ def test_exclusive_group(capsys, monkeypatch):
 
     parsed = parser.parse_args(["elevation", "download", "--upgrade"])
     with pytest.raises(SystemExit) as exit_info:
-        parser.parse_args(["elevation", "download", "--check-updates", "--upgrade"])
+        parser.parse_args(["elevation", "download", "--check", "--upgrade"])
 
-    assert (parsed.upgrade, parsed.check_updates, parsed.force) == (True, False, False)
+    assert (parsed.upgrade, parsed.check, parsed.force) == (True, False, False)
     assert exit_info.value.code == 2
     assert "not allowed with argument" in capsys.readouterr().err
     usage = _leaf(parser, "elevation", "download").format_usage()
-    assert "[--check-updates | --upgrade | --force]" in usage
+    assert "[--check | --upgrade | --force]" in usage
 
 
 def test_sections_and_epilog_in_help():
@@ -513,7 +513,7 @@ def test_usage_error_mode():
         (["sheet", "parse"], "required: GODLO"),
         (["elevation", "download", "--product", "dem"], "invalid choice"),
         (["elevation", "download", "--workers", "x"], "invalid int value"),
-        (["elevation", "download", "--check-updates", "--upgrade"], "not allowed"),
+        (["elevation", "download", "--check", "--upgrade"], "not allowed"),
         (["nope"], "invalid choice"),
     ):
         with pytest.raises(UsageError) as error:

@@ -242,7 +242,7 @@ def progress_printer(
 class _PlanContext:
     """Update plan of one run.
 
-    ``--check-updates`` collects one plan per request (``plans``, written as ONE file);
+    ``--check`` collects one plan per request (``plans``, written as ONE file);
     ``--upgrade --plan`` reads the file once (``loaded``). ``document``: the result of
     the run (a plan or a report); with ``--json`` it waits until the plan file is
     written, then it is printed.
@@ -292,7 +292,7 @@ def run_with_plan_file(
 ) -> int:
     """Plan file cycle of a store command (spec 4.4).
 
-    ``--upgrade --plan`` reads the plan before any work; ``--check-updates
+    ``--upgrade --plan`` reads the plan before any work; ``--check
     --plan`` writes the plans collected by ``body`` as ONE file after it -
     a file in an existing directory, checked before any request. A plan that
     cannot be read, a directory in place of the file and a directory that does
@@ -321,7 +321,7 @@ def run_with_plan_file(
         except ValidationError as e:
             e.option = "plan"
             raise
-    if getattr(args, "check_updates", False) and plan_file:
+    if getattr(args, "check", False) and plan_file:
         if Path(plan_file).is_dir():
             raise ValidationError(
                 message(
@@ -341,7 +341,7 @@ def run_with_plan_file(
             )
     rc = body(args)
     wrote_plan = False
-    if getattr(args, "check_updates", False) and plan_file and ctx.plans:
+    if getattr(args, "check", False) and plan_file and ctx.plans:
         plan = ctx.plans[0]
         for other in ctx.plans[1:]:
             plan = plan.merge(other)
@@ -350,7 +350,7 @@ def run_with_plan_file(
     if wants_json(args):
         if ctx.document is None:
             raise RuntimeError("--json: the command left no document to print")
-        check = bool(getattr(args, "check_updates", False))
+        check = bool(getattr(args, "check", False))
         return emit_result(command_id(args), ctx.document, check=check)
     if wrote_plan:
         print(
@@ -403,7 +403,7 @@ def _plan_line(item: PlanItem) -> str:
 
 
 def _report_plan(args: argparse.Namespace, plan: UpdatePlan) -> int:
-    """Run ``--check-updates``.
+    """Run ``--check``.
 
     Print the positions (stdout, also with ``-q``) and keep the plan for ``--plan``. A
     position that could not be checked = 1.
@@ -471,7 +471,7 @@ def _status_line(unit: str, file: VersionedFile, update: UpdateMode | None) -> s
 
     ``unit`` is its path below ``--root``; a local version the default mode did not
     compare with the source (no cheap signal, or not asked: ADR-036 erratum 3) gets
-    ``(not checked; --check-updates)``.
+    ``(not checked; --check)``.
     """
     (line,) = _status_lines(unit, (file,), file.newer)
     unchecked = file.unverified in ("none", "unchecked")
@@ -576,7 +576,7 @@ def _cmd_download(args: argparse.Namespace) -> int:
     _cache_warnings_shown.clear()
     arguments: dict[str, Any] = {**library_arguments(args), "root": store_dir(args)}
     on_notice = _data_notices(args)
-    if getattr(args, "check_updates", False):
+    if getattr(args, "check", False):
         return _report_plan(args, check_data(**arguments, on_notice=on_notice))
     workers = getattr(args, "workers", 4)
     on_progress = progress_printer(args, workers)

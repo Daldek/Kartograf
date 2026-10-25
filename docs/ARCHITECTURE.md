@@ -2008,9 +2008,9 @@ the CLI and the library use the same cache (Z6, ADR-037): the parameter
 `cache: MetadataCache | bool = True` of public functions (`True` =
 `<cache_dir>/kartograf/metadata.db` via `cache/defaults.py::open_cache`, `False` =
 no cache); `update="force"` (CLI `--force`) and every check
-(`check_*`, `check_data`, CLI `--check-updates` - always queries the source)
+(`check_*`, `check_data`, CLI `--check` - always queries the source)
 open it in `MetadataCache(refresh=True)` mode — read skipped,
-fresh record written (E14); `--upgrade` the same as `--check-updates`
+fresh record written (E14); `--upgrade` the same as `--check`
 (`fetch.refreshes_cache`: `upgrade` and `force`), the default download reads the
 cache within the TTL. `kartograf cache stats` shows `Wpisy rekordow`. Rule:
 `force`/`upgrade` refresh only the cache opened by the function (parameter
@@ -2169,7 +2169,7 @@ leave it on an older version; the next call repairs it.
 
 **Modes and update plan (ADR-036, D5, D14).** `update` in
 `download_sheet`/`download_hierarchy`/`download_sheets` (CLI: no flag,
-`--upgrade`, `--force`; mutually exclusive with `--check-updates`):
+`--upgrade`, `--force`; mutually exclusive with `--check`):
 by default a local version with the record label is used without download,
 missing versions (`all`, `--full-sheet`, no local one) are downloaded,
 and when the newest flight is not local, but there is another local version
@@ -2181,7 +2181,7 @@ different = a new version of the same label), record verification works in
 all modes; `update="check"` is a `ValidationError` (checking
 is done by `manager.check_sheets(sheets)`). Providers without campaigns: without `force`
 the newest local version (no cheap signal).
-`DownloadManager.check_sheets(sheets)` (CLI `--check-updates [--plan PLIK]`)
+`DownloadManager.check_sheets(sheets)` (CLI `--check [--plan PLIK]`)
 downloads nothing and returns `UpdatePlan` (`kartograf-plan/1`: `store`,
 `checked_at`, `kartograf_version`, items with segment, hierarchy, name,
 local version and record signal; statuses `current`/`newer`/`missing`/
@@ -2226,8 +2226,8 @@ D26), openzu files — SM5 sheet, native TM33 tile (plan B) and LAZ CZ —
 The default mode does not ask the source about the local version (erratum 3 of ADR-036):
 `http` + `probe` and `metadata` + `edition` give a local version
 `unverified="unchecked"` without a query (line `(bez sprawdzania;
---check-updates)`); `upgrade` does `HEAD` (equal `ETag` = local, different =
-download, failed `HEAD` = error), `--check-updates` = `inspect_version`.
+--check)`); `upgrade` does `HEAD` (equal `ETag` = local, different =
+download, failed `HEAD` = error), `--check` = `inspect_version`.
 The label of an index record (`index` + `edition`) is known from the file selection,
 so the comparison remains in every mode. A TM33 tile from ImageServer and
 cutouts `none` (local, `unverified="none"`). Result: `VersionedFile(path, status, label, sha256,
@@ -2245,8 +2245,8 @@ existing version with the same sha256, `VersionedFile.same_as`),
 etykieta: N, bez zmian: N, lokalne: N, bledy: N (<dir>)` (PL sheets
 and LAZ tiles; PL LAZ unit = file name, LAZ CZ = sheet code, cutout = path under
 `--root`). A file without a cheap signal: by default the suffix `(bez
-sprawdzania; --check-updates)`, with `--upgrade` an `Info:` about `--force`;
-a failed signal check: `Warning:`. The `--check-updates` report is
+sprawdzania; --check)`, with `--upgrade` an `Info:` about `--force`;
+a failed signal check: `Warning:`. The `--check` report is
 one line per item (`aktualne`, `nowsza: ...`, `do pobrania`, `nie da
 sie sprawdzic bez pobrania`, `nie udalo sie sprawdzic: ...`); land cover,
 soils and HSG mark items with the path under `--root` like the status line
@@ -2318,7 +2318,7 @@ not sheets. A sheet without data in any year has status `no_coverage`
 (`Warning:` R5); a sheet with data only outside the range is
 `YearRangeError` and aborts the WHOLE list before download, also with
 `--min-year` alone. A failed sheet index check also aborts the list.
-The same applies to `--check-updates`: sheets without data are `NO_COVERAGE_SOME` and code 0
+The same applies to `--check`: sheets without data are `NO_COVERAGE_SOME` and code 0
 (no sheet with data = `NoCoverageError`, `no_data` with the reason `no_coverage`, exit code 14),
 a year conflict is a single `YearRangeError` (`no_data`, reason `year_out_of_range`) for all
 sheets (section 4.1).
@@ -3479,7 +3479,7 @@ with outlines), `prg|<envelope in mm>` (land mask) and CZ
 `transport/index_records.py::wfs_records(cache=)`) - key
 `wfs-records|<endpoint>|<type>|<envelope in mm>` with area records, so
 a repeated download of an area with local tiles does not query the index
-(`--check-updates`/`--upgrade`/`--force` refresh the entry);
+(`--check`/`--upgrade`/`--force` refresh the entry);
 the SM5 sheet code goes to `sheet_cache` (TTL
 30 days). The cache is opened by
 `open_cache(cache, force=force)`; `force=True` (CLI `--force`) skips
@@ -3579,7 +3579,7 @@ remain in `failed`. A country in which the area has no units (no KU in RUIAN,
 county, sheet, tile - the rectangular CZ envelope covers PL territory)
 or in which the unit query failed is an error of that country
 (`UnitFailure(<country>, <country>, ...)`, `_jobs`) and does not interrupt the other; no
-units in ALL countries = `NoCoverageError`. `--check-updates`: such a
+units in ALL countries = `NoCoverageError`. `--check`: such a
 country is `Warning` `check_failed` + `auto_partial_success` (as in `check_data`).
 The KUs of the area according to RUIAN (`cadastral_areas_for_bbox`, also an empty response) lie
 in the metadata cache (`index_area_cache`, TTL 7 days, like PRG counties), so
@@ -3640,7 +3640,7 @@ of the dataset feed, group `sheet` = key (without it the feed has one dataset,
 key `""`). The index lies in `MetadataCache` (`atom_cache`) with the `ETag`
 of the feed: within the TTL (7 days) without a query, older: conditional GET
 `If-None-Match` (304 = unchanged); `--force`, `--upgrade`
-and `--check-updates` (cache in refresh mode) read the feed anew.
+and `--check` (cache in refresh mode) read the feed anew.
 `resolve_atom_file` always reads the dataset feed fresh (small, carries the
 release) and selects the file by CRS category (`check_atom_crs` - without a
 network); a key missing from the cached index or a 404 of the dataset feed = ONE
@@ -3716,12 +3716,12 @@ of the store.
 **Store, signals and labels (D6, D7).** Signal = `update_signal` of the channel.
 Channels without an explicitly announced signal (`PRG`, `EGiB`, `PRNG`/`Geonames`
 areas, `PRNG` country and other area objects) have `none`:
-the local version is used without queries, `--check-updates` = `unverifiable`
+the local version is used without queries, `--check` = `unverifiable`
 (`nie da sie sprawdzic bez pobrania`), new content is brought only by
 `--force` (the same
 content = `unchanged`, different = a new version). CUZK country files with `ETag`
 (RUIAN, HY-NET) have `http`: `--upgrade` compares the local version with one
-`HEAD` (different `ETag` = download), `--check-updates` = `current`/`newer`,
+`HEAD` (different `ETag` = download), `--check` = `current`/`newer`,
 by default the local version without a query. A file from the ATOM feed (ZABAGED,
 Geonames country, QGZU) has `metadata`: the release from the feed before the download, a different
 release = `newer`. BDOT10k maps have `index` (the `Stan bazy` date separately
@@ -3731,7 +3731,7 @@ tiles too (label from the WFS record:
 `Aktualnosc` and `Numer_zgloszenia_pracy`; the tiles of an area are chosen by the WFS index,
 whose area records lie in the metadata cache - `index_area_cache`,
 TTL 7 days - so a repeated run with local tiles does not query the network, like PL
-sheet indexes; modes `--check-updates`/`--upgrade`/`--force` query the
+sheet indexes; modes `--check`/`--upgrade`/`--force` query the
 index), ZTM sheets `http` (`HEAD`).
 Label = `edition` of the variant (BDOT10k
 vintage, year of the 3D models; `label_source="edition"`), the release from the ATOM feed
@@ -3862,9 +3862,9 @@ clean process).
 (`catalog/formatting.py`), `run_command`/`check_command` (conversion, validation, then the command
 function: `download_data`, `download_collection`, ... or `check_*`). `options` is the JSON form of
 project task options (ADR-040), `run` - the remaining flags of the line under the parameter
-names (`root`, `upgrade`, `force`, `check_updates`, `plan`, `workers`,
+names (`root`, `upgrade`, `force`, `check`, `plan`, `workers`,
 `quiet`, `json`, `summary`; there is no `update` key: `run_command` takes the mode as
-`update="upgrade"|"force"`, and `check_updates` is `check_command`, so the mapping is done by the
+`update="upgrade"|"force"`, and `check` is `check_command`, so the mapping is done by the
 caller). The functions without network (`parse_command`, `validate_command`,
 `format_command`) have a test with a transport stub rejecting every request.
 
@@ -3911,7 +3911,7 @@ examples, `dependentRequired` `bbox` -> `bbox_crs`, JSON Schema 2020-12 with
 `additionalProperties: false`; `anyOf` for a value per country) and from the mode of the server:
 `tool_specs(allow_writes=)` gives, with writes, the commands as declared, and without writes the commands that have a
 plan (the 12 data commands and `project download`) in a plan-only variant (without the run options `update`, `plan`,
-`workers`, `summary`; `check_updates` fixed to `true`; `readOnlyHint: true`), while the commands that write without a
+`workers`, `summary`; `check` fixed to `true`; `readOnlyHint: true`), while the commands that write without a
 plan (`project init|add|remove`) vanish from the list (`hidden_tools`: a call is `forbidden`).
 `_output_schema.py` is the `outputSchema` of all tools: the schema `result-1` from `schemas/nogat/`
 made self-contained (`scripts/generate_output_schema.py`, a contract test: the module == the generator and the
@@ -3922,7 +3922,7 @@ same verdicts as the Nogat schema). Without `mcp` (the module does not import th
 is_error=<error>)`, errors as `kartograf-error/1` (`forbidden` for a path outside `--allow-dir`, for a
 hidden tool and for a run option in the plan-only variant; `missing_dependency` without the SDK),
 the order of the checks: refusal of a write, the input schema (`jsonschema`), the absolute paths rule
-(`--allow-dir`, also paths nested in the options of `project add`), the run options next to `check_updates`,
+(`--allow-dir`, also paths nested in the options of `project add`), the run options next to `check`,
 `validate_command`; progress through `report_progress`, at most 4 concurrent network calls (those with
 `openWorldHint`) and a server cache in the user cache directory. The `mcp` SDK is an optional dependency
 (extra `mcp`), and only `mcp_server.py` touches it, lazily. The server instructions (in English, up to 4096

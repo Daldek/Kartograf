@@ -323,7 +323,7 @@ def emit_partial_success(
     points 4-5). The countries come from RECTANGULAR envelopes, so an area deep
     inside one country routinely reaches the other one; code 1 stays for an explicit
     ``--country`` and for the failure of every country. ``check``: the plan of the
-    failed countries could not be made (``--check-updates``).
+    failed countries could not be made (``--check``).
     """
     if check:
         text = (

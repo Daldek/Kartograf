@@ -121,7 +121,7 @@ def test_more_files_than_the_limit_refused_before_any_transfer(tmp_path, router)
     assert "szacunkowo ok. 8,6 GB (sredni rozmiar 5 z 144 plikow wg HEAD" in text
     assert f"limit jednego zadania to {VOLUME_FILES} plikow i 10 GB" in text
     assert "Zawez obszar (--bbox, --sheet, --geometry)" in text
-    assert "--check-updates --plan PLIK, potem --upgrade --plan PLIK" in text
+    assert "--check --plan PLIK, potem --upgrade --plan PLIK" in text
     assert router.gets() == 0
     heads = _heads(router)
     assert len(heads) == 5

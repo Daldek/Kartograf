@@ -6,7 +6,7 @@ Kartograf is for getting the data of an area (a sheet code, a bbox, a geometry f
 
 Interfaces: Python (<!-- kartograf:python_example -->), the CLI (`kartograf <group> <command> --option value --json`) and the MCP server (`kartograf-mcp`, read only unless started with `--allow-writes --allow-dir DIR`; a tool is an `operation_id`). Install with `pip install "kartograf @ git+https://github.com/Daldek/Kartograf.git"`; the extra `mcp` adds the server.
 
-Work in four steps: discover (`kartograf commands list`, `kartograf commands schema --command NAME`), check (`--check-updates`), run, read (`status`, `result`, `items`, `notices`). A result is a `kartograf-result/1` envelope; an error is a `kartograf-error/1` document whose `code` is one of: <!-- kartograf:error_codes -->.
+Work in four steps: discover (`kartograf commands list`, `kartograf commands schema --command NAME`), check (`--check`), run, read (`status`, `result`, `items`, `notices`). A result is a `kartograf-result/1` envelope; an error is a `kartograf-error/1` document whose `code` is one of: <!-- kartograf:error_codes -->.
 
 Command groups: <!-- kartograf:group_names -->.
 

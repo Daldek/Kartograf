@@ -161,7 +161,7 @@ def test_instructions_are_english_short_and_say_what_the_tools_do_not_repeat():
         "geometry",
         "country",
         "update",
-        "check_updates",
+        "check",
         "kartograf-plan/1",
         "kartograf-result/1",
         "kartograf-error/1",
@@ -438,7 +438,7 @@ def test_a_server_that_does_not_write_lists_plans_and_leaves_out_three_tools():
     properties = plan.input_schema["properties"]
     assert plan.annotations.read_only_hint is True
     assert not {"update", "plan", "workers", "summary"} & set(properties)
-    assert properties["check_updates"]["const"] is True
+    assert properties["check"]["const"] is True
     assert plan.description.endswith("This server only plans: nothing is written.")
     # what only reads is the same in both modes
     assert tools["kartograf_store_overview"].annotations.read_only_hint is True
@@ -577,8 +577,8 @@ def test_ok_false_is_a_result_with_the_status_of_its_units(tmp_path):
 @needs_mcp
 @pytest.mark.usefixtures("frozen_clock")
 @pytest.mark.parametrize("mode", ["plans", "writes"])
-def test_check_updates_equals_check_command(mode, tmp_path):
-    """The plan of a server that writes (``check_updates`` true) and the plan of a
+def test_check_equals_check_command(mode, tmp_path):
+    """The plan of a server that writes (``check`` true) and the plan of a
     server that does not (the only thing it does, so the argument may be left out)
     are the document of ``check_command``."""
     fake = FakeCampaignProvider({"newest": [REC["83233"]]})
@@ -590,7 +590,7 @@ def test_check_updates_equals_check_command(mode, tmp_path):
     fake.records = {"newest": [REC["84183"]]}
     arguments = {**PL_SHEET, "root": str(tmp_path / "mcp")}
     if mode == "writes":
-        arguments["check_updates"] = True
+        arguments["check"] = True
     with pl_sheets(fake):
         direct = check_command(
             "elevation download", PL_SHEET, root=tmp_path / "lib", cache=False
@@ -640,7 +640,7 @@ def test_a_plan_document_and_update_upgrade_reach_the_library(tmp_path):
         )
         checked = call(
             "kartograf_elevation_download",
-            {**PL_SHEET, "root": str(tmp_path / "mcp"), "check_updates": True},
+            {**PL_SHEET, "root": str(tmp_path / "mcp"), "check": True},
             **server,
         )
         upgraded = call(
@@ -692,18 +692,18 @@ def test_summary_is_an_argument_of_the_run_not_of_the_task(tmp_path):
 
 
 @needs_mcp
-def test_check_updates_refuses_the_options_of_a_run(tmp_path):
+def test_check_refuses_the_options_of_a_run(tmp_path):
     here = str(tmp_path)
-    selection = {**PL_SHEET, "root": here, "check_updates": True}
+    selection = {**PL_SHEET, "root": here, "check": True}
     hsg = {"depth": "0-5cm", "sheet": HSG_SHEET, "root": here}
-    project = {"project_dir": here, "check_updates": True}
+    project = {"project_dir": here, "check": True}
     cases = [
         ("kartograf_elevation_download", selection | {"update": "force"}, "update"),
         ("kartograf_elevation_download", selection | {"plan": {}}, "plan"),
         ("kartograf_elevation_download", selection | {"workers": 2}, "workers"),
         (
             "kartograf_soil_hsg",
-            hsg | {"summary": True, "check_updates": True},
+            hsg | {"summary": True, "check": True},
             "summary",
         ),
         ("kartograf_project_download", project | {"update": "upgrade"}, "update"),
@@ -714,20 +714,20 @@ def test_check_updates_refuses_the_options_of_a_run(tmp_path):
         report = error_of(call(tool, arguments, **writing(tmp_path)))
 
         assert report["details"]["option"] == option, arguments
-        assert report["details"]["options"] == ["check_updates", option]
-        assert "Drop check_updates to run" in report["hint"]
+        assert report["details"]["options"] == ["check", option]
+        assert "Drop check to run" in report["hint"]
         assert report["exit_code"] == 2
     assert list(tmp_path.iterdir()) == []  # a plan writes nothing
 
 
 @needs_mcp
-def test_check_updates_input_errors(tmp_path):
+def test_check_input_errors(tmp_path):
     here = str(tmp_path)
-    selection = {**PL_SHEET, "root": here, "check_updates": True}
+    selection = {**PL_SHEET, "root": here, "check": True}
     cases = [
         (selection | {"root": "rel"}, "root"),
-        (selection | {"check_updates": "yes"}, "check_updates"),
-        ({"root": here, "check_updates": True}, "product"),
+        (selection | {"check": "yes"}, "check"),
+        ({"root": here, "check": True}, "product"),
     ]
 
     for arguments, option in cases:
@@ -742,7 +742,7 @@ def test_check_updates_input_errors(tmp_path):
     report = error_of(
         call(
             "kartograf_elevation_download",
-            {"product": "nmt", "root": here, "check_updates": True},
+            {"product": "nmt", "root": here, "check": True},
             **writing(tmp_path),
         )
     )
@@ -873,7 +873,7 @@ def test_input_errors_are_error_documents(tmp_path, tool, arguments, option, com
 )
 def test_every_data_tool_runs_its_own_command(tmp_path, spec):
     """Without an area the library refuses every data command: the answer names
-    the command the tool stands for, for a run, for ``check_updates`` and for a
+    the command the tool stands for, for a run, for ``check`` and for a
     server that only plans."""
     arguments = {"root": str(tmp_path)}
     properties = spec.input_schema["properties"]
@@ -883,9 +883,7 @@ def test_every_data_tool_runs_its_own_command(tmp_path, spec):
         arguments["depth"] = properties["depth"]["enum"][0]
 
     run = error_of(call(spec.name, arguments, **writing(tmp_path)))
-    check = error_of(
-        call(spec.name, {**arguments, "check_updates": True}, **writing(tmp_path))
-    )
+    check = error_of(call(spec.name, {**arguments, "check": True}, **writing(tmp_path)))
     plan = error_of(call(spec.name, arguments))
 
     assert run["command"] == check["command"] == plan["command"] == spec.command
@@ -1057,7 +1055,7 @@ def test_a_tool_that_writes_and_is_not_offered_answers_forbidden(tmp_path):
         ("kartograf_elevation_download", "plan", {}),
         ("kartograf_elevation_download", "workers", 2),
         ("kartograf_soil_hsg", "summary", True),
-        ("kartograf_elevation_download", "check_updates", False),
+        ("kartograf_elevation_download", "check", False),
         ("kartograf_project_download", "update", "upgrade"),
         ("kartograf_project_download", "workers", 2),
     ],
@@ -1080,7 +1078,7 @@ def test_a_server_that_does_not_write_refuses_a_run_with_forbidden(
     assert report["exit_code"] == 12
     assert report["details"] == {"option": option}
     assert report["command"] == tool.removeprefix("kartograf_").replace("_", " ", 1)
-    assert FORBIDDEN_HINT in report["hint"] and "check_updates=true" in report["hint"]
+    assert FORBIDDEN_HINT in report["hint"] and "check=true" in report["hint"]
     assert list(tmp_path.iterdir()) == []  # nothing was fetched or written
 
 
@@ -1424,7 +1422,7 @@ def test_project_and_store_tools_work_on_real_files(tmp_path):
     before = go("kartograf_project_status", here)
     with pl_sheets():
         downloaded = go("kartograf_project_download", here)
-        checked = go("kartograf_project_download", {**here, "check_updates": True})
+        checked = go("kartograf_project_download", {**here, "check": True})
     after = go("kartograf_project_status", here)
     verified = go("kartograf_project_verify", here)
 

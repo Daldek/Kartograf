@@ -263,7 +263,7 @@ def test_enumerated_values_are_taken_in_any_case(tmp_path, capsys):
     out = tmp_path / "store"
     assert main([
         "landcover", "download", "--product", "bdot10k", "--teryt", "1465",
-        "--format", "shp", "--root", str(out), "--check-updates",
+        "--format", "shp", "--root", str(out), "--check",
     ]) == 0  # fmt: skip
     assert capsys.readouterr().out == (
         "landcover/pl_bdot10k_shp/teryt/1465.zip: do pobrania\n"

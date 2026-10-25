@@ -73,7 +73,7 @@ _PRINCIPLES: Final[tuple[str, ...]] = (
     "hint.",
     "**Absolute paths, outside the repository and /tmp:** `{opt:root}` (CLI "
     "`--root`) is the store; a version is never overwritten, so a rerun is safe.",
-    "**Check, then run:** `--check-updates` (MCP: `check_updates`) plans without "
+    "**Check, then run:** `--check` (MCP: `check`) plans without "
     "fetching; `--upgrade` fetches newer content, `--force` fetches again, and "
     "`--plan` runs a saved plan.",
     "**Decide by codes:** `status` of the envelope (`ok`, `partial`, `failed`), "
@@ -166,7 +166,7 @@ _FLOWS: Final[tuple[_Flow, ...]] = (
                 "written.",
                 f"kartograf elevation download --product nmt --sheet {_SHEET} "
                 f"--resolution 1m --vertical-crs EVRF2007 --root {_STORE} "
-                "--check-updates --json",
+                "--check --json",
             ),
             _Step(
                 "the run: `kartograf-download/1`, `files[].path` of the versions "
@@ -247,7 +247,7 @@ _BLOCK_LINES: Final[tuple[str, ...]] = (
     f"kartograf sheet parse {_SHEET} --json",
     f"kartograf elevation availability --product nmt --sheet {_SHEET} --json",
     f"kartograf elevation download --product nmt --sheet {_SHEET} --resolution 1m "
-    f"--vertical-crs EVRF2007 --root {_STORE} --check-updates --json",
+    f"--vertical-crs EVRF2007 --root {_STORE} --check --json",
 )
 _PYTHON_CALL: Final = (
     "kartograf.download_data",

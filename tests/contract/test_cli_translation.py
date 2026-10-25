@@ -210,7 +210,7 @@ def test_level_per_country_syntax(tmp_path, capsys):
     assert line.startswith("Error: --level: nieprawidlowa wartosc 'pl=gmina,de=obec'")
 
 
-def test_check_updates_calls_check_data_and_writes_plan(tmp_path, capsys):
+def test_check_calls_check_data_and_writes_plan(tmp_path, capsys):
     plan_file = tmp_path / "plan.json"
     plan = new_plan(tmp_path, [])
     with patch(_CHECK, return_value=plan) as check, patch(_DOWNLOAD) as download:
@@ -222,7 +222,7 @@ def test_check_updates_calls_check_data_and_writes_plan(tmp_path, capsys):
                 "nmt",
                 "--sheet",
                 "N-34-139-C-a-3-1",
-                "--check-updates",
+                "--check",
                 "--plan",
                 str(plan_file),
                 "--root",
@@ -310,7 +310,7 @@ def test_laz_preamble_only_after_validation_with_pl_crs(tmp_path, capsys, check)
         str(tmp_path),
     ]
     if check:
-        argv.append("--check-updates")
+        argv.append("--check")
     with (
         patch(
             "kartograf.download.laz.download_laz_area",

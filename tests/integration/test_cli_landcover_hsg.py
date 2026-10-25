@@ -62,9 +62,7 @@ def _hsg(tmp_path, *argv):
 # --- landcover download and soil download ---------------------------------------
 
 
-@pytest.mark.parametrize(
-    "flags", [["--check-updates", "--upgrade"], ["--upgrade", "--force"]]
-)
+@pytest.mark.parametrize("flags", [["--check", "--upgrade"], ["--upgrade", "--force"]])
 def test_landcover_update_flags_exclusive(tmp_path, flags, capsys):
     with pytest.raises(SystemExit) as exc:
         _soil(tmp_path, *SOIL, *flags)
@@ -76,16 +74,14 @@ def test_landcover_update_flags_exclusive(tmp_path, flags, capsys):
 def test_plan_without_mode_is_error(tmp_path, command, capsys):
     rc = main([*command, "--plan", str(tmp_path / "p.json"), "--root", str(tmp_path)])
     assert rc == 2
-    assert "Error: --plan wymaga --check-updates albo --upgrade" in (
-        capsys.readouterr().err
-    )
+    assert "Error: --plan wymaga --check albo --upgrade" in (capsys.readouterr().err)
 
 
 def test_landcover_check_writes_plan(tmp_path, capsys):
     fake = FakeSoilGrids("2.0")
     plan_file = tmp_path / "plan.json"
     with _session(fake):
-        rc = _soil(tmp_path, *SOIL, "--check-updates", "--plan", str(plan_file))
+        rc = _soil(tmp_path, *SOIL, "--check", "--plan", str(plan_file))
     assert rc == 0
     assert fake.coverages == 0
     assert f"{CLAY}: do pobrania (2.0)" in capsys.readouterr().out
@@ -105,7 +101,7 @@ def test_landcover_soilgrids_status_default_asks_no_edition(tmp_path, capsys):
         assert _soil(tmp_path, *SOIL) == 0
     out = capsys.readouterr().out
     # the default mode asks no source for a local version (ADR-036 erratum 3)
-    assert f"{CLAY}: lokalna wersja 2.0 (bez sprawdzania; --check-updates)" in out
+    assert f"{CLAY}: lokalna wersja 2.0 (bez sprawdzania; --check)" in out
     assert newer.capabilities == 0
 
 
@@ -114,7 +110,7 @@ def test_landcover_upgrade_plan_stale_exit_1(tmp_path, capsys):
     with _session(FakeSoilGrids("2.0")):
         _soil(tmp_path, *SOIL)
     with _session(FakeSoilGrids("2.1")):
-        _soil(tmp_path, *SOIL, "--check-updates", "--plan", str(plan_file))
+        _soil(tmp_path, *SOIL, "--check", "--plan", str(plan_file))
     capsys.readouterr()
     fake = FakeSoilGrids("2.2")
     with _session(fake):
@@ -171,7 +167,7 @@ def test_landcover_bdot_rerun_unchecked_line(tmp_path, capsys):
     assert pkg.call_count == 1
     captured = capsys.readouterr()
     assert "landcover/pl_bdot10k_gpkg/teryt/1465.gpkg: lokalna wersja " in captured.out
-    assert "(bez sprawdzania; --check-updates)" in captured.out
+    assert "(bez sprawdzania; --check)" in captured.out
     assert "Info: landcover/pl_bdot10k_gpkg/teryt/1465.gpkg: lokalna wersja" in (
         captured.err
     )
@@ -184,7 +180,7 @@ def test_landcover_check_keep_raw_lines_name_each_file(tmp_path, capsys):
         return_value=["0208"],
     ):
         argv = ["--product", "bdot10k", "--bbox", BBOX_ARG, "--keep-raw"]
-        rc = _lc(tmp_path, *argv, "--check-updates")
+        rc = _lc(tmp_path, *argv, "--check")
     assert rc == 0
     assert capsys.readouterr().out.splitlines() == [
         "landcover/pl_bdot10k_gpkg/teryt/0208.gpkg: do pobrania",
@@ -266,7 +262,7 @@ def test_invalid_teryt_matches_cli_and_api(tmp_path, capsys, mode):
         match="^--teryt 14: BDOT10k is published per county - give --teryt <4 digits>",
     ) as exc:
         getattr(manager, mode)(teryt="14")
-    flags = ["--check-updates"] if mode == "check" else []
+    flags = ["--check"] if mode == "check" else []
     assert _lc(tmp_path, "--product", "bdot10k", "--teryt", "14", *flags) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -289,7 +285,7 @@ def test_invalid_landcover_bbox_matches_cli_and_api(
     manager = LandCoverManager("bdot10k", cache=False, root=tmp_path / "api")
     with pytest.raises(ValidationError) as exc:
         getattr(manager, mode)(bbox=bbox)
-    flags = ["--check-updates"] if mode == "check" else []
+    flags = ["--check"] if mode == "check" else []
     assert _lc(tmp_path, "--product", "bdot10k", "--bbox", coordinates, *flags) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -312,7 +308,7 @@ def test_invalid_hsg_bbox_matches_cli_and_api(
     calc = HSGCalculator(cache=False, root=tmp_path / "api")
     with pytest.raises(ValidationError) as exc:
         getattr(calc, mode)(bbox=bbox, depth="0-5cm")
-    flags = ["--check-updates"] if mode == "check_hsg" else []
+    flags = ["--check"] if mode == "check_hsg" else []
     assert (
         main(
             [
@@ -398,7 +394,7 @@ def test_hsg_cli_check_plan_tracks(tmp_path, capsys):
     plan_file = tmp_path / "plan.json"
     fake = FakeSoilGrids("2.0")
     with _session(fake):
-        rc = _hsg(tmp_path, "--check-updates", "--plan", str(plan_file))
+        rc = _hsg(tmp_path, "--check", "--plan", str(plan_file))
     assert rc == 0 and fake.coverages == 0
     out = capsys.readouterr().out
     for segment in ("clay_0-5cm_mean", "sand_0-5cm_mean", "silt_0-5cm_mean"):
