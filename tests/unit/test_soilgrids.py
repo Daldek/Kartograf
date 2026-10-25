@@ -101,7 +101,7 @@ class TestSoilGridsValidation:
         """Test download with invalid property."""
         provider = SoilGridsProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        with pytest.raises(ValidationError, match="Nieprawidlowa wlasciwosc"):
+        with pytest.raises(ValidationError, match="Invalid property"):
             provider.download_by_bbox(
                 bbox,
                 Path("/tmp/test.tif"),
@@ -114,7 +114,7 @@ class TestSoilGridsValidation:
         """Test download with invalid depth."""
         provider = SoilGridsProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        with pytest.raises(ValidationError, match="Nieprawidlowa glebokosc"):
+        with pytest.raises(ValidationError, match="Invalid depth"):
             provider.download_by_bbox(
                 bbox,
                 Path("/tmp/test.tif"),
@@ -127,7 +127,7 @@ class TestSoilGridsValidation:
         """Test download with invalid stat."""
         provider = SoilGridsProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        with pytest.raises(ValidationError, match="Nieprawidlowa statystyka"):
+        with pytest.raises(ValidationError, match="Invalid statistic"):
             provider.download_by_bbox(
                 bbox,
                 Path("/tmp/test.tif"),

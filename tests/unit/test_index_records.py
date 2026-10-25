@@ -80,12 +80,12 @@ def test_map_links_record():
     assert _gfi("gfi_mapy10k_outside.html") == []
     # a real HTML page without the sheet table (WFS service info page)
     message = _gfi_error((FIXTURES / "mesh_no_params.html").read_bytes())
-    assert message.endswith("wynik bylby niepelny")
+    assert message.endswith("the result would be incomplete")
     # the table without the base date row is not a record
     page = (FIXTURES / "gfi_mapy10k_M-34-64-D-d-1.html").read_text("utf-8")
     undated = re.sub(r"<tr>\s*<th[^>]*>Stan bazy.*?</tr>", "", page, flags=re.S)
     assert undated != page
-    assert _gfi_error(undated.encode()).endswith("wynik bylby niepelny")
+    assert _gfi_error(undated.encode()).endswith("the result would be incomplete")
     # OGC exception (unknown layer) at HTTP 200
     message = _gfi_error((FIXTURES / "gfi_exception_bad_layer.xml").read_bytes())
     assert "LayerNotDefined" in message or "Invalid layer" in message
@@ -194,7 +194,7 @@ def test_tile_units_from_wfs_pages(monkeypatch):
         ("mesh_no_params.html", None),  # HTML at HTTP 200
     ]
     for first_page in broken:
-        with pytest.raises(DownloadError, match="wynik bylby niepelny"):
+        with pytest.raises(DownloadError, match="the result would be incomplete"):
             wfs_records(
                 _MeshPages(first_page).factory, MESH, MESH_LAYER, KRAKOW, timeout=5
             )

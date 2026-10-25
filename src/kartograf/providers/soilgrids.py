@@ -51,6 +51,7 @@ import requests
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.messages import message
 from kartograf.providers.base import LandCoverProvider
 from kartograf.sources.edition import Edition, edition_label
 from kartograf.transform.bbox import envelope_from_2180
@@ -182,41 +183,51 @@ def is_empty(path: Path, property: str) -> bool:
     return True
 
 
-# Names of the soil properties for the user (Polish, ASCII; one text for --help
+# Names of the soil properties for the user (catalog messages; one text for --help
 # and `soil list-layers`, UX-23); the description adds the unit of the values
 # in the file and its conversion (``PROPERTY_UNITS``).
 _PROPERTY_NAMES = {
-    "bdod": "gestosc objetosciowa",
-    "cec": "pojemnosc sorpcyjna",
-    "cfvo": "frakcja szkieletowa",
-    "clay": "il",
-    "nitrogen": "azot calkowity",
-    "ocd": "gestosc wegla organicznego",
-    "ocs": "zasob wegla organicznego, tylko glebokosc 0-30cm",
-    "phh2o": "pH w wodzie (H2O)",
-    "sand": "piasek",
-    "silt": "pyl",
-    "soc": "wegiel organiczny",
+    "bdod": message("providers.property_bdod"),
+    "cec": message("providers.property_cec"),
+    "cfvo": message("providers.property_cfvo"),
+    "clay": message("providers.property_clay"),
+    "nitrogen": message("providers.property_nitrogen"),
+    "ocd": message("providers.property_ocd"),
+    "ocs": message("providers.property_ocs"),
+    "phh2o": message("providers.property_phh2o"),
+    "sand": message("providers.property_sand"),
+    "silt": message("providers.property_silt"),
+    "soc": message("providers.property_soc"),
 }
 
 
 def _unit_text(units: SoilUnits) -> str:
-    return f"w pliku {units.mapped}; {units.conventional} = wartosc / {units.divisor}"
+    return message(
+        "providers.unit_text",
+        mapped=units.mapped,
+        conventional=units.conventional,
+        divisor=units.divisor,
+    )
 
 
 PROPERTY_DESCRIPTIONS = {
-    code: f"{name} ({_unit_text(PROPERTY_UNITS[code])})"
+    code: message(
+        "providers.property_description",
+        name=name,
+        units=_unit_text(PROPERTY_UNITS[code]),
+    )
     for code, name in _PROPERTY_NAMES.items()
 }
 STAT_DESCRIPTIONS = {
-    "mean": "srednia",
-    "Q0.05": "5. percentyl",
-    "Q0.5": "mediana",
-    "Q0.95": "95. percentyl",
-    "uncertainty": f"niepewnosc predykcji ({_unit_text(UNCERTAINTY_UNITS)}; bez "
-    "jednostki)",
+    "mean": message("providers.stat_mean"),
+    "Q0.05": message("providers.stat_q0_05"),
+    "Q0.5": message("providers.stat_q0_5"),
+    "Q0.95": message("providers.stat_q0_95"),
+    "uncertainty": message(
+        "providers.stat_uncertainty", unit_text=_unit_text(UNCERTAINTY_UNITS)
+    ),
 }
-DEPTH_DESCRIPTION = "przedzial glebokosci ponizej powierzchni"
+DEPTH_DESCRIPTION = message("providers.depth_description")
 
 
 class SoilGridsProvider(LandCoverProvider):
@@ -321,14 +332,31 @@ class SoilGridsProvider(LandCoverProvider):
         (``option`` and ``allowed``).
         """
         for name, label, value, allowed, where in (
-            ("property", "wlasciwosc", property, cls.PROPERTIES, ""),
-            ("depth", "glebokosc", depth, cls.depths_for(property), f" dla {property}"),
-            ("stat", "statystyka", stat, cls.STATS, ""),
+            (
+                "property",
+                message("providers.label_property"),
+                property,
+                cls.PROPERTIES,
+                "",
+            ),
+            (
+                "depth",
+                message("providers.label_depth"),
+                depth,
+                cls.depths_for(property),
+                message("providers.for_property", property=property),
+            ),
+            ("stat", message("providers.label_stat"), stat, cls.STATS, ""),
         ):
             if value not in allowed:
                 raise ValidationError(
-                    f"Nieprawidlowa {label}: {value}. Dostepne{where}: "
-                    f"{', '.join(allowed)}",
+                    message(
+                        "providers.invalid_layer_option",
+                        label=label,
+                        value=value,
+                        where=where,
+                        allowed=", ".join(allowed),
+                    ),
                     option=name,
                     allowed=tuple(allowed),
                 )
@@ -413,8 +441,11 @@ class SoilGridsProvider(LandCoverProvider):
         """
         if property not in self.PROPERTIES:
             raise ValidationError(
-                f"Nieprawidlowa wlasciwosc: {property}. "
-                f"Dostepne: {', '.join(self.PROPERTIES)}"
+                message(
+                    "providers.invalid_property",
+                    property=property,
+                    properties=", ".join(self.PROPERTIES),
+                )
             )
         url, title = self._capabilities_title(property, timeout)
         match = _EDITION_RE.match(title)
@@ -429,8 +460,9 @@ class SoilGridsProvider(LandCoverProvider):
                 source_property = _EDITION_REFERENCE
         if match is None:
             raise DownloadError(
-                f"SoilGrids GetCapabilities {property}: brak wydania w tytule "
-                f"{title!r} (oczekiwano 'SoilGrids250m <wydanie> - ...')"
+                message(
+                    "providers.edition_missing_in_title", property=property, title=title
+                )
             )
         label = edition_label(match.group(1), what="SoilGrids")
         return Edition(id=label, url=url, title=title, source_property=source_property)
@@ -491,10 +523,7 @@ class SoilGridsProvider(LandCoverProvider):
         """
         # Validate CRS
         if bbox.crs != "EPSG:2180":
-            raise ValidationError(
-                f"bbox musi byc w EPSG:2180, podano {bbox.crs}. "
-                "Przelicz: SheetParser.get_bbox(crs='EPSG:2180')."
-            )
+            raise ValidationError(message("providers.bbox_wrong_crs", crs=bbox.crs))
 
         # Validate property, its depth and the statistic
         self.check_layer(property, depth, stat)

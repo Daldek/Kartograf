@@ -280,7 +280,7 @@ class TestSingleQueryRetries:
         session.get.return_value = bad
         with (
             patch("kartograf.transport.http.time.sleep") as sleep,
-            pytest.raises(DownloadError, match="nieudane"),
+            pytest.raises(DownloadError, match="failed"),
         ):
             _cuzk_query(session)
         assert session.get.call_count == 1

@@ -39,6 +39,7 @@ from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import CZ_SM5_PATTERN
 from kartograf.core.parser_tm33 import TM33_CRS
 from kartograf.exceptions import ParseError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.providers.cuzk.client import CuzkClient
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ _LAYER_FIELDS = "MAPNOM,MAPNAME"
 # "NM-34-07-1-D-15"); nothing else, so it is safe in a where clause.
 _MAPNOM_PATTERN = re.compile(r"[A-Za-z0-9-]+")
 
-_SM5_HINT = "oczekiwano 2 albo 4 wielkich liter + 2 cyfr, np. CTES96, AS91"
+_SM5_HINT = message("providers.sm5_hint")
 
 # ArcGIS coordinates carry gridding noise of the order of 1e-3 m (e.g.
 # -449999.999308 instead of -450000), so an edge touch must be detected with a
@@ -95,7 +96,9 @@ class SheetIndex:
     def sm5_sheet(self, mapnom: str) -> SheetInfo:
         """SM5 sheet by MAPNOM; ValidationError when unknown (before download)."""
         if not isinstance(mapnom, str) or not CZ_SM5_PATTERN.match(mapnom.strip()):
-            raise ValidationError(f"Niepoprawne godlo SM5: '{mapnom}' ({_SM5_HINT})")
+            raise ValidationError(
+                message("providers.invalid_sm5_code", mapnom=mapnom, sm5_hint=_SM5_HINT)
+            )
         mapnom = mapnom.strip()  # consistent with detect_system (system registry)
         cached = self._cached_sheet(SM5_SYSTEM, mapnom)
         if cached is not None:
@@ -110,8 +113,9 @@ class SheetIndex:
         )
         if not features:
             raise ValidationError(
-                f"Arkusz SM5 '{mapnom}' nie istnieje w indeksie "
-                f"KladyMapovychListu (warstwa {SM5_LAYER})"
+                message(
+                    "providers.sm5_sheet_not_found", mapnom=mapnom, sm5_layer=SM5_LAYER
+                )
             )
         info = _sm5_info(features[0])
         self._store_sheet(SM5_SYSTEM, mapnom, info)
@@ -127,8 +131,7 @@ class SheetIndex:
         code = mapnom.strip() if isinstance(mapnom, str) else ""
         if not _MAPNOM_PATTERN.fullmatch(code):
             raise ValidationError(
-                f"Niepoprawne oznaczenie arkusza CUZK: '{mapnom}' "
-                f"(dozwolone litery, cyfry i '-', np. 0510-D-11)"
+                message("providers.invalid_cuzk_sheet", mapnom=mapnom)
             )
         system = f"cz_klady_{layer}"
         cached = self._cached_sheet(system, code)
@@ -144,8 +147,7 @@ class SheetIndex:
         )
         if not features:
             raise ValidationError(
-                f"Arkusz '{code}' nie istnieje w indeksie KladyMapovychListu "
-                f"(warstwa {layer})"
+                message("providers.sheet_not_found", code=code, layer=layer)
             )
         info = _layer_info(features[0], crs)
         self._store_sheet(system, code, info)
@@ -225,7 +227,7 @@ class SheetIndex:
                 for info in self.tm33_tiles_for_bbox(area)
                 if info.in_cz is not False
             ]
-        raise ValueError(f"Nieznany system arkuszy CZ: {system!r} (sm5, tm33)")
+        raise ValueError(f"Unknown CZ sheet system: {system!r} (sm5, tm33)")
 
 
 def _validate_request_bbox(bbox: BBox, expected_crs: str, method: str) -> None:
@@ -235,9 +237,12 @@ def _validate_request_bbox(bbox: BBox, expected_crs: str, method: str) -> None:
     """
     if bbox.crs.strip().upper() != expected_crs:
         raise ValidationError(
-            f"{method} wymaga bbox w {expected_crs} (usluga zwraca geometrie "
-            f"w tym ukladzie, a filtr przeciec wymaga wspolnego CRS), "
-            f"otrzymano: {bbox.crs}"
+            message(
+                "providers.bbox_crs_mismatch",
+                method=method,
+                expected_crs=expected_crs,
+                crs=bbox.crs,
+            )
         )
     _validate_extent(bbox)
 
@@ -245,8 +250,13 @@ def _validate_request_bbox(bbox: BBox, expected_crs: str, method: str) -> None:
 def _validate_extent(bbox: BBox) -> None:
     if bbox.min_x >= bbox.max_x or bbox.min_y >= bbox.max_y:
         raise ValidationError(
-            f"Niepoprawny bbox: ({bbox.min_x}, {bbox.min_y}, "
-            f"{bbox.max_x}, {bbox.max_y})"
+            message(
+                "core.invalid_bbox",
+                min_x=bbox.min_x,
+                min_y=bbox.min_y,
+                max_x=bbox.max_x,
+                max_y=bbox.max_y,
+            )
         )
 
 
@@ -263,8 +273,8 @@ def _intersecting(bbox: BBox, infos: list[SheetInfo]) -> list[SheetInfo]:
     if len(kept) != len(infos):
         dropped = sorted({i.sheet for i in infos} - {i.sheet for i in kept})
         logger.debug(
-            f"KladyMapovychListu: odrzucono {len(infos) - len(kept)} "
-            f"nieprzecinajacych arkuszy: {', '.join(dropped)}"
+            f"KladyMapovychListu: dropped {len(infos) - len(kept)} "
+            f"non-intersecting sheets: {', '.join(dropped)}"
         )
     return sorted(kept, key=lambda i: i.sheet)
 
@@ -283,8 +293,7 @@ def _rings_envelope(feature: dict[str, Any], crs: str) -> BBox:
     points = [pt for ring in geometry.get("rings") or [] for pt in ring]
     if not points:
         raise ParseError(
-            f"Feature bez geometrii 'rings' w odpowiedzi KladyMapovychListu: "
-            f"{feature.get('attributes')}"
+            message("providers.feature_no_rings", attributes=feature.get("attributes"))
         )
     xs = [pt[0] for pt in points]
     ys = [pt[1] for pt in points]
@@ -294,9 +303,7 @@ def _rings_envelope(feature: dict[str, Any], crs: str) -> BBox:
 def _mapnom(feature: dict[str, Any]) -> str:
     mapnom = (feature.get("attributes") or {}).get("MAPNOM")
     if not mapnom:
-        raise ParseError(
-            f"Feature bez atrybutu MAPNOM w odpowiedzi KladyMapovychListu: {feature}"
-        )
+        raise ParseError(message("providers.feature_no_mapnom", feature=feature))
     return str(mapnom)
 
 
@@ -370,5 +377,7 @@ def _info_from_payload(payload: dict[str, Any]) -> SheetInfo | None:
             in_cz=payload.get("in_cz"),
         )
     except (KeyError, TypeError, ValueError) as e:
-        logger.warning(f"Pomijam niezdatny wpis sheet_cache ({e}): {payload}")
+        logger.warning(
+            message("providers.skip_bad_cache_entry", error=reason(e), payload=payload)
+        )
         return None

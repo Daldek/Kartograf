@@ -45,6 +45,7 @@ from kartograf.core.coverage import (
 )
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.providers.pl.skorowidz import (
     SkorowidzLayersMixin,
     SkorowidzRecord,
@@ -67,7 +68,7 @@ URN_2180 = "urn:ogc:def:crs:EPSG::2180"
 PAGE_SIZE = 1000
 # The fact only: the remedy depends on the caller (download summaries add
 # "ponow pobranie", a ``--check-updates`` line names no download).
-INCOMPLETE = "wynik bylby niepelny"
+INCOMPLETE = message("providers.incomplete_result")
 # Half side (m) of the query square around a sheet centre (sheet lookup).
 QUERY_HALF_M = 10.0
 # A sheet frame overlaps an area only when it still does after its edges are
@@ -161,7 +162,7 @@ def type_year(name: str) -> int:
     """Year of a yearly feature type (``gugik:SkorowidzNMT2025`` -> 2025)."""
     match = _YEAR.search(name)
     if match is None:
-        raise ValueError(f"typ obiektu bez roku: {name!r}")
+        raise ValueError(f"feature type without a year: {name!r}")
     return int(match[1])
 
 
@@ -187,10 +188,11 @@ def parse_feature_types(root: ET.Element, layer_prefix: str) -> list[str]:
                 found[text] = int(match[1])
             elif family.match(text):
                 logger.warning(
-                    "Typ obiektu %s z rodziny %s nie pasuje do wzorca "
-                    "<prefiks><rok> - NIE odpytywany",
-                    text,
-                    layer_prefix,
+                    message(
+                        "providers.type_pattern_mismatch",
+                        text=text,
+                        layer_prefix=layer_prefix,
+                    ),
                 )
     return sorted(found, key=lambda t: -found[t])
 
@@ -247,13 +249,23 @@ class WfsIndex:
             # keep the transport classification (status code, requests
             # cause) - an index outage lets the manager use a local version
             raise DownloadError(
-                f"{e} - {INCOMPLETE}", status_code=e.status_code
+                message(
+                    "providers.error_incomplete",
+                    error=reason(e),
+                    incomplete=INCOMPLETE,
+                ),
+                status_code=e.status_code,
             ) from e.__cause__
         try:
             root = ET.fromstring(response.text)
         except ET.ParseError as e:
             raise DownloadError(
-                f"{description}: odpowiedz WFS nieczytelna: {e} - {INCOMPLETE}"
+                message(
+                    "providers.wfs_response_unreadable",
+                    description=description,
+                    error=reason(e),
+                    incomplete=INCOMPLETE,
+                )
             ) from e
         if localname(root.tag) == "ExceptionReport":
             details = "; ".join(
@@ -262,7 +274,12 @@ class WfsIndex:
                 if localname(elem.tag) == "ExceptionText" and elem.text
             )
             raise DownloadError(
-                f"{description}: ExceptionReport: {details} - {INCOMPLETE}"
+                message(
+                    "providers.wfs_exception_report",
+                    description=description,
+                    details=details,
+                    incomplete=INCOMPLETE,
+                )
             )
         return root
 
@@ -284,7 +301,12 @@ class WfsIndex:
         found = parse_feature_types(root, self._prefix)
         if not found:
             raise DownloadError(
-                f"{description}: brak typow obiektow {self._prefix}<rok> - {INCOMPLETE}"
+                message(
+                    "providers.no_feature_types",
+                    description=description,
+                    prefix=self._prefix,
+                    incomplete=INCOMPLETE,
+                )
             )
         return found
 
@@ -300,18 +322,16 @@ class WfsIndex:
         later page is a ``DownloadError``, never a silently incomplete result.
         """
         if bbox.crs != "EPSG:2180":
-            raise ValidationError(f"obszar musi byc w EPSG:2180, podano {bbox.crs}")
+            raise ValidationError(message("providers.area_crs_not_2180", crs=bbox.crs))
         if not types:
             return
         pages = self._pages(bbox, types)
         found, following = next(pages)
         if following is not None and len(types) > 1:
             logger.info(
-                "WFS %s: ponad %s obiektow %s typow - zapytania per typ "
-                "(stronicowanie wielu typow serwera niespojne)",
-                self._endpoint,
-                PAGE_SIZE,
-                len(types),
+                f"WFS {self._endpoint}: more than {PAGE_SIZE} features across "
+                f"{len(types)} types - querying per type (server paging across "
+                f"multiple types is inconsistent)",
             )
             for name in types:
                 for page_features, _ in self._pages(bbox, [name]):
@@ -337,7 +357,15 @@ class WfsIndex:
             "BBOX": bbox_param(bbox),
             "COUNT": str(PAGE_SIZE),
         }
-        shown = types[0] if len(types) == 1 else f"{len(types)} typow {self._prefix}"
+        shown = (
+            types[0]
+            if len(types) == 1
+            else message(
+                "providers.types_shown_label",
+                types_count=len(types),
+                prefix=self._prefix,
+            )
+        )
         url: str | None = f"{self._endpoint}?{urlencode(params)}"
         seen: set[str] = set()
         # (type, gml:id, URL) of every feature already returned
@@ -346,23 +374,38 @@ class WfsIndex:
         while url is not None:
             if url in seen:
                 raise DownloadError(
-                    f"WFS {self._endpoint}: petla stronicowania - {INCOMPLETE}"
+                    message(
+                        "providers.wfs_paging_loop",
+                        endpoint=self._endpoint,
+                        incomplete=INCOMPLETE,
+                    )
                 )
             seen.add(url)
             page += 1
-            description = f"WFS GetFeature {shown} (strona {page})"
+            description = message(
+                "providers.wfs_getfeature_page", shown=shown, page=page
+            )
             root = self._xml(url, description)
             if localname(root.tag) != "FeatureCollection":
                 raise DownloadError(
-                    f"{description}: odpowiedz nie jest kolekcja obiektow "
-                    f"({localname(root.tag)}) - {INCOMPLETE}"
+                    message(
+                        "providers.not_feature_collection",
+                        description=description,
+                        localname=localname(root.tag),
+                        incomplete=INCOMPLETE,
+                    )
                 )
             found = [elem for elem in root.iter() if self._is_feature(elem)]
             returned = root.get("numberReturned", "")
             if not returned.isdigit() or int(returned) != len(found):
                 raise DownloadError(
-                    f"{description}: numberReturned={returned!r}, obiektow "
-                    f"{len(found)} - {INCOMPLETE}"
+                    message(
+                        "providers.number_returned_mismatch",
+                        description=description,
+                        returned=returned,
+                        found_count=len(found),
+                        incomplete=INCOMPLETE,
+                    )
                 )
             for elem in found:
                 key = (
@@ -372,15 +415,23 @@ class WfsIndex:
                 )
                 if key in yielded:
                     raise DownloadError(
-                        f"{description}: obiekt {key[1]} powtorzony z poprzedniej "
-                        f"strony - stronicowanie serwera niespojne - {INCOMPLETE}"
+                        message(
+                            "providers.feature_repeated_page",
+                            description=description,
+                            key_value=key[1],
+                            incomplete=INCOMPLETE,
+                        )
                     )
                 yielded.add(key)
             following = root.get("next") or None
             if following and not following.startswith(f"{self._endpoint}?"):
                 raise DownloadError(
-                    f"{description}: strona next spoza uslugi ({following}) - "
-                    f"{INCOMPLETE}"
+                    message(
+                        "providers.next_page_outside_service",
+                        description=description,
+                        following=following,
+                        incomplete=INCOMPLETE,
+                    )
                 )
             yield found, following
             url = following
@@ -456,7 +507,9 @@ def parse_index_feature(feature: ET.Element) -> SkorowidzRecord | None:
     match = _YEAR.search(layer)
     if match and year.isdigit() and year != match[1]:
         logger.warning(
-            "Warstwa %s: rekord %s ma rok %s poza partycja warstwy", layer, sheet, year
+            message(
+                "providers.year_outside_partition", layer=layer, sheet=sheet, year=year
+            )
         )
     return record
 
@@ -564,7 +617,9 @@ class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
             return index_records(index, sheet_query_bbox(parser), layer.split(","))
         except DownloadError as e:
             raise DownloadError(
-                f"{parser.sheet}: {e}", sheet=parser.sheet, status_code=e.status_code
+                message("providers.sheet_error", sheet=parser.sheet, error=reason(e)),
+                sheet=parser.sheet,
+                status_code=e.status_code,
             ) from e.__cause__
 
 

@@ -262,7 +262,7 @@ def test_true_orto_cutout_native_grid(tmp_path, images):
     assert "SCALEFACTOR" not in query
     assert "coverage" not in _meta(unit.file.path)["request"]
 
-    with pytest.raises(ValidationError, match="bez --coverage"):
+    with pytest.raises(ValidationError, match="omit --coverage"):
         validate_data_request(
             **cutout, coverage="true", resolution="0.05m", output_dir=tmp_path
         )

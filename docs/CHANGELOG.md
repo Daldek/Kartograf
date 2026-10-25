@@ -26,9 +26,10 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - The library texts of the areas that moved into the message catalog are English by default and
   Polish with `--lang pl` (ADR-053), area by area: the sheet code parsers and geometry readers
   (`core`), the CRS transformations and the GeoPackage writer (`transform`), the transport engines,
-  the metadata cache and the CLMS Auth Proxy (`transport`, `cache`, `auth`), `sheet_info`, the argument
-  conversion (`catalog/kinds.py`) and the bbox check (`Invalid bbox: <reason>. Expected: ...` is one
-  catalog message). A client that matched the Polish text matches the English one or the `code` and
+  the metadata cache and the CLMS Auth Proxy (`transport`, `cache`, `auth`), the providers
+  (`providers`: GUGiK, CUZK, CORINE and SoilGrids), `sheet_info`, the argument conversion
+  (`catalog/kinds.py`) and the bbox check (`Invalid bbox: <reason>. Expected: ...` is one catalog
+  message). A client that matched the Polish text matches the English one or the `code` and
   `details`.
 - The package lives in `src/kartograf/` (ECO-011). Import paths do not change;
   repeat an editable install made before (`uv sync --locked --all-extras`).

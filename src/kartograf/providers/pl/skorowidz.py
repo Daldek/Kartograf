@@ -21,6 +21,7 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
+from kartograf.messages import message, reason
 from kartograf.sources.registry import parse_pl_system
 from kartograf.transport.http import (
     SessionPerThread,
@@ -186,13 +187,15 @@ def parse_skorowidz_records(text: str, layer: str) -> list[SkorowidzRecord]:
         raw = {key: _decode_value(value) for key, value in _FIELD.findall(match[1])}
         url = raw.get("url", "")
         if not url.startswith("https://"):
-            logger.warning("Warstwa %s: pominieto rekord bez URL HTTPS", layer)
+            logger.warning(message("providers.record_no_https_url", layer=layer))
             continue
         try:
             sheet = SheetParser(raw.get("godlo", "")).sheet
         except (ParseError, ValidationError):
             logger.warning(
-                "Warstwa %s: nieprawidlowe godlo %r", layer, raw.get("godlo")
+                message(
+                    "providers.invalid_sheet_code", layer=layer, code=raw.get("godlo")
+                )
             )
             continue
         system, zone = horizontal_crs_of(
@@ -225,10 +228,12 @@ def parse_skorowidz_records(text: str, layer: str) -> list[SkorowidzRecord]:
             )
             if outside:
                 logger.warning(
-                    "Warstwa %s: rekord %s ma rok %s poza partycja warstwy",
-                    layer,
-                    sheet,
-                    record_year,
+                    message(
+                        "providers.record_year_outside_partition",
+                        layer=layer,
+                        sheet=sheet,
+                        record_year=record_year,
+                    ),
                 )
         records.append(record)
     return records
@@ -260,9 +265,11 @@ def _matches(
         return False
     if record.system is None or (require_resolution and record.resolution_m is None):
         logger.warning(
-            "Warstwa %s: rekord %s bez ukladu lub rozdzielczosci - pominieto",
-            record.layer,
-            record.sheet,
+            message(
+                "providers.record_no_crs_resolution",
+                layer=record.layer,
+                sheet=record.sheet,
+            ),
         )
         return False
     if record.system != system:
@@ -369,7 +376,7 @@ def query_skorowidz_layer(
         "I": 50,
         "J": 50,
     }
-    description = f"{sheet}: warstwa {layer}"
+    description = message("transport.gfi_context", sheet=sheet, layer=layer)
     response = get_with_retry(
         session,
         f"{endpoint}?{urlencode(params)}",
@@ -382,11 +389,17 @@ def query_skorowidz_layer(
         match = _OGC_TEXT.search(text)
         excerpt = " ".join((match[1] if match else text).split())[:200]
         raise DownloadError(
-            f"{description}: raport wyjatku OGC: {excerpt}", sheet=sheet
+            message(
+                "providers.ogc_exception_report",
+                description=description,
+                excerpt=excerpt,
+            ),
+            sheet=sheet,
         )
     if not is_skorowidz_answer(text):
         raise DownloadError(
-            f"{description}: odpowiedz nie jest szablonem skorowidza GUGiK", sheet=sheet
+            message("providers.not_sheet_index_template", description=description),
+            sheet=sheet,
         )
     return parse_skorowidz_records(text, label or layer)
 
@@ -416,7 +429,7 @@ def _cached_no_coverage_message(sheet: str) -> str:
     Written before 2026-10-07. A cache hit never calls the provider's ``no_coverage`` -
     that may query the network (variant hints, P10).
     """
-    return f"Brak danych dla {sheet} (z cache metadanych)"
+    return message("providers.cached_no_coverage", sheet=sheet)
 
 
 # Flags renamed in 0.8.0 (ADR-038): a cached hint naming one is outdated.
@@ -538,7 +551,11 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     @staticmethod
     def _missing_endpoint(query: SkorowidzQuery, sheet: str) -> DownloadError:
         return DownloadError(
-            f"Brak endpointu skorowidza dla {query.cache_key[1]}, {query.cache_key[2]}",
+            message(
+                "providers.missing_index_endpoint",
+                product=query.cache_key[1],
+                variant=query.cache_key[2],
+            ),
             sheet=sheet,
         )
 
@@ -728,12 +745,14 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                     )
                 )
                 if not years:
-                    raise NoCoverageError(f"Brak kampanii {sheet}", sheet=sheet)
+                    raise NoCoverageError(
+                        message("providers.no_campaign", sheet=sheet), sheet=sheet
+                    )
                 raise year_range_error({sheet: years}, min_year, max_year, total=1)
         if not all_campaigns:
             return [kept[0]]
         # the manager logs the campaign count at INFO (`_fetch_campaigns`, M-7)
-        logger.debug("%s: %s kampanii", sheet, len(kept))
+        logger.debug(f"{sheet}: {len(kept)} campaigns")
         return kept
 
     def available_years(
@@ -835,7 +854,11 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             root = ET.fromstring(response.text)
         except ET.ParseError as exc:
             raise DownloadError(
-                f"GUGiK WMS GetCapabilities {wms_endpoint}: nieprawidlowy XML: {exc}"
+                message(
+                    "providers.wms_caps_invalid_xml",
+                    wms_endpoint=wms_endpoint,
+                    error=reason(exc),
+                )
             ) from exc
         # {name: (no year, aggregate, -year)} — yearly newest first, aggregate
         # last, the layer without a year ("Starsze") after all yearly ones
@@ -847,10 +870,11 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             if match is None:
                 if self.LAYER_FAMILY.match(elem.text):
                     logger.warning(
-                        "Warstwa GetCapabilities %s z rodziny produktu nie pasuje "
-                        "do wzorca %s - NIE odpytywana",
-                        elem.text,
-                        self.LAYER_PATTERN.pattern,
+                        message(
+                            "providers.wms_layer_pattern_mismatch",
+                            layer_name=elem.text,
+                            pattern=self.LAYER_PATTERN.pattern,
+                        ),
                     )
             else:
                 year, cumulative = match.group(1), match.group(2)
@@ -861,8 +885,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 )
         if not layers:
             raise DownloadError(
-                f"GUGiK WMS GetCapabilities {wms_endpoint}: "
-                "endpoint nie publikuje warstw skorowidza dla tego produktu"
+                message("providers.wms_no_index_layers", wms_endpoint=wms_endpoint)
             )
         return sorted(layers, key=layers.__getitem__)
 
@@ -889,13 +912,19 @@ def coverage_hints(parser: SheetParser, records: Iterable[SkorowidzRecord]) -> s
     (NMT resolution); the provider's own hints (resolution, orto colour
     variants) stay with it.
     """
-    hints = set()
+    hints: set[str] = set()
     for record in records:
         if parser.sheet_system == "2000" and record.sheet.startswith(
             parser.sheet + "."
         ):
             scale = SheetParser(record.sheet).scale
-            hints.add(f"Dostepny potomek {record.sheet} - uzyj --scale {scale}")
+            hints.add(
+                message(
+                    "providers.descendant_sheet_available",
+                    sheet=record.sheet,
+                    scale=scale,
+                )
+            )
         elif record.system is not None and record.system != parser.sheet_system:
             scale = SheetParser(record.sheet).scale
             # PL-1992 sheets come only at 1:10000 (no --scale); PL-2000 needs it
@@ -903,17 +932,22 @@ def coverage_hints(parser: SheetParser, records: Iterable[SkorowidzRecord]) -> s
             if record.system == "2000":
                 flags += f" --scale {scale}"
             hints.add(
-                f"Skorowidz ma ten obszar w PL-{record.system}: "
-                f"{record.sheet} ({scale}) - uzyj tego godla lub {flags}"
+                message(
+                    "providers.index_other_system_hint",
+                    system=record.system,
+                    sheet=record.sheet,
+                    scale=scale,
+                    flags=flags,
+                )
             )
     return hints
 
 
 def no_coverage_error(
-    parser: SheetParser, message: str, hints: Iterable[str]
+    parser: SheetParser, text: str, hints: Iterable[str]
 ) -> NoCoverageError:
     """``NoCoverageError`` with hints appended in a fixed order."""
     ordered = sorted(hints)
     if ordered:
-        message += ". " + "; ".join(ordered)
-    return NoCoverageError(message, sheet=parser.sheet, hints=tuple(ordered))
+        text = message("providers.no_coverage_hints", text=text, hints=ordered)
+    return NoCoverageError(text, sheet=parser.sheet, hints=tuple(ordered))

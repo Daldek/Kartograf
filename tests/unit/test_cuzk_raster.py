@@ -1321,7 +1321,7 @@ class TestVerticalTransform:
             )
             pinned = provider.route("CTES96").vertical
             assert pinned is vertical
-            with pytest.raises(ValidationError, match="geotransformacj"):
+            with pytest.raises(ValidationError, match="no usable geotransform"):
                 provider._apply_vertical_shift(path, pinned)
 
         assert not vertical.transform.called  # nothing was converted

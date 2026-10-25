@@ -19,6 +19,7 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.cuzk.client import CuzkClient, wkid
 from kartograf.providers.cuzk.raster import bbox_to_crs
@@ -79,8 +80,11 @@ class CuzkLazProvider(BaseProvider):
         )
         if self._channel.endpoint is None:
             raise ValidationError(
-                f"Deskryptor '{self.descriptor_key}' nie ma endpointu plikow "
-                f"{self._channel.horizontal_crs}"
+                message(
+                    "providers.no_file_endpoint",
+                    descriptor_key=self.descriptor_key,
+                    horizontal_crs=self._channel.horizontal_crs,
+                )
             )
         self._endpoint: str = self._channel.endpoint
         self._cache = cache
@@ -153,7 +157,10 @@ class CuzkLazProvider(BaseProvider):
             raise cz_laz_error(
                 model=self._model, vertical_crs=self._vertical_crs, system=system
             ) or ValidationError(
-                f"Godlo '{sheet}' spoza systemu {self._system}", option="sheet"
+                message(
+                    "providers.sheet_outside_system", sheet=sheet, system=self._system
+                ),
+                option="sheet",
             )
         return self._endpoint.format(sheet=sheet)
 
@@ -202,8 +209,7 @@ class CuzkLazProvider(BaseProvider):
             if e.status_code != 404:
                 raise
             raise DownloadError(
-                f"{e} - zweryfikuj godlo w indeksie KladyMapovychListu "
-                f"(arkusz moze byc znany indeksowi, ale plik openzu niedostepny)",
+                message("providers.openzu_file_unavailable", error=reason(e)),
                 sheet=sheet,
                 status_code=e.status_code,
             ) from e

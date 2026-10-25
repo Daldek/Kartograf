@@ -341,7 +341,7 @@ def test_all_no_records_is_no_coverage_with_provider_hints():
             session=recorded_wfs(answers), vertical_crs="EVRF2007", resolution="1m"
         ).resolve_campaigns(sheet, all_campaigns=True)
     assert str(every.value) == str(newest.value)
-    assert "Brak danych NMT 1m dla N-33-46-C-c-3-2" in str(every.value)
+    assert "No NMT 1m data for N-33-46-C-c-3-2" in str(every.value)
 
 
 def test_orto_all_min_year_always_queries_starsze():
@@ -460,7 +460,7 @@ def test_nmpt_inherits_campaigns(tmp_path):
         GugikNmptProvider(
             session=s, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         ).resolve_campaigns(sheet, all_campaigns=True)
-    assert "NMPT 0.5m EVRF2007 - uzyj --resolution 0.5m" in str(exc.value)
+    assert "NMPT 0.5m EVRF2007 - use --resolution 0.5m" in str(exc.value)
     # NMPT asks NMPT services only (its own and, for the variant hint, the
     # other height system) - never NMT
     assert {c.args[0].split("?")[0] for c in s.get.call_args_list} == {
@@ -518,7 +518,7 @@ def test_all_record_without_year_is_dropped_by_min_year():
 def test_records_without_any_year_are_no_coverage_not_conflict():
     """Spec 4.2 BRAK: no year to compare with = no data, as in the manager."""
     s = _blank_years({"81025", "81616", "75506", "74160", "72675"})
-    with pytest.raises(NoCoverageError, match=f"Brak kampanii {G}"):
+    with pytest.raises(NoCoverageError, match=f"No campaign for {G}"):
         GugikProvider(
             session=s, vertical_crs="EVRF2007", resolution="1m"
         ).resolve_campaigns(G, min_year=2024, max_year=2024)

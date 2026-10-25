@@ -76,14 +76,14 @@ class TestBdot10kProvider:
         layers = provider.get_available_layers()
         assert {"PTLZ", "PTWP", "PTZB", "BUBD", "SWRS"} <= set(layers)
         assert normalize_layers(layers) == sorted(layers)
-        with pytest.raises(ValidationError, match="brak takich klas"):
+        with pytest.raises(ValidationError, match="no such classes in BDOT10k"):
             normalize_layers(["PTWP", "XXXX"])
 
     def test_layer_description(self):
         """Test layer descriptions."""
         provider = Bdot10kProvider()
-        assert provider.get_layer_description("PTLZ") == "Tereny lesne"
-        assert provider.get_layer_description("PTWP") == "Wody powierzchniowe"
+        assert provider.get_layer_description("PTLZ") == "Forest areas"
+        assert provider.get_layer_description("PTWP") == "Surface waters"
 
     def test_supported_formats(self):
         """Test supported formats."""
@@ -350,7 +350,7 @@ class TestLandCoverCLI:
         assert result == 0
         captured = capsys.readouterr()
         assert "PTLZ" in captured.out
-        assert "Tereny lesne" in captured.out
+        assert "Forest areas" in captured.out
 
     def test_landcover_list_layers_corine(self, capsys):
         """Test list-layers for CORINE."""
@@ -579,7 +579,7 @@ class TestBdot10kProviderDownload:
     def test_download_by_teryt_invalid_format(self):
         """Invalid format raises ValidationError."""
         provider = Bdot10kProvider()
-        with pytest.raises(ValidationError, match="Nieobslugiwany format"):
+        with pytest.raises(ValidationError, match="Unsupported format"):
             provider.download_by_teryt("1465", Path("/tmp/out.gpkg"), format="XML")
 
     def test_download_by_teryt_success(self, tmp_path):
@@ -777,13 +777,13 @@ class TestBdot10kRetryAndIO:
         mock_resp = Mock()
         mock_resp.iter_content.return_value = [b"not a zip file"]
 
-        with pytest.raises(DownloadError, match="Nieprawidlowy plik ZIP"):
+        with pytest.raises(DownloadError, match="Invalid ZIP file"):
             provider._extract_gpkg_from_zip(mock_resp, output)
 
     def test_merge_gpkg_files_empty(self):
         """Empty file list -> DownloadError."""
         provider = Bdot10kProvider()
-        with pytest.raises(DownloadError, match="Brak plikow do scalenia"):
+        with pytest.raises(DownloadError, match="No files to merge"):
             provider._merge_gpkg_files([], Path("/tmp/out.gpkg"))
 
     def test_merge_gpkg_files(self, tmp_path):
@@ -878,7 +878,7 @@ class TestCorineProviderInit:
         proxy.last_error = 'Proxy request failed: {"error": "token"}'
         with (
             patch("kartograf.providers.corine._get_auth_proxy", return_value=proxy),
-            pytest.raises(DownloadError, match="proxy nie powiodlo sie: Proxy.*token"),
+            pytest.raises(DownloadError, match="Task via proxy failed: Proxy.*token"),
         ):
             provider._download_via_clms_proxy({}, Path("x"), 2018, 10)
 
@@ -1736,7 +1736,7 @@ class TestBdot10kLayersAndDuplicates:
     def test_bad_layer_code_rejected_before_network(self, tmp_path):
         session = _zip_session(b"")
         provider = Bdot10kProvider(session=session)
-        with pytest.raises(ValidationError, match="warstw"):
+        with pytest.raises(ValidationError, match="Invalid BDOT10k layer codes"):
             provider.download_package("0262", tmp_path / "x.gpkg", layers=["ptwp_a"])
         session.get.assert_not_called()
 
@@ -1827,7 +1827,7 @@ class TestBdot10kSidecarSource:
 
         monkeypatch.setattr(Path, "write_bytes", disk_full)
         provider = Bdot10kProvider(session=self._session(body, {}))
-        with pytest.raises(DownloadError, match="oryginalnego ZIP") as exc:
+        with pytest.raises(DownloadError, match="the original BDOT10k ZIP") as exc:
             provider.download_package(
                 "0262", tmp_path / "o" / "bdot10k_teryt_0262.gpkg", keep_raw=True
             )
@@ -1943,7 +1943,7 @@ class TestBdot10kSidecarSource:
             )
         assert rc == 11
         err = capsys.readouterr().err
-        assert "Error: 0262: Nie udalo sie rozpakowac" in err
+        assert "Error: 0262: Failed to extract or save the BDOT10k package" in err
         assert "Cannot allocate memory" in err
         assert "OSError" not in err
 

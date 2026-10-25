@@ -116,7 +116,7 @@ def test_eea_service_without_the_raster_layer_is_a_readable_error():
         pytest.raises(DownloadError) as error,
     ):
         provider._eea_raster_layer(2012, 30)
-    assert "nie ma warstwy rastrowej" in str(error.value)
+    assert "has no raster layer" in str(error.value)
     assert "WMS returned" not in str(error.value)
 
 
@@ -146,7 +146,7 @@ def test_fully_transparent_preview_is_no_coverage_and_leaves_no_file(tmp_path, y
     provider._wms_layers[2018] = "12"
     with _serve_png(False, []), pytest.raises(NoCoverageError) as error:
         provider._download_via_wms(AREA, tmp_path / "x.png", year, 30)
-    assert "w calosci przezroczysty" in str(error.value)
+    assert "is fully transparent" in str(error.value)
     assert list(tmp_path.iterdir()) == []
 
 
@@ -154,7 +154,7 @@ def test_corine_year_error_lists_the_years_with_the_flag():
     with pytest.raises(ValidationError) as error:
         CorineProvider.check_year(2019)
     assert str(error.value) == (
-        "--year 2019: niedostepne dla --product corine; dostepne: 2018, 2012, "
+        "--year 2019: not available for --product corine; available: 2018, 2012, "
         "2006, 2000, 1990"
     )
     assert error.value.option == "year"
@@ -232,7 +232,7 @@ def test_ocd_edition_comes_from_the_clay_map_its_title_has_none():
         own = provider.edition("clay")
         assert own.id == "2.0" and "source_property" not in own.to_extra()
         maps["clay"] = "Soilgrids property: Clay"
-        with pytest.raises(DownloadError, match="brak wydania"):
+        with pytest.raises(DownloadError, match="no edition in title"):
             provider.edition("ocd")
 
 
@@ -389,8 +389,8 @@ def test_layers_name_only_classes_of_the_classification_and_no_blank_code():
     with pytest.raises(ValidationError) as unknown:
         normalize_layers(["PTWP", "XXXX"])
     assert unknown.value.option == "layers"
-    assert "--layers XXXX: brak takich klas w BDOT10k" in str(unknown.value)
-    with pytest.raises(ValidationError, match="pusty kod warstwy"):
+    assert "--layers XXXX: no such classes in BDOT10k" in str(unknown.value)
+    with pytest.raises(ValidationError, match="empty layer code"):
         normalize_layers(["SWRS", ""])
 
 
@@ -401,7 +401,7 @@ def test_class_absent_from_a_powiat_package_is_reported_not_an_error(tmp_path):
         "0262", tmp_path / "o" / "x.gpkg", layers=["PTWP", "SWKN"]
     )
     assert package.classes == ("PTWP",) and package.absent == ("SWKN",)
-    with pytest.raises(NoCoverageError, match="nie ma plikow klas SWKN"):
+    with pytest.raises(NoCoverageError, match="has no files for classes SWKN"):
         provider.download_package("0262", tmp_path / "p" / "x.gpkg", layers=["SWKN"])
 
 

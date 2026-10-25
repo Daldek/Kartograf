@@ -32,6 +32,7 @@ from rasterio.windows import Window
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError
+from kartograf.messages import message, reason
 from kartograf.transport.http import SessionPerThread, get_with_retry
 
 logger = logging.getLogger(__name__)
@@ -101,7 +102,7 @@ def _query(bbox: BBox, session: requests.Session, timeout: float) -> list[str]:
         session,
         PRG_WFS_ENDPOINT,
         timeout=timeout,
-        description="zapytanie PRG (powiaty)",
+        description=message("providers.prg_query_counties"),
         params=params,
     )
     root = _feature_collection(response.content)
@@ -110,7 +111,7 @@ def _query(bbox: BBox, session: requests.Session, timeout: float) -> list[str]:
     for element in root.iter(f"{_MS}JPT_KOD_JE"):
         code = (element.text or "").strip()
         if not _TERYT.fullmatch(code):
-            raise DownloadError(f"PRG WFS: nieprawidlowy kod TERYT powiatu {code!r}")
+            raise DownloadError(message("providers.invalid_county_teryt", code=code))
         codes.append(code)
     _check_complete(root, len(codes))
     return sorted(set(codes))
@@ -121,10 +122,12 @@ def _feature_collection(content: bytes) -> ET.Element:
     try:
         root = ET.fromstring(content)
     except ET.ParseError as e:
-        raise DownloadError(f"PRG WFS: odpowiedz nie jest XML: {e}") from e
+        raise DownloadError(
+            message("providers.response_not_xml", error=reason(e))
+        ) from e
     if root.tag != _WFS_COLLECTION:
         text = " ".join(t.strip() for t in root.itertext() if t.strip())[:300]
-        raise DownloadError(f"PRG WFS: blad uslugi ({root.tag}): {text}")
+        raise DownloadError(message("providers.service_error", tag=root.tag, text=text))
     return root
 
 
@@ -132,13 +135,13 @@ def _ring(element: ET.Element) -> list[list[float]]:
     """Decode GML (northing, easting) pairs as GeoJSON (easting, northing)."""
     pos = element.find(f"{_GML}LinearRing/{_GML}posList")
     if pos is None or pos.get("srsDimension", "2") != "2":
-        raise DownloadError("PRG WFS: brak dwuwymiarowej listy punktow GML")
+        raise DownloadError(message("providers.no_2d_point_list"))
     try:
         values = np.fromstring(pos.text or "", sep=" ")
     except ValueError as e:
-        raise DownloadError("PRG WFS: nieprawidlowa lista punktow GML") from e
+        raise DownloadError(message("providers.invalid_point_list")) from e
     if values.size < 8 or values.size % 2 or not np.isfinite(values).all():
-        raise DownloadError("PRG WFS: nieprawidlowa lista punktow GML")
+        raise DownloadError(message("providers.invalid_point_list"))
     pairs: list[list[float]] = values.reshape(-1, 2)[:, ::-1].tolist()
     return pairs
 
@@ -146,7 +149,7 @@ def _ring(element: ET.Element) -> list[list[float]]:
 def _polygon(element: ET.Element) -> list[list[list[float]]]:
     exterior = element.find(f"{_GML}exterior")
     if exterior is None:
-        raise DownloadError("PRG WFS: wielokat bez zewnetrznego pierscienia")
+        raise DownloadError(message("providers.polygon_no_exterior"))
     return [_ring(exterior)] + [
         _ring(interior) for interior in element.findall(f"{_GML}interior")
     ]
@@ -158,31 +161,35 @@ def _land_geometries(root: ET.Element, layer: str) -> tuple[dict[str, Any], ...]
     returned = root.get("numberReturned", "")
     if not returned.isdigit() or int(returned) != len(members) or root.get("next"):
         raise DownloadError(
-            f"PRG WFS: niepelna odpowiedz {layer} (numberReturned={returned})"
+            message("providers.incomplete_returned", layer=layer, returned=returned)
         )
     matched = root.get("numberMatched", "")
     if matched.isdigit() and int(matched) > len(members):
         raise DownloadError(
-            f"PRG WFS: niepelna odpowiedz {layer} (numberMatched={matched})"
+            message("providers.incomplete_matched", layer=layer, matched=matched)
         )
     geometries: list[dict[str, Any]] = []
     for member in members:
         feature = member.find(layer.replace("ms:", _MS))
         geom = feature.find(f"{_MS}msGeometry") if feature is not None else None
         if geom is None or len(geom) != 1:
-            raise DownloadError(f"PRG WFS: brak geometrii {layer}")
+            raise DownloadError(message("providers.no_layer_geometry", layer=layer))
         shape = geom[0]
         if shape.tag == f"{_GML}Polygon":
             geometries.append({"type": "Polygon", "coordinates": _polygon(shape)})
         elif shape.tag == f"{_GML}MultiSurface":
             surfaces = shape.findall(f"{_GML}surfaceMember/{_GML}Polygon")
             if not surfaces:
-                raise DownloadError(f"PRG WFS: pusta geometria MultiSurface {layer}")
+                raise DownloadError(
+                    message("providers.empty_multisurface", layer=layer)
+                )
             geometries.append(
                 {"type": "MultiPolygon", "coordinates": [_polygon(p) for p in surfaces]}
             )
         else:
-            raise DownloadError(f"PRG WFS: nieznana geometria {layer}: {shape.tag}")
+            raise DownloadError(
+                message("providers.unknown_geometry", layer=layer, tag=shape.tag)
+            )
     return tuple(geometries)
 
 
@@ -306,12 +313,12 @@ def fetch_land_mask(
             current_session,
             PRG_WFS_ENDPOINT,
             timeout=timeout,
-            description=f"zapytanie PRG ({layer})",
+            description=message("providers.prg_query_layer", layer=layer),
             params=params,
         )
         geometries = _land_geometries(_feature_collection(response.content), layer)
         if layer == _LAND_LAYER and not geometries:
-            raise DownloadError("PRG WFS: brak granicy panstwa")
+            raise DownloadError(message("providers.no_national_boundary"))
         results.append(geometries)
         logger.debug("PRG land mask: %s: %s features", layer, len(geometries))
     return LandMask(country=results[0], water=results[1] + results[2])
@@ -332,16 +339,22 @@ def _check_complete(root: ET.Element, found: int) -> None:
     returned_attr = root.get("numberReturned", "")
     if returned_attr.isdigit() and int(returned_attr) != found:
         raise DownloadError(
-            f"PRG WFS: niespojna odpowiedz: numberReturned={returned_attr}, "
-            f"kodow {found}"
+            message(
+                "providers.inconsistent_response",
+                returned_attr=returned_attr,
+                found=found,
+            )
         )
     returned = found
     # non-numeric numberMatched ('unknown'): a full page counts as cut
     cut = returned < int(matched) if matched.isdigit() else returned >= _COUNT
     if cut or root.get("next"):
         raise DownloadError(
-            f"PRG WFS: niepelna lista powiatow ({returned} z "
-            f"{matched or 'nieznanej liczby'}) - zmniejsz obszar"
+            message(
+                "providers.incomplete_county_list",
+                returned=returned,
+                matched=matched or message("providers.unknown_county_count"),
+            )
         )
 
 

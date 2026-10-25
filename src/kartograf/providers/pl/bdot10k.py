@@ -34,6 +34,7 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.interrupt import check_stop
+from kartograf.messages import message, reason
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.pl.prg import discover_teryts_for_bbox
 from kartograf.transport.http import (
@@ -56,64 +57,64 @@ _LAYER_CODE = re.compile(r"[A-Z]{4}")
 # this list; GUGiK's own table OT_BIUB_L of powiat 2472 is a typo of BUIB).
 # A class a powiat has no objects of is missing in its package.
 BDOT10K_CLASSES = {
-    "ADJA": "Jednostki podzialu administracyjnego",
-    "ADMS": "Miejscowosci",
-    "BUBD": "Budynki",
-    "BUHD": "Budowle hydrotechniczne",
-    "BUIB": "Inne budowle",
-    "BUIN": "Budowle inzynierskie",
-    "BUIT": "Inne urzadzenia techniczne",
-    "BUSP": "Budowle sportowe",
-    "BUTR": "Urzadzenia transportowe",
-    "BUUO": "Umocnienia drogowe, kolejowe i wodne",
-    "BUWT": "Wysokie budowle techniczne",
-    "BUZM": "Budowle ziemne",
-    "BUZT": "Zbiorniki techniczne",
-    "KUHO": "Kompleksy uslug hotelarskich",
-    "KUHU": "Bazary i targowiska",
-    "KUKO": "Kompleksy komunikacyjne",
-    "KUMN": "Osiedla mieszkaniowe",
-    "KUOS": "Kompleksy oswiatowe",
-    "KUOZ": "Kompleksy ochrony zdrowia i opieki spolecznej",
-    "KUPG": "Kompleksy przemyslowo-gospodarcze",
-    "KUPW": "Poligony wojskowe",
-    "KUSC": "Kompleksy sakralne i cmentarze",
-    "KUSK": "Kompleksy sportowe i rekreacyjne",
-    "KUZA": "Kompleksy zabytkowo-historyczne",
-    "OIKM": "Obiekty zwiazane z komunikacja",
-    "OIMK": "Mokradla",
-    "OIOR": "Obiekty o znaczeniu orientacyjnym",
-    "OIPR": "Obiekty przyrodnicze",
-    "OISZ": "Szuwary",
-    "PTGN": "Grunty nieuzytkowe",
-    "PTKM": "Tereny komunikacyjne",
-    "PTLZ": "Tereny lesne",
-    "PTNZ": "Tereny niezabudowane",
+    "ADJA": message("providers.class_adja"),
+    "ADMS": message("providers.class_adms"),
+    "BUBD": message("providers.class_bubd"),
+    "BUHD": message("providers.class_buhd"),
+    "BUIB": message("providers.class_buib"),
+    "BUIN": message("providers.class_buin"),
+    "BUIT": message("providers.class_buit"),
+    "BUSP": message("providers.class_busp"),
+    "BUTR": message("providers.class_butr"),
+    "BUUO": message("providers.class_buuo"),
+    "BUWT": message("providers.class_buwt"),
+    "BUZM": message("providers.class_buzm"),
+    "BUZT": message("providers.class_buzt"),
+    "KUHO": message("providers.class_kuho"),
+    "KUHU": message("providers.class_kuhu"),
+    "KUKO": message("providers.class_kuko"),
+    "KUMN": message("providers.class_kumn"),
+    "KUOS": message("providers.class_kuos"),
+    "KUOZ": message("providers.class_kuoz"),
+    "KUPG": message("providers.class_kupg"),
+    "KUPW": message("providers.class_kupw"),
+    "KUSC": message("providers.class_kusc"),
+    "KUSK": message("providers.class_kusk"),
+    "KUZA": message("providers.class_kuza"),
+    "OIKM": message("providers.class_oikm"),
+    "OIMK": message("providers.class_oimk"),
+    "OIOR": message("providers.class_oior"),
+    "OIPR": message("providers.class_oipr"),
+    "OISZ": message("providers.class_oisz"),
+    "PTGN": message("providers.class_ptgn"),
+    "PTKM": message("providers.class_ptkm"),
+    "PTLZ": message("providers.class_ptlz"),
+    "PTNZ": message("providers.class_ptnz"),
     "PTPL": "Place",
-    "PTRK": "Roslinnosc krzewiasta",
-    "PTSO": "Skladowiska",
-    "PTTR": "Tereny rolne",
-    "PTUT": "Uprawy trwale",
-    "PTWP": "Wody powierzchniowe",
-    "PTWZ": "Wyrobiska i zwalowiska",
-    "PTZB": "Tereny zabudowane",
-    "RTLW": "Linie wysokosciowe",
-    "RTPW": "Punkty wysokosciowe",
-    "SKDR": "Drogi",
-    "SKJZ": "Jezdnie",
-    "SKPP": "Przeprawy",
-    "SKRP": "Ciagi ruchu pieszego i rowerowego",
-    "SKRW": "Ronda i wezly drogowe",
-    "SKTR": "Tory i zespoly torow",
-    "SULN": "Linie elektroenergetyczne",
-    "SUPR": "Przewody rurowe",
-    "SWKN": "Kanaly",
-    "SWRM": "Rowy melioracyjne",
-    "SWRS": "Rzeki i strumienie",
-    "TCON": "Obszary Natura 2000",
-    "TCPK": "Parki krajobrazowe",
-    "TCPN": "Parki narodowe",
-    "TCRZ": "Rezerwaty",
+    "PTRK": message("providers.class_ptrk"),
+    "PTSO": message("providers.class_ptso"),
+    "PTTR": message("providers.class_pttr"),
+    "PTUT": message("providers.class_ptut"),
+    "PTWP": message("providers.class_ptwp"),
+    "PTWZ": message("providers.class_ptwz"),
+    "PTZB": message("providers.class_ptzb"),
+    "RTLW": message("providers.class_rtlw"),
+    "RTPW": message("providers.class_rtpw"),
+    "SKDR": message("providers.class_skdr"),
+    "SKJZ": message("providers.class_skjz"),
+    "SKPP": message("providers.class_skpp"),
+    "SKRP": message("providers.class_skrp"),
+    "SKRW": message("providers.class_skrw"),
+    "SKTR": message("providers.class_sktr"),
+    "SULN": message("providers.class_suln"),
+    "SUPR": message("providers.class_supr"),
+    "SWKN": message("providers.class_swkn"),
+    "SWRM": message("providers.class_swrm"),
+    "SWRS": message("providers.class_swrs"),
+    "TCON": message("providers.class_tcon"),
+    "TCPK": message("providers.class_tcpk"),
+    "TCPN": message("providers.class_tcpn"),
+    "TCRZ": message("providers.class_tcrz"),
 }
 
 
@@ -130,28 +131,28 @@ def normalize_layers(layers: Sequence[str]) -> list[str]:
     wanted = sorted({layer.strip().upper() for layer in layers})
     if not wanted:
         raise ValidationError(
-            "--layers: podaj co najmniej jeden kod warstwy BDOT10k (4 litery, "
-            "np. PTWP, SWRS)",
+            message("providers.layers_required"),
             option="layers",
         )
     if "" in wanted:
         raise ValidationError(
-            "--layers: pusty kod warstwy (nadmiarowy przecinek?); podaj kody "
-            "BDOT10k po przecinku (4 litery, np. PTWP,SWRS)",
+            message("providers.layers_empty_code"),
             option="layers",
         )
     bad = [layer for layer in wanted if not _LAYER_CODE.fullmatch(layer)]
     if bad:
         raise ValidationError(
-            f"Nieprawidlowe kody warstw BDOT10k: {', '.join(bad)} (4 litery, np. "
-            "PTWP, SWRS)",
+            message("providers.layers_invalid_codes", bad=", ".join(bad)),
             option="layers",
         )
     unknown = [layer for layer in wanted if layer not in BDOT10K_CLASSES]
     if unknown:
         raise ValidationError(
-            f"--layers {', '.join(unknown)}: brak takich klas w BDOT10k; "
-            f"dostepne: {', '.join(BDOT10K_CLASSES)}",
+            message(
+                "providers.layers_unknown_classes",
+                unknown=", ".join(unknown),
+                bdot10k_classes=", ".join(BDOT10K_CLASSES),
+            ),
             option="layers",
             allowed=tuple(BDOT10K_CLASSES),
         )
@@ -354,22 +355,20 @@ class Bdot10kProvider(LandCoverProvider):
             Download failure or two package files with the same table name.
         """
         if not self.validate_admin_unit(code):
-            raise ValidationError(f"Nieprawidlowy kod TERYT: {code}")
+            raise ValidationError(message("providers.invalid_teryt_code", code=code))
         if format not in ["GPKG", "SHP"]:
             raise ValidationError(
-                f"Nieobslugiwany format: {format}. Uzyj 'GPKG' albo 'SHP'"
+                message("providers.unsupported_format", format=format)
             )
         wanted = None
         if layers is not None:
             wanted = normalize_layers(layers)
             if format != "GPKG":
-                raise ValidationError("Filtr warstw BDOT10k dziala tylko z GPKG")
+                raise ValidationError(message("providers.layer_filter_gpkg_only"))
         if keep_raw and format != "GPKG":
-            raise ValidationError(
-                "keep_raw dotyczy tylko GPKG (SHP to juz oryginalny ZIP)"
-            )
+            raise ValidationError(message("providers.keep_raw_gpkg_only"))
         if raw_path is not None and not keep_raw:
-            raise ValidationError("raw_path wymaga keep_raw=True")
+            raise ValidationError(message("providers.raw_path_needs_keep_raw"))
         output_path = Path(output_path)
         if format == "SHP":
             # The SHP package is a ZIP archive of shapefiles (not unpacked): the name
@@ -457,8 +456,11 @@ class Bdot10kProvider(LandCoverProvider):
 
         if woj_code not in WOJEWODZTWO_NAMES:
             raise ValidationError(
-                f"Nieznany kod wojewodztwa: {woj_code}. "
-                f"Dostepne kody: {list(WOJEWODZTWO_NAMES.keys())}"
+                message(
+                    "providers.unknown_voivodeship_code",
+                    woj_code=woj_code,
+                    keys=list(WOJEWODZTWO_NAMES.keys()),
+                )
             )
 
         pattern = self.OPENDATA_PATTERNS.get(format, self.OPENDATA_PATTERNS["GPKG"])
@@ -489,12 +491,15 @@ class Bdot10kProvider(LandCoverProvider):
         """
         teryts = self.teryts_for_area(bbox, timeout=timeout)
         if not teryts:
-            raise NoCoverageError(f"{what}: obszar nie przecina zadnego powiatu (PRG)")
+            raise NoCoverageError(message("providers.area_no_county", what=what))
         if len(teryts) > 1:
             raise ValidationError(
-                f"{what}: obszar przecina {len(teryts)} powiaty ({', '.join(teryts)}); "
-                "uzyj download_landcover(product='bdot10k', bbox=..., "
-                "output_dir=...) albo pobierz kazdy powiat przez --teryt"
+                message(
+                    "providers.area_multiple_counties",
+                    what=what,
+                    teryts_count=len(teryts),
+                    teryts=", ".join(teryts),
+                )
             )
         return teryts[0]
 
@@ -545,7 +550,9 @@ class Bdot10kProvider(LandCoverProvider):
 
         bbox = SheetParser(sheet).get_bbox(crs="EPSG:2180")
         teryt = self._single_teryt(bbox, f"BDOT10k {sheet}", timeout)
-        logger.info(f"Godlo {sheet} is in powiat {teryt}, downloading county package")
+        logger.info(
+            f"Sheet code {sheet} is in county {teryt}, downloading county package"
+        )
         return self.download_by_admin_unit(
             teryt, output_path, timeout, format=format, **kwargs
         )
@@ -676,7 +683,7 @@ class Bdot10kProvider(LandCoverProvider):
 
                 if not all_gpkg:
                     raise DownloadError(
-                        f"Brak plikow GPKG w ZIP. Zawartosc: {zf.namelist()}"
+                        message("providers.no_gpkg_in_zip", namelist=zf.namelist())
                     )
 
                 if layers is not None:
@@ -688,9 +695,10 @@ class Bdot10kProvider(LandCoverProvider):
                     absent = [code for code in by_code if code not in kept]
                     if not kept:
                         raise NoCoverageError(
-                            "paczka BDOT10k nie ma plikow klas "
-                            f"{', '.join(absent)} (brak obiektow tych klas w "
-                            "powiecie)"
+                            message(
+                                "providers.package_missing_class_files",
+                                absent=", ".join(absent),
+                            )
                         )
                     if report is not None:
                         report["classes"] = kept
@@ -731,9 +739,12 @@ class Bdot10kProvider(LandCoverProvider):
                                 self._write_raw_zip(zip_data, raw_path)
                             except OSError as e:
                                 raise DownloadError(
-                                    "Nie udalo sie zapisac oryginalnego ZIP "
-                                    f"BDOT10k {raw_path.name}: {e}; poprzedni "
-                                    f"{output_gpkg.name} (jesli byl) bez zmian"
+                                    message(
+                                        "providers.raw_zip_save_failed",
+                                        name=raw_path.name,
+                                        error=reason(e),
+                                        output_gpkg_name=output_gpkg.name,
+                                    )
                                 ) from e
                         # os.replace: overwrites an existing file on Windows
                         # too (--force)
@@ -747,13 +758,18 @@ class Bdot10kProvider(LandCoverProvider):
                     return output_gpkg
 
         except zipfile.BadZipFile as e:
-            raise DownloadError(f"Nieprawidlowy plik ZIP: {e}") from e
+            raise DownloadError(
+                message("providers.invalid_zip_file", error=reason(e))
+            ) from e
         except OSError as e:
             # disk full, no memory for the temp file, share errors: a
             # KartografError, not a bare OSError
             raise DownloadError(
-                "Nie udalo sie rozpakowac ani zapisac paczki BDOT10k "
-                f"({output_path.with_suffix('.gpkg').name}): {e}"
+                message(
+                    "providers.package_extract_failed",
+                    name=output_path.with_suffix(".gpkg").name,
+                    error=reason(e),
+                )
             ) from e
 
     @staticmethod
@@ -796,7 +812,7 @@ class Bdot10kProvider(LandCoverProvider):
             would silently lose the second copy)
         """
         if not source_files:
-            raise DownloadError("Brak plikow do scalenia")
+            raise DownloadError(message("providers.no_files_to_merge"))
 
         # SQLite ALWAYS writes in a local temp directory: on a CIFS/SMB share without
         # `nobrl`, byte-range locks ended the merge with `database is locked`. The
@@ -862,8 +878,11 @@ class Bdot10kProvider(LandCoverProvider):
                 )
                 if cursor.fetchone():
                     raise DownloadError(
-                        f"Paczka BDOT10k: tabela {table_name} wystepuje w wiecej niz "
-                        f"jednym pliku ({source_path.name}) - scalenie zgubiloby dane"
+                        message(
+                            "providers.table_in_multiple_files",
+                            table_name=table_name,
+                            name=source_path.name,
+                        )
                     )
 
                 # Get table schema from source

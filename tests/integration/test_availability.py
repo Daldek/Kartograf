@@ -270,7 +270,7 @@ def test_availability_never_downloads():
 
 def test_failure_is_error_not_empty():
     exception = wfs_response(wfs_fixture("exception_report.xml"), status=400)
-    with pytest.raises(DownloadError, match="wynik bylby niepelny"):
+    with pytest.raises(DownloadError, match="the result would be incomplete"):
         _check(
             RecordedIndex(
                 _areas("nmt", "krakow"),
@@ -303,7 +303,7 @@ def test_failure_is_error_not_empty():
             ),
         }
     )
-    with patch("time.sleep"), pytest.raises(DownloadError, match="niepelny"):
+    with patch("time.sleep"), pytest.raises(DownloadError, match="incomplete"):
         _check(broken, product="nmt", country="pl", bbox=KRAKOW, year=2025)
 
     with pytest.raises(DownloadError, match="PRG"):

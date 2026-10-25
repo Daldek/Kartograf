@@ -491,9 +491,11 @@ class TestNoCoverageHintsOnRealWfs:
                     ),
                 ],
                 (
-                    "Dostepny potomek 6.129.30.13.4 - uzyj --scale 1:1000",
-                    "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1 (1:10000) "
-                    "- uzyj tego godla lub --sheet-system 1992",
+                    "Available descendant 6.129.30.13.4 - use --scale 1:1000",
+                    (
+                        "The sheet index has this area in PL-1992: M-34-63-A-c-2-1 "
+                        "(1:10000) - use this sheet code or --sheet-system 1992"
+                    ),
                 ),
                 id="c6f-1_10000",
             ),
@@ -518,9 +520,11 @@ class TestNoCoverageHintsOnRealWfs:
                     ),
                 ],
                 (
-                    "Dostepny potomek 5.167.25.13 - uzyj --scale 1:2000",
-                    "Skorowidz ma ten obszar w PL-1992: M-33-8-A-a-3-1 (1:10000) "
-                    "- uzyj tego godla lub --sheet-system 1992",
+                    "Available descendant 5.167.25.13 - use --scale 1:2000",
+                    (
+                        "The sheet index has this area in PL-1992: M-33-8-A-a-3-1 "
+                        "(1:10000) - use this sheet code or --sheet-system 1992"
+                    ),
                 ),
                 id="c6g-kron86",
             ),
@@ -557,8 +561,9 @@ class TestNoCoverageHintsOnRealWfs:
                 session=session, vertical_crs="EVRF2007", resolution="1m"
             )._resolve_sheet(sheet)
         assert str(exc.value) == (
-            "Brak danych NMT 1m dla N-33-58-A-c-1-3 (uklad PL-1992, EVRF2007). "
-            "Skorowidz GUGiK ma ten arkusz w NMT 0.5m EVRF2007 - uzyj --resolution 0.5m"
+            "No NMT 1m data for N-33-58-A-c-1-3 (PL-1992 system, EVRF2007). The "
+            "GUGiK sheet index has this sheet in NMT 0.5m EVRF2007 - use "
+            "--resolution 0.5m"
         )
         # the hint comes from the answer itself, not from a second query
         assert len(wfs_requests(session, NMT_EVRF2007)) == 1
@@ -572,10 +577,14 @@ class TestNoCoverageHintsOnRealWfs:
                 session=session, vertical_crs="EVRF2007", resolution="1m"
             )._resolve_sheet(sheet)
         assert exc.value.hints == (
-            "Skorowidz GUGiK ma ten arkusz w NMPT 0.5m EVRF2007 - uzyj "
-            "--resolution 0.5m",
-            "Skorowidz GUGiK ma ten arkusz w NMPT 0.6m EVRF2007 - uzyj "
-            "--resolution 0.6m",
+            (
+                "The GUGiK sheet index has this sheet in NMPT 0.5m EVRF2007 - use "
+                "--resolution 0.5m"
+            ),
+            (
+                "The GUGiK sheet index has this sheet in NMPT 0.6m EVRF2007 - use "
+                "--resolution 0.6m"
+            ),
         )
         # its own service and, for P10, the other height system - never NMT
         assert [c.args[0].split("?")[0] for c in session.get.call_args_list] == [
@@ -593,13 +602,20 @@ class TestNoCoverageHintsOnRealWfs:
                 session=session, vertical_crs="KRON86", resolution="1m"
             )._resolve_sheet(sheet)
         assert exc.value.hints == (
-            "Skorowidz GUGiK ma ten arkusz w NMT TBD 25m KRON86 - uzyj --format TBD "
-            "--resolution 25m",
-            "Skorowidz GUGiK ma ten arkusz w NMT TBD 30m KRON86 - uzyj --format TBD "
-            "--resolution 30m",
-            "Skorowidz GUGiK ma ten arkusz w NMT TIN KRON86 - uzyj --format TIN",
-            "Skorowidz GUGiK ma ten arkusz w NMT TTN KRON86 - uzyj --format TTN",
-            "Skorowidz GUGiK ma ten arkusz w NMT XYZ 1m KRON86 - uzyj --format XYZ",
+            (
+                "The GUGiK sheet index has this sheet in NMT TBD 25m KRON86 - use "
+                "--format TBD --resolution 25m"
+            ),
+            (
+                "The GUGiK sheet index has this sheet in NMT TBD 30m KRON86 - use "
+                "--format TBD --resolution 30m"
+            ),
+            "The GUGiK sheet index has this sheet in NMT TIN KRON86 - use --format TIN",
+            "The GUGiK sheet index has this sheet in NMT TTN KRON86 - use --format TTN",
+            (
+                "The GUGiK sheet index has this sheet in NMT XYZ 1m KRON86 - use "
+                "--format XYZ"
+            ),
         )
         assert all(sheet not in hint for hint in exc.value.hints)
 
@@ -611,12 +627,15 @@ class TestVariantHintOnRealWfs:
 
     SHEET = "N-33-58-A-c-1-4"
     EVRF2007_HINTS = (
-        "Skorowidz GUGiK ma ten arkusz w NMT 0.5m EVRF2007 - uzyj --resolution 0.5m",
-        "Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 - uzyj --resolution 1m",
-        "Skorowidz GUGiK ma ten arkusz w NMT 5m EVRF2007 - uzyj --resolution 5m",
+        (
+            "The GUGiK sheet index has this sheet in NMT 0.5m EVRF2007 - use "
+            "--resolution 0.5m"
+        ),
+        "The GUGiK sheet index has this sheet in NMT 1m EVRF2007 - use --resolution 1m",
+        "The GUGiK sheet index has this sheet in NMT 5m EVRF2007 - use --resolution 5m",
     )
     KRON86_HINT = (
-        "Skorowidz GUGiK ma ten arkusz w NMT 1m KRON86 - uzyj --resolution 1m "
+        "The GUGiK sheet index has this sheet in NMT 1m KRON86 - use --resolution 1m "
         "--vertical-crs KRON86"
     )
 
@@ -657,15 +676,17 @@ class TestVariantHintOnRealWfs:
         assert caught == [
             self.EVRF2007_HINTS,
             (
-                "Skorowidz GUGiK ma ten arkusz w NMT 0.5m EVRF2007 - uzyj "
-                "--resolution 0.5m",
+                (
+                    "The GUGiK sheet index has this sheet in NMT 0.5m EVRF2007 - use "
+                    "--resolution 0.5m"
+                ),
             ),
         ]
         assert len(wfs_requests(session, NMT_KRON86)) == 1
         assert len(wfs_requests(session, NMT_EVRF2007)) == 2
         assert any(
             r.levelname == "WARNING"
-            and "nie sprawdzono ukladu KRON86" in r.getMessage()
+            and "vertical CRS KRON86 was not checked" in r.getMessage()
             for r in caplog.records
         )
 
@@ -907,7 +928,7 @@ class TestLazDiscoveryOnRealWfs:
             )
         err = caught.value
         assert err.sheets == {"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)}
-        assert "brak kafli LAZ z roku 2024 dla 1 z 1 kafli obszaru" in str(err)
+        assert "brak LAZ tiles z roku 2024 dla 1 z 1 area tiles" in str(err)
         assert "N-34-139-A-c-1-1-3-4 (2025, PL-1992)" in str(err)
         assert "--min-year 2024" in str(err)
         assert "--max-year 2024" in str(err)
@@ -918,14 +939,14 @@ class TestLazDiscoveryOnRealWfs:
     @pytest.mark.parametrize(
         ("bounds", "message"),
         [
-            ({"min_year": 2010, "max_year": 2017}, "przedzial 2010-2017 nie ma"),
-            ({"year": 2017}, "rocznik 2017 nie istnieje"),
-            ({"min_year": 2017, "max_year": 2017}, "rocznik 2017 nie istnieje"),
+            ({"min_year": 2010, "max_year": 2017}, "range 2010-2017 has no vintage"),
+            ({"year": 2017}, "vintage 2017 does not exist"),
+            ({"min_year": 2017, "max_year": 2017}, "vintage 2017 does not exist"),
         ],
     )
     def test_laz_range_without_service_year(self, bounds, message):
         session = laz_session()
-        with pytest.raises(DownloadError, match=f"{message} .*usludze EVRF2007"):
+        with pytest.raises(DownloadError, match=f"{message} in service EVRF2007"):
             GugikLazProvider(session=session, vertical_crs="EVRF2007").select_tiles(
                 W2_BBOX, **bounds
             )
@@ -988,7 +1009,7 @@ class TestLazDiscoveryOnRealWfs:
             "M-33-35-A-c-4-4-3-2 (2024, PL-1992): dostepne roczniki "
             "2019, 2022, 2024, 2025 (tylko arkusze niepelne)"
         ) in str(err)
-        assert "dla 1 z 3 kafli obszaru" in str(err)
+        assert "area tiles" in str(err)
         assert "--max-year 2025" in str(err)
         assert "--min-year" not in str(err)
         assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
@@ -1017,7 +1038,7 @@ class TestLazDiscoveryOnRealWfs:
             )
         err = caught.value
         assert err.sheets == {sheet: years}
-        assert f"z roku {year} dla 1 z 2 kafli obszaru" in str(err)
+        assert f"z roku {year} dla 1 z 2 area tiles" in str(err)
         assert hint in str(err)
         assert no_hint not in str(err)
         assert "niepelne" not in str(err)  # every tile here is a full sheet

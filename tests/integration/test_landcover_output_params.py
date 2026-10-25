@@ -472,7 +472,7 @@ class TestBdot10kStore:
 
     def test_bdot_bad_layer_rejected_before_network(self, tmp_path):
         packages = FakePackages()
-        with pytest.raises(ValidationError, match="warstw"):
+        with pytest.raises(ValidationError, match="layer codes"):
             _bdot(tmp_path, packages).download(teryt="1465", layers=["ptwp_a"])
         assert packages.calls == []
 

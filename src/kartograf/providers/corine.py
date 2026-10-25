@@ -51,6 +51,7 @@ from kartograf.sources.edition import Edition, edition_label
 
 if TYPE_CHECKING:
     from kartograf.auth import AuthProxyClient
+from kartograf.messages import message, reason
 from kartograf.transform.bbox import envelope_from_2180
 from kartograf.transport.http import (
     MAX_RETRIES,
@@ -83,7 +84,9 @@ def _raster_layer_name(content: bytes, year: int, *, what: str) -> str:
     try:
         root = ET.fromstring(content)
     except ET.ParseError as e:
-        raise DownloadError(f"{what}: GetCapabilities nie jest XML: {e}") from e
+        raise DownloadError(
+            message("providers.capabilities_not_xml", what=what, error=reason(e))
+        ) from e
     wanted = f"Corine Land Cover {year} raster".lower()
     named: list[str] = []
     for layer in root.iter(f"{_WMS}Layer"):
@@ -94,9 +97,12 @@ def _raster_layer_name(content: bytes, year: int, *, what: str) -> str:
         if (layer.findtext(f"{_WMS}Title") or "").strip().lower() == wanted:
             return name
     raise DownloadError(
-        f"{what}: usluga WMS EEA nie ma warstwy rastrowej 'Corine Land Cover "
-        f"{year} raster' (warstwy: {', '.join(named) or 'brak'}); podglad "
-        "tego roku jest niedostepny - zmien --year albo ustaw CLMS_CREDENTIALS"
+        message(
+            "providers.wms_raster_layer_missing",
+            what=what,
+            year=year,
+            named=", ".join(named) or message("transport.none_found"),
+        )
     )
 
 
@@ -207,7 +213,7 @@ class CLMSAuth:
             headers["kid"] = self.key_id
 
         if not self.private_key:
-            raise DownloadError("Nie udalo sie utworzyc asercji JWT: brak private_key")
+            raise DownloadError(message("providers.jwt_no_private_key"))
 
         try:
             assertion = jwt.encode(
@@ -217,7 +223,9 @@ class CLMSAuth:
                 headers=headers if headers else None,
             )
         except Exception as e:
-            raise DownloadError(f"Nie udalo sie utworzyc asercji JWT: {e}") from e
+            raise DownloadError(
+                message("providers.jwt_assertion_failed", error=reason(e))
+            ) from e
 
         # Exchange for access token
         sess = session or requests.Session()
@@ -235,13 +243,15 @@ class CLMSAuth:
 
             access_token: str | None = result.get("access_token")
             if not access_token:
-                raise DownloadError(f"Brak access_token w odpowiedzi: {result}")
+                raise DownloadError(message("providers.no_access_token", result=result))
 
             logger.info("CLMS access token obtained successfully")
             return access_token
 
         except requests.RequestException as e:
-            raise DownloadError(f"Wymiana tokenu nie powiodla sie: {e}") from e
+            raise DownloadError(
+                message("providers.token_exchange_failed", error=reason(e))
+            ) from e
 
 
 class CorineProvider(LandCoverProvider):
@@ -413,8 +423,11 @@ class CorineProvider(LandCoverProvider):
         """``ValidationError`` unless ``year`` is a CORINE edition (``--year``)."""
         if year not in cls.AVAILABLE_YEARS:
             raise ValidationError(
-                f"--year {year}: niedostepne dla --product corine; dostepne: "
-                f"{', '.join(str(y) for y in cls.AVAILABLE_YEARS)}",
+                message(
+                    "providers.year_not_available",
+                    year=year,
+                    ys=", ".join(str(y) for y in cls.AVAILABLE_YEARS),
+                ),
                 option="year",
                 allowed=tuple(str(y) for y in cls.AVAILABLE_YEARS),
             )
@@ -437,10 +450,14 @@ class CorineProvider(LandCoverProvider):
         uid = self.CLMS_DATASET_UIDS.get(year)
         if uid is None:
             raise ValidationError(
-                f"CORINE {year}: brak zbioru CLMS (lata: {sorted(self.CLMS_YEARS)})"
+                message(
+                    "providers.no_clms_dataset",
+                    year=year,
+                    clms_years=sorted(self.CLMS_YEARS),
+                )
             )
         url = f"{self.CLMS_API_BASE}/@search?UID={uid}&fullobjects=1"
-        what = f"CORINE {year} katalog CLMS"
+        what = message("providers.clms_catalogue_what", year=year)
         response = get_with_retry(
             self._sessions.get(),
             url,
@@ -452,16 +469,20 @@ class CorineProvider(LandCoverProvider):
         try:
             items = response.json().get("items")
         except (ValueError, AttributeError) as e:
-            raise DownloadError(f"{what}: odpowiedz nie jest JSON: {e}") from e
+            raise DownloadError(
+                message("providers.response_not_json", what=what, error=reason(e))
+            ) from e
         if not isinstance(items, list) or len(items) != 1:
             count = len(items) if isinstance(items, list) else None
             raise DownloadError(
-                f"{what}: oczekiwano 1 rekordu zbioru {uid}, jest {count}"
+                message(
+                    "providers.unexpected_record_count", what=what, uid=uid, count=count
+                )
             )
         raw = items[0].get("characteristics_release_major_version")
         if not isinstance(raw, str) or not raw:
             raise DownloadError(
-                f"{what}: rekord bez characteristics_release_major_version"
+                message("providers.record_no_release_version", what=what)
             )
         return Edition(id=edition_label(raw, what=what), url=url, dataset_uid=uid)
 
@@ -513,10 +534,7 @@ class CorineProvider(LandCoverProvider):
             If the download fails
         """
         if bbox.crs != "EPSG:2180":
-            raise ValidationError(
-                f"bbox musi byc w EPSG:2180, podano {bbox.crs}. "
-                "Przelicz: SheetParser.get_bbox(crs='EPSG:2180')."
-            )
+            raise ValidationError(message("providers.bbox_wrong_crs", crs=bbox.crs))
 
         self.check_year(year)
 
@@ -642,10 +660,7 @@ class CorineProvider(LandCoverProvider):
             path.unlink(missing_ok=True)
             service = "EEA" if year in self.EEA_YEARS else "DLR"
             raise NoCoverageError(
-                f"podglad CORINE {year}: obraz WMS {service} jest w calosci "
-                f"przezroczysty - usluga nie ma danych CLC {year} dla tego obszaru "
-                "(poza zasiegiem CORINE albo kraj bez tego rocznika); wersja nie "
-                "powstala, zmien --bbox albo --year"
+                message("providers.wms_image_transparent", year=year, service=service)
             )
         return path
 
@@ -724,7 +739,7 @@ class CorineProvider(LandCoverProvider):
 
         if not response:
             reason = f": {proxy.last_error}" if proxy.last_error else ""
-            raise DownloadError(f"Zadanie przez proxy nie powiodlo sie{reason}")
+            raise DownloadError(message("providers.proxy_task_failed", reason=reason))
 
         if response.get("status_code") != 200:
             raise DownloadError(
@@ -742,7 +757,7 @@ class CorineProvider(LandCoverProvider):
                 task_id = task_ids[0].get("TaskID")
 
         if not task_id:
-            raise DownloadError(f"API CLMS nie zwrocilo TaskID: {result}")
+            raise DownloadError(message("providers.clms_no_task_id", result=result))
 
         logger.info(f"CLMS download requested, TaskID: {task_id}")
 
@@ -756,7 +771,7 @@ class CorineProvider(LandCoverProvider):
             logger.info(f"Successfully downloaded to {output_file}")
             return output_file
         else:
-            raise DownloadError("Nie udalo sie pobrac pliku przez proxy")
+            raise DownloadError(message("providers.proxy_download_failed"))
 
     def _poll_clms_task_proxy(
         self,
@@ -786,11 +801,17 @@ class CorineProvider(LandCoverProvider):
                 download_url: str | None = task_info.get("DownloadURL")
                 if download_url:
                     return download_url
-                raise DownloadError("Zadanie CLMS zakonczone bez DownloadURL")
+                raise DownloadError(message("providers.clms_task_no_url"))
 
             if status in ("Failed", "Cancelled", "Rejected"):
                 raise DownloadError(
-                    f"CLMS task {status}: {task_info.get('Message', 'nieznany blad')}"
+                    message(
+                        "providers.clms_task_failed",
+                        status=status,
+                        detail=task_info.get(
+                            "Message", message("providers.clms_unknown_error")
+                        ),
+                    )
                 )
 
             logger.info(f"CLMS task status: {status}, waiting...")
@@ -814,7 +835,7 @@ class CorineProvider(LandCoverProvider):
         # Reachable only via has_clms_token with the proxy off, i.e. with
         # _clms_auth set; the check narrows the Optional for the type checker.
         if self._clms_auth is None:
-            raise DownloadError("Tryb bezposredni CLMS wymaga clms_credentials")
+            raise DownloadError(message("providers.clms_direct_needs_creds"))
         access_token = self._clms_auth.get_access_token(session)
 
         headers = {
@@ -842,7 +863,7 @@ class CorineProvider(LandCoverProvider):
                     task_id = task_ids[0].get("TaskID")
 
             if not task_id:
-                raise DownloadError(f"API CLMS nie zwrocilo TaskID: {result}")
+                raise DownloadError(message("providers.clms_no_task_id", result=result))
 
             logger.info(f"CLMS download requested, TaskID: {task_id}")
 
@@ -862,7 +883,9 @@ class CorineProvider(LandCoverProvider):
             )
 
         except requests.RequestException as e:
-            raise DownloadError(f"Zapytanie API CLMS nie powiodlo sie: {e}") from e
+            raise DownloadError(
+                message("providers.clms_api_request_failed", error=reason(e))
+            ) from e
 
     def _poll_clms_task(
         self,
@@ -897,11 +920,17 @@ class CorineProvider(LandCoverProvider):
                     download_url: str | None = task_info.get("DownloadURL")
                     if download_url:
                         return download_url
-                    raise DownloadError("Zadanie CLMS zakonczone bez DownloadURL")
+                    raise DownloadError(message("providers.clms_task_no_url"))
 
                 if status in ("Failed", "Cancelled", "Rejected"):
-                    msg = task_info.get("Message", "Unknown error")
-                    raise DownloadError(f"CLMS task {status}: {msg}")
+                    detail = task_info.get(
+                        "Message", message("providers.clms_unknown_error")
+                    )
+                    raise DownloadError(
+                        message(
+                            "providers.clms_task_failed", status=status, detail=detail
+                        )
+                    )
 
                 logger.info(f"CLMS task status: {status}, waiting...")
                 time.sleep(self.CLMS_POLL_INTERVAL)

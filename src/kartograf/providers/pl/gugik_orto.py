@@ -42,6 +42,7 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
 from kartograf.core.sheet_parser import SheetParser, series_scale
 from kartograf.exceptions import NoCoverageError, ValidationError
+from kartograf.messages import message
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import (
     SkorowidzLayersMixin,
@@ -102,7 +103,7 @@ def sheet_index_channel(key: str) -> AccessChannel:
     for channel in get_source(key).channels:
         if isinstance(channel.params, SheetIndexParams):
             return channel
-    raise ValidationError(f"Zrodlo {key} nie ma skorowidza arkuszy WMS")
+    raise ValidationError(message("providers.no_wms_sheet_index", key_value=key))
 
 
 def sheet_index(key: str) -> SheetIndexParams:
@@ -149,22 +150,32 @@ def _coverage_error(key: str, coverage: object) -> ValidationError | None:
         if coverage is None:
             return None
         return ValidationError(
-            f"--coverage {coverage!r}: --product {product} ma jedna usluge WCS "
-            f"wycinka ({channels[0].notes}) - bez --coverage",
+            message(
+                "providers.coverage_single_wcs_service",
+                coverage=coverage,
+                product=product,
+                notes=channels[0].notes,
+            ),
             option="coverage",
         )
     allowed = tuple(_params(c).variant for c in channels)
     if coverage is None:
         return ValidationError(
-            f"--coverage wymagane z --cutout --product {product}: "
-            + coverage_choices(key),
+            message(
+                "providers.coverage_required_cutout",
+                product=product,
+                coverage_choices=coverage_choices(key),
+            ),
             option="coverage",
             allowed=allowed,
         )
     if coverage not in allowed:
         return ValidationError(
-            f"--coverage {coverage!r}: nieznana wartosc - dostepne: "
-            f"{coverage_choices(key)}",
+            message(
+                "providers.coverage_unknown_value",
+                coverage=coverage,
+                coverage_choices=coverage_choices(key),
+            ),
             option="coverage",
             allowed=allowed,
         )
@@ -217,16 +228,23 @@ def cutout_choice_error(
     labels = cutout_resolution_labels(key, coverage)
     if resolution is None:
         return ValidationError(
-            f"--resolution wymagane z --cutout --product {product} (piksel "
-            f"wycinka): {', '.join(labels)}",
+            message(
+                "providers.resolution_required_cutout",
+                product=product,
+                labels=", ".join(labels),
+            ),
             option="resolution",
             allowed=tuple(labels),
         )
     if not isinstance(resolution, str) or resolution not in labels:
         variant = _params(wcs_cutout_channel(key, coverage)).variant
         return ValidationError(
-            f"--resolution {resolution!r}: niedostepne dla wycinka ortofotomapy "
-            f"{variant} - dostepne: {', '.join(labels)}",
+            message(
+                "providers.resolution_unavailable_cutout",
+                resolution=resolution,
+                variant=variant,
+                labels=", ".join(labels),
+            ),
             option="resolution",
             allowed=tuple(labels),
         )
@@ -347,14 +365,16 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         channels = wcs_cutout_channels(source)
         if not channels:
             raise ValidationError(
-                f"--product {product} nie ma wycinka WCS - pomin --coverage i "
-                "--resolution",
+                message("providers.product_no_wcs_cutout", product=product),
                 options=("coverage", "resolution"),
             )
         if coverage is None and len(channels) > 1:
             raise ValidationError(
-                f"--resolution --product {product} dotyczy tylko wycinka WCS - "
-                f"podaj --coverage: {coverage_choices(source)}",
+                message(
+                    "providers.resolution_needs_coverage",
+                    product=product,
+                    coverage_choices=coverage_choices(source),
+                ),
                 option="coverage",
                 allowed=tuple(_params(c).variant for c in channels),
             )
@@ -380,14 +400,17 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         if not codes:
             if direction is not None:
                 raise ValidationError(
-                    f"--direction dotyczy tylko orto ukosnej - --product {product} "
-                    "nie ma kierunkow"
+                    message("providers.direction_not_oblique", product=product)
                 )
             return None
         if direction not in codes:
             raise ValidationError(
-                f"--product {product}: kierunek {direction!r} - dostepne: "
-                f"{', '.join(codes)}"
+                message(
+                    "providers.direction_unknown",
+                    product=product,
+                    direction=direction,
+                    codes=", ".join(codes),
+                )
             )
         assert isinstance(direction, str)  # one of the codes
         return direction
@@ -512,16 +535,26 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     def _no_coverage(
         self, parser: SheetParser, records: list[SkorowidzRecord]
     ) -> NoCoverageError:
-        what = f"--product {self._descriptor.product}"
-        if self._direction is not None:
-            what += f" (kierunek {self._direction})"
-        message = (
-            f"Brak danych {what} dla {parser.sheet} (uklad PL-{parser.sheet_system})"
+        product = self._descriptor.product
+        what = (
+            f"--product {product}"
+            if self._direction is None
+            else message(
+                "providers.product_with_direction",
+                product=product,
+                direction=self._direction,
+            )
+        )
+        text = message(
+            "providers.orto_no_data_for_sheet",
+            what=what,
+            sheet=parser.sheet,
+            sheet_system=parser.sheet_system,
         )
         hints = coverage_hints(parser, records)
         if self._index.extent is not None:
             hints.add(self._index.extent)
-        return no_coverage_error(parser, message, hints)
+        return no_coverage_error(parser, text, hints)
 
     # =========================================================================
     # Download by bbox → WCS (GeoTIFF)
@@ -573,27 +606,28 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             provider has neither a cutout channel nor a raw WCS request
         """
         if bbox.crs != "EPSG:2180":
-            raise ValidationError(
-                f"bbox musi byc w EPSG:2180, podano {bbox.crs}. "
-                "Przelicz: SheetParser.get_bbox(crs='EPSG:2180')."
-            )
+            raise ValidationError(message("providers.bbox_wrong_crs", crs=bbox.crs))
 
         if format not in self.WCS_FORMATS:
             raise ValidationError(
-                f"Nieobslugiwany format WCS: '{format}'. "
-                f"Obslugiwane formaty: {list(self.WCS_FORMATS.keys())}"
+                message(
+                    "providers.wcs_format_unsupported",
+                    format=format,
+                    keys=list(self.WCS_FORMATS.keys()),
+                )
             )
         if self._cutout is None:
             if self.RAW_WCS_TARGET is None:
                 raise ValidationError(
-                    f"--product {self._descriptor.product}: obszar WCS tylko jako "
-                    "wycinek (podaj resolution wycinka)"
+                    message(
+                        "providers.wcs_area_cutout_only",
+                        product=self._descriptor.product,
+                    )
                 )
         else:
             if format != "GTiff":
                 raise ValidationError(
-                    f"Wycinek WCS (coverage) jest tylko GTiff - podano "
-                    f"format {format!r}; PNG/JPEG: provider bez coverage"
+                    message("providers.wcs_cutout_gtiff_only", format=format)
                 )
             timeout = max(timeout, self.WCS_CUTOUT_READ_TIMEOUT)
 
@@ -713,8 +747,11 @@ class GugikOrtoProvider(GugikImageProvider):
         )
         if self._cutout is not None and color != self.DEFAULT_COLOR:
             raise ValidationError(
-                f"wycinek WCS ortofotomapy ma tylko kompozycje {self.DEFAULT_COLOR} "
-                f"- podano color={color!r}"
+                message(
+                    "providers.wcs_cutout_color_only",
+                    default_color=self.DEFAULT_COLOR,
+                    color=color,
+                )
             )
 
     @property
@@ -762,15 +799,24 @@ class GugikOrtoProvider(GugikImageProvider):
             and record.system == parser.sheet_system
             and record.zone == zone
         )
-        message = (
-            f"Brak ortofotomapy {self._color} dla {parser.sheet} "
-            f"(uklad PL-{parser.sheet_system})"
-        )
-        if variants:
-            message += ". Dostepne warianty tego arkusza: " + ", ".join(
-                f"{kolor} {aktualnosc}" for aktualnosc, kolor in variants
+        variants_note = (
+            message(
+                "providers.sheet_variants_available",
+                variants=", ".join(
+                    f"{kolor} {aktualnosc}" for aktualnosc, kolor in variants
+                ),
             )
-        return no_coverage_error(parser, message, coverage_hints(parser, records))
+            if variants
+            else ""
+        )
+        text = message(
+            "providers.no_orthophoto_for_sheet",
+            color=self._color,
+            sheet=parser.sheet,
+            sheet_system=parser.sheet_system,
+            variants_note=variants_note,
+        )
+        return no_coverage_error(parser, text, coverage_hints(parser, records))
 
 
 def image_provider(
@@ -792,12 +838,11 @@ def image_provider(
     """
     source = image_source(product)
     if source is None:
-        raise ValidationError(f"Nieobslugiwany produkt obrazow PL: {product}")
+        raise ValidationError(
+            message("providers.unsupported_image_product", product=product)
+        )
     if source.key == ORTO_KEY:
         if direction is not None:
-            raise ValidationError(
-                "--direction dotyczy tylko orto ukosnej - --product orto nie ma "
-                "kierunkow"
-            )
+            raise ValidationError(message("providers.direction_oblique_only"))
         return GugikOrtoProvider(session, cache, color=GugikOrtoProvider.DEFAULT_COLOR)
     return GugikImageProvider(source.key, session, cache, direction=direction)

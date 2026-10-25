@@ -198,7 +198,7 @@ def _provider_with_getfeature(text):
 class TestInitAndProperties:
     def test_defaults(self):
         p = GugikLazProvider(vertical_crs="EVRF2007")
-        assert p.name == "GUGiK LAZ (chmura punktow)"
+        assert p.name == "GUGiK LAZ (point cloud)"
         assert p.base_url == "https://mapy.geoportal.gov.pl"
         assert p.default_extension == ".laz"
         assert p.vertical_crs == "EVRF2007"
@@ -208,7 +208,7 @@ class TestInitAndProperties:
         assert p.vertical_crs == "KRON86"
 
     def test_invalid_vertical_crs(self):
-        with pytest.raises(ValidationError, match="Nieobslugiwany uklad wysokosci"):
+        with pytest.raises(ValidationError, match="Unsupported vertical CRS"):
             GugikLazProvider(vertical_crs="NONSENSE")
 
     @pytest.mark.parametrize(
@@ -371,7 +371,7 @@ class TestSessionPerThread:
         ("text", "message"),
         [
             (CAPABILITIES_NO_LIDAR, "LIDAR"),
-            ("<wfs:WFS_Capabilities", "nieczytelna"),
+            ("<wfs:WFS_Capabilities", "unreadable"),
             (EXCEPTION_XML, "Unknown type name"),
         ],
     )
@@ -482,7 +482,7 @@ class TestDiscoverTiles:
 
     def test_only_transposed_tiles_raise_axis_error(self):
         p, _ = _provider_with_getfeature(_collection([LUBUSKIE_MEMBER]))
-        with pytest.raises(DownloadError, match="kolejnosci osi"):
+        with pytest.raises(DownloadError, match="axis order mismatch"):
             p.discover_tiles(SPYTKOWICE_BBOX, year=2024)
 
     @pytest.mark.parametrize(
@@ -609,7 +609,7 @@ class TestDiscoverTiles:
         with pytest.raises(DownloadError) as exc:
             provider.discover_tiles(QUERY_BBOX, year=2099)
 
-        assert "rocznik 2099 nie istnieje w usludze EVRF2007" in str(exc.value)
+        assert "vintage 2099 does not exist in service EVRF2007" in str(exc.value)
         assert "2025, 2024, 2018" in str(exc.value)
         assert "ponow pobranie" not in str(exc.value)
         assert session.get.call_count == 1
@@ -622,7 +622,7 @@ class TestDiscoverTiles:
 
     def test_unreadable_response_raises_download_error(self):
         p, _ = _provider_with_getfeature("<wfs:FeatureCollection")
-        with pytest.raises(DownloadError, match="2024.*nieczytelna"):
+        with pytest.raises(DownloadError, match="2024.*unreadable"):
             p.discover_tiles(QUERY_BBOX, year=2024)
 
     def test_network_error_raises_download_error(self):
@@ -634,7 +634,9 @@ class TestDiscoverTiles:
             patch("kartograf.transport.http.time.sleep"),
             pytest.raises(
                 DownloadError,
-                match="2024.*connection broken or refused.*wynik bylby niepelny",
+                match=(
+                    "2024.*connection broken or refused.*the result would be incomplete"
+                ),
             ),
         ):
             p.discover_tiles(QUERY_BBOX, year=2024)
@@ -650,7 +652,7 @@ class TestDiscoverTiles:
         p._available_years["EVRF2007"] = [2024, 2023]
         with (
             patch("kartograf.transport.http.time.sleep"),
-            pytest.raises(DownloadError, match="2023.*wynik bylby niepelny"),
+            pytest.raises(DownloadError, match="2023.*the result would be incomplete"),
         ):
             p.discover_tiles(QUERY_BBOX)
         assert session.get.call_count == 4
@@ -665,7 +667,7 @@ class TestDiscoverTiles:
         p._available_years["EVRF2007"] = [2024]
         with (
             patch("kartograf.transport.http.time.sleep"),
-            pytest.raises(DownloadError, match="2024.*wynik bylby niepelny"),
+            pytest.raises(DownloadError, match="2024.*the result would be incomplete"),
         ):
             p.discover_tiles(QUERY_BBOX, year=2024)
         assert session.get.call_count == 4

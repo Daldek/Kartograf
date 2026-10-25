@@ -113,7 +113,9 @@ def test_min_year_applies_to_newest_too():
 
 def test_min_year_above_service_years_rejected_without_get_feature():
     session = laz_session()
-    with pytest.raises(DownloadError, match="przedzial.*2099.*usludze EVRF2007"):
+    with pytest.raises(
+        DownloadError, match=("range.*2099.*no vintage in service EVRF2007")
+    ):
         GugikLazProvider(session=session, vertical_crs="EVRF2007").select_tiles(
             W2_BBOX, all_campaigns=True, min_year=2099
         )

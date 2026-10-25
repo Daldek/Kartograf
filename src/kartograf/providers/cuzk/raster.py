@@ -39,6 +39,7 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox, transform_bbox
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.cuzk.client import CuzkClient, wkid
 from kartograf.providers.cuzk.sheets import SheetIndex
@@ -79,12 +80,6 @@ CUZK_NODATA = -9999.0
 NATIVE_CRS = "EPSG:5514"
 
 _DEFAULT_TIMEOUT = 60
-# A missing openzu file (404) is a sheet the index knows but CUZK does not
-# publish for the model (spec section 7).
-_FILE_HINT = (
-    "zweryfikuj godlo w indeksie KladyMapovychListu (arkusz moze byc znany "
-    "indeksowi, ale plik openzu niedostepny)"
-)
 
 # Control point for HORIZONTAL operations whose source is the native CRS
 # — roughly the centre of Czechia (15.5E / 49.8N) in Krovak. A grid that does
@@ -184,8 +179,7 @@ class CuzkRasterProvider(BaseProvider):
         """
         if vertical_crs == "KRON86":
             raise TransformUnavailableError(
-                "Brak transformacji Bpv (EPSG:8357) -> KRON86 (EPSG:9650) "
-                "- siatki GUGiK nie sa publiczne",
+                message("providers.no_kron86_transform"),
                 remedy=REMEDIES["EPSG:9650"],
             )
         error = cz_variant_error(
@@ -388,10 +382,7 @@ class CuzkRasterProvider(BaseProvider):
         request, after format and CRS validation (see :meth:`download`).
         """
         if format != "GTiff":
-            raise ValidationError(
-                f"CuzkRasterProvider.download_bbox obsluguje tylko GTiff "
-                f"(zadano: {format})"
-            )
+            raise ValidationError(message("providers.bbox_gtiff_only", format=format))
         output_path = Path(output_path)
         route = self.route()
         if wkid(bbox.crs) != wkid(route.horizontal_crs):
@@ -499,8 +490,12 @@ class CuzkRasterProvider(BaseProvider):
         route = self.route(sheet)
         if not route.files:
             raise ValidationError(
-                f"{sheet} ({self._model}, {self._vertical_crs}) nie ma pliku CUZK "
-                "- kafel z ImageServer bez taniego sygnalu zrodla"
+                message(
+                    "providers.no_cuzk_file",
+                    sheet=sheet,
+                    model=self._model,
+                    vertical_crs=self._vertical_crs,
+                )
             )
         return route.channel.endpoint.format(sheet=sheet)
 
@@ -536,9 +531,13 @@ class CuzkRasterProvider(BaseProvider):
                 url, output_path, unzip_single=".tif", on_response=on_response
             )
         except DownloadError as e:
-            # spec section 7: 404 from openzu -> hint to verify the sheet code
+            # A missing openzu file (404) is a sheet the index knows but CUZK does
+            # not publish for the model (spec section 7): hint to verify the sheet
+            # code.
             raise DownloadError(
-                f"{e} - {_FILE_HINT}", sheet=sheet, status_code=e.status_code
+                message("providers.openzu_file_unavailable", error=reason(e)),
+                sheet=sheet,
+                status_code=e.status_code,
             ) from e
         _assign_crs(output_path, channel.horizontal_crs)
 
@@ -624,15 +623,10 @@ class CuzkRasterProvider(BaseProvider):
         """
         with rasterio.open(path, "r+") as ds:
             if ds.crs is None:
-                raise ValidationError(
-                    f"Raster {label} nie ma CRS - nie da sie wyznaczyc "
-                    f"(lon, lat) wymaganych przez operacje pionowa"
-                )
+                raise ValidationError(message("providers.raster_no_crs", label=label))
             if ds.transform.is_identity or not ds.transform.is_rectilinear:
                 raise ValidationError(
-                    f"Raster {label} nie ma uzytecznej geotransformacji "
-                    f"(jednostkowa/nieprostokatna) - nie da sie wyznaczyc "
-                    f"(lon, lat) dla operacji pionowej"
+                    message("providers.raster_no_geotransform", label=label)
                 )
             bounds = ds.bounds
             horizontal = self._pinned(
@@ -646,8 +640,8 @@ class CuzkRasterProvider(BaseProvider):
             )
             nodata = ds.nodata if ds.nodata is not None else CUZK_NODATA
             logger.debug(
-                f"Transformacja pionowa {label}: {pinned.description} "
-                f"(dokladnosc {pinned.accuracy_m} m), nodata {nodata}"
+                f"Vertical transformation {label}: {pinned.description} "
+                f"(accuracy {pinned.accuracy_m} m), nodata {nodata}"
             )
             chunk_rows = max(1, _CHUNK_PIXELS // ds.width)
             for row_start in range(0, ds.height, chunk_rows):
@@ -718,9 +712,11 @@ def _assign_crs(path: Path, crs: str) -> None:
     try:
         with rasterio.open(path, "r+") as ds:
             if ds.crs is None:
-                logger.debug(f"{path.name}: brak CRS w GeoTIFF - wpisuje {crs}")
+                logger.debug(f"{path.name}: no CRS in GeoTIFF - writing {crs}")
                 ds.crs = CRS.from_string(crs)
     except Exception as e:
         path.unlink(missing_ok=True)
         path.with_suffix(".tfw").unlink(missing_ok=True)
-        raise DownloadError(f"nie udalo sie wpisac CRS {crs} w {path}: {e}") from e
+        raise DownloadError(
+            message("providers.crs_write_failed", crs=crs, path=path, error=reason(e))
+        ) from e

@@ -1096,7 +1096,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "year",
         None,
         ("2018", "2012", "2006", "2000", "1990"),
-        "--year 2019: niedostepne dla --product corine; dostepne: 2018, 2012, ",
+        "--year 2019: not available for --product corine; available: 2018, 2012, ",
     ),
     _row(
         kartograf.download_landcover,
@@ -1259,7 +1259,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "depth",
         None,
         _DEPTHS,
-        "Nieprawidlowa glebokosc: 1m",
+        "Invalid depth: 1m",
     ),
     _row(
         kartograf.download_soil,
@@ -1293,7 +1293,7 @@ LANDCOVER_OPTION_SCENARIOS = [
             "silt",
             "soc",
         ),
-        "Nieprawidlowa wlasciwosc: x",
+        "Invalid property: x",
     ),
     _row(
         kartograf.download_soil,
@@ -1338,7 +1338,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "depth",
         None,
         _DEPTHS,
-        "Nieprawidlowa glebokosc: 1m",
+        "Invalid depth: 1m",
     ),
     _row(
         kartograf.check_hsg,
@@ -1894,7 +1894,7 @@ OPTION_SCENARIOS = [
         "coverage",
         None,
         ("standard", "high"),
-        "--coverage wymagane z --cutout --product orto",
+        "--coverage required with --cutout --product orto",
     ),
     _row(
         kartograf.download_data,
@@ -1902,7 +1902,7 @@ OPTION_SCENARIOS = [
         "resolution",
         None,
         tuple(cutout_resolution_labels(_ORTO_KEY, "standard")),
-        "niedostepne dla wycinka ortofotomapy standard",
+        "not available for the standard orthophoto cutout",
     ),
     _row(
         kartograf.download_data,

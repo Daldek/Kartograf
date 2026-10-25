@@ -51,9 +51,21 @@ POLISH = re.compile(
     r"|(?-i:\bGodl[ao]\b)",
     re.IGNORECASE,
 )
-# Polish words that are data, not text: the header cell of a GUGiK response that the
-# code compares with what the service sent.
-DOMAIN = frozenset({"god\u0142o"})
+# Polish words that are data, not text: a header cell, the names of fields and the
+# value of a flag (NIE = no) of the GUGiK sheet index, compared with what the
+# service sent.
+DOMAIN = frozenset(
+    {
+        "god\u0142o",
+        "NIE",
+        "zrodloDanych",
+        "zrodlo_danych",
+        "bladSredniWysokosci",
+        "bladSredniPolozenia",
+        "blad_sr_wys",
+        "blad_sr_syt",
+    }
+)
 SCOPES = ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
 # The generated registry of the Nogat standard carries the Polish titles of its codes.
 GENERATED = frozenset({"_errors.py"})
@@ -134,22 +146,6 @@ _PENDING = frozenset(
         "project/commands.py",
         "project/manifest.py",
         "project/operations.py",
-        # Providers.
-        "providers/base.py",
-        "providers/corine.py",
-        "providers/cuzk/client.py",
-        "providers/cuzk/laz.py",
-        "providers/cuzk/raster.py",
-        "providers/cuzk/ruian.py",
-        "providers/cuzk/sheets.py",
-        "providers/pl/bdot10k.py",
-        "providers/pl/gugik.py",
-        "providers/pl/gugik_laz.py",
-        "providers/pl/gugik_orto.py",
-        "providers/pl/prg.py",
-        "providers/pl/skorowidz.py",
-        "providers/pl/skorowidz_wfs.py",
-        "providers/soilgrids.py",
         # Source registry.
         "sources/descriptor.py",
         "sources/edition.py",
@@ -158,6 +154,15 @@ _PENDING = frozenset(
         "sources/variants.py",
     }
 )
+
+
+def is_polish(value: str) -> bool:
+    """Whether a string literal is Polish text: not a domain token and not a URL."""
+    return (
+        POLISH.search(value) is not None
+        and value not in DOMAIN
+        and not value.startswith(("http://", "https://"))
+    )
 
 
 def sources() -> Iterator[tuple[str, ast.Module]]:
@@ -284,10 +289,7 @@ def test_polish_literals_stay_only_in_the_catalog_and_the_pending_files():
     found = {
         name
         for name, tree in sources()
-        if any(
-            POLISH.search(node.value) and node.value not in DOMAIN
-            for node in string_values(tree)
-        )
+        if any(is_polish(node.value) for node in string_values(tree))
     }
     assert found - _PENDING == set(), "a Polish text belongs in kartograf.messages"
     assert _PENDING - found == set(), "no Polish literal left: drop the file"

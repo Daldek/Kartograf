@@ -20,6 +20,7 @@ from rasterio.crs import CRS
 
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.messages import message, reason
 from kartograf.transport.chunks import (
     Chunk,
     ChunkLimits,
@@ -96,14 +97,18 @@ class CuzkClient:
                 url,
                 timeout=self._timeout,
                 params=params,
-                description=f"Zapytanie {url}",
+                description=message("providers.query_description", url=url),
             )
             try:
                 data = response.json()
             except ValueError as e:
-                raise DownloadError(f"Zapytanie {url} nieudane: {e}") from e
+                raise DownloadError(
+                    message("providers.query_failed", url=url, error=reason(e))
+                ) from e
             if "error" in data:
-                raise DownloadError(f"Blad ArcGIS dla {url}: {data['error']}")
+                raise DownloadError(
+                    message("providers.arcgis_error", url=url, data_error=data["error"])
+                )
             page = data.get("features", [])
             features.extend(page)
             if data.get("exceededTransferLimit") and page:
@@ -188,9 +193,11 @@ class CuzkClient:
         chunks = plan_chunks(aligned, width_px, height_px, pixel_size, limits)
         if len(chunks) > 1 and wkid(aligned.crs) != wkid(image_sr):
             raise ValidationError(
-                f"Kafelkowanie exportImage wymaga bbox.crs == image_sr "
-                f"(bbox: {aligned.crs}, image_sr: {image_sr}) - znormalizuj bbox "
-                f"do ukladu wyjsciowego przed eksportem"
+                message(
+                    "providers.export_tiling_crs_mismatch",
+                    crs=aligned.crs,
+                    image_sr=image_sr,
+                )
             )
 
         def fetch(chunk: Chunk, path: Path) -> None:
@@ -241,8 +248,7 @@ class CuzkClient:
                 snippet = f.read(500)
             output_path.unlink(missing_ok=True)
             raise DownloadError(
-                f"exportImage nie zwrocil TIFF "
-                f"(poczatek odpowiedzi: {snippet[:200]!r}) [{url}]"
+                message("providers.export_not_tiff", snippet=snippet[:200], url=url)
             )
 
 
@@ -264,8 +270,12 @@ def _overwrite_crs(output_path: Path, image_sr: str) -> None:
     except Exception as e:
         output_path.unlink(missing_ok=True)
         raise DownloadError(
-            f"exportImage: nie udalo sie nadpisac CRS na {image_sr} "
-            f"w {output_path}: {e}"
+            message(
+                "providers.crs_overwrite_failed",
+                image_sr=image_sr,
+                output_path=output_path,
+                error=reason(e),
+            )
         ) from e
 
 
@@ -297,8 +307,12 @@ def _extract_zip_pair(
             names = [n for n in zf.namelist() if n.lower().endswith(suffix)]
             if len(names) != 1:
                 raise DownloadError(
-                    f"ZIP {url}: oczekiwano dokladnie 1 pliku "
-                    f"'{unzip_single}', znaleziono {len(names)}"
+                    message(
+                        "providers.zip_unexpected_file_count",
+                        url=url,
+                        unzip_single=unzip_single,
+                        names_count=len(names),
+                    )
                 )
             _extract_to(zf, names[0], tmp_main)
             stem = names[0].rsplit(".", 1)[0].lower()
@@ -320,9 +334,13 @@ def _extract_zip_pair(
     except DownloadError:
         raise
     except zipfile.BadZipFile as e:
-        raise DownloadError(f"Uszkodzony ZIP z {url}: {e}") from e
+        raise DownloadError(
+            message("providers.zip_corrupt", url=url, error=reason(e))
+        ) from e
     except Exception as e:
-        raise DownloadError(f"Rozpakowanie ZIP {url} nieudane: {e}") from e
+        raise DownloadError(
+            message("providers.zip_extract_failed", url=url, error=reason(e))
+        ) from e
     finally:
         tmp_main.unlink(missing_ok=True)
         tmp_tfw.unlink(missing_ok=True)

@@ -64,7 +64,7 @@ class TestSoilGridsEdition:
 
     def test_unknown_title_is_download_error(self):
         xml = CAPABILITIES.replace(b"SoilGrids250m 2.0 - ", b"Soil maps ")
-        with pytest.raises(DownloadError, match="brak wydania"):
+        with pytest.raises(DownloadError, match="no edition in title"):
             SoilGridsProvider(session=_session(content=xml)).edition("clay")
 
     def test_broken_xml_is_download_error(self):
@@ -104,7 +104,7 @@ class TestCorineEdition:
 
     def test_no_record_is_download_error(self):
         session = _session(payload={"items": [], "items_total": 0})
-        with pytest.raises(DownloadError, match="1 rekordu"):
+        with pytest.raises(DownloadError, match="expected 1 record"):
             CorineProvider(session=session, use_proxy=False).edition(2012)
 
     def test_record_without_release_is_download_error(self):

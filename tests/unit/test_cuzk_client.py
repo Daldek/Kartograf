@@ -217,7 +217,7 @@ class TestFetchFile:
         fake_download = self._client_with_zip(tmp_path, zip_content)
         with (
             patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
-            pytest.raises(DownloadError, match="1 pliku"),
+            pytest.raises(DownloadError, match="expected exactly 1 file"),
         ):
             CuzkClient(session=Mock()).fetch_file(
                 "http://x/CTES96.zip", target, unzip_single=".tif"
@@ -270,7 +270,7 @@ class TestFetchFile:
         with (
             patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
             patch.object(client_module, "_extract_to", side_effect=flaky_extract_to),
-            pytest.raises(DownloadError, match="Rozpakowanie"),
+            pytest.raises(DownloadError, match="Extracting ZIP"),
         ):
             CuzkClient(session=Mock()).fetch_file(
                 "http://x/CTES96.zip", target, unzip_single=".tif"

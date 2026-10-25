@@ -275,7 +275,7 @@ class TestGugikOrtoProviderSelection:
             provider._get_opendata_url(SHEET)
 
         message = str(exc.value)
-        assert "Brak ortofotomapy RGB dla M-34-76-A-a-1-1" in message
+        assert "No RGB orthophoto for M-34-76-A-a-1-1" in message
         assert "PL-2000: 7.124.07.24" in message
 
     def test_only_cir_and_bw_raises_no_coverage_with_variants(self):
@@ -288,7 +288,7 @@ class TestGugikOrtoProviderSelection:
         )
         provider, _ = self.provider_with(*[body] * 4)
 
-        with pytest.raises(NoCoverageError, match="Dostepne warianty") as exc:
+        with pytest.raises(NoCoverageError, match="Available variants") as exc:
             provider._get_opendata_url(SHEET)
 
         message = str(exc.value)
@@ -331,7 +331,7 @@ class TestGugikOrtoProviderSelection:
         """Empty responses from all layers = NoCoverageError in Polish."""
         provider, session = self.provider_with(*[orto_body([])] * 4)
 
-        with pytest.raises(NoCoverageError, match="Brak ortofotomapy RGB"):
+        with pytest.raises(NoCoverageError, match="No RGB orthophoto"):
             provider._get_opendata_url(SHEET)
 
         assert queried_layers(session) == LAYERS
@@ -551,7 +551,7 @@ class TestGugikOrtoLayerDiscovery:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(xml))
 
-        with pytest.raises(DownloadError, match="nie publikuje warstw"):
+        with pytest.raises(DownloadError, match="does not publish sheet index layers"):
             GugikOrtoProvider(session=session, color="RGB")._fetch_wms_layers(ENDPOINT)
 
     def test_get_opendata_url_fails_before_get_feature_info(self):
@@ -732,7 +732,7 @@ class TestGugikOrtoProviderDownloadBbox:
         provider = GugikOrtoProvider(color="RGB")
         output_path = tmp_path / "area.xyz"
 
-        with pytest.raises(ValidationError, match="Nieobslugiwany format WCS"):
+        with pytest.raises(ValidationError, match="Unsupported WCS format"):
             provider.download_bbox(sample_bbox, output_path, format="InvalidFormat")
 
 

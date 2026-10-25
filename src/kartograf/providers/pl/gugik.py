@@ -33,6 +33,7 @@ from kartograf.exceptions import (
     NoCoverageError,
     ValidationError,
 )
+from kartograf.messages import message, reason
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import (
     SkorowidzQuery,
@@ -357,9 +358,11 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             flags.append(f"--resolution {variant.label}")
         if variant.vertical_crs != self._vertical_crs:
             flags.append(f"--vertical-crs {variant.vertical_crs}")
-        return (
-            f"Skorowidz GUGiK ma ten arkusz w {self.describe(variant)} "
-            f"{variant.vertical_crs} - uzyj {' '.join(flags)}"
+        return message(
+            "providers.index_other_variant_hint",
+            describe=self.describe(variant),
+            vertical_crs=variant.vertical_crs,
+            flags=" ".join(flags),
         )
 
     def _no_coverage(
@@ -406,23 +409,32 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         if not others:
             unsupported = sorted(
                 {
-                    f"{r.file_format or 'bez formatu'} "
-                    f"(plik {r.url.rsplit('/', 1)[-1].rsplit('.', 1)[-1]})"
+                    message(
+                        "providers.unsupported_record_format",
+                        file_format=r.file_format or message("providers.no_format"),
+                        extension=r.url.rsplit("/", 1)[-1].rsplit(".", 1)[-1],
+                    )
                     for r in own
                     if self.record_variant(r, self._vertical_crs) is None
                 }
             )
             if unsupported:
                 hints.add(
-                    "Skorowidz GUGiK ma dla tego arkusza tylko rekordy, ktorych "
-                    f"Kartograf nie pobiera: {', '.join(unsupported)} (format "
-                    "rekordu niezgodny z plikiem albo wariant spoza rejestru)"
+                    message(
+                        "providers.only_unsupported_records_hint",
+                        unsupported=", ".join(unsupported),
+                    )
                 )
         hints |= self._variant_hints(parser)
         return no_coverage_error(
             parser,
-            f"Brak danych {self.describe()} dla {parser.sheet} "
-            f"(uklad PL-{parser.sheet_system}, {self._vertical_crs})",
+            message(
+                "providers.no_data_for_sheet",
+                describe=self.describe(),
+                sheet=parser.sheet,
+                sheet_system=parser.sheet_system,
+                vertical_crs=self._vertical_crs,
+            ),
             hints,
         )
 
@@ -472,11 +484,12 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                 with self._failed_variants_lock:
                     self._failed_variants.add(endpoint)
                 logger.warning(
-                    "%s: nie sprawdzono ukladu %s (podpowiedz pominieta, "
-                    "usluga pomijana do konca zadania): %s",
-                    parser.sheet,
-                    vertical_crs,
-                    e,
+                    message(
+                        "providers.vertical_crs_check_skipped",
+                        sheet=parser.sheet,
+                        vertical_crs=vertical_crs,
+                        error=reason(e),
+                    ),
                 )
                 continue
             for record in records:
@@ -624,29 +637,32 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         """
         if not self.has_wcs():
             raise ValidationError(
-                f"Pobieranie WCS (download_bbox) jest dostepne tylko dla siatki "
-                f"{self.PRODUCT.upper()} 1m - {self.describe()} pobierz przez "
-                "download() (arkusze)"
+                message(
+                    "providers.wcs_only_1m_grid",
+                    product=self.PRODUCT.upper(),
+                    describe=self.describe(),
+                )
             )
 
         if bbox.crs != "EPSG:2180":
-            raise ValidationError(
-                f"bbox musi byc w EPSG:2180, podano {bbox.crs}. "
-                "Przelicz: SheetParser.get_bbox(crs='EPSG:2180')."
-            )
+            raise ValidationError(message("providers.bbox_wrong_crs", crs=bbox.crs))
 
         if format not in self.WCS_FORMATS:
             raise ValidationError(
-                f"Nieobslugiwany format WCS: '{format}'. "
-                f"Obslugiwane formaty: {list(self.WCS_FORMATS.keys())}"
+                message(
+                    "providers.wcs_format_unsupported",
+                    format=format,
+                    keys=list(self.WCS_FORMATS.keys()),
+                )
             )
 
         if self._vertical_crs in self.WITHDRAWN_WCS_VERTICAL_CRS:
             raise ValidationError(
-                f"WCS {self.PRODUCT.upper()} 1m dla {self._vertical_crs} "
-                "nie jest "
-                "dostepny (usluga wycofana przez GUGiK). Pobierz arkusze przez "
-                "godlo."
+                message(
+                    "providers.wcs_withdrawn",
+                    product=self.PRODUCT.upper(),
+                    vertical_crs=self._vertical_crs,
+                )
             )
 
         return self._download_wcs(
