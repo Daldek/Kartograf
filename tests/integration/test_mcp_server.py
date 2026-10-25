@@ -1904,9 +1904,12 @@ def test_stdio_server_with_writes_downloads_inside_its_directory(tmp_path):
 
 
 @needs_mcp
-def test_stdio_stdout_has_only_protocol_frames():
+def test_stdio_stdout_has_only_protocol_frames(monkeypatch):
     """What the library prints (``print`` or a write to descriptor 1) while a tool
-    runs goes to stderr: every line of stdout is a JSON-RPC message."""
+    runs goes to stderr, also what stdout still buffers when the client leaves: every
+    line of stdout is a JSON-RPC message."""
+    # clients start servers without PYTHONUNBUFFERED: stdout is block-buffered
+    monkeypatch.delenv("PYTHONUNBUFFERED", raising=False)
     program = (
         "import os, sys, kartograf\n"
         "real = kartograf.list_commands\n"

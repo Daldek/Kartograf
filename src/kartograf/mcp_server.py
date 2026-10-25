@@ -43,7 +43,7 @@ import logging
 import sys
 import threading
 from collections.abc import AsyncGenerator, Callable, Iterable, Mapping, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -963,15 +963,23 @@ def _parser() -> argparse.ArgumentParser:
 async def _serve(server: Server[_State]) -> None:
     """Serve one connection on stdin and stdout.
 
-    Stray output of the library on stdout goes to stderr (the SDK claims the descriptors
-    while it serves).
+    Stray output of the library on stdout goes to stderr: the SDK points file
+    descriptor 1 at stderr while it serves, and what stdout still buffers when the
+    client leaves is flushed there before the SDK restores the descriptor.
     """
     from mcp.server.stdio import stdio_server
 
     async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream, write_stream, server.create_initialization_options()
-        )
+        try:
+            await server.run(
+                read_stream, write_stream, server.create_initialization_options()
+            )
+        finally:
+            # Block-buffered stdout (a pipe) holds the text of a ``print`` until it
+            # is flushed: flushed after the SDK restored file descriptor 1 it would
+            # reach the client, flushed here it goes to stderr.
+            with suppress(OSError, ValueError):
+                sys.stdout.flush()
 
 
 def _fail(error: KartografError) -> int:
