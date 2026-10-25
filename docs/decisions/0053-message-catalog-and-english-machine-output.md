@@ -35,6 +35,9 @@ raise sites and a Polish dictionary keyed by the sentence.
    (two forms: one, other) or `{n:plural(plik|pliki|plikow)}` (three forms: one, few, many,
    as Polish needs them); `message` formats with a `string.Formatter` that knows this spec.
    It replaces `notices.count_text` and its noun tables, which only Polish could use.
+   A list of messages or names is written `{items:join}` (joined with `, `) or
+   `{items:join(; )}`; a `Message` among the items is rendered in the language of its
+   parent, so a list of fragments (the problems of a sheet code) stays translatable.
 4. **Where a text is rendered.** The raise site and the notice give English (a `Message`).
    `KartografError.localized(lang)` renders the text of an exception, `Notice.localized(lang)`
    the text of a notice, `error_report(exc, lang=)` the title, message and hint of the error
@@ -65,6 +68,10 @@ raise sites and a Polish dictionary keyed by the sentence.
    user-visible line and becomes a catalog message; a lower one, a `ValueError` for a
    program error and an assertion text are plain English. Tests assert the key
    (`exc.args[0].key`), the English text or `lang="pl"`; they do not match Polish text.
+   A sentence that wraps a caught error (`{reason}` of `reason(exc)`) moves in the same
+   commit as the errors it wraps (a partial migration of the wrapper's file), so a Polish
+   sentence never carries English text; CLI and API parity tests compare the CLI line with
+   `error.localized("pl")`.
 8. **Open.** The reasons of internal validators (a `ValueError` whose text another message
    embeds) are catalog messages where a person reads them and plain English where only a
    developer does; the help of `argparse` itself (`usage:`, `options:`) stays English.

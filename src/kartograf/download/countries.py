@@ -7,13 +7,11 @@ Country recognition and clipping to a country's envelope, shared by the CLI
 from dataclasses import dataclass
 
 from kartograf.core.bbox import BBox
+from kartograf.messages import message
 
 # The remedy of numbers that do not fit the CRS label of a bbox: another CRS
 # than ``--bbox-crs`` says (metres given as EPSG:4326) or swapped axes.
-BBOX_CRS_REMEDY = (
-    "Sprawdz --bbox-crs (domyslnie EPSG:2180; wspolrzedne S-JTSK: --bbox-crs "
-    "EPSG:5514) i kolejnosc osi (EPSG:4326: dlugosc,szerokosc)"
-)
+BBOX_CRS_REMEDY = message("countries.check_bbox_crs")
 
 
 def bbox_to_wgs84(bbox: BBox) -> BBox:
@@ -99,13 +97,21 @@ def outside_country(area: BBox, code: str, *, flag: str = "--bbox") -> str | Non
         wgs = bbox_to_wgs84(area)
     if _reaches(wgs, code):
         return None
-    text = f"{flag} ({area.crs}) lezy poza {code} (w EPSG:4326: {_coords(wgs)})"
+    text = message(
+        "countries.lies_outside_epsg_4326",
+        flag=flag,
+        crs=area.crs,
+        code=code,
+        coords=_coords(wgs),
+    )
     if flag != "--bbox":
-        return f"{text}. Sprawdz uklad wspolrzednych pliku geometrii"
-    text += f". {BBOX_CRS_REMEDY}"
+        return message("countries.check_coordinate_system_geometry_file", text=text)
+    text = message("countries.with_remedy", text=text, remedy=BBOX_CRS_REMEDY)
     swapped = BBox(area.min_y, area.min_x, area.max_y, area.max_x, area.crs)
     if area.crs == "EPSG:4326" and _reaches(swapped, code):
-        text += f"; osie wygladaja na zamienione: --bbox {_coords(swapped, 'g')}"
+        text = message(
+            "countries.with_swapped_axes", text=text, coords=_coords(swapped, "g")
+        )
     return text
 
 

@@ -43,7 +43,11 @@ POLISH = re.compile(
     r"|obszar\w*|arkusz(?:a|e|y|u|em|ami|ach)?|kafel|kafle|kafli|kafla|paczk\w+"
     r"|wycink\w+|serwer\w*|tresc\w*|wydani\w+|wariant\w*|rozmiar\w*|odpowiedz\w*"
     r"|usluga|uslugi|wynik\w*|zadanie|zadania|roku|sciezk\w+"
-    r"|uklad(?:u|zie|y|ow|em|ach)?|komunikat\w*|komend\w+|nazwa|nazwy|nazwe|eksport\w*)\b"
+    r"|uklad(?:u|zie|y|ow|em|ach)?|komunikat\w*|komend\w+|nazwa|nazwy|nazwe|eksport\w*"
+    r"|nieobslug\w+|obslugiwan\w+|obiekt\w*|identyfikator\w*|odczytal\w*|rzucil\w*"
+    r"|wyjat\w+|strona|strony|stron|juz|daja|rozn\w+|odrzucon\w+|kandydat\w+"
+    r"|przypiet\w+|kolumn\w+|liczb\w*|napis\w*|list[ay]|zawsze|nigdy"
+    r"|inn(?:y|a|e|ego|ym|ych))\b"
     r"|(?-i:\bGodl[ao]\b)",
     re.IGNORECASE,
 )
@@ -62,7 +66,6 @@ _PENDING = frozenset(
         "commands.py",
         "mcp_server.py",
         "notices.py",
-        "sheet_info.py",
         "source_info.py",
         "store.py",
         "store_documents.py",
@@ -98,21 +101,13 @@ _PENDING = frozenset(
         "catalog/commands/project.py",
         "catalog/commands/soil.py",
         "catalog/excerpts.py",
-        "catalog/kinds.py",
         "catalog/shared.py",
-        # Sheet parsers and geometry.
-        "core/bbox.py",
-        "core/geometry.py",
-        "core/parser_2000.py",
-        "core/parser_tm33.py",
-        "core/sheet_parser.py",
         # Downloads.
         "download/area.py",
         "download/arguments.py",
         "download/availability.py",
         "download/campaigns.py",
         "download/collections.py",
-        "download/countries.py",
         "download/cutout.py",
         "download/cz_contours.py",
         "download/cz_cutout.py",
@@ -413,6 +408,34 @@ def test_a_counted_noun_takes_its_form_from_the_count_in_each_language(monkeypat
         plural_forms("3", ("file", "files"))
     with pytest.raises(ValueError, match="two or three"):
         plural_forms(3, ("file",))
+
+
+def test_a_list_of_messages_is_joined_and_each_item_follows_the_language_of_the_text(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        messages,
+        "_catalog",
+        lambda area: (
+            {
+                "list": Text("Problems: {items:join}", "Problemy: {items:join}"),
+                "semi": Text("{items:join(; )}", "{items:join(; )}"),
+            }
+            if area == "x"
+            else messages.importlib.import_module(f"kartograf.messages.{area}").MESSAGES
+        ),
+    )
+    items = [message("errors.interrupted"), "plain", message("errors.terminated")]
+
+    text = message("x.list", items=items)
+
+    assert text == "Problems: interrupted (Ctrl-C), plain, terminated (SIGTERM)"
+    assert (
+        text.localized("pl")
+        == "Problemy: przerwano (Ctrl-C), plain, przerwano (SIGTERM)"
+    )
+    assert message("x.semi", items=tuple(items[:2])) == "interrupted (Ctrl-C); plain"
+    assert placeholders("{items:join(; )} {n:plural(a|b)}") == {"items", "n"}
 
 
 def test_the_error_document_is_english_unless_a_person_asks_for_polish():

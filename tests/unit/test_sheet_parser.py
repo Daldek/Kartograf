@@ -153,12 +153,12 @@ class TestSheetParserUklad:
 
     def test_invalid_system(self):
         """Test of validation of an invalid system."""
-        with pytest.raises(ValidationError, match="Nieprawidlowy uklad"):
+        with pytest.raises(ValidationError, match="Invalid system: '"):
             SheetParser("N-34-130-D", sheet_system="1965")
 
     def test_invalid_system_wrong_type(self):
         """Test of validation of a system of the wrong type."""
-        with pytest.raises(ValidationError, match="Nieprawidlowy uklad"):
+        with pytest.raises(ValidationError, match="Invalid system: '"):
             SheetParser("N-34-130-D", sheet_system="PUWG")
 
 
@@ -167,7 +167,7 @@ class TestSheetParserValidation:
 
     def test_invalid_sheet_format(self):
         """Test of validation of an invalid sheet code format."""
-        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
+        with pytest.raises(ParseError, match="Invalid sheet code: '"):
             SheetParser("INVALID-GODLO")
 
     @pytest.mark.parametrize("sheet", ["M-３３-８-A", "N-34-１３０-D", "6.１４５.２０"])
@@ -179,15 +179,15 @@ class TestSheetParserValidation:
     @pytest.mark.parametrize("zone", ["5", "6", "7", "8", " 6 "])
     def test_bare_pl2000_zone_number_message(self, zone):
         """A bare number 5-8 is a PL-2000 zone number, not a sheet code."""
-        with pytest.raises(ParseError, match="numer strefy PL-2000") as exc:
+        with pytest.raises(ParseError, match="a PL-2000 zone") as exc:
             SheetParser(zone)
-        assert "strefa.pas.slup" in str(exc.value)
+        assert "zone.strip.column" in str(exc.value)
         assert "6.179.12" in str(exc.value)
 
     @pytest.mark.parametrize("junk", ["XYZ", "9", "0"])
     def test_generic_error_shows_both_formats(self, junk):
         """The general error lists both formats with examples."""
-        with pytest.raises(ParseError, match="Nieprawidlowe godlo") as exc:
+        with pytest.raises(ParseError, match="Invalid sheet code: '") as exc:
             SheetParser(junk)
         msg = str(exc.value)
         assert "numer strefy" not in msg
@@ -198,7 +198,7 @@ class TestSheetParserValidation:
     @pytest.mark.parametrize("zone", ["5", "6", "7", "8", " 6 "])
     def test_bare_zone_number_with_explicit_system(self, zone, system):
         """A zone number with an explicit system gives the same zone message."""
-        with pytest.raises(ParseError, match="numer strefy PL-2000") as exc:
+        with pytest.raises(ParseError, match="a PL-2000 zone") as exc:
             SheetParser(zone, sheet_system=system)
         msg = str(exc.value)
         assert "6.179.12" in msg
@@ -212,42 +212,42 @@ class TestSheetParserValidation:
 
     def test_empty_sheet(self):
         """Test of an empty sheet code."""
-        with pytest.raises(ParseError, match="nie moze byc puste"):
+        with pytest.raises(ParseError, match="The sheet code must not be empty"):
             SheetParser("")
 
     def test_whitespace_only_sheet(self):
         """Test of a sheet code containing only whitespace."""
-        with pytest.raises(ParseError, match="nie moze byc puste"):
+        with pytest.raises(ParseError, match="The sheet code must not be empty"):
             SheetParser("   ")
 
     def test_invalid_sheet_type(self):
         """Test of an invalid sheet code type."""
-        with pytest.raises(ParseError, match="musi byc stringiem"):
+        with pytest.raises(ParseError, match="The sheet code must be"):
             SheetParser(12345)  # type: ignore
 
     def test_invalid_pas_letter(self):
         """Test of an invalid belt letter."""
-        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
+        with pytest.raises(ParseError, match="Invalid sheet code: '"):
             SheetParser("1-34")
 
     def test_invalid_100k_subdivision(self):
         """Test of an invalid 100k division (E is not allowed)."""
-        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
+        with pytest.raises(ParseError, match="Invalid sheet code: '"):
             SheetParser("N-34-130-E")
 
     def test_invalid_50k_subdivision(self):
         """Test of an invalid 50k division (e is not allowed)."""
-        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
+        with pytest.raises(ParseError, match="Invalid sheet code: '"):
             SheetParser("N-34-130-D-e")
 
     def test_invalid_25k_subdivision(self):
         """Test of an invalid 25k division (5 is not allowed)."""
-        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
+        with pytest.raises(ParseError, match="Invalid sheet code: '"):
             SheetParser("N-34-130-D-d-5")
 
     def test_invalid_10k_subdivision(self):
         """Test of an invalid 10k division (0 is not allowed)."""
-        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
+        with pytest.raises(ParseError, match="Invalid sheet code: '"):
             SheetParser("N-34-130-D-d-2-0")
 
 
@@ -256,12 +256,12 @@ class TestSheetParserEdgeCases:
 
     def test_single_digit_slup_out_of_range(self):
         """A7: a one-digit column is outside the PL-1992 range (33-35)."""
-        with pytest.raises(ParseError, match="slup 1 "):
+        with pytest.raises(ParseError, match="column 1 "):
             SheetParser("M-1", sheet_system="1992")
 
     def test_double_digit_slup_out_of_range(self):
         """A7: column 99 is outside the PL-1992 range (33-35)."""
-        with pytest.raises(ParseError, match="slup 99 "):
+        with pytest.raises(ParseError, match="column 99 "):
             SheetParser("M-99", sheet_system="1992")
 
     def test_three_digit_arkusz_200k(self):
@@ -452,7 +452,7 @@ class TestSheetParser8Part:
 
     @pytest.mark.parametrize("sheet", ["N-34-50-A-c-3-2-5", "N-34-50-A-c-3-2-3-1"])
     def test_codes_beyond_the_8_part_level_are_rejected(self, sheet):
-        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
+        with pytest.raises(ParseError, match="Invalid sheet code: '"):
             SheetParser(sheet)
 
 
@@ -801,17 +801,17 @@ class TestSheetParserGetAllDescendants:
         """Test of get_all_descendants() with an invalid target scale."""
         parser = SheetParser("N-34-130-D")
 
-        with pytest.raises(ValidationError, match="Nieprawidlowa skala"):
+        with pytest.raises(ValidationError, match="Invalid scale: '"):
             parser.get_all_descendants("1:2500")
 
     def test_descendants_target_scale_not_smaller(self):
         """Test of get_all_descendants() when the target scale is >= the current one."""
         parser = SheetParser("N-34-130-D")  # 1:100000
 
-        with pytest.raises(ValidationError, match="musi byc wieksza"):
+        with pytest.raises(ValidationError, match="must be larger"):
             parser.get_all_descendants("1:100000")
 
-        with pytest.raises(ValidationError, match="musi byc wieksza"):
+        with pytest.raises(ValidationError, match="must be larger"):
             parser.get_all_descendants("1:200000")
 
     def test_descendants_preserves_system(self):
@@ -979,7 +979,7 @@ class TestSheetParserGetBBox:
         """Test of the error for an unsupported CRS."""
         parser = SheetParser("N-34")
 
-        with pytest.raises(ValidationError, match="Nieobslugiwany uklad"):
+        with pytest.raises(ValidationError, match="Unsupported coordinate system:"):
             parser.get_bbox(crs="EPSG:3857")
 
     def test_bbox_default_crs_is_2180(self):
@@ -1195,13 +1195,13 @@ class TestFindSheetsForBBox:
     def test_invalid_scale(self):
         """Test of a wrong target scale → ValidationError."""
         bbox = BBox(20.0, 52.0, 20.5, 52.5, "EPSG:4326")
-        with pytest.raises(ValidationError, match="Nieprawidlowa skala"):
+        with pytest.raises(ValidationError, match="Invalid scale: '"):
             find_sheets_for_bbox(bbox, "1:2500", sheet_system="1992")
 
     def test_invalid_crs(self):
         """Test of an unsupported CRS → ValidationError."""
         bbox = BBox(0, 0, 1, 1, "EPSG:3857")
-        with pytest.raises(ValidationError, match="Nieobslugiwany CRS"):
+        with pytest.raises(ValidationError, match="Unsupported CRS: '"):
             find_sheets_for_bbox(bbox, "1:10000", sheet_system="1992")
 
     def test_sorted_output(self):
@@ -1530,7 +1530,7 @@ class TestSheetParserBBoxViaCoreBBox:
 
     def test_find_sheets_rejects_inverted_bbox(self):
         """Formerly BBox(10,10,5,5) gave the junk sheet ['L-33-1-D-c-4-3']."""
-        with pytest.raises(ValidationError, match="odwrocony"):
+        with pytest.raises(ValidationError, match="is inverted"):
             find_sheets_for_bbox(
                 BBox(10, 10, 5, 5, "EPSG:2180"),
                 target_scale="1:10000",
@@ -1539,7 +1539,7 @@ class TestSheetParserBBoxViaCoreBBox:
 
     @pytest.mark.parametrize("system", ["1992", "2000"])
     def test_find_sheets_rejects_nan_bbox(self, system):
-        with pytest.raises(ValidationError, match="skonczone"):
+        with pytest.raises(ValidationError, match="must be finite"):
             find_sheets_for_bbox(
                 BBox(float("nan"), 1, 2, 3, "EPSG:2180"),
                 sheet_system=system,
@@ -1575,7 +1575,7 @@ class TestNomenclatureRange:
         ],
     )
     def test_out_of_range_raises_parse_error(self, sheet):
-        with pytest.raises(ParseError, match="poza zakresem"):
+        with pytest.raises(ParseError, match="- outside the range of"):
             SheetParser(sheet)
 
     def test_parse_error_is_validation_error(self):

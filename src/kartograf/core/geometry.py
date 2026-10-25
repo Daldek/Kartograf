@@ -16,6 +16,7 @@ from pyproj import CRS
 from kartograf.core.bbox import BBox, transform_bbox
 from kartograf.core.sheet_parser import find_sheets_for_bbox
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message, reason
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +71,7 @@ def _point_from_wkb(
     base_type = (wkb_type & 0x0FFFFFFF) % 1000
     if base_type != 1:
         raise ValidationError(
-            "Geometria GPKG bez obwiedni w naglowku (envelope_type=0) "
-            f"dla typu WKB {wkb_type} - przebuduj plik z obwiedniami "
-            "(np. ogr2ogr) albo uzyj SHP"
+            message("core.gpkg_geometry_without_envelope_header", wkb_type=wkb_type)
         )
 
     # EWKB with the SRID flag inserts a 4 B CRS identifier BETWEEN the type and
@@ -181,10 +180,7 @@ def _read_shp_crs(filepath: Path) -> CRS:
     """
     prj_path = filepath.with_suffix(".prj")
     if not prj_path.exists():
-        raise ValidationError(
-            f"Brak pliku .prj shapefile: {prj_path}. "
-            "Nie da sie ustalic ukladu wspolrzednych."
-        )
+        raise ValidationError(message("core.no_prj_file_shapefile", prj_path=prj_path))
 
     wkt = prj_path.read_text(encoding="utf-8").strip()
     try:
@@ -194,7 +190,11 @@ def _read_shp_crs(filepath: Path) -> CRS:
             return CRS.from_user_input(wkt)
         except Exception as e:
             raise ValidationError(
-                f"Nie da sie odczytac ukladu z {prj_path}: {e}"
+                message(
+                    "core.cannot_read_coordinate_system",
+                    prj_path=prj_path,
+                    error=reason(e),
+                )
             ) from e
 
 
@@ -293,7 +293,7 @@ def _read_gpkg_crs(conn: sqlite3.Connection, table_name: str) -> CRS:
     row = cursor.fetchone()
     if row is None:
         raise ValidationError(
-            f"Brak metadanych kolumny geometrii tabeli '{table_name}'"
+            message("core.no_geometry_column_metadata_table", table_name=table_name)
         )
     srs_id = row[0]
 
@@ -304,7 +304,7 @@ def _read_gpkg_crs(conn: sqlite3.Connection, table_name: str) -> CRS:
     )
     row = cursor.fetchone()
     if row is None:
-        raise ValidationError(f"Brak definicji SRS dla srs_id={srs_id}")
+        raise ValidationError(message("core.no_srs_definition_srs_id", srs_id=srs_id))
 
     wkt = row[0]
     try:
@@ -314,7 +314,11 @@ def _read_gpkg_crs(conn: sqlite3.Connection, table_name: str) -> CRS:
             return CRS.from_authority("EPSG", str(srs_id))
         except Exception as e:
             raise ValidationError(
-                f"Nie da sie odczytac ukladu dla srs_id={srs_id}: {e}"
+                message(
+                    "core.cannot_read_coordinate_system_srs_id",
+                    srs_id=srs_id,
+                    error=reason(e),
+                )
             ) from e
 
 
@@ -336,12 +340,15 @@ def _gpkg_layer_choice(
     """
     tables = tuple(_get_gpkg_feature_tables(conn))
     if not tables:
-        raise ValidationError(f"Brak tabel obiektow w GeoPackage: {filepath}")
+        raise ValidationError(
+            message("core.no_feature_tables_geopackage", filepath=filepath)
+        )
     if layer is not None:
         if layer not in tables:
             raise ValidationError(
-                f"Brak warstwy '{layer}' w GeoPackage. "
-                f"Dostepne warstwy: {', '.join(tables)}"
+                message(
+                    "core.no_layer_geopackage", layer=layer, tables=", ".join(tables)
+                )
             )
         return LayerChoice(layer, tables, defaulted=False)
     return LayerChoice(tables[0], tables, defaulted=True)
@@ -425,8 +432,11 @@ def resolve_layer(filepath: Path, layer: str | None = None) -> LayerChoice:
         finally:
             conn.close()
     raise ValidationError(
-        f"Nieobslugiwany format geometrii: '{ext}'. "
-        f"Obslugiwane: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}"
+        message(
+            "core.unsupported_geometry_format",
+            ext=ext,
+            supported_extensions=", ".join(sorted(_SUPPORTED_EXTENSIONS)),
+        )
     )
 
 
@@ -521,8 +531,11 @@ def read_feature_bboxes(
         return _read_gpkg_bboxes(filepath, layer, target_crs)
     else:
         raise ValidationError(
-            f"Nieobslugiwany format geometrii: '{ext}'. "
-            f"Obslugiwane: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}"
+            message(
+                "core.unsupported_geometry_format",
+                ext=ext,
+                supported_extensions=", ".join(sorted(_SUPPORTED_EXTENSIONS)),
+            )
         )
 
 
@@ -565,8 +578,11 @@ def read_source_crs(filepath: Path, layer: str | None = None) -> CRS:
             conn.close()
 
     raise ValidationError(
-        f"Nieobslugiwany format geometrii: '{ext}'. "
-        f"Obslugiwane: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}"
+        message(
+            "core.unsupported_geometry_format",
+            ext=ext,
+            supported_extensions=", ".join(sorted(_SUPPORTED_EXTENSIONS)),
+        )
     )
 
 
@@ -601,7 +617,7 @@ def get_overall_bbox(
     bboxes = read_feature_bboxes(filepath, layer=layer, target_crs=target_crs)
 
     if not bboxes:
-        raise ValidationError(f"Brak obiektow z geometria w: {filepath}")
+        raise ValidationError(message("core.no_features_geometry", filepath=filepath))
 
     min_x = min(b.min_x for b in bboxes)
     min_y = min(b.min_y for b in bboxes)

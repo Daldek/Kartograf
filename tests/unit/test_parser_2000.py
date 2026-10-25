@@ -124,17 +124,17 @@ class TestParser2000Validation:
 
     def test_non_string_raises_parse_error(self):
         """Test that a non-string raises ParseError."""
-        with pytest.raises(ParseError, match="stringiem"):
+        with pytest.raises(ParseError, match="The sheet code must be"):
             Parser2000(123)
 
     def test_empty_string_raises_parse_error(self):
         """Test that an empty string raises ParseError."""
-        with pytest.raises(ParseError, match="puste"):
+        with pytest.raises(ParseError, match="not be empty"):
             Parser2000("")
 
     def test_whitespace_only_raises_parse_error(self):
         """Test that whitespace alone raises ParseError."""
-        with pytest.raises(ParseError, match="puste"):
+        with pytest.raises(ParseError, match="not be empty"):
             Parser2000("   ")
 
     def test_pl1992_format_rejected(self):
@@ -658,7 +658,7 @@ class TestParser2000BBoxCRS:
     def test_bbox_unsupported_crs_raises(self):
         """Test that an unsupported CRS raises ValidationError."""
         p = Parser2000("6.179.12")
-        with pytest.raises(ValidationError, match="Nieobs"):
+        with pytest.raises(ValidationError, match="Unsupported coordinate system:"):
             p.get_bbox(crs="EPSG:4258")
 
     def test_bbox_all_zone_crs_accepted(self):
@@ -1705,7 +1705,7 @@ class TestFindSheets2000DenseEnvelope:
         assert {"6.135.17", "6.135.18", "6.135.19"} <= set(result)
 
     def test_inverted_bbox_rejected(self):
-        with pytest.raises(ValidationError, match="odwrocony"):
+        with pytest.raises(ValidationError, match="is inverted"):
             find_sheets_2000_for_bbox(
                 BBox(6_500_000, 5_600_000, 6_490_000, 5_590_000, "EPSG:2177"),
                 target_scale="1:10000",

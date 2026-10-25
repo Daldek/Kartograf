@@ -226,7 +226,9 @@ def test_corine_preview_not_emitted_for_invalid_sheet(tmp_path, capsys):
         )
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert without_error_document(captured.err) == f"Error: {exc.value}\n"
+    assert (
+        without_error_document(captured.err) == f"Error: {exc.value.localized('pl')}\n"
+    )
 
 
 def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
@@ -251,7 +253,9 @@ def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
     )
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert without_error_document(captured.err) == f"Error: {exc.value}\n"
+    assert (
+        without_error_document(captured.err) == f"Error: {exc.value.localized('pl')}\n"
+    )
 
 
 @pytest.mark.parametrize("mode", ["check", "download"])
@@ -267,7 +271,9 @@ def test_invalid_teryt_matches_cli_and_api(tmp_path, capsys, mode):
     assert _lc(tmp_path, "--product", "bdot10k", "--teryt", "14", *flags) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert without_error_document(captured.err) == f"Error: {exc.value}\n"
+    assert (
+        without_error_document(captured.err) == f"Error: {exc.value.localized('pl')}\n"
+    )
 
 
 @pytest.mark.parametrize(
@@ -288,7 +294,9 @@ def test_invalid_landcover_bbox_matches_cli_and_api(
     assert _lc(tmp_path, "--product", "bdot10k", "--bbox", coordinates, *flags) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert without_error_document(captured.err) == f"Error: {exc.value}\n"
+    assert (
+        without_error_document(captured.err) == f"Error: {exc.value.localized('pl')}\n"
+    )
 
 
 @pytest.mark.parametrize(
@@ -324,13 +332,15 @@ def test_invalid_hsg_bbox_matches_cli_and_api(
     )
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert without_error_document(captured.err) == f"Error: {exc.value}\n"
+    assert (
+        without_error_document(captured.err) == f"Error: {exc.value.localized('pl')}\n"
+    )
 
 
 @pytest.mark.parametrize("mode", ["check", "download"])
 def test_unsupported_bbox_crs_rejected_before_transform(tmp_path, mode):
     manager = LandCoverManager(tmp_path / "api", "corine", cache=False)
-    with pytest.raises(ValidationError, match="Nieprawidlowy bbox:") as exc:
+    with pytest.raises(ValidationError, match="Invalid bbox:") as exc:
         getattr(manager, mode)(bbox=BBox(0, 0, 1, 1, "EPSG:999999"), year=2018)
     assert "EPSG:999999" in str(exc.value)
 
@@ -338,7 +348,7 @@ def test_unsupported_bbox_crs_rejected_before_transform(tmp_path, mode):
 @pytest.mark.parametrize("mode", ["check_hsg", "calculate_hsg"])
 def test_hsg_unsupported_bbox_crs_rejected_before_transform(tmp_path, mode):
     calc = HSGCalculator(tmp_path / "api", cache=False)
-    with pytest.raises(ValidationError, match="Nieprawidlowy bbox:") as exc:
+    with pytest.raises(ValidationError, match="Invalid bbox:") as exc:
         getattr(calc, mode)(bbox=BBox(0, 0, 1, 1, "EPSG:999999"), depth="0-5cm")
     assert "EPSG:999999" in str(exc.value)
 
@@ -357,7 +367,10 @@ def test_hsg_cli_output_tif_rejected(tmp_path, capsys):
     assert fake.capabilities == 0
     with pytest.raises(ValidationError) as error:
         HSGCalculator(tmp_path / "hsg.tif")
-    assert without_error_document(capsys.readouterr().err) == f"Error: {error.value}\n"
+    assert (
+        without_error_document(capsys.readouterr().err)
+        == f"Error: {error.value.localized('pl')}\n"
+    )
 
 
 def test_hsg_cli_keep_intermediate_removed(tmp_path):

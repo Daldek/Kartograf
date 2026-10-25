@@ -1018,7 +1018,7 @@ class TestOnDownloadCallback:
     def test_tm33_odd_km_does_not_announce(self, tmp_path):
         events, announce = self._recorder()
         with patch(_CLIENT_PATCH) as client_cls:
-            with pytest.raises(ParseError, match="parzyste"):
+            with pytest.raises(ParseError, match="must be even"):
                 CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv").download(
                     "301_5550", tmp_path / "t.tif", on_download=announce
                 )

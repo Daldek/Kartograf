@@ -19,7 +19,10 @@ language of its caller (`Message.localized`, `localize`) instead of parsing text
 A template is ``str.format`` text with named placeholders; a counted noun is
 written ``{count} {count:plural(file|files)}`` (two forms: one and other) or
 ``{count:plural(plik|pliki|plikow)}`` (three forms: one, few and many, as Polish
-needs them), so a text and its plural forms stay in one entry per language.
+needs them), so a text and its plural forms stay in one entry per language. A list of
+messages or names is written ``{items:join}`` (joined with ``", "``) or
+``{items:join(; )}``; a `Message` among the items is rendered in the language of
+its parent, so a list of fragments stays translatable.
 
 Raise sites and notices call `message` with the key as a literal and one keyword
 per placeholder; ``tests/unit/test_messages.py`` checks every call against its
@@ -62,6 +65,7 @@ DEFAULT_LANG: Lang = "en"
 _KEY = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+")
 _AREA = re.compile(r"[a-z][a-z0-9_]*")
 _PLURAL = re.compile(r"plural\(([^|()]+(?:\|[^|()]+){1,2})\)")
+_JOIN = re.compile(r"join(?:\(([^()]*)\))?")
 
 
 class Text(NamedTuple):
@@ -184,13 +188,28 @@ def plural_forms(count: object, forms: Sequence[str]) -> str:
 
 
 class _Formatter(string.Formatter):
-    """``str.format`` plus the specs ``plural(a|b)`` and ``plural(a|b|c)``."""
+    """``str.format`` plus the specs ``plural(a|b)``, ``plural(a|b|c)`` and ``join``."""
 
     def format_field(self, value: Any, format_spec: str) -> str:
         found = _PLURAL.fullmatch(format_spec)
         if found is not None:
             return plural_forms(value, found.group(1).split("|"))
+        joined = _JOIN.fullmatch(format_spec)
+        if joined is not None:
+            separator = ", " if joined.group(1) is None else joined.group(1)
+            return separator.join(str(item) for item in value)
         return str(super().format_field(value, format_spec))
+
+
+def _localized_value(value: object, lang: Lang) -> object:
+    """Render a `Message` value, or each one in a list or tuple, in ``lang``."""
+    if isinstance(value, Message):
+        return value.localized(lang)
+    if type(value) is list:
+        return [_localized_value(item, lang) for item in value]
+    if type(value) is tuple:
+        return tuple(_localized_value(item, lang) for item in value)
+    return value
 
 
 _FORMATTER = _Formatter()
@@ -244,10 +263,7 @@ def message(key: str, /, lang: Lang = DEFAULT_LANG, **params: object) -> Message
     if lang not in LANGS:
         raise ValueError(f"Unknown message language {lang!r}; allowed: {LANGS}")
     template = text.pl if lang == "pl" else text.en
-    values = {
-        name: value.localized(lang) if isinstance(value, Message) else value
-        for name, value in params.items()
-    }
+    values = {name: _localized_value(value, lang) for name, value in params.items()}
     return Message(_FORMATTER.vformat(template, (), values), key, values, lang)
 
 

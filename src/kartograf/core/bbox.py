@@ -23,6 +23,7 @@ import numpy as np
 from pyproj import CRS, Transformer
 
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 from kartograf.serialization import EncodeContext
 
 # Number of points per edge (as in corine/soilgrids `transform_bounds`).
@@ -106,18 +107,18 @@ def validate_bbox(bbox: BBox, *, crs: str | None = None) -> None:
     coords = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
     if not all(math.isfinite(v) for v in coords):
         raise ValidationError(
-            f"wspolrzedne bboxa musza byc skonczone, otrzymano {coords}",
+            message("core.bbox_coordinates_must_be_finite", coords=coords),
             option="bbox",
         )
     if bbox.min_x > bbox.max_x or bbox.min_y > bbox.max_y:
         raise ValidationError(
-            f"bbox odwrocony (min > max): {coords}; "
-            "oczekiwano min_x <= max_x i min_y <= max_y",
+            message("core.bbox_inverted", coords=coords),
             option="bbox",
         )
     if crs is not None and _norm_label(bbox.crs) != _norm_label(crs):
         raise ValidationError(
-            f"bbox w ukladzie {bbox.crs!r}, oczekiwano {crs!r}", option="bbox"
+            message("core.bbox_crs_mismatch", found=bbox.crs, expected=crs),
+            option="bbox",
         )
 
 

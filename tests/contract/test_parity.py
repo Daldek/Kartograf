@@ -686,7 +686,7 @@ def test_input_errors_same_type_and_text(tmp_path, argv, kwargs):
     )
     assert run.cli_code == 2
     assert type(run.api_error).__name__ == "ValidationError"
-    assert run.cli_text.strip() == f"Error: {run.api_error}"
+    assert run.cli_text.strip() == f"Error: {run.api_error.localized('pl')}"
     assert not run.cli_store.exists() and not run.api_store.exists()
 
 
@@ -733,7 +733,7 @@ def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
     run = run_both(argv, lambda out: operation(output_dir=out, **options), tmp_path)
     assert run.cli_code == 2
     assert type(run.api_error) is ValidationError
-    assert run.cli_text == f"Error: {run.api_error}\n"
+    assert run.cli_text == f"Error: {run.api_error.localized('pl')}\n"
     assert run.cli_stdout == ""
     assert not run.cli_store.exists() and not run.api_store.exists()
 

@@ -114,14 +114,14 @@ class TestValidateBBox:
     def test_non_finite_rejected(self, bad, pos):
         coords = [1.0, 2.0, 3.0, 4.0]
         coords[pos] = bad
-        with pytest.raises(ValidationError, match="skonczone"):
+        with pytest.raises(ValidationError, match="must be finite"):
             validate_bbox(BBox(*coords, "EPSG:2180"))
 
     @pytest.mark.parametrize(
         "coords", [(10, 10, 5, 50), (10, 10, 50, 5), (10, 10, 5, 5)]
     )
     def test_inverted_rejected(self, coords):
-        with pytest.raises(ValidationError, match="odwrocony"):
+        with pytest.raises(ValidationError, match="is inverted"):
             validate_bbox(BBox(*coords, "EPSG:2180"))
 
     def test_point_allowed(self):

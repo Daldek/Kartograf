@@ -380,7 +380,7 @@ def test_choices_of_the_report_are_validated_before_network():
         _check(session, product="nmt", country="pl", sheet="302_5550")
     with pytest.raises(ParseError):
         _check(session, product="nmt", sheet="N-34-999-X")
-    with pytest.raises(ParseError, match="parzyste"):
+    with pytest.raises(ParseError, match="must be even"):
         _check(session, product="nmt", sheet="301_5550")
     assert session.urls == []
 

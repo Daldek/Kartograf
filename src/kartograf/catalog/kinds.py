@@ -35,6 +35,7 @@ from kartograf.download.options import (
 )
 from kartograf.download.plan import UpdatePlan
 from kartograf.exceptions import ValidationError
+from kartograf.messages import message
 
 
 def layer_codes(text: str) -> tuple[str, ...]:
@@ -62,9 +63,7 @@ def parse_per_country(raw: str | None, flag: str) -> str | dict[str, str] | None
         key = key.strip().lower()
         if not sep or key not in COUNTRY_KEYS or not value.strip() or key in values:
             raise ValidationError(
-                f"{flag}: nieprawidlowa wartosc {raw!r} - podaj jedna wartosc dla "
-                f"kazdego kraju zadania albo pary kraj=wartosc rozdzielone "
-                f"przecinkami (kraje: pl, cz), np. {flag} pl=...,cz=..."
+                message("kinds.invalid_value_give_one_value_every", flag=flag, raw=raw)
             )
         values[key] = value.strip()
     return values
@@ -92,16 +91,22 @@ def parse_bbox_arg(text: str, crs: str) -> BBox:
     """
     parts = text.split(",")
     if len(parts) != 4:
-        reason = f"oczekiwano 4 wartosci rozdzielonych przecinkami, podano {len(parts)}"
-        raise ValidationError(f"Nieprawidlowy bbox: {reason}. {BBOX_EXPECTED}")
+        reason = message(
+            "kinds.expected_4_comma_separated_values", parts_count=len(parts)
+        )
+        raise ValidationError(
+            message("kinds.invalid_bbox", reason=reason, bbox_expected=BBOX_EXPECTED)
+        )
     values = []
     for part in parts:
         try:
             values.append(float(part.strip()))
         except ValueError:
-            reason = f"{part.strip()!r} nie jest liczba"
+            reason = message("kinds.not_number", part=part.strip())
             raise ValidationError(
-                f"Nieprawidlowy bbox: {reason}. {BBOX_EXPECTED}"
+                message(
+                    "kinds.invalid_bbox", reason=reason, bbox_expected=BBOX_EXPECTED
+                )
             ) from None
     return validate_request_bbox(BBox(values[0], values[1], values[2], values[3], crs))
 
@@ -111,16 +116,16 @@ def parse_bbox_arg(text: str, crs: str) -> BBox:
 # =============================================================================
 
 _KIND_TEXT: dict[Kind, str] = {
-    "str": "napis",
-    "int": "liczba calkowita",
+    "str": message("kinds.string"),
+    "int": message("kinds.integer"),
     "flag": "true",
-    "bbox": "lista 4 liczb [min_x, min_y, max_x, max_y] z bbox_crs",
-    "bbox_crs": "napis (uklad bbox) razem z bbox",
-    "path": "niepusta sciezka (napis)",
-    "per_country": 'napis albo obiekt {"pl": napis, "cz": napis}',
-    "str_list": "lista napisow",
-    "plan": "dokument kartograf-plan/1 (obiekt)",
-    "options": "obiekt opcji zadania",
+    "bbox": message("kinds.list_4_numbers_min_x"),
+    "bbox_crs": message("kinds.string_bbox_crs_together_bbox"),
+    "path": message("kinds.non_empty_path"),
+    "per_country": message("kinds.string_object"),
+    "str_list": message("kinds.list_strings"),
+    "plan": message("kinds.document_kartograf_plan_1"),
+    "options": message("kinds.options_object_task"),
 }
 
 
@@ -196,10 +201,14 @@ def options_to_json(
     names = _argument_names(kinds)
     for name in given:
         if name not in names:
-            owner = f" komendy {command}" if command else ""
+            owner = message("kinds.of_the_command", command=command) if command else ""
             raise ValidationError(
-                f"opcja {name!r} nie nalezy do zadania{owner} "
-                f"(opcje: {', '.join(names)})",
+                message(
+                    "kinds.option_does_not_belong_task",
+                    name=name,
+                    owner=owner,
+                    names=", ".join(names),
+                ),
                 option=name,
             )
     data: dict[str, Any] = {}
@@ -211,7 +220,8 @@ def options_to_json(
         if kind == "bbox":
             if not isinstance(value, BBox):
                 raise ValidationError(
-                    f"opcja bbox: oczekiwano BBox, podano {value!r}", option="bbox"
+                    message("kinds.option_bbox_expected_bbox", value=value),
+                    option="bbox",
                 )
             data["bbox"] = [value.min_x, value.min_y, value.max_x, value.max_y]
             data["bbox_crs"] = value.crs
@@ -219,7 +229,12 @@ def options_to_json(
         converted = _json_value(kind, value)
         if converted is None:
             raise ValidationError(
-                f"opcja {name}: oczekiwano {_KIND_TEXT[kind]}, podano {value!r}",
+                message(
+                    "kinds.option_expected_got",
+                    name=name,
+                    kind_text=_KIND_TEXT[kind],
+                    value=value,
+                ),
                 option=name,
             )
         data[name] = converted
@@ -259,17 +274,21 @@ def check_options_json(
     ``bbox_crs`` come together.
     """
     if not isinstance(data, dict):
-        return "options: oczekiwano obiektu"
+        return message("kinds.options_object_expected")
     for name, value in data.items():
         kind = kinds.get(name)
         if kind is None:
-            owner = f" komendy {command}" if command else ""
-            return (
-                f"options: opcja {name!r} nie nalezy do{owner or ' komendy'} "
-                f"(opcje: {', '.join(kinds)})"
+            owner = message("kinds.the_command", command=command) if command else ""
+            return message(
+                "kinds.options_option_does_not_belong",
+                name=name,
+                owner=owner or message("kinds.the_command_unnamed"),
+                kinds=", ".join(kinds),
             )
         if not _valid_json(kind, value, data):
-            return f"options.{name}: oczekiwano {_KIND_TEXT[kind]}"
+            return message(
+                "kinds.options_expected", name=name, kind_text=_KIND_TEXT[kind]
+            )
     return None
 
 
@@ -310,7 +329,10 @@ def convert_arguments(
     for name in data:
         if name not in kinds:
             raise ValidationError(
-                f"nieznana opcja {name!r} (opcje: {', '.join(kinds)})", option=name
+                message(
+                    "kinds.unknown_option_options", name=name, kinds=", ".join(kinds)
+                ),
+                option=name,
             )
     given = {
         name: value
@@ -324,19 +346,24 @@ def convert_arguments(
             value = os.fspath(value)
         if kind == "bbox" and "bbox_crs" not in given:
             raise ValidationError(
-                "opcja bbox wymaga bbox_crs (uklad wspolrzednych bbox)",
+                message("kinds.option_bbox_needs_bbox_crs"),
                 option="bbox_crs",
                 options=("bbox", "bbox_crs"),
             )
         if kind == "bbox_crs" and "bbox" not in given:
             raise ValidationError(
-                "opcja bbox_crs wymaga bbox",
+                message("kinds.option_bbox_crs_needs_bbox"),
                 option="bbox_crs",
                 options=("bbox", "bbox_crs"),
             )
         if not _valid_json(kind, value, given):
             raise ValidationError(
-                f"opcja {name}: oczekiwano {_KIND_TEXT[kind]}, podano {value!r}",
+                message(
+                    "kinds.option_expected_got",
+                    name=name,
+                    kind_text=_KIND_TEXT[kind],
+                    value=value,
+                ),
                 option=name,
             )
         if kind == "bbox":
