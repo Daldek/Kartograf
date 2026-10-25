@@ -4023,6 +4023,12 @@ value and source, each credential as present or missing, and the store root with
 or `file`; `name` is the variable or the table.) `config_file.ignored` lists the keys of
 `[kartograf]` that nothing reads: an unknown key, or a credential (`clms_credentials`).
 
+**The default root without the size.** `kartograf.store_root()` returns `StoreRoot(root, source,
+name, marker_exists)`: the root of the default store by the same order, the layer that gave it and
+whether `kartograf-store.json` is a file in it. It lists and measures nothing, so a caller that only
+needs the place (a wizard, a consumer) uses it instead of `get_config()`; IMGWTools has the same
+function.
+
 **A file or a value that cannot be used.** An unreadable file, a file that is not UTF-8 text,
 invalid TOML, a section that is not a table, a missing file named by `NOGAT_CONFIG` and a
 `lang` other than `pl` or `en` are a `ConfigError` (`validation_error`, exit code 2,

@@ -43,6 +43,7 @@ from typing import Any, ClassVar, Final, Literal
 import platformdirs
 
 from kartograf.exceptions import ConfigError, ValidationError
+from kartograf.marker import MARKER
 from kartograf.messages import Lang, message
 from kartograf.serialization import Document
 
@@ -51,6 +52,7 @@ __all__ = [
     "ConfigFile",
     "Setting",
     "StoreInfo",
+    "StoreRoot",
     "cache_dir",
     "check_config",
     "config_file",
@@ -205,6 +207,31 @@ class StoreInfo:
     name: str | None
     exists: bool
     size_bytes: int | None
+
+
+@dataclass(frozen=True)
+class StoreRoot:
+    """
+    The default store root, resolved without reading the store (DEV-19.2).
+
+    Attributes
+    ----------
+    root : pathlib.Path
+        The store root: ``--root`` aside, ``KARTOGRAF_ROOT``, ``[kartograf] root``
+        of ``nogat.toml``, else ``<data_dir>/kartograf``; ``~`` expanded.
+    source : {"default", "env", "file"}
+        The layer that gave the root.
+    name : str or None
+        The variable or the table that gave it; ``None`` for the default.
+    marker_exists : bool
+        Whether ``kartograf-store.json`` is a file in the root. The directory may
+        be missing; then the marker does not exist either.
+    """
+
+    root: Path
+    source: SettingSource
+    name: str | None
+    marker_exists: bool
 
 
 @dataclass(frozen=True)
@@ -418,9 +445,31 @@ def cache_dir() -> Path:
     return _path("cache_dir")
 
 
-def store_root() -> Path:
-    """Return the store root: ``root``, else ``<data_dir>/kartograf`` (DEV-19.2)."""
-    return _path("root")
+def store_root() -> StoreRoot:
+    """
+    Return the default store root, its source and whether its marker exists.
+
+    The read-only accessor of the default root that every Nogat producer
+    exposes alike (DEV-19.2). It resolves the setting ``root`` by the order of
+    DEV-18.1, as ``get_config`` does, and looks for one file, the marker. It
+    never creates, lists or measures anything, so the cost does not grow with
+    the store (``get_config().store`` measures the size).
+
+    Returns
+    -------
+    StoreRoot
+        ``root``, ``source`` (``default``, ``env`` or ``file``), ``name`` (the
+        variable or the table) and ``marker_exists``.
+
+    Examples
+    --------
+    >>> default = store_root()
+    >>> default.marker_exists in (True, False)
+    True
+    """
+    setting = resolve("root")
+    root = Path(str(setting.value))
+    return StoreRoot(root, setting.source, setting.name, (root / MARKER).is_file())
 
 
 def resolve_root(root: str | os.PathLike[str] | None) -> Path:
@@ -455,7 +504,7 @@ def resolve_root(root: str | os.PathLike[str] | None) -> Path:
     'data'
     """
     if root is None:
-        return store_root()
+        return store_root().root
     if not os.fspath(root):
         raise ValidationError(message("config.empty_root"), option="root")
     return Path(root)

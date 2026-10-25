@@ -68,7 +68,7 @@ def test_an_empty_variable_counts_as_unset(monkeypatch):
 def test_the_store_root_is_a_key_of_kartograf_only(
     tmp_path, monkeypatch, user_environment
 ):
-    assert environment.store_root() == user_environment / "data" / "kartograf"
+    assert environment.store_root().root == user_environment / "data" / "kartograf"
     write_config(
         tmp_path,
         monkeypatch,
@@ -91,10 +91,64 @@ def test_the_store_root_is_a_key_of_kartograf_only(
     )
 
 
+def test_the_public_store_root_names_the_root_its_source_and_the_marker(
+    tmp_path, monkeypatch, user_environment
+):
+    default = kartograf.store_root()
+    assert default == kartograf.StoreRoot(
+        user_environment / "data" / "kartograf", "default", None, False
+    )
+
+    write_config(tmp_path, monkeypatch, '[kartograf]\nroot = "' + str(tmp_path) + '"\n')
+    (tmp_path / "kartograf-store.json").write_text("{}", encoding="utf-8")
+    assert kartograf.store_root() == kartograf.StoreRoot(
+        tmp_path, "file", "[kartograf]", True
+    )
+
+    elsewhere = tmp_path / "elsewhere"
+    monkeypatch.setenv("KARTOGRAF_ROOT", str(elsewhere))
+    assert kartograf.store_root() == kartograf.StoreRoot(
+        elsewhere, "env", "KARTOGRAF_ROOT", False
+    )
+    # the same root, source and name as the report of config show
+    store = get_config().store
+    assert (store.root, store.source, store.name) == (
+        elsewhere,
+        "env",
+        "KARTOGRAF_ROOT",
+    )
+
+
+def test_the_marker_of_another_tool_is_not_the_marker_of_kartograf(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("KARTOGRAF_ROOT", str(tmp_path))
+    (tmp_path / "imgw-store.json").write_text("{}", encoding="utf-8")
+
+    assert kartograf.store_root().marker_exists is False
+
+
+def test_the_public_store_root_does_not_walk_the_tree(
+    tmp_path, monkeypatch, user_environment
+):
+    (tmp_path / "versions").mkdir()
+    monkeypatch.setenv("KARTOGRAF_ROOT", str(tmp_path))
+
+    def walked(*args, **kwargs):
+        raise AssertionError("store_root() must not read the store")
+
+    monkeypatch.setattr(environment, "_tree_size", walked)
+    monkeypatch.setattr(os, "walk", walked)
+    monkeypatch.setattr(os, "scandir", walked)
+    monkeypatch.setattr(Path, "iterdir", walked)
+
+    assert kartograf.store_root().root == tmp_path
+
+
 def test_a_directory_expands_the_home_of_the_user(monkeypatch):
     monkeypatch.setenv("KARTOGRAF_ROOT", "~/kartograf-store")
 
-    assert environment.store_root() == Path.home() / "kartograf-store"
+    assert environment.store_root().root == Path.home() / "kartograf-store"
 
 
 def test_a_call_without_a_root_gets_the_default_root(user_environment):

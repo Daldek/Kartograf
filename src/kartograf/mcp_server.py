@@ -552,7 +552,7 @@ class _Toolbox:
             or not self._allow_dirs
         ):
             return
-        default = store_root().resolve()
+        default = store_root().root.resolve()
         if any(default.is_relative_to(directory) for directory in self._allow_dirs):
             return
         directories = [directory.as_posix() for directory in self._allow_dirs]
