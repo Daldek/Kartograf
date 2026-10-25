@@ -1,7 +1,8 @@
 # ADR-052: Command catalog documents and the MCP server on the Nogat agent interface
 
 **Date:** 2026-10-24
-**Status:** Accepted. The catalog documents (decisions 1 to 8), the MCP rebuild (decision 9)
+**Status:** Accepted — amended by ADR-054 (the options `output_dir` and `root`, `check` instead of
+`check_updates`, `store init`). The catalog documents (decisions 1 to 8), the MCP rebuild (decision 9)
 and the guide for agents (decision 10) are implemented.
 
 **Context:** The Nogat standard 2.1 asks every tool for a command catalog as the document
