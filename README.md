@@ -36,7 +36,7 @@ Development setup: `git clone https://github.com/Daldek/Kartograf.git && cd Kart
 
 ## Quick start
 
-Every command takes `--json`: stdout is then exactly one `kartograf-result/1` document, logs go to stderr. Without it the output is for people.
+Every command takes `--json`: stdout is then exactly one `kartograf-result/1` document, logs go to stderr. Without it the output is for people, in the language of `--lang` (`pl` or `en`).
 
 ### CLI
 
@@ -251,7 +251,7 @@ Settings come from the first of: the command-line option, the variable `KARTOGRA
 | `KARTOGRAF_ROOT` | `[kartograf] root` | root of the store (reported by `config show`; the commands still take the store from `--output`) | `<data_dir>/kartograf` |
 | `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR` | `data_dir` | parent of the stores | user data directory of `nogat` (`~/.local/share/nogat`) |
 | `KARTOGRAF_CACHE_DIR`, `NOGAT_CACHE_DIR` | `cache_dir` | parent of the caches; the metadata cache is `<cache_dir>/kartograf/metadata.db` | user cache directory of `nogat` (`~/.cache/nogat`) |
-| `KARTOGRAF_LANG`, `NOGAT_LANG` | `lang` | language of human-readable output, `pl` or `en` (output is Polish until the message catalogue lands) | `pl` |
+| `KARTOGRAF_LANG`, `NOGAT_LANG` | `lang` | language of human-readable output, `pl` or `en`; `--lang` overrides it; the `--json` output and the error line are English (the library texts move into the message catalog area by area) | `pl` |
 | `KARTOGRAF_DEBUG` | `[kartograf] debug` | print tracebacks and every library log record | off |
 | `NOGAT_CONFIG` | - | path of `nogat.toml` | user configuration directory |
 | `CLMS_CREDENTIALS` | never in the file | CLMS API credentials for CORINE as GeoTIFF ([USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md), section 6); `config show` says present or missing | - |

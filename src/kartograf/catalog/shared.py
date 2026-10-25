@@ -183,6 +183,21 @@ JSON = Param(
     "nazywa jego typ), bez paska postepu i tekstu; blad jako kartograf-error/1",
     argument=None,
 )
+LANG = Param(
+    "lang",
+    "str",
+    "Language of the text for people: pl or en (default: KARTOGRAF_LANG, then "
+    "nogat.toml, then pl). The --json document, the error line and every notice "
+    "of the library stay English.",
+    description_pl="Jezyk tekstu dla czlowieka: pl albo en (domyslnie KARTOGRAF_LANG, "
+    "potem nogat.toml, potem pl); dokument --json, linia bledu i komunikaty "
+    "biblioteki zostaja po angielsku",
+    argument=None,
+    allowed=("pl", "en"),
+    choices=True,
+    normalize="lower",
+    metavar="JEZYK",
+)
 CHECK_UPDATES = Param(
     "check_updates",
     "flag",

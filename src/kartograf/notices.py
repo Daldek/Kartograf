@@ -5,8 +5,10 @@ cover sizes, counted nouns and flag names.
 """
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
+
+from kartograf.messages import Lang, localize
 
 SHEET_LIST = "sheet_list"
 GEOMETRY_LAYER_DEFAULT = "geometry_layer_default"
@@ -127,7 +129,11 @@ def cli_flag(name: str) -> str:
 
 @dataclass(frozen=True)
 class Notice:
-    """An ASCII message about data, identified independently of its wording."""
+    """An ASCII message about data, identified independently of its wording.
+
+    ``message`` is English; a catalog `kartograf.messages.Message` there can be
+    rendered in another language (`localized`).
+    """
 
     level: Literal["info", "warning"]
     code: str
@@ -136,7 +142,11 @@ class Notice:
     def __post_init__(self) -> None:
         """Check that the message of the notice is ASCII."""
         if not self.message.isascii():
-            raise ValueError("Tekst komunikatu musi byc zapisany w ASCII")
+            raise ValueError("The message of a notice must be ASCII")
+
+    def localized(self, lang: Lang) -> "Notice":
+        """Return the notice with its message rendered in ``lang``."""
+        return replace(self, message=localize(self.message, lang))
 
 
 class NoticeSink:

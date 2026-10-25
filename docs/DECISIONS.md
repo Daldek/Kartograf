@@ -74,6 +74,7 @@ each relation is recorded on both sides.
 | [ADR-050](decisions/0050-nogat-user-environment.md) | User environment: nogat.toml, variables, user directories and `config show` | 2026-10-24 | Accepted |
 | [ADR-051](decisions/0051-result-envelope-and-outcome-exit-codes.md) | Result envelope kartograf-result/1, outcome exit codes 10 and 11, error document on stderr | 2026-10-24 | Accepted |
 | [ADR-052](decisions/0052-command-catalog-documents-and-mcp-server.md) | Command catalog documents kartograf-command-list/1 and kartograf-commands/1, and the MCP server | 2026-10-24 | Accepted |
+| [ADR-053](decisions/0053-message-catalog-and-english-machine-output.md) | Message catalog and English machine output | 2026-10-25 | Accepted; amends [ADR-037](#adr-037-cli-and-api-consistency) (Z5, S6: the language of messages) |
 
 ---
 
@@ -2838,6 +2839,12 @@ as `Info:`/`Warning:` on stderr, and saving the `--plan` file does not print an 
 Input errors (`ValidationError`, `ParseError`, `UsageError`) end the CLI with code 2, not 1
 (one table of exit and error codes: USAGE 9.3). The CLI imports test allows
 `kartograf.catalog` and `kartograf.serialization`.
+
+**Erratum (2026-10-25, ADR-053):** Z5 and S6 (Polish ASCII texts of the library, the
+CLI and `KartografError`) are amended: the texts of the library, the notices and the
+error document are English by default, and the Polish ASCII texts are the second language of
+the message catalog (`kartograf.messages`), shown by `--lang pl`, the default of a person at
+a terminal.
 
 ---
 

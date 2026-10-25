@@ -650,6 +650,7 @@ class TestCommandGroups:
             "--quiet",
             "-q",
             "--json",
+            "--lang",
         }
 
 

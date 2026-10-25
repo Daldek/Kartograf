@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from kartograf._errors import BY_CODE
+from kartograf.messages import Lang, localize, message
 from kartograf.serialization import encode
 
 
@@ -87,6 +88,23 @@ class KartografError(Exception):
         super().__init__(*args)
         self.hint = hint
 
+    def localized(self, lang: Lang) -> str:
+        """Return the text of the exception in ``lang``.
+
+        Parameters
+        ----------
+        lang : {"en", "pl"}
+            The language of the person who reads it (``--lang`` of the CLI).
+
+        Returns
+        -------
+        str
+            The message of the catalog (``kartograf.messages``) the exception was
+            raised with, rendered in ``lang``; any other text as it is.
+        """
+        first = self.args[0] if len(self.args) == 1 else None
+        return localize(first, lang) if isinstance(first, str) else str(self)
+
     def details(self) -> dict[str, object]:
         """Return ``reason`` and the attributes of ``DETAIL_FIELDS`` as JSON values.
 
@@ -137,9 +155,9 @@ class ValidationError(KartografError):
 
     Examples
     --------
-    >>> raise ValidationError("Invalid układ: '1965'. Must be '1992' or '2000'")
+    >>> raise ValidationError("Invalid sheet system: '1965'. Must be '1992' or '2000'")
     >>> raise ValidationError(
-    ...     "zly uklad", option="sheet_system", allowed=("1992", "2000")
+    ...     "wrong sheet system", option="sheet_system", allowed=("1992", "2000")
     ... )
     """
 
@@ -182,9 +200,7 @@ class UsageError(ValidationError):
 
     code = "validation_error"
     reason = "usage"
-    DEFAULT_HINT = (
-        'Parametry komendy: kartograf commands schema --command "<grupa> <komenda>"'
-    )
+    DEFAULT_HINT = message("errors.usage_default_hint")
 
     def __init__(
         self,
@@ -213,15 +229,12 @@ class ParseError(ValidationError):
 
     Examples
     --------
-    >>> raise ParseError("Invalid godło format: 'ABC-123'")
+    >>> raise ParseError("Invalid sheet code format: 'ABC-123'")
     """
 
     code = "validation_error"
     reason = "invalid_sheet_code"
-    DEFAULT_HINT = (
-        "Formaty godel: PL-1992 N-34-130-D-d-2-4, PL-2000 6.179.12.20, "
-        "SM5 CTES96, TM33 302_5550; wiecej: kartograf sheet parse --help"
-    )
+    DEFAULT_HINT = message("errors.parse_default_hint")
 
 
 class ConfigError(ValidationError):
@@ -251,10 +264,7 @@ class ConfigError(ValidationError):
     code = "validation_error"
     reason = "invalid_config"
     DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("option", "value", "allowed", "path")
-    DEFAULT_HINT = (
-        "Fix or remove the settings file, or point NOGAT_CONFIG at another one; "
-        "kartograf config show reports the problem"
-    )
+    DEFAULT_HINT = message("errors.config_default_hint")
 
     def __init__(
         self,
@@ -387,7 +397,7 @@ class CacheError(KartografError):
 
     code = "store_unavailable"
     reason = "cache"
-    DEFAULT_HINT = "Wyczysc cache: kartograf cache clear"
+    DEFAULT_HINT = message("errors.cache_default_hint")
 
 
 class InvalidSidecarError(KartografError):
@@ -407,10 +417,7 @@ class InvalidSidecarError(KartografError):
     code = "data_error"
     reason = "invalid_sidecar"
     DETAIL_FIELDS = ("path",)
-    DEFAULT_HINT = (
-        "Podaj sciezke pliku danych magazynu albo jego sidecara "
-        "<plik>.meta.json (kartograf-meta/1)"
-    )
+    DEFAULT_HINT = message("errors.sidecar_default_hint")
 
     def __init__(self, message: str, *, path: Path, hint: str | None = None) -> None:
         super().__init__(message, hint=hint)

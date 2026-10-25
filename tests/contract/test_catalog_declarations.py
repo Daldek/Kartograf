@@ -376,8 +376,8 @@ def test_the_catalog_commands_take_no_options_but_the_command_to_describe():
     schema = _COMMAND_BY_ID["commands schema"]
     params = {p.name: p for p in schema.params}
 
-    assert [p.name for p in listing.params] == ["json"]
-    assert [p.name for p in schema.params] == ["command", "json"]
+    assert [p.name for p in listing.params] == ["json", "lang"]
+    assert [p.name for p in schema.params] == ["command", "json", "lang"]
     assert resolve(params["command"].allowed) == _IDS  # every command, no copy
     assert callable(params["command"].allowed)
     assert (params["command"].required, params["command"].choices) == (True, False)

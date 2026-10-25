@@ -3870,8 +3870,8 @@ caller). The functions without network (`parse_command`, `validate_command`,
 set `ValidationError.option`/`options`/`allowed` (the API argument name, not the flag).
 `error_report(exc, command=)` turns any exception into an `ErrorReport` (the codes `io_error` for
 `OSError`, `interrupted`, `terminated` and `internal_error` are built here, not by the hierarchy classes); `hint` is composed
-deterministically from `exc.hint`, `DEFAULT_HINT`, `hints`/`remedy` or `Dozwolone wartosci ...` and
-`Przyklad: ...` from the catalog (up to 400 characters). `main` (`cli/commands.py`) detects JSON mode before
+deterministically from `exc.hint`, `DEFAULT_HINT`, `hints`/`remedy` or `Allowed values of ...` and
+`Example: ...` from the catalog (English, `kartograf.messages.errors`; up to 400 characters). `main` (`cli/commands.py`) detects JSON mode before
 parsing (`cli/_json.py::json_mode`), builds the parser with `usage_errors=True` (a syntax error
 is a `UsageError`, with `command` when the line named a known command) and turns every exception into a
 `kartograf-error/1` document on stdout (stderr empty) and the exit code `e.exit_code`

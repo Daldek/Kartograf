@@ -93,6 +93,10 @@ MEANINGS: Final[Mapping[str, Mapping[str, str]]] = {
         "sjtsk": "ZTM sheets in S-JTSK.",
         "etrs89": "ZTM sheets in ETRS89.",
     },
+    "lang": {
+        "pl": "Polish text for people (the default).",
+        "en": "English text for people.",
+    },
     "bbox_crs": {
         "EPSG:2176": "PL-2000 zone 5.",
         "EPSG:2177": "PL-2000 zone 6.",
