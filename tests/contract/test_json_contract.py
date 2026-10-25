@@ -356,7 +356,7 @@ def _source() -> SourceInfo:
         country="PL",
         provider="GUGiK",
         product="nmt",
-        directory="nmt/<uklad>_1m_<uklad-wys>",
+        directory="nmt/<crs>_1m_<vertical-crs>",
         select={
             "product": "nmt",
             "country": "pl",

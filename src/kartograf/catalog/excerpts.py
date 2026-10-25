@@ -99,7 +99,7 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
                 "country": "PL",
                 "provider": "GUGiK",
                 "product": "nmt",
-                "directory": "nmt/<uklad>_1m_<uklad-wys>",
+                "directory": "nmt/<crs>_1m_<vertical-crs>",
             }
         ],
     },

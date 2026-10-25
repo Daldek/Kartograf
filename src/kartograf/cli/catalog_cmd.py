@@ -4,10 +4,10 @@
 The commands are queries: they read the catalog from the library (``list_commands``,
 ``command_schema``), need no network and write nothing. With ``--json`` they print the
 envelope of the documents ``kartograf-command-list/1`` and ``kartograf-commands/1`` of
-the library; without it, a text for a person (Polish until the message catalogue,
-ADR-050): the groups with their products and commands, or the description of one
+the library; without it, a text for a person in the language of the command line
+(``--lang``): the groups with their products and commands, or the description of one
 command with its parameters, rules, constraints and examples. The text is rendered from
-the declarations, which have the Polish texts next to the English ones.
+the declarations, whose texts are catalog messages of both languages.
 
 ``commands guide`` prints the guide for agents of the library (``agent_guide``: English,
 AGI-9.2) and, with ``--inject FILE``, puts its compact block into that file instead.
@@ -49,19 +49,20 @@ def _command_lines(commands: list[Command], indent: str) -> list[str]:
     id_width = max(len(c.id) for c in commands)
     kind_width = max(len(c.kind) for c in commands)
     return [
-        f"{indent}{c.id.ljust(id_width)}  {c.kind.ljust(kind_width)}  {c.summary_pl}"
+        f"{indent}{c.id.ljust(id_width)}  {c.kind.ljust(kind_width)}  "
+        f"{localized(c.summary)}"
         for c in commands
     ]
 
 
 def _group_view(group: Group, commands: list[Command]) -> list[str]:
-    lines = [f"{group.name}: {group.summary_pl}"]
-    lines += _wrap(group.description_pl, "  ")
+    lines = [f"{group.name}: {localized(group.summary)}"]
+    lines += _wrap(localized(group.description), "  ")
     products = resolve(group.products)
     if products:
         lines.append(message("cli.group_products_header", lang=language()))
         for name, summary in products:
-            lines += _wrap(f"{name} - {summary}", "      ", "    ")
+            lines += _wrap(f"{name} - {localized(summary)}", "      ", "    ")
     lines.append(message("cli.group_commands_header", lang=language()))
     lines += _command_lines(commands, "    ")
     return lines
@@ -137,7 +138,7 @@ def _param_lines(command: Command, indent: str) -> list[str]:
                 ),
                 indent + "    ",
             )
-        lines += _wrap(resolve(param.description_pl), indent + "    ")
+        lines += _wrap(localized(resolve(param.description)), indent + "    ")
     return lines
 
 
@@ -146,23 +147,23 @@ def _constraint_lines(command: Command) -> list[str]:
         return []
     return [
         message("cli.constraints_header", lang=language()),
-        *(f"  - {c.message_pl}" for c in command.constraints),
+        *(f"  - {localized(c.message)}" for c in command.constraints),
     ]
 
 
 def _rule_lines(command: Command) -> list[str]:
-    if not command.rules_pl:
+    if not command.rules:
         return []
     return [
         message("cli.rules_header", lang=language()),
-        *(f"  - {rule}" for rule in command.rules_pl),
+        *(f"  - {localized(rule)}" for rule in command.rules),
     ]
 
 
 def _example_lines(command: Command) -> list[str]:
     lines: list[str] = [message("cli.examples_header", lang=language())]
     for example in command.examples:
-        lines.append(f"  {example.title_pl}:")
+        lines.append(f"  {localized(example.title or '')}:")
         lines.append(f"    {example_command_line(command, example)}")
     return lines
 
@@ -174,8 +175,8 @@ def format_command(command: Command) -> str:
     effects, the id of the operation), the parameters, the constraints and rules and
     the examples.
     """
-    lines = [f"{command.id}: {command.summary_pl}", ""]
-    lines += _wrap(resolve(command.description_pl), "")
+    lines = [f"{command.id}: {localized(command.summary)}", ""]
+    lines += _wrap(localized(resolve(command.description)), "")
     facts: list[str] = [
         message("cli.fact_kind", lang=language(), kind=command.kind),
         message(

@@ -48,12 +48,12 @@ def _collapse(values: Sequence[str | int]) -> list[str]:
 def _metavars(group: str) -> dict[str, str]:
     """Return the placeholders of the flags of ``<group> download``.
 
-    A placeholder is like ``--property WLASCIWOSC``: what ``list-sources`` writes for a
-    value the caller chooses.
+    A placeholder is like ``--property PROPERTY``: what ``list-sources`` writes for a
+    value the caller chooses, in the language of the command line.
     """
     for command in declared().commands:
         if command.id == f"{group} download":
-            return {p.name: p.metavar for p in command.params if p.metavar}
+            return {p.name: localized(p.metavar) for p in command.params if p.metavar}
     return {}
 
 

@@ -14,13 +14,14 @@ from kartograf.catalog.spec import Command, Constraint, Example, Group, Param
 from kartograf.download.options import store_files
 from kartograf.hydrology.hsg import HSG_OUTPUT_FILES
 from kartograf.landcover.manager import soil_choices
+from kartograf.messages import message
 from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.sources.registry import sources_for
 
 _AREA_RULE = Constraint(
     "one_of",
     ("sheet", "bbox", "geometry"),
-    "Podaj dokladnie jeden obszar: --sheet, --bbox albo --geometry",
+    message("catalog_soil.rule_give_exactly_one_area_sheet_bbox_geometry"),
 )
 
 
@@ -28,12 +29,16 @@ def _products() -> list[tuple[str, str]]:
     return [("soil", sources_for(product="soil")[0].name)]
 
 
-def _described(kind: str) -> str:
+def _described(kind: str) -> list[str]:
     """Return the values of ``kind`` with their texts.
 
-    The text is like ``bdod: gestosc objetosciowa (kg/dm3); ...``.
+    The items are like ``bdod: gestosc objetosciowa (kg/dm3)``, each one a message of
+    its own so that the text of the value follows the language of the help.
     """
-    return "; ".join(f"{value}: {text}" for value, text in soil_choices()[kind].items())
+    return [
+        message("catalog_soil.described_item", value=value, text=text)
+        for value, text in soil_choices()[kind].items()
+    ]
 
 
 def _depths(standard_only: bool = False) -> str:
@@ -44,24 +49,30 @@ def _depths(standard_only: bool = False) -> str:
     """
     depths = soil_choices()["depth"]
     names = SoilGridsProvider.DEPTHS if standard_only else list(depths)
-    note = "" if standard_only else "; 0-30cm tylko dla ocs"
-    return f"{', '.join(names)} ({', '.join(dict.fromkeys(depths.values()))}{note})"
+    return message(
+        "catalog_soil.depths_text",
+        names=list(names),
+        explanations=list(dict.fromkeys(depths.values())),
+        note="" if standard_only else message("catalog_soil.depths_ocs_note"),
+    )
 
 
 def _property_help() -> str:
-    return f"Wymagane: {_described('property')}"
+    return message(
+        "catalog_soil.property_description", described=_described("property")
+    )
 
 
 def _depth_help() -> str:
-    return f"Wymagane: {_depths()}"
+    return message("catalog_soil.depth_description", depths=_depths())
 
 
 def _hsg_depth_help() -> str:
-    return f"Wymagane: {_depths(standard_only=True)}"
+    return message("catalog_soil.depth_description", depths=_depths(standard_only=True))
 
 
 def _stat_help() -> str:
-    return f"Wymagane: {_described('stat')}"
+    return message("catalog_soil.stat_description", described=_described("stat"))
 
 
 def _values(kind: str) -> Callable[[], list[str]]:
@@ -72,123 +83,76 @@ def _depth(standard_only: bool = False) -> Param:
     return Param(
         "depth",
         "str",
-        ("Depth interval below the surface (required); `0-30cm` only for `ocs`."),
+        _hsg_depth_help if standard_only else _depth_help,
         short="-d",
-        metavar="GLEBOKOSC",
+        metavar=message("catalog.metavar_depth"),
         allowed=(lambda: list(SoilGridsProvider.DEPTHS))
         if standard_only
         else _values("depth"),
         required=True,
         task=True,
         section=SELECTION_TITLE,
-        description_pl=_hsg_depth_help if standard_only else _depth_help,
     )
 
 
-def _update(plan: str) -> tuple[Param, ...]:
+_PLAN = message("catalog_soil.plan_description", common=shared.PLAN_HELP)
+
+
+def _update() -> tuple[Param, ...]:
     return shared.update_params(
-        check=(
-            "Compares the local versions with the SoilGrids release.",
-            "Porownaj lokalne wersje z wydaniem SoilGrids bez pobierania",
-        ),
-        upgrade="Pobierz nowsze wydanie SoilGrids (domyslnie tylko "
-        "informacja); z --plan wykonaj zapisany plan",
-        force="Pobierz ponownie kazdy plik; ta sama tresc = bez zmian, inna "
-        "= nowa wersja",
-        plan=plan,
+        check=message("catalog_soil.check_description"),
+        upgrade=message("catalog_soil.download_upgrade_description"),
+        force=message("catalog_soil.download_force_description"),
+        plan=_PLAN,
     )
 
-
-_PLAN = (
-    "Z --check: zapisz plan aktualizacji (kartograf-plan/1); "
-    "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)"
-)
 
 _DOWNLOAD_PARAMS = (
     Param(
         "property",
         "str",
-        (
-            "SoilGrids property (required). Values stay in the SoilGrids "
-            "units of the file; the meaning of each property gives its unit"
-            " and conversion."
-        ),
+        _property_help,
         short="-p",
-        metavar="WLASCIWOSC",
+        metavar=message("catalog.metavar_property"),
         allowed=_values("property"),
         required=True,
         task=True,
         section=SELECTION_TITLE,
-        description_pl=_property_help,
     ),
     _depth(),
     Param(
         "stat",
         "str",
-        "Statistic of the prediction (required).",
-        metavar="STATYSTYKA",
+        _stat_help,
+        metavar=message("catalog.metavar_stat"),
         allowed=_values("stat"),
         required=True,
         task=True,
         section=SELECTION_TITLE,
-        description_pl=_stat_help,
     ),
-    *shared.area(
-        sheet=(
-            "Sheet code (for example N-34-130-D): the area is the extent of"
-            " that sheet, as bbox with its corners.",
-            SHEET_AREA_HELP,
-        ),
-        accepts=PL_SHEETS,
-    ),
+    *shared.area(sheet=SHEET_AREA_HELP, accepts=PL_SHEETS),
     *shared.target(lambda: store_files(["soil"])),
-    *_update(
-        "Z --check: zapisz plan aktualizacji (kartograf-plan/1); "
-        "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)"
-    ),
+    *_update(),
     shared.QUIET,
     replace(shared.JSON, section=OUTPUT_TITLE),
 )
 
 _HSG_PARAMS = (
     _depth(standard_only=True),
-    *shared.area(
-        sheet=(
-            "Sheet code (for example N-34-130-D): the area is the extent of"
-            " that sheet, as bbox with its corners.",
-            SHEET_AREA_HELP,
-        ),
-        accepts=PL_SHEETS,
-    ),
+    *shared.area(sheet=SHEET_AREA_HELP, accepts=PL_SHEETS),
     *shared.target(lambda: HSG_OUTPUT_FILES),
     *shared.update_params(
-        check=(
-            "Compares the clay, sand and silt inputs with the SoilGrids "
-            "release and the HSG with its inputs; nothing is computed.",
-            (
-                "Porownaj wejscia clay/sand/silt z wydaniem SoilGrids i HSG z "
-                "wejsciami bez pobierania i bez liczenia"
-            ),
-        ),
-        upgrade="Pobierz nowsze wydanie wejsc (domyslnie tylko informacja); "
-        "HSG liczony tylko dla nowego zestawu wejsc; z --plan wykonaj plan",
-        force="Pobierz ponownie wejscia; HSG liczony tylko, gdy tresc "
-        "wejsc sie zmienila (inaczej uzyta ponownie)",
+        check=message("catalog_soil.check_description_2"),
+        upgrade=message("catalog_soil.hsg_upgrade_description"),
+        force=message("catalog_soil.hsg_force_description"),
         plan=_PLAN,
     ),
     Param(
         "summary",
         "flag",
-        (
-            "Add the HSG summary after the calculation: the share and area "
-            "of the groups A-D and of the cells without data."
-        ),
+        message("catalog_soil.summary_description"),
         default=False,
         section=OUTPUT_TITLE,
-        description_pl=(
-            "Wypisz podsumowanie HSG po obliczeniu: udzial i powierzchnia "
-            "grup A-D oraz brak danych"
-        ),
     ),
     shared.QUIET,
     replace(shared.JSON, section=OUTPUT_TITLE),
@@ -197,16 +161,13 @@ _HSG_PARAMS = (
 COMMANDS = (
     Command(
         "soil download",
-        ("Download one SoilGrids layer (property, depth, statistic) for an area"),
+        message("catalog_soil.soil_download_summary"),
         "data",
         "download_soil",
         "kartograf-download/1",
         _DOWNLOAD_PARAMS,
-        description=(
-            "Fetches one SoilGrids layer (ISRIC, 250 m) for an area given "
-            "by `sheet`, `bbox` or `geometry`; values keep the SoilGrids "
-            "units. For hydrologic soil groups use `soil hsg`. Never "
-            f"overwrites: new content is a new version. {shared.PLAIN_NOTE}"
+        description=message(
+            "catalog_soil.soil_download_description", note=shared.PLAIN_NOTE
         ),
         effects=("network", "store_write"),
         project_task=True,
@@ -222,8 +183,7 @@ COMMANDS = (
                     "bbox": [626000, 480000, 628000, 482000],
                     "bbox_crs": "EPSG:2180",
                 },
-                title="Clay content at 0-5 cm for a rectangle",
-                title_pl="Zawartosc ilu 0-5 cm dla prostokata",
+                title=message("catalog_soil.example_clay_content_0_5_cm_rectangle"),
             ),
             Example(
                 {
@@ -232,37 +192,24 @@ COMMANDS = (
                     "stat": "Q0.5",
                     "sheet": "N-34-130-D",
                 },
-                title="Organic carbon at 15-30 cm (median) for a sheet",
-                title_pl="Wegiel organiczny 15-30 cm (mediana) dla arkusza",
+                title=message(
+                    "catalog_soil.example_organic_carbon_15_30_cm_median_sheet"
+                ),
             ),
         ),
-        summary_pl="Pobierz warstwe SoilGrids (wlasciwosc, glebokosc, statystyka)",
-        description_pl=(
-            "Pobierz jedna warstwe SoilGrids (--property, --depth, --stat; "
-            "lista: kartograf soil list-layers) dla jednego obszaru: "
-            f"--sheet, --bbox albo --geometry. {shared.PLAIN_NOTE_PL}"
-        ),
-        rules=("Take `property`, `depth` and `stat` from `soil list-layers`.",),
-        rules_pl=("Wez `property`, `depth` i `stat` z `soil list-layers`.",),
+        rules=(message("catalog_soil.soil_download_rule"),),
         errors=shared.DATA_ERRORS,
         family="data",
         core=True,
     ),
     Command(
         "soil hsg",
-        ("Compute hydrologic soil groups (HSG) from SoilGrids texture for an area"),
+        message("catalog_soil.soil_hsg_summary"),
         "data",
         "calculate_hsg",
         "kartograf-download/1",
         _HSG_PARAMS,
-        description=(
-            "Fetches the clay, sand and silt layers (statistic `mean`) of "
-            "one depth for an area and computes the groups A-D for the "
-            "SCS-CN method. Inputs and the HSG raster are stored as "
-            "versions; the HSG is recomputed only when the inputs change. "
-            "With `output_dir` only the HSG raster is written, as a plain file. "
-            "For one SoilGrids layer use `soil download`."
-        ),
+        description=message("catalog_soil.soil_hsg_description"),
         effects=("network", "store_write"),
         project_task=True,
         check_function="check_hsg",
@@ -275,22 +222,11 @@ COMMANDS = (
                     "bbox": [626000, 480000, 628000, 482000],
                     "bbox_crs": "EPSG:2180",
                 },
-                title="HSG for a rectangle with the summary",
+                title=message("catalog_soil.example_hsg_rectangle_summary"),
                 run={"summary": True},
-                title_pl="HSG dla prostokata z podsumowaniem",
             ),
         ),
-        summary_pl="Oblicz grupy hydrologiczne gleb (HSG) z uziarnienia",
-        description_pl=(
-            "Pobierz clay (il), sand (piasek), silt (pyl) z SoilGrids dla "
-            "wybranej glebokosci; uzyj statystyki mean (srednia) i oblicz "
-            "grupy hydrologiczne HSG dla metody SCS-CN. Z --output-dir zapisuje "
-            "tylko raster HSG, jako zwykly plik."
-        ),
-        rules=(("Give `depth`; add `summary` for the share and area of each group."),),
-        rules_pl=(
-            ("Podaj `depth`; `summary` dodaje udzial i powierzchnie kazdej grupy."),
-        ),
+        rules=(message("catalog_soil.soil_hsg_rule"),),
         errors=shared.DATA_ERRORS,
         family="data",
         core=True,
@@ -298,7 +234,7 @@ COMMANDS = (
     shared.list_sources_command("soil", lambda: ("soil",)),
     Command(
         "soil list-layers",
-        "List the SoilGrids properties, depths and statistics (offline)",
+        message("catalog_soil.soil_list_layers_summary"),
         "query",
         "list_layers",
         "kartograf-layers/1",
@@ -308,33 +244,22 @@ COMMANDS = (
                 "str",
                 flag=None,
                 required=True,
-                description_pl=(
-                    "Grupa komend (tu: soil); list_layers obsluguje landcover i soil"
-                ),
+                description=message("catalog_soil.group_description"),
                 fixed="soil",
             ),
             shared.JSON,
         ),
-        description=(
-            "Lists the values of `property`, `depth` and `stat` of `soil "
-            "download` with the units of each property. Use it to choose a "
-            "layer."
-        ),
-        summary_pl="Wypisz wlasciwosci, glebokosci i statystyki SoilGrids",
-        description_pl=(
-            "Wypisz wlasciwosci, glebokosci i statystyki SoilGrids "
-            "(wartosci --property, --depth, --stat; bez sieci)"
-        ),
+        description=message("catalog_soil.soil_list_layers_description"),
         rules=(),
-        rules_pl=(),
         errors=("validation_error",),
         family="discovery",
         cardinality="bounded",
         examples=(
             Example(
                 {},
-                title="The SoilGrids properties, depths and statistics",
-                title_pl="Wlasciwosci, glebokosci i statystyki SoilGrids",
+                title=message(
+                    "catalog_soil.example_soilgrids_properties_depths_statistics"
+                ),
             ),
         ),
     ),
@@ -343,17 +268,8 @@ COMMANDS = (
 GROUPS = (
     Group(
         "soil",
-        "Soil: SoilGrids and hydrologic soil groups (HSG)",
-        (
-            "Soil in the versioned store: the SoilGrids property layers "
-            "(ISRIC, 250 m) and the hydrologic soil groups (HSG) computed "
-            "from the texture."
-        ),
+        message("catalog_soil.soil_group_summary"),
+        message("catalog_soil.soil_group_description"),
         products=_products,
-        summary_pl="Gleby: SoilGrids i grupy hydrologiczne HSG",
-        description_pl=(
-            "Gleby: warstwy wlasciwosci SoilGrids (ISRIC, 250 m) i grupy "
-            "hydrologiczne HSG obliczone z uziarnienia, w magazynie wersji."
-        ),
     ),
 )

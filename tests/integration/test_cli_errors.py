@@ -217,14 +217,14 @@ def test_json_argparse_error_is_usage_error(capsys):
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "usage"
     assert document["exit_code"] == 2
-    assert "nieznana opcja --bogus" in document["message"]
+    assert "unknown option --bogus" in document["message"]
 
 
 @pytest.mark.parametrize(
     ("flags", "message"),
     [
         (["--product", "foo"], "invalid choice: 'foo'"),
-        (["--bogus"], "nieznana opcja --bogus"),
+        (["--bogus"], "unknown option --bogus"),
         (["--product"], "expected one argument"),
     ],
     ids=["value-outside-choices", "unknown-flag", "flag-without-value"],
@@ -295,7 +295,7 @@ def test_json_flag_before_the_command_is_a_usage_error(capsys):
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "usage"
     # one short hint: where the flag goes, not the list of all 37 commands
-    assert "nieznana opcja --json" in document["message"]
+    assert "unknown option --json" in document["message"]
     assert "kartograf elevation list-sources --json" in document["message"]
     assert len(document["message"]) < 200
 
