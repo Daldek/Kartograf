@@ -37,7 +37,6 @@ from typing import Any
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.download.area import bbox_to_2180
 from kartograf.download.fetch import (
@@ -64,6 +63,7 @@ from kartograf.download.storage import bbox_cutout_path, bbox_slot
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice, NoticeSink
+from kartograf.output import plain_of, preflight, writing
 from kartograf.sources.descriptor import TransportKind
 from kartograf.sources.registry import channel_signal, get_source
 from kartograf.sources.variants import ProductVariant, variants
@@ -431,6 +431,7 @@ def check_pl_cutout(
     bbox: BBox,
     horizontal_crs: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     vertical_crs: str,
     product: str,
     cache: MetadataCache | bool = True,
@@ -440,29 +441,46 @@ def check_pl_cutout(
 
     The WCS channel has no remote version signal, so the plan reads only the
     local store: no PRG, WCS or metadata cache request is made. ``cache`` and
-    ``on_notice`` are accepted for symmetry with ``download_pl_cutout``.
+    ``on_notice`` are accepted for symmetry with ``download_pl_cutout``. With
+    ``output_dir`` the position is the target of a plain write (``action``, ``path``).
 
     Raises ``ValidationError`` for invalid choices and ``TransformError``
     when no safe pinned reprojection exists, exactly as the download does.
     """
-    root = resolve_root(root)
     del cache, on_notice  # same signature as the download (Z2); unused here
-    cutout = _prepare_pl_cutout(
-        bbox,
-        horizontal_crs,
-        root=root,
-        vertical_crs=vertical_crs,
-        product=product,
-    )
-    return _check_prepared(cutout)
+    with writing(output_dir=output_dir, root=root) as store:
+        cutout = _prepare_pl_cutout(
+            bbox,
+            horizontal_crs,
+            root=store,
+            vertical_crs=vertical_crs,
+            product=product,
+        )
+        return _check_prepared(cutout)
 
 
 def _cutout_result(
-    file: VersionedFile | None, *, stale: tuple[PlanItem, ...] = ()
+    file: VersionedFile | None,
+    *,
+    stale: tuple[PlanItem, ...] = (),
+    measured: tuple[int, int, bool] | None = None,
 ) -> PlCutoutResult:
-    """Read mask counts from the immutable version sidecar, never from the raster."""
+    """Read mask counts from the immutable version sidecar, never from the raster.
+
+    A plain file has no sidecar: ``measured`` are the counts the run took (masked
+    pixels, zero pixels, no valid pixel).
+    """
     if file is None:
         return PlCutoutResult(None, stale=stale)
+    if measured is not None:
+        masked, zero, empty = measured
+        return PlCutoutResult(
+            file=file,
+            all_nodata=empty,
+            masked_pixels=masked,
+            zero_pixels=zero,
+            stale=stale,
+        )
     version = read_version(file.version_path.parent, file.version_path.name)
     if version is None:
         raise DownloadError(f"{file.version_path}: wersja bez czytelnego sidecara")
@@ -506,6 +524,7 @@ def _run_pl_wcs_cutout(
     if provider is not None:
         _require_matching_provider(cutout, provider)
     slot = _pl_cutout_slot(cutout)
+    preflight(cutout.root, [slot.name])
     signal = channel_signal(
         _cutout_descriptor_key(cutout.product, cutout.vertical_crs), TransportKind.WCS
     )
@@ -622,7 +641,12 @@ def _run_pl_wcs_cutout(
         version=VersionRef.downloaded(now),
         write_sidecar=write_sidecar,
     )
-    return _cutout_result(file, stale=stale)
+    plain = plain_of(cutout.root) is not None
+    return _cutout_result(
+        file,
+        stale=stale,
+        measured=(masked_pixels, zero_pixels, all_nodata) if plain else None,
+    )
 
 
 def download_pl_cutout(
@@ -630,6 +654,7 @@ def download_pl_cutout(
     bbox: BBox,
     horizontal_crs: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     vertical_crs: str,
     product: str,
     update: UpdateMode | None = None,
@@ -646,7 +671,11 @@ def download_pl_cutout(
     links to an immutable version. Default and ``update="upgrade"`` use a
     local version without PRG or WCS requests; ``update="force"`` downloads
     again. ``plan`` (from ``check_pl_cutout``) downloads only its missing
-    position; a changed position lands in ``stale``. For a geometry request
+    position; a changed position lands in ``stale``. ``output_dir`` writes the
+    plain file ``bbox_<coords>.tif`` into that directory instead of the store (no
+    sidecar, no version; ``update="force"`` replaces an existing file, a conflict
+    stops before the first byte; it excludes ``root``, ``update="upgrade"`` and
+    ``plan``). For a geometry request
     pass its envelope as ``bbox`` (e.g. via
     ``get_overall_bbox(path, target_crs="EPSG:2180")``).
 
@@ -681,27 +710,27 @@ def download_pl_cutout(
     DownloadError
         PRG or WCS failure; no new version is committed.
     """
-    root = resolve_root(root)
     validate_update(update, check="check_pl_cutout")
-    cutout = _prepare_pl_cutout(
-        bbox,
-        horizontal_crs,
-        root=root,
-        vertical_crs=vertical_crs,
-        product=product,
-    )
-    sink = NoticeSink(on_notice)
-    with open_cache(
-        cache, force=refreshes_cache(update), on_notice=sink.add
-    ) as metadata:
-        result = _run_pl_wcs_cutout(
-            cutout,
-            provider=_wcs_cutout_provider(cutout, metadata),
-            update=update,
-            plan=plan,
-            parent_request=parent_request,
-            sink=sink,
+    with writing(output_dir=output_dir, root=root, update=update, plan=plan) as store:
+        cutout = _prepare_pl_cutout(
+            bbox,
+            horizontal_crs,
+            root=store,
+            vertical_crs=vertical_crs,
+            product=product,
         )
+        sink = NoticeSink(on_notice)
+        with open_cache(
+            cache, force=refreshes_cache(update), on_notice=sink.add
+        ) as metadata:
+            result = _run_pl_wcs_cutout(
+                cutout,
+                provider=_wcs_cutout_provider(cutout, metadata),
+                update=update,
+                plan=plan,
+                parent_request=parent_request,
+                sink=sink,
+            )
     file = result.file
     if result.all_nodata and file is not None and file.status != "local":
         # an area off PL land fails before WCS (PRG mask); nodata on land is

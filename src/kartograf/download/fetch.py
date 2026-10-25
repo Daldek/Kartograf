@@ -41,6 +41,7 @@ from kartograf.download.versions import (
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.marker import lenient_store, prepare_store
 from kartograf.notices import CHECK_FAILED, UNVERIFIED_LOCAL, NoticeSink
+from kartograf.output import FileResult, plain_of
 from kartograf.sources.descriptor import SignalKind
 from kartograf.sources.edition import Edition
 
@@ -52,7 +53,10 @@ UpdateMode = Literal["check", "upgrade", "force"]
 _UPDATE_VALUES = ("upgrade", "force")  # the modes a caller names
 _UPDATE_MODES = (None, *_UPDATE_VALUES)
 
-FileStatus = Literal["new", "unchanged", "relabeled", "local", "reused"]
+# ``written`` and ``replaced``: the files of a plain write (DEV-19.19).
+FileStatus = Literal[
+    "new", "unchanged", "relabeled", "local", "reused", "written", "replaced"
+]
 
 # Download into the staged path; returns the HTTP signal of the response
 # (``response_signal``) or ``None`` for a channel without one.
@@ -209,6 +213,22 @@ def committed_file(path: Path, commit: VersionCommit) -> VersionedFile:
     )
 
 
+def plain_file(result: FileResult) -> VersionedFile:
+    """Return the outcome of a file a plain write put in place (DEV-19.19).
+
+    A plain file has no version: its ``label`` is empty and its ``version_path``
+    is its ``path``.
+    """
+    return VersionedFile(
+        result.path,
+        result.status,
+        "",
+        result.sha256,
+        result.size_bytes,
+        result.path,
+    )
+
+
 def link_version(std: Path, version: LocalVersion, *, refresh: bool) -> None:
     """``ensure_link`` of the standard path; ``OSError`` -> ``DownloadError``."""
     try:
@@ -242,14 +262,23 @@ def new_staging(slot: FileSlot) -> Path:
     The root is checked before the first byte (``lenient_store``: a nested store, the
     layout of a store without its marker, a root that holds other files, ADR-054);
     the marker is written when the first version is published (``store_file``), so
-    a download that fails leaves no marker behind.
+    a download that fails leaves no marker behind. A plain write (``output_dir``)
+    stages the file in the staging directory of its output directory, under the name
+    of the slot.
     """
+    plain = plain_of(slot.root)
+    if plain is not None:
+        return plain.stage_path(slot.name)
     lenient_store(slot.root)
     return new_incoming_dir(slot.versions_base) / slot.name
 
 
 def discard_staging(staged: Path, slot: FileSlot) -> None:
     """Remove a staging directory and the empty ``.incoming`` tree above it."""
+    plain = plain_of(slot.root)
+    if plain is not None:
+        plain.discard(staged)
+        return
     shutil.rmtree(staged.parent, ignore_errors=True)
     _prune_empty(staged.parent.parent, slot.root)
 
@@ -371,6 +400,10 @@ def use_local(
         Link failure; with ``"upgrade"`` also a failed probe or edition.
     """
     validate_update(update)
+    if plain_of(slot.root) is not None:
+        return (
+            None  # a plain write has no local version: the preflight judged its targets
+        )
     local = local_version(slot) if update != "force" else None
     if local is None:
         return None
@@ -426,7 +459,7 @@ def store_file(
     slot: FileSlot,
     staged: Path,
     *,
-    version: VersionRef,
+    version: VersionRef | None,
     write_sidecar: WriteSidecar,
     http: dict[str, Any] | None,
     signal: SignalKind,
@@ -441,11 +474,25 @@ def store_file(
     a freshness signal never turn equal content into ``relabeled``. The
     staging directory is always removed; a failure leaves no version.
 
+    A plain write (``output_dir``) moves the staged file to its name in the output
+    directory (``os.replace``; size and SHA-256 from one chunked read) and writes no
+    sidecar, link or version: ``version``, ``write_sidecar`` and ``http`` are not
+    used.
+
     Raises
     ------
     DownloadError
         Version, sidecar or link failure.
+    ConflictError
+        A plain target appeared after the preflight and the write is not forced.
     """
+    plain = plain_of(slot.root)
+    if plain is not None:
+        try:
+            return plain_file(plain.commit(staged, plain.target(slot.name)))
+        finally:
+            plain.discard(staged)
+    assert version is not None  # a store file is labelled
     try:
         prepare_store(slot.root)
         digest = read_content(staged, ext=slot.ext, coverage=coverage)
@@ -495,7 +542,10 @@ def fetch_version(
     or ``edition`` (the label of the unit's index record, labelled the same
     way, ADR-043); other signals require ``version``.
     A download goes into a private staging directory and becomes a version;
-    a failure leaves no version and no staging directory.
+    a failure leaves no version and no staging directory. In a plain write
+    (``output_dir``) it is the file in the output directory, with no label, no
+    sidecar and no edition lookup: ``version``, ``edition``, ``probe`` and
+    ``write_sidecar`` are not used.
 
     Raises
     ------
@@ -512,7 +562,7 @@ def fetch_version(
     local = use_local(slot, update, signal=signal, probe=probe, edition=lookup)
     if local is not None:
         return local
-    if version is None:
+    if version is None and plain_of(slot.root) is None:
         assert lookup is not None  # _check_label_args
         version = VersionRef(lookup().id, "edition")
     staged = new_staging(slot)
@@ -564,6 +614,22 @@ def inspect_version(
     """
     if signal == "metadata" and edition is None:
         raise ValidationError("sygnal metadata: wymagane edition=")
+    plain = plain_of(slot.root)
+    if plain is not None:  # the position of a plain target: judged by `new_plan`
+        return PlanItem(
+            track=track,
+            segment="",
+            hierarchy="",
+            name=slot.name,
+            unit=unit,
+            local_label=None,
+            local_sha256=None,
+            available_label=None,
+            available_signal=None,
+            status="missing",
+            action="write",
+            path=plain.target(slot.name),
+        )
     lenient_store(slot.root)
     local = local_version(slot)
     label, remote = available

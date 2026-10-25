@@ -32,7 +32,6 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import detect_system
 from kartograf.download.fetch import (
@@ -66,6 +65,7 @@ from kartograf.download.versions import ContentDigest, VersionRef, new_incoming_
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.marker import lenient_store
 from kartograf.notices import Notice, NoticeSink
+from kartograf.output import plain_of, preflight, writing
 from kartograf.sources.descriptor import AtomFilesParams, SignalKind
 from kartograf.sources.edition import Edition
 from kartograf.sources.registry import get_source
@@ -365,8 +365,12 @@ def _download(
     file = release()  # the label before the transfer (D30)
     version = VersionRef(file.edition, "edition")
     image = slots[_IMAGE]
-    lenient_store(image.root)
-    archive = new_incoming_dir(image.versions_base) / f"{sheet}.zip"
+    plain = plain_of(image.root)
+    if plain is not None:  # the ZIP and its members in one private staging directory
+        archive = plain.stage_path(f"{sheet}.zip")
+    else:
+        lenient_store(image.root)
+        archive = new_incoming_dir(image.versions_base) / f"{sheet}.zip"
     stored: dict[str, VersionedFile] = {}
     try:
         if on_download is not None:
@@ -413,6 +417,7 @@ def _run(
     stored; a position whose source changed since the check is ``stale``.
     """
     slots = _slots(sheet, root)
+    preflight(root, [slot.name for slot in slots.values()])
     release = _release_lookup(session, sheet, metadata, refresh=update == "upgrade")
     edition = _edition(release)
     outcome: dict[str, VersionedFile | None]
@@ -460,6 +465,7 @@ def check_cz_orto_sheet(
     *,
     sheet: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
@@ -470,26 +476,31 @@ def check_cz_orto_sheet(
 
     ``current``/``newer`` compare the local edition label, ``missing`` = no
     local file, ``check_failed`` = the feeds could not be read. The source is
-    always asked: the metadata cache is refreshed, never read.
+    always asked: the metadata cache is refreshed, never read. With ``output_dir``
+    the four positions are the targets of a plain write (``action``, ``path``) and
+    no feed is read.
 
     Raises
     ------
     ValidationError
         Not an SM5 sheet code (TM33 tiles are NMT only).
     """
-    root = resolve_root(root)
     sheet = cz_orto_sheet(sheet)
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=True, on_notice=sink.add) as metadata:
+    with (
+        writing(output_dir=output_dir, root=root) as store,
+        open_cache(cache, force=True, on_notice=sink.add) as metadata,
+    ):
         release = _release_lookup(_session(), sheet, metadata, refresh=True)
-        items = _inspect(_slots(sheet, root), sheet, _edition(release))
-    return new_plan(store_id(root), items)
+        items = _inspect(_slots(sheet, store), sheet, _edition(release))
+        return new_plan(store_id(store), items)
 
 
 def download_cz_orto_sheet(
     *,
     sheet: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     parent_request: dict[str, Any] | None = None,
@@ -506,7 +517,11 @@ def download_cz_orto_sheet(
     edition downloaded (older versions stay in ``versions/``); ``"force"`` =
     downloaded again. ``plan`` (``check_cz_orto_sheet`` with
     ``update="upgrade"``) stores only its ``missing``/``newer`` positions of
-    the sheet. ``parent_request`` (area requests) goes into the sidecars.
+    the sheet. ``output_dir`` writes the four plain files ``<sheet>.jpg`` and its
+    world files into that directory instead of the store (no sidecar, no version;
+    ``update="force"`` replaces existing files, a conflict stops before the first
+    byte; it excludes ``root``, ``update="upgrade"`` and ``plan``).
+    ``parent_request`` (area requests) goes into the sidecars.
     ``cache``: ``True`` = default metadata cache in the current directory, a
     ``MetadataCache`` = that cache (the ATOM feed index), ``False`` = none
     (the whole service feed, 23.7 MB, is read for every sheet).
@@ -524,20 +539,22 @@ def download_cz_orto_sheet(
         Feed, transfer or store failure; files committed before the failure
         (world files before the JPEG) stay, the failed one has no version.
     """
-    root = resolve_root(root)
     sheet = cz_orto_sheet(sheet)
     validate_update(update, check="check_cz_orto_sheet")
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
     sink = NoticeSink(on_notice)
-    with open_cache(
-        cache, force=refreshes_cache(update), on_notice=sink.add
-    ) as metadata:
+    with (
+        writing(output_dir=output_dir, root=root, update=update, plan=plan) as store,
+        open_cache(
+            cache, force=refreshes_cache(update), on_notice=sink.add
+        ) as metadata,
+    ):
         result = _run(
             _session(),
             metadata,
             sheet,
-            root=root,
+            root=store,
             update=update,
             plan=plan,
             parent_request=parent_request,

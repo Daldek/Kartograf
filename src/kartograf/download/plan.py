@@ -25,7 +25,7 @@ from kartograf._version import build_version
 from kartograf.exceptions import ValidationError
 from kartograf.messages import message
 from kartograf.notices import Notice
-from kartograf.output import Action, Mode
+from kartograf.output import Action, Mode, Staging, plain_of
 from kartograf.serialization import Document
 
 PLAN_SCHEMA = "kartograf-plan/1"
@@ -249,13 +249,44 @@ def store_id(root: str | Path) -> str:
     return str(Path(root).resolve())
 
 
+def plain_items(write: Staging, items: Iterable[PlanItem]) -> tuple[PlanItem, ...]:
+    """Judge the positions of a plain write as a whole (DEV-19.10).
+
+    One `plan_plain` over the names of every position: each gets its ``action``
+    (``write``, ``replace`` with ``--force``, ``conflict``), its ``path`` and, for a
+    conflict, its ``reason``; the ``status`` is ``missing`` for ``write`` and
+    ``unverifiable`` for the others. Called again on positions already judged, it
+    judges them again (a plan merged from several tracks sees their duplicates).
+    """
+    listed = tuple(items)
+    entries = write.plan([item.name for item in listed])
+    return tuple(
+        replace(
+            item,
+            status="missing" if entry.action == "write" else "unverifiable",
+            action=entry.action,
+            path=entry.path,
+            reason=entry.reason,
+        )
+        for item, entry in zip(listed, entries, strict=True)
+    )
+
+
 def new_plan(
     root: str | Path | None,
     items: Iterable[PlanItem],
     *,
     output_dir: str | Path | None = None,
 ) -> UpdatePlan:
-    """Return the plan checked now: of the store ``root``, or of ``output_dir``."""
+    """Return the plan checked now: of the store ``root``, or of ``output_dir``.
+
+    A ``root`` that is the handle root of a plain write (``kartograf.output.plain_of``)
+    gives the plan of that write: its positions are judged by `plain_items` and its
+    directory is the ``output_dir`` of the plan.
+    """
+    write = plain_of(root)
+    if write is not None:
+        items, root, output_dir = plain_items(write, items), None, write.directory
     return UpdatePlan(
         root=None if root is None else store_id(root),
         output_dir=None if output_dir is None else store_id(output_dir),

@@ -32,7 +32,6 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox
 from kartograf.download.arguments import require_workers
 from kartograf.download.fetch import (
@@ -57,6 +56,7 @@ from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.interrupt import run_parallel
 from kartograf.notices import Notice, NoticeSink
+from kartograf.output import preflight, writing
 from kartograf.providers.cuzk.laz import CuzkLazProvider
 from kartograf.sources.descriptor import SignalKind, TransportKind
 from kartograf.sources.registry import channel_for
@@ -283,6 +283,7 @@ def _run(
         planned = {item.unit: item.available_signal for item in todo}
         selected = tuple(sheet for sheet in sheets if sheet in planned)
         stale = tuple(excluded)
+    preflight(root, [_slot(provider, sheet, root).name for sheet in selected])
     total = len(selected)
 
     def fetch(sheet: str) -> tuple[str, VersionedFile | None, DownloadError | None]:
@@ -337,6 +338,7 @@ def check_cz_laz(
     model: str,
     vertical_crs: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     cache: MetadataCache | bool = True,
@@ -347,16 +349,19 @@ def check_cz_laz(
     One ``HEAD`` per file (plus the index query of an area); positions of
     track ``cz_laz`` with the sheet code as ``unit``. The source is always
     asked: the metadata cache is refreshed, never read. Invalid choices
-    raise the same errors as the download.
+    raise the same errors as the download. With ``output_dir`` the positions are the
+    targets of a plain write (``action``, ``path``), nothing is probed.
     """
-    root = resolve_root(root)
     bbox = _validate_selection(
         model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox
     )
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=True, on_notice=sink.add) as metadata:
+    with (
+        writing(output_dir=output_dir, root=root) as store,
+        open_cache(cache, force=True, on_notice=sink.add) as metadata,
+    ):
         provider = _provider(model, vertical_crs, metadata)
-        return _check(provider, _select(provider, sheet, bbox), root)
+        return _check(provider, _select(provider, sheet, bbox), store)
 
 
 def download_cz_laz(
@@ -364,6 +369,7 @@ def download_cz_laz(
     model: str,
     vertical_crs: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     update: UpdateMode | None = None,
@@ -375,7 +381,7 @@ def download_cz_laz(
     on_progress: CzLazProgressCallback | None = None,
 ) -> CzLazResult:
     """
-    CUZK LAZ files of a sheet or an area into the versioned store.
+    CUZK LAZ files of a sheet or an area into the versioned store, or plain files.
 
     Parameters
     ----------
@@ -384,8 +390,14 @@ def download_cz_laz(
     vertical_crs : str
         ``"Bpv"`` (SM5 sheets, S-JTSK) or ``"EVRF2007"`` (TM33 tiles,
         ETRS89); the file is stored as published, never transformed.
-    root : str or Path
-        Base directory: ``laz/cz_<model>_<vcrs>/<sheet hierarchy>/<sheet>.laz``.
+    root : str or Path, optional
+        Store root: ``laz/cz_<model>_<vcrs>/<sheet hierarchy>/<sheet>.laz``;
+        the default root when neither ``root`` nor ``output_dir`` is given.
+    output_dir : str or Path, optional
+        Write plain files ``<sheet>.laz`` into this directory instead (DEV-19.1;
+        no sidecar, no version; ``update="force"`` replaces existing files, a
+        conflict stops before the first byte). Excludes ``root``; not with
+        ``update="upgrade"`` or ``plan``.
     sheet, bbox
         Exactly one: a sheet code of the height system's sheet system, or
         an area in any supported CRS (sheets from ``KladyMapovychListu``).
@@ -423,7 +435,6 @@ def download_cz_laz(
     DownloadError
         Index or plan check failure.
     """
-    root = resolve_root(root)
     validate_update(update, check="check_cz_laz")
     require_workers(workers, "workers")
     bbox = _validate_selection(
@@ -432,14 +443,17 @@ def download_cz_laz(
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
     sink = NoticeSink(on_notice)
-    with open_cache(
-        cache, force=refreshes_cache(update), on_notice=sink.add
-    ) as metadata:
+    with (
+        writing(output_dir=output_dir, root=root, update=update, plan=plan) as store,
+        open_cache(
+            cache, force=refreshes_cache(update), on_notice=sink.add
+        ) as metadata,
+    ):
         provider = _provider(model, vertical_crs, metadata)
         result = _run(
             provider,
             _select(provider, sheet, bbox),
-            root=root,
+            root=store,
             update=update,
             plan=plan,
             parent_request=parent_request,

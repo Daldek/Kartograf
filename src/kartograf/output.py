@@ -30,7 +30,7 @@ import shutil
 import socket
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
@@ -50,9 +50,13 @@ __all__ = [
     "Staging",
     "Target",
     "digest_of",
+    "plain_of",
     "plan_plain",
+    "preflight",
     "refuse",
     "resolve_target",
+    "store_only",
+    "writing",
 ]
 
 STAGING: Final = ".kartograf-incoming"
@@ -320,15 +324,22 @@ def _leftovers(staging: Path) -> None:
 
 class Staging:
     """
-    Staging directory of one plain write (DEV-19.7).
+    The plain write of one request: its staging directory and the root its tracks use.
 
-    Used as a context manager: entering creates
-    ``<directory>/.kartograf-incoming/<host>_<pid>_<token>/`` (the output directory
-    too, when it is missing), removes leftovers older than 24 hours and, in the main
-    thread, lets SIGTERM interrupt the run like Ctrl-C (``sigterm_interrupts``);
-    leaving removes the staging directory, and the ``.kartograf-incoming`` directory
-    when it is empty, whatever ended the block (success, an error, SIGINT, SIGTERM).
-    Threads of one run may stage and commit at the same time.
+    Used as a context manager: entering arms SIGTERM (in the main thread it
+    interrupts the run like Ctrl-C, ``sigterm_interrupts``) and registers the handle
+    root; nothing is created before the first transfer, so a request that fails its
+    validation or its preflight leaves no directory behind. The first
+    `stage_directory` creates ``<directory>/.kartograf-incoming/<host>_<pid>_<token>/``
+    (the output directory too, when it is missing) and removes leftovers older than
+    24 hours; leaving removes the staging directory, and the ``.kartograf-incoming``
+    directory when it is empty, whatever ended the block (success, an error, SIGINT,
+    SIGTERM). Threads of one run may stage and commit at the same time.
+
+    The tracks take ``handle`` where they take a store root: a path inside the
+    staging directory that no file ever reaches, by which `plain_of` recognises the
+    write from any slot built on it, so a plain run reads nothing from and writes
+    nothing to the store.
 
     Parameters
     ----------
@@ -347,16 +358,18 @@ class Staging:
         self.path = (
             self.root / f"{socket.gethostname()}_{os.getpid()}_{secrets.token_hex(4)}"
         )
+        self.handle = self.path / "root"
+        self._opened = False
         self._counter = 0
         self._lock = threading.Lock()
         self._signals = contextlib.ExitStack()
 
     def __enter__(self) -> "Staging":
-        """Create the staging directory and arm the SIGTERM handler."""
-        self.directory.mkdir(parents=True, exist_ok=True)
-        _leftovers(self.root)
-        self.path.mkdir(parents=True)
+        """Arm the SIGTERM handler and register the handle root."""
         self._signals.enter_context(sigterm_interrupts())
+        with _OPEN_LOCK:
+            for key in _keys(self.handle):
+                _OPEN[key] = self
         return self
 
     def __exit__(
@@ -365,11 +378,33 @@ class Staging:
         error: BaseException | None,
         trace: TracebackType | None,
     ) -> None:
-        """Remove the staging directory and restore the SIGTERM handler."""
+        """Remove the staging directory, forget the handle and restore SIGTERM."""
+        with _OPEN_LOCK:
+            for key in _keys(self.handle):
+                _OPEN.pop(key, None)
         self._signals.close()
-        shutil.rmtree(self.path, ignore_errors=True)
-        with contextlib.suppress(OSError):
-            self.root.rmdir()  # only when no other run is staging beside this one
+        if self._opened:
+            shutil.rmtree(self.path, ignore_errors=True)
+            with contextlib.suppress(OSError):
+                self.root.rmdir()  # only when no other run is staging beside this one
+
+    def _open(self) -> None:
+        """Create the output and the staging directory at the first transfer."""
+        with self._lock:
+            if self._opened:
+                return
+            self.directory.mkdir(parents=True, exist_ok=True)
+            _leftovers(self.root)
+            self.path.mkdir(parents=True)
+            self._opened = True
+
+    def target(self, name: str) -> Path:
+        """Return the path of the file ``name`` in the output directory."""
+        return self.directory.joinpath(*name.split("/"))
+
+    def plan(self, names: Sequence[str]) -> list[PlanEntry]:
+        """Check the target list of this write (`plan_plain`) with its ``force``."""
+        return plan_plain(self.directory, names, force=self.force)
 
     def stage_directory(self) -> Path:
         """
@@ -380,6 +415,7 @@ class Staging:
         pathlib.Path
             A new empty directory inside the staging directory.
         """
+        self._open()
         with self._lock:
             self._counter += 1
             number = self._counter
@@ -464,3 +500,141 @@ class Staging:
         """
         if staged.parent.parent == self.path:
             shutil.rmtree(staged.parent, ignore_errors=True)
+
+
+_OPEN: dict[Path, Staging] = {}
+_OPEN_LOCK = threading.Lock()
+
+
+def _keys(path: str | os.PathLike[str]) -> tuple[Path, Path]:
+    """Return the absolute and the real path: a handle is found by either."""
+    raw = os.fspath(path)
+    return Path(os.path.abspath(raw)), Path(os.path.realpath(raw))
+
+
+def plain_of(root: str | os.PathLike[str] | None) -> Staging | None:
+    """
+    Return the plain write whose handle root ``root`` is.
+
+    Parameters
+    ----------
+    root : str or os.PathLike or None
+        What a track takes as the store root.
+
+    Returns
+    -------
+    Staging or None
+        The open write when ``root`` is its handle (or lies below it); None for a
+        store root.
+    """
+    if root is None or not _OPEN:
+        return None
+    with _OPEN_LOCK:
+        for key in _keys(root):
+            for handle, write in _OPEN.items():
+                if key == handle or handle in key.parents:
+                    return write
+    return None
+
+
+def preflight(root: str | os.PathLike[str], names: Iterable[str]) -> None:
+    """
+    Refuse a plain write whose target list conflicts, before its first byte.
+
+    Parameters
+    ----------
+    root : str or os.PathLike
+        What the track takes as the store root.
+    names : iterable of str
+        The file name of every target of the track (DEV-19.5).
+
+    Raises
+    ------
+    ConflictError
+        ``root`` is a plain write and the plan lists a conflict (`refuse`). Nothing
+        happens for a store.
+    """
+    write = plain_of(root)
+    if write is not None:
+        refuse(write.plan(list(names)))
+
+
+def store_only(option: str) -> ValidationError:
+    """
+    Build the error of an option that acts on versions, given with ``output_dir``.
+
+    Parameters
+    ----------
+    option : str
+        The CLI spelling of the option (``--upgrade``).
+
+    Returns
+    -------
+    ValidationError
+        ``details.reason`` is ``store_only_option``, ``details.option`` the option,
+        and the hint names ``--root`` (DEV-19.17).
+    """
+    return ValidationError(
+        message("output.store_only_option", option=option),
+        option=option,
+        hint=message("output.store_only_option_hint", option=option),
+        reason="store_only_option",
+    )
+
+
+@contextlib.contextmanager
+def writing(
+    *,
+    output_dir: str | os.PathLike[str] | None = None,
+    root: str | os.PathLike[str] | None = None,
+    update: str | None = None,
+    plan: object | None = None,
+    all_campaigns: bool = False,
+    force: bool = False,
+) -> Iterator[Path]:
+    """
+    Open the write of one request and give what its tracks take as the store root.
+
+    Parameters
+    ----------
+    output_dir, root : str or os.PathLike or None, optional
+        The target (`resolve_target`); ``root`` may also be the handle root of an
+        enclosing plain write, which this block then joins.
+    update : str or None, optional
+        The update mode of the request: ``force`` lets a plain write replace
+        existing files (DEV-19.9); ``upgrade`` acts on versions and is refused.
+    plan : object or None, optional
+        A saved update plan (``--plan``), refused in plain mode.
+    all_campaigns : bool, optional
+        Several flights of one sheet (``--all-campaigns``), refused in plain mode.
+    force : bool, optional
+        Replace existing files, as ``update="force"`` does (the plan of a check, which
+        has no update mode).
+
+    Yields
+    ------
+    pathlib.Path
+        The store root (the default root when none is given), or the handle root of
+        the plain write, which lives as long as the block.
+
+    Raises
+    ------
+    ValidationError
+        Both targets are given (`resolve_target`), or ``output_dir`` is given with
+        ``update="upgrade"``, a ``plan`` or ``all_campaigns`` (`store_only`).
+    """
+    if root is not None and plain_of(root) is not None:
+        yield Path(root)
+        return
+    target = resolve_target(output_dir=output_dir, root=root)
+    if target.mode == "store":
+        yield target.path
+        return
+    if update == "upgrade":
+        raise store_only("--upgrade")
+    if plan is not None:
+        raise store_only("--plan")
+    if all_campaigns:
+        raise store_only("--all-campaigns")
+    with Staging(target.path, force=force or update == "force") as write:
+        yield write.handle

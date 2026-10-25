@@ -37,7 +37,6 @@ from typing import Any
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.core.coverage import Polygon
 from kartograf.core.sheet_parser import SheetParser
@@ -66,6 +65,7 @@ from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.interrupt import run_parallel
 from kartograf.notices import LAZ_SUPERSEDED, TILES, Notice, NoticeSink, count_text
+from kartograf.output import preflight, writing
 from kartograf.providers.pl.gugik_laz import (
     COVERAGE_TOLERANCE_M,
     GugikLazProvider,
@@ -303,6 +303,7 @@ def _run_laz_download(
             in keys
         )
         stale = tuple(excluded)
+    preflight(root, [laz_slot(storage, tile).name for tile in tiles])
     total = len(tiles)
 
     def fetch(
@@ -507,6 +508,7 @@ def check_laz_area(
     bbox: BBox | None = None,
     sheet: str | None = None,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     vertical_crs: str,
     year: int | None = None,
     min_year: int | None = None,
@@ -523,27 +525,30 @@ def check_laz_area(
     The tile selection queries the WFS (as the download does); no LAZ bytes
     are transferred. Raises the same errors as the download's selection.
     The source is always asked (``--check``): the metadata cache is
-    refreshed, never read.
+    refreshed, never read. With ``output_dir`` the positions are the targets of a
+    plain write (``action``, ``path``) and ``all_campaigns`` is refused.
     """
-    root = resolve_root(root)
     bbox = _validate_area(bbox, sheet)
     sink = NoticeSink(on_notice)
-    with _selected(
-        bbox,
-        sheet,
-        vertical_crs=vertical_crs,
-        year=year,
-        min_density=min_density,
-        all_campaigns=all_campaigns,
-        min_year=min_year,
-        max_year=max_year,
-        provider=provider,
-        tolerance_m=tolerance_m,
-        cache=cache,
-        force=True,
-        sink=sink,
-    ) as (selected_provider, selection, _area):
-        return _check_selection(selection, provider=selected_provider, root=root)
+    with (
+        writing(output_dir=output_dir, root=root, all_campaigns=all_campaigns) as store,
+        _selected(
+            bbox,
+            sheet,
+            vertical_crs=vertical_crs,
+            year=year,
+            min_density=min_density,
+            all_campaigns=all_campaigns,
+            min_year=min_year,
+            max_year=max_year,
+            provider=provider,
+            tolerance_m=tolerance_m,
+            cache=cache,
+            force=True,
+            sink=sink,
+        ) as (selected_provider, selection, _area),
+    ):
+        return _check_selection(selection, provider=selected_provider, root=store)
 
 
 def download_laz_area(
@@ -551,6 +556,7 @@ def download_laz_area(
     bbox: BBox | None = None,
     sheet: str | None = None,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     vertical_crs: str,
     year: int | None = None,
     min_year: int | None = None,
@@ -580,8 +586,14 @@ def download_laz_area(
         Instead of ``bbox``: a PL-1992 or PL-2000 sheet code. The WFS is
         asked for the envelope of its frame, the tiles are those reaching
         into the frame itself (neighbouring sheets only touch it).
-    root : str or Path
-        Explicit base directory for LAZ tiles and their sidecars.
+    root : str or Path, optional
+        Base directory (the store root) for LAZ tiles and their sidecars; the
+        default root when neither ``root`` nor ``output_dir`` is given.
+    output_dir : str or Path, optional
+        Write the plain tiles into this directory instead (DEV-19.1; no sidecar, no
+        version; ``update="force"`` replaces existing files, a conflict stops before
+        the first byte). Excludes ``root``; not with ``update="upgrade"``, ``plan``
+        or ``all_campaigns``.
     vertical_crs : str
         "EVRF2007" (current European heights) or "KRON86" (legacy
         Kronsztadt 86). Chooses the WFS service and output segment;
@@ -638,31 +650,39 @@ def download_laz_area(
     NoCoverageError
         (a ``DownloadError`` subclass) no tiles in any year for the area.
     """
-    root = resolve_root(root)
     bbox = _validate_area(bbox, sheet)
     validate_update(update, check="check_laz_area")
     require_workers(workers, "workers")
     sink = NoticeSink(on_notice)
-    with _selected(
-        bbox,
-        sheet,
-        vertical_crs=vertical_crs,
-        year=year,
-        min_density=min_density,
-        all_campaigns=all_campaigns,
-        min_year=min_year,
-        max_year=max_year,
-        provider=provider,
-        tolerance_m=tolerance_m,
-        cache=cache,
-        force=refreshes_cache(update),
-        sink=sink,
-    ) as (selected_provider, selection, area):
+    with (
+        writing(
+            output_dir=output_dir,
+            root=root,
+            update=update,
+            plan=plan,
+            all_campaigns=all_campaigns,
+        ) as store,
+        _selected(
+            bbox,
+            sheet,
+            vertical_crs=vertical_crs,
+            year=year,
+            min_density=min_density,
+            all_campaigns=all_campaigns,
+            min_year=min_year,
+            max_year=max_year,
+            provider=provider,
+            tolerance_m=tolerance_m,
+            cache=cache,
+            force=refreshes_cache(update),
+            sink=sink,
+        ) as (selected_provider, selection, area),
+    ):
         result = _run_laz_download(
             selection,
             provider=selected_provider,
             bbox=area,
-            root=root,
+            root=store,
             year=year,
             min_density=min_density,
             all_campaigns=all_campaigns,

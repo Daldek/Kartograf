@@ -87,6 +87,7 @@ from kartograf.notices import (
     count_text,
     size_text,
 )
+from kartograf.output import plain_of
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
 from kartograf.sources.registry import get_source
@@ -652,6 +653,11 @@ class DownloadManager:
             raise ValidationError(
                 f"Provider {self._provider.name} nie obsluguje kampanii "
                 f"(--all-campaigns/--min-year/--max-year/--year/--full-sheet)"
+            )
+        if self._campaign_aware and plain_of(self._storage.root) is not None:
+            raise ValidationError(
+                "output_dir: the PL sheets of the GUGiK index (campaigns) are not "
+                "written as plain files yet; write the store (root)"
             )
         self._all_campaigns = all_campaigns
         self._min_year = min_year

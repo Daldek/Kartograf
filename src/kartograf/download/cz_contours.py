@@ -29,7 +29,6 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import detect_system
 from kartograf.download.fetch import (
@@ -58,6 +57,7 @@ from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import FILES, Notice, NoticeSink, count_text
+from kartograf.output import preflight, writing
 from kartograf.sources.descriptor import SignalKind, SourceDescriptor
 from kartograf.sources.registry import get_source
 from kartograf.sources.sidecar import emit_sidecar
@@ -379,6 +379,7 @@ def _run(
     downloaded; a position whose source changed since the check is ``stale``.
     """
     slot = _slot(source, sheet, root)
+    preflight(root, [slot.name])
     planned: dict[str, Any] | None = None
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
@@ -418,22 +419,28 @@ def _run(
 
 
 def check_cz_contours_sheet(
-    sheet: str, *, format: str, root: str | Path | None = None
+    sheet: str,
+    *,
+    format: str,
+    root: str | Path | None = None,
+    output_dir: str | Path | None = None,
 ) -> UpdatePlan:
     """Build the update plan of ``download_cz_contours_sheet``.
 
     One position (track ``cz_sheet``), one ``HEAD`` of the ZIP, nothing downloaded.
+    With ``output_dir`` the position is the target of a plain write (``action``,
+    ``path``) and nothing is probed.
 
     Raises
     ------
     ValidationError
         Not an SM5 sheet code, or a format without contours.
     """
-    root = resolve_root(root)
     sheet = cz_contours_sheet(sheet)
     source = contours_source(format)
-    item = _inspect(_session(), source, sheet, _slot(source, sheet, root))
-    return new_plan(store_id(root), (item,))
+    with writing(output_dir=output_dir, root=root) as store:
+        item = _inspect(_session(), source, sheet, _slot(source, sheet, store))
+        return new_plan(store_id(store), (item,))
 
 
 def download_cz_contours_sheet(
@@ -441,6 +448,7 @@ def download_cz_contours_sheet(
     *,
     format: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     parent_request: dict[str, Any] | None = None,
@@ -456,7 +464,11 @@ def download_cz_contours_sheet(
     ``VersionedFile.newer``); ``"upgrade"`` = a changed ZIP downloaded (older
     versions stay in ``versions/``); ``"force"`` = downloaded again. ``plan``
     (``check_cz_contours_sheet`` with ``update="upgrade"``) downloads only its
-    ``missing``/``newer`` position of the sheet. ``parent_request`` (area
+    ``missing``/``newer`` position of the sheet. ``output_dir`` writes the plain
+    ZIP ``<sheet>.zip`` into that directory instead of the store (no sidecar, no
+    version; ``update="force"`` replaces an existing file, a conflict stops before
+    the first byte; it excludes ``root``, ``update="upgrade"`` and ``plan``).
+    ``parent_request`` (area
     requests) goes into the sidecar. ``cache``: ``True`` = default metadata
     cache in the current directory (the sheet index record of the sidecar), a
     ``MetadataCache`` = that cache, ``False`` = none. ``on_notice`` receives
@@ -472,22 +484,24 @@ def download_cz_contours_sheet(
         openzu failure (a 404 names the sheet index), not a ZIP or a ZIP
         without the format's file; no version is committed.
     """
-    root = resolve_root(root)
     sheet = cz_contours_sheet(sheet)
     source = contours_source(format)
     validate_update(update, check="check_cz_contours_sheet")
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
     sink = NoticeSink(on_notice)
-    with open_cache(
-        cache, force=refreshes_cache(update), on_notice=sink.add
-    ) as metadata:
+    with (
+        writing(output_dir=output_dir, root=root, update=update, plan=plan) as store,
+        open_cache(
+            cache, force=refreshes_cache(update), on_notice=sink.add
+        ) as metadata,
+    ):
         result = _run(
             _session(),
             metadata,
             source,
             sheet,
-            root=root,
+            root=store,
             update=update,
             plan=plan,
             parent_request=parent_request,
