@@ -30,6 +30,7 @@ from kartograf.exceptions import (
     registry_exit_code,
 )
 from kartograf.interrupt import Terminated
+from kartograf.messages import DEFAULT_LANG, Lang, Message, localize, message
 from kartograf.serialization import Document
 from kartograf.transform.crs import TransformUnavailableError
 
@@ -224,14 +225,6 @@ def _exit_codes() -> tuple[ExitCodeSpec, ...]:
 
 EXIT_CODES: tuple[ExitCodeSpec, ...] = _exit_codes()
 
-INTERRUPTED_MESSAGE = "przerwano (Ctrl-C)"
-TERMINATED_MESSAGE = "przerwano (SIGTERM)"
-INTERNAL_ERROR_HINT = (
-    "Zglos blad z komenda i wersja; KARTOGRAF_DEBUG=1 pokazuje traceback"
-)
-IO_ERROR_HINT = "Sprawdz sciezke i uprawnienia: {path}"
-IO_ERROR_HINT_NO_PATH = "Sprawdz sciezki i uprawnienia katalogow z argumentow"
-
 
 @dataclass(frozen=True)
 class ErrorReport(Document):
@@ -289,12 +282,14 @@ def error_line(report: ErrorReport) -> str:
     )
 
 
-def allowed_values_hint(flag: str, allowed: Sequence[str]) -> str:
-    """``Dozwolone wartosci <flag>: a, b, c.`` (at most 40 values, then ``...``)."""
+def allowed_values_hint(
+    flag: str, allowed: Sequence[str], lang: Lang = DEFAULT_LANG
+) -> Message:
+    """Return ``Allowed values of <flag>: a, b, c.`` (up to 40, then ``...``)."""
     shown = ", ".join(allowed[:ALLOWED_HINT_MAX_VALUES])
     if len(allowed) > ALLOWED_HINT_MAX_VALUES:
-        return f"Dozwolone wartosci {flag}: {shown}, ..."
-    return f"Dozwolone wartosci {flag}: {shown}."
+        return message("errors.allowed_values_cut", lang, flag=flag, values=shown)
+    return message("errors.allowed_values", lang, flag=flag, values=shown)
 
 
 def _one_line(text: str) -> str:
@@ -315,6 +310,7 @@ def _option_hint(
     allowed: Sequence[str] | None,
     command: str | None,
     given: Mapping[str, object] | None = None,
+    lang: Lang = DEFAULT_LANG,
 ) -> str | None:
     """Return the hint of a ``ValidationError`` that names an argument.
 
@@ -329,9 +325,10 @@ def _option_hint(
     from kartograf.catalog.hints import example_for  # loads the declarations
 
     flag, line = example_for(command, option, given)
-    text = allowed_values_hint(flag or option, allowed) if allowed else ""
+    text = allowed_values_hint(flag or option, allowed, lang) if allowed else ""
     if line:
-        candidate = f"{text} Przyklad: {line}".strip()
+        example = message("errors.example", lang, line=line)
+        candidate = f"{text} {example}".strip()
         if len(candidate) <= HINT_MAX_CHARS:
             return candidate
     return text or None
@@ -341,7 +338,8 @@ def _options_hint(
     options: Sequence[str],
     command: str | None,
     given: Mapping[str, object] | None = None,
-) -> str | None:
+    lang: Lang = DEFAULT_LANG,
+) -> str:
     """Return the hint of a ``ValidationError`` that names several arguments.
 
     The area is missing (``sheet``, ``bbox``, ``geometry``) or two arguments
@@ -355,47 +353,50 @@ def _options_hint(
     from kartograf.catalog.hints import example_for  # loads the declarations
 
     flags = [example_for(command, name)[0] or name for name in options]
-    text = f"Opcje: {', '.join(flags)}."
+    text = str(message("errors.options", lang, flags=", ".join(flags)))
     _, line = example_for(command, options[0], given)
-    if line and len(candidate := f"{text} Przyklad: {line}") <= HINT_MAX_CHARS:
-        return candidate
+    if line:
+        candidate = f"{text} {message('errors.example', lang, line=line)}"
+        if len(candidate) <= HINT_MAX_CHARS:
+            return candidate
     return text
 
 
-def _usage_hint(command: str | None) -> str | None:
+def _usage_hint(command: str | None, lang: Lang = DEFAULT_LANG) -> str | None:
     """Return the hint of a ``UsageError`` about a command of the catalog.
 
     Where its parameters are and an example line (``None`` for an unknown command).
     """
     from kartograf.catalog.hints import usage_hint  # loads the declarations
 
-    return usage_hint(command, max_chars=HINT_MAX_CHARS)
+    return usage_hint(command, max_chars=HINT_MAX_CHARS, lang=lang)
 
 
 def _library_hint(
     exc: KartografError,
     command: str | None,
     given: Mapping[str, object] | None = None,
+    lang: Lang = DEFAULT_LANG,
 ) -> str | None:
     """Return the hint of an exception of the package hierarchy (spec 6.3, 1-3)."""
     if exc.hint:
-        return exc.hint
+        return localize(exc.hint, lang)
     if isinstance(exc, NoCoverageError | YearRangeError) and exc.hints:
-        return "; ".join(exc.hints)
+        return "; ".join(localize(hint, lang) for hint in exc.hints)
     if isinstance(exc, TransformUnavailableError) and exc.remedy:
-        return exc.remedy
+        return localize(exc.remedy, lang)
     if isinstance(exc, UsageError):
         # the command whose line was wrong, else the command that was run
-        usage = _usage_hint(exc.command or command)
+        usage = _usage_hint(exc.command or command, lang)
         if usage:
             return usage
     if exc.DEFAULT_HINT:
-        return exc.DEFAULT_HINT
+        return localize(exc.DEFAULT_HINT, lang)
     if isinstance(exc, ValidationError):
         if exc.option:
-            return _option_hint(exc.option, exc.allowed, command, given)
+            return _option_hint(exc.option, exc.allowed, command, given, lang)
         if exc.options:
-            return _options_hint(exc.options, command, given)
+            return _options_hint(exc.options, command, given, lang)
     return None
 
 
@@ -421,17 +422,19 @@ def _io_details(exc: OSError) -> dict[str, object]:
 
 def _report(
     code: str,
-    message: str,
+    text: str,
     *,
     hint: str | None = None,
     command: str | None = None,
     details: dict[str, object] | None = None,
+    lang: Lang = DEFAULT_LANG,
 ) -> ErrorReport:
     """Return the report of a registry ``code`` (its title and exit code)."""
+    entry = BY_CODE[code]
     return ErrorReport(
         code=code,
-        title=BY_CODE[code].title,
-        message=message,
+        title=entry.title_pl if lang == "pl" else entry.title,
+        message=text,
         hint=hint,
         exit_code=registry_exit_code(code),
         command=command,
@@ -444,6 +447,7 @@ def error_report(
     *,
     command: str | None = None,
     given: Mapping[str, object] | None = None,
+    lang: Lang = DEFAULT_LANG,
 ) -> ErrorReport:
     """Describe an exception as an :class:`ErrorReport`.
 
@@ -466,32 +470,57 @@ def error_report(
         is then the one of the ``product`` of the call, of its ``country`` and
         of the way it chose the area (``kartograf.catalog.hints.example_for``);
         without it the example is the first one that shows the argument.
+    lang : {"en", "pl"}, optional
+        Language of the ``title``, the ``message`` and the ``hint``: English, as
+        every machine surface has it (AGI-9.2), unless a person asked for Polish.
     """
     if isinstance(exc, KartografError):
         named = exc.command if isinstance(exc, UsageError) else None
         return _report(
             exc.code,
-            str(exc) or type(exc).__name__,
-            hint=_hint_or_none(_library_hint(exc, command, given)),
+            exc.localized(lang) or type(exc).__name__,
+            hint=_hint_or_none(_library_hint(exc, command, given, lang)),
             command=command if command is not None else named,
             details=exc.details(),
+            lang=lang,
         )
     if isinstance(exc, Terminated):
-        return _report("terminated", TERMINATED_MESSAGE, command=command)
+        return _report(
+            "terminated",
+            message("errors.terminated", lang),
+            command=command,
+            lang=lang,
+        )
     if isinstance(exc, KeyboardInterrupt):
-        return _report("cancelled", INTERRUPTED_MESSAGE, command=command)
-    message = _ascii(f"{type(exc).__name__}: {exc}")
+        return _report(
+            "cancelled",
+            message("errors.interrupted", lang),
+            command=command,
+            lang=lang,
+        )
+    text = _ascii(f"{type(exc).__name__}: {exc}")
     if isinstance(exc, OSError):
         path = _io_path(exc)
-        hint = IO_ERROR_HINT.format(path=path) if path else IO_ERROR_HINT_NO_PATH
+        hint = (
+            message("errors.io_error_hint", lang, path=path)
+            if path
+            else message("errors.io_error_hint_no_path", lang)
+        )
         return _report(
             "io_error",
-            message,
+            text,
             hint=_one_line(hint),
             command=command,
             details=_io_details(exc),
+            lang=lang,
         )
-    return _report("internal_error", message, hint=INTERNAL_ERROR_HINT, command=command)
+    return _report(
+        "internal_error",
+        text,
+        hint=str(message("errors.internal_error_hint", lang)),
+        command=command,
+        lang=lang,
+    )
 
 
 def _hint_or_none(text: str | None) -> str | None:

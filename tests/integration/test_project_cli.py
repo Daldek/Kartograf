@@ -82,6 +82,7 @@ def test_data_parser_options_cover_manifest_options(command):
         "quiet",
         "summary",
         "json",
+        "lang",
     }
     parsed = {
         action.dest

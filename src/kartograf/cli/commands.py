@@ -31,6 +31,7 @@ import sys
 
 from kartograf.cli._handlers import HANDLERS
 from kartograf.cli._json import emit_error, json_mode, use_utf8_stdout
+from kartograf.cli._language import language, language_of, set_language
 from kartograf.cli._parser import (
     create_parser,
     parse_command_line,
@@ -43,6 +44,7 @@ from kartograf.config import check_config, debug
 from kartograf.error_report import error_report
 from kartograf.exceptions import KartografError, UsageError, ValidationError
 from kartograf.interrupt import sigterm_interrupts
+from kartograf.messages import Message, localize, message
 
 __all__ = [
     "create_parser",
@@ -63,16 +65,14 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
         # stderr and exit 2, like any other missing argument (a script with a
         # typo must not "pass"); the error document is the last line (AGI-3.3)
         getattr(parsed_args, "_group_parser", parser).print_help(sys.stderr)
-        return emit_error(error_report(UsageError("nie podano komendy")))
+        return emit_error(error_report(UsageError(message("cli.no_command"))))
     if command != _CONFIG_SHOW:  # `config show` reports unusable settings itself
         check_config()
     # --plan needs a mode in every store command
     if getattr(parsed_args, "plan", None) is not None and not (
         parsed_args.check_updates or parsed_args.upgrade
     ):
-        raise ValidationError(
-            "--plan wymaga --check-updates albo --upgrade", option="plan"
-        )
+        raise ValidationError(message("cli.plan_needs_mode"), option="plan")
     return HANDLERS[command](parsed_args)
 
 
@@ -101,7 +101,12 @@ class _StderrLines(logging.Handler):
         if self.as_json and record.name != _HTTP_LOGGER and not debug():
             return
         prefix = "Error" if record.levelno >= logging.ERROR else "Warning"
-        print(f"{prefix}: {record.getMessage()}", file=sys.stderr)
+        shown = record.getMessage()
+        if isinstance(record.msg, Message) and not record.args:
+            # a catalog message: the text for a person follows --lang, the lines of
+            # the --json mode are English like the rest of that mode
+            shown = localize(record.msg, "en" if self.as_json else language())
+        print(f"{prefix}: {shown}", file=sys.stderr)
 
 
 def _stderr_lines(as_json: bool) -> None:
@@ -139,17 +144,23 @@ def _fail(
     report = error_report(error, command=command, given=given)
     if as_json:
         return emit_error(report)
+    lang = language()
     if isinstance(error, KeyboardInterrupt):
         # versions are committed atomically from .incoming/ staging (a stale
         # leftover is removed by a later run): no half-written file is kept
-        print(f"Error: {report.message}", file=sys.stderr)
+        text = error_report(error, command=command, lang=lang).message
+        print(f"Error: {text}", file=sys.stderr)
     elif isinstance(error, KartografError):
         remedy = getattr(error, "remedy", None)  # TransformUnavailableError
-        text = f"Error: {error}" + (f" Remedium: {remedy}" if remedy else "")
+        text = f"Error: {error.localized(lang)}"
+        if remedy:
+            text += " " + message(
+                "cli.remedy", lang=lang, remedy=localize(remedy, lang)
+            )
         print(text, file=sys.stderr)
     else:
         print(f"Error: {type(error).__name__}: {error}", file=sys.stderr)
-        print("Ustaw KARTOGRAF_DEBUG=1, aby zobaczyc pelny traceback.", file=sys.stderr)
+        print(message("cli.debug_hint", lang=lang), file=sys.stderr)
     return emit_error(report)
 
 
@@ -172,6 +183,7 @@ def main(args: list[str] | None = None) -> int:
     """
     argv = sys.argv[1:] if args is None else args
     as_json = json_mode(argv)
+    set_language(language_of(argv))
     _stderr_lines(as_json)
     if as_json:
         use_utf8_stdout()

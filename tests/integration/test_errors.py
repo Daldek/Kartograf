@@ -310,7 +310,7 @@ def test_error_report_document():
         "code": "validation_error",
         "title": "Invalid input",
         "message": "--vertical-crs wymagane",
-        "hint": "Dozwolone wartosci --vertical-crs: EVRF2007, KRON86. Przyklad: "
+        "hint": "Allowed values of --vertical-crs: EVRF2007, KRON86. Example: "
         "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
         "--resolution 1m --vertical-crs EVRF2007 -o ./data",
         "details": {
@@ -369,11 +369,9 @@ def test_validation_hint_lists_allowed_values_with_option_name():
     without_allowed = ValidationError("m", option="product")
     without_option = ValidationError("m", allowed=("a", "b"))
 
-    assert (
-        error_report(two).hint == "Dozwolone wartosci vertical_crs: EVRF2007, KRON86."
-    )
+    assert error_report(two).hint == "Allowed values of vertical_crs: EVRF2007, KRON86."
     shown = ", ".join(f"v{i}" for i in range(40))
-    assert error_report(many).hint == f"Dozwolone wartosci layer: {shown}, ..."
+    assert error_report(many).hint == f"Allowed values of layer: {shown}, ..."
     assert error_report(without_allowed).hint is None
     assert error_report(without_option).hint is None
 
@@ -384,18 +382,18 @@ def test_validation_hint_has_flag_and_example_from_the_catalog():
     hint = error_report(exc, command="elevation download").hint
 
     assert hint is not None and hint.startswith(
-        "Dozwolone wartosci --vertical-crs: EVRF2007, KRON86. Przyklad: "
+        "Allowed values of --vertical-crs: EVRF2007, KRON86. Example: "
         "kartograf elevation download "
     )
-    example = parse_command(hint.split("Przyklad: kartograf ", 1)[1])
+    example = parse_command(hint.split("Example: kartograf ", 1)[1])
     assert example.command == "elevation download"
     assert "vertical_crs" in example.options
     # without the command the flag is the name of the argument, with no example
-    bare = "Dozwolone wartosci vertical_crs: EVRF2007, KRON86."
+    bare = "Allowed values of vertical_crs: EVRF2007, KRON86."
     assert error_report(exc).hint == bare
     assert error_report(exc, command="no such command").hint == bare
     assert error_report(exc, command="sheet parse").hint == (
-        f"{bare} Przyklad: kartograf sheet parse N-34-130-D-d-2-4"
+        f"{bare} Example: kartograf sheet parse N-34-130-D-d-2-4"
     )
 
 
@@ -407,9 +405,10 @@ def test_usage_error_of_a_known_command_names_it_and_gives_an_example():
     assert (exc.command, report.command) == ("elevation download",) * 2
     assert report.exit_code == 2 and report.details == {"reason": "usage"}
     assert report.hint is not None
-    where, example = report.hint.split(" Przyklad: kartograf ", 1)
+    where, example = report.hint.split(" Example: kartograf ", 1)
     assert where == (
-        'Parametry komendy: kartograf commands schema --command "elevation download".'
+        "The options of the command: kartograf commands schema "
+        '--command "elevation download".'
     )
     assert parse_command(example).command == "elevation download"
     assert UsageError("m").command is None
@@ -424,12 +423,12 @@ def test_usage_error_command_and_hint_sources():
     assert nested.command == "project add"
     assert nested.hint is not None
     assert nested.hint.startswith(
-        'Parametry komendy: kartograf commands schema --command "elevation '
+        'The options of the command: kartograf commands schema --command "elevation '
     )
     # without a command of its own the error is about the command that was run
     assert error_report(UsageError("m"), command="sheet parse").hint == (
-        'Parametry komendy: kartograf commands schema --command "sheet parse". '
-        "Przyklad: kartograf sheet parse N-34-130-D-d-2-4"
+        'The options of the command: kartograf commands schema --command "sheet '
+        'parse". Example: kartograf sheet parse N-34-130-D-d-2-4'
     )
     # a hint set where the error is raised wins, an unknown id is no command
     own = UsageError("m", command="elevation download", hint="Wlasna podpowiedz")
@@ -444,7 +443,7 @@ def test_validation_hint_has_an_example_without_allowed_values():
         ValidationError("m", option="output_dir"), command="elevation download"
     ).hint
 
-    assert hint is not None and hint.startswith("Przyklad: kartograf elevation ")
+    assert hint is not None and hint.startswith("Example: kartograf elevation ")
     assert hint.endswith("-o ./data")
 
 
@@ -455,8 +454,8 @@ def test_validation_hint_drops_the_example_that_would_not_fit():
     hint = error_report(exc, command="elevation download").hint
 
     assert hint is not None and len(hint) <= 400
-    assert hint.startswith("Dozwolone wartosci --product: wartosc-00-dluga")
-    assert "Przyklad" not in hint
+    assert hint.startswith("Allowed values of --product: wartosc-00-dluga")
+    assert "Example" not in hint
 
 
 def test_validation_hint_of_several_options_has_their_flags_and_an_example():
@@ -465,14 +464,14 @@ def test_validation_hint_of_several_options_has_their_flags_and_an_example():
     hint = error_report(exc, command="elevation download").hint
 
     assert hint is not None and hint.startswith(
-        "Opcje: --sheet, --bbox, --geometry. Przyklad: kartograf elevation download "
+        "Options: --sheet, --bbox, --geometry. Example: kartograf elevation download "
     )
-    example = parse_command(hint.split("Przyklad: kartograf ", 1)[1])
+    example = parse_command(hint.split("Example: kartograf ", 1)[1])
     assert example.command == "elevation download" and "sheet" in example.options
     # without the command the names of the arguments stand for the flags
-    assert error_report(exc).hint == "Opcje: sheet, bbox, geometry."
+    assert error_report(exc).hint == "Options: sheet, bbox, geometry."
     assert error_report(exc, command="no such command").hint == (
-        "Opcje: sheet, bbox, geometry."
+        "Options: sheet, bbox, geometry."
     )
     # one argument named is the hint of that argument, not of the group
     single = ValidationError("m", option="sheet", options=("sheet", "bbox"))
@@ -485,8 +484,8 @@ def test_the_missing_area_of_a_command_line_has_a_hint_with_an_example(tmp_path)
 
     assert caught.value.options == ("sheet", "bbox", "geometry")
     hint = error_report(caught.value, command="elevation download").hint
-    assert hint is not None and hint.startswith("Opcje: --sheet, --bbox, --geometry.")
-    assert "Przyklad: kartograf elevation download " in hint
+    assert hint is not None and hint.startswith("Options: --sheet, --bbox, --geometry.")
+    assert "Example: kartograf elevation download " in hint
 
 
 def test_oserror_is_io_error():
@@ -497,10 +496,12 @@ def test_oserror_is_io_error():
     assert report.exit_code == 9
     assert report.message.startswith("FileNotFoundError: ")
     assert report.details == {"errno": "ENOENT", "path": "/x"}
-    assert report.hint == "Sprawdz sciezke i uprawnienia: /x"
+    assert report.hint == "Check the path and the permissions: /x"
     bare = error_report(OSError("boom"))
     assert bare.details == {}
-    assert bare.hint == "Sprawdz sciezki i uprawnienia katalogow z argumentow"
+    assert bare.hint == (
+        "Check the paths and the permissions of the directories in the arguments"
+    )
     assert error_report(PermissionError(13, "denied", Path("/p"))).details == {
         "errno": "EACCES",
         "path": "/p",
@@ -525,7 +526,7 @@ def test_keyboard_interrupt_is_cancelled():
     report = error_report(KeyboardInterrupt(), command="elevation download")
 
     assert (report.code, report.exit_code) == ("cancelled", 130)
-    assert report.message == "przerwano (Ctrl-C)"
+    assert report.message == "interrupted (Ctrl-C)"
     assert report.command == "elevation download"
 
 
@@ -533,7 +534,7 @@ def test_sigterm_is_terminated_with_its_own_exit_code():
     report = error_report(Terminated(), command="landcover download")
 
     assert (report.code, report.exit_code) == ("terminated", 143)
-    assert report.message == "przerwano (SIGTERM)"
+    assert report.message == "terminated (SIGTERM)"
     assert report.command == "landcover download"
     assert report.hint is None
 
@@ -546,7 +547,9 @@ def test_hint_is_one_ascii_line_up_to_400_chars():
 
     assert accented.hint is not None
     assert accented.hint.isascii() and "\n" not in accented.hint
-    assert accented.hint.startswith("Sprawdz sciezke i uprawnienia: /dane/za\\u017c")
+    assert accented.hint.startswith(
+        "Check the path and the permissions: /dane/za\\u017c"
+    )
     assert multiline.hint == "a b c"
     assert long.hint is not None
     assert len(long.hint) == 400 and long.hint.endswith("...")

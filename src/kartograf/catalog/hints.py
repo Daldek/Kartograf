@@ -21,6 +21,7 @@ from collections.abc import Mapping
 from kartograf.catalog.commands import declared_commands
 from kartograf.catalog.formatting import example_command_line
 from kartograf.catalog.spec import Command, Example, Param
+from kartograf.messages import DEFAULT_LANG, Lang, message
 
 # The arguments that choose the area or the unit of a data command: an example
 # that chooses it the same way is closer to the call than one that does not.
@@ -124,7 +125,9 @@ def example_for(
     return flag, None if chosen is None else example_command_line(found, chosen)
 
 
-def usage_hint(command: str | None, *, max_chars: int) -> str | None:
+def usage_hint(
+    command: str | None, *, max_chars: int, lang: Lang = DEFAULT_LANG
+) -> str | None:
     """Return where the parameters of a command are and an example line of it.
 
     This is the hint of a ``UsageError`` about the command.
@@ -137,19 +140,23 @@ def usage_hint(command: str | None, *, max_chars: int) -> str | None:
     max_chars : int
         The longest text allowed: the example is left out when the hint would
         pass it.
+    lang : {"en", "pl"}, optional
+        Language of the hint (English by default).
 
     Returns
     -------
     str or None
-        ``Parametry komendy: kartograf commands schema --command "<id>".`` followed by
-        ``Przyklad:``
-        and the first example of the command when it has one and the text fits.
+        ``The options of the command: kartograf commands schema --command "<id>".``
+        followed by ``Example:`` and the first example of the command when it has
+        one and the text fits.
     """
     found = declared_commands().get(command) if command is not None else None
     if found is None:
         return None
-    where = f'Parametry komendy: kartograf commands schema --command "{found.id}".'
+    where = str(message("errors.usage_hint", lang, command=found.id))
     _, line = example_for(found.id, None)
-    if line and len(candidate := f"{where} Przyklad: {line}") <= max_chars:
-        return candidate
+    if line:
+        candidate = f"{where} {message('errors.example', lang, line=line)}"
+        if len(candidate) <= max_chars:
+            return candidate
     return where

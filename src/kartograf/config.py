@@ -43,6 +43,7 @@ from typing import Any, ClassVar, Final, Literal
 import platformdirs
 
 from kartograf.exceptions import ConfigError
+from kartograf.messages import Lang
 from kartograf.serialization import Document
 
 __all__ = [
@@ -56,6 +57,7 @@ __all__ = [
     "data_dir",
     "debug",
     "get_config",
+    "human_language",
     "resolve",
     "store_root",
 ]
@@ -423,6 +425,28 @@ def store_root() -> Path:
 def debug() -> bool:
     """Return whether ``KARTOGRAF_DEBUG`` (or ``debug`` of the file) is on."""
     return bool(resolve("debug").value)
+
+
+def human_language(explicit: str | None = None) -> Lang:
+    """Return the language of the output for people (AGI-9.2, DEV-18.1).
+
+    Parameters
+    ----------
+    explicit : str, optional
+        The language of the command line (``--lang``); the first of the layers.
+        A value that is no language is ignored (the parser of the CLI refuses it).
+
+    Returns
+    -------
+    {"pl", "en"}
+        ``explicit``, else the setting ``lang`` (``KARTOGRAF_LANG``,
+        ``NOGAT_LANG``, ``nogat.toml``), else ``pl``. A setting that is not valid
+        counts as ``pl`` here; ``check_config`` reports it.
+    """
+    chosen = explicit.strip().lower() if explicit is not None else None
+    if chosen in LANGUAGES:
+        return "en" if chosen == "en" else "pl"
+    return "en" if resolve("lang").value == "en" else "pl"
 
 
 def check_config() -> None:

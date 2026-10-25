@@ -9,11 +9,13 @@ shared file to edit. Modules starting with ``_`` are helpers, not groups.
 
 import functools
 from collections.abc import Mapping
+from dataclasses import replace
 from importlib import import_module
 from pkgutil import iter_modules
 from types import MappingProxyType
 from typing import NamedTuple
 
+from kartograf.catalog.shared import LANG
 from kartograf.catalog.spec import Command, Group, check_declarations, sorted_groups
 
 # Order of the modules - and so of the commands of the catalog: the data
@@ -56,6 +58,16 @@ def _module_names() -> list[str]:
     )
 
 
+def _with_language(command: Command) -> Command:
+    """Give a command the CLI-only ``--lang``, after ``--json`` (all commands)."""
+    if any(param.name == LANG.name for param in command.params):
+        return command
+    params = list(command.params)
+    after = next((i for i, param in enumerate(params) if param.name == "json"), None)
+    params.insert(len(params) if after is None else after + 1, LANG)
+    return replace(command, params=tuple(params))
+
+
 @functools.cache
 def declared() -> Declared:
     """Return the declarations of every module of this package.
@@ -70,7 +82,7 @@ def declared() -> Declared:
     groups: list[Group] = []
     for name in _module_names():
         module = import_module(f"{__name__}.{name}")
-        commands.extend(module.COMMANDS)
+        commands.extend(_with_language(command) for command in module.COMMANDS)
         groups.extend(getattr(module, "GROUPS", ()))
     check_declarations(commands, groups)
     return Declared(tuple(commands), sorted_groups(groups))

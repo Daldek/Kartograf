@@ -3360,7 +3360,7 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
   "code": "validation_error",
   "title": "Invalid input",
   "message": "--vertical-crs wymagane dla --product nmt (PL): EVRF2007 (PL-EVRF2007-NH, uklad obowiazujacy), KRON86 (PL-KRON86-NH, uklad historyczny)",
-  "hint": "Dozwolone wartosci --vertical-crs: EVRF2007, KRON86. Przyklad: kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 -o ./data",
+  "hint": "Allowed values of --vertical-crs: EVRF2007, KRON86. Example: kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 -o ./data",
   "details": {
     "reason": "invalid_input",
     "option": "vertical_crs",
@@ -3472,9 +3472,11 @@ The document `kartograf-error/1` has the keys `code`, `title`, `message`, `hint`
   library raises it);
 - `hint` is one line (at most 400 characters) and is left out when there is none: the hint
   the exception carries, else the one of its class; for a `ValidationError` with `option`
-  the parts `Dozwolone wartosci <flag>: ...` (from `allowed`, at most 40 values) and
-  `Przyklad: <command line>` from the catalog, and with `options` (for example a missing
-  area) `Opcje: <flags>.` and `Przyklad: <command line>` from the catalog;
+  the parts `Allowed values of <flag>: ...` (from `allowed`, at most 40 values) and
+  `Example: <command line>` from the catalog, and with `options` (for example a missing
+  area) `Options: <flags>.` and `Example: <command line>` from the catalog; the hint and
+  the title are English, and so is the `message` of every class that moved into the message
+  catalog (ADR-053; the others are Polish ASCII until their area moves);
 - `details` is always present: `reason` first (when the class has one), then the attributes
   of the exception: `option` (the name of the **API** argument, for example `vertical_crs`,
   not the flag), `options` (the arguments in conflict, for example `["sheet", "bbox",
@@ -3877,7 +3879,7 @@ and does not read a `.env` file ([.env.example](../.env.example) lists every var
 | `root` | `KARTOGRAF_ROOT` | `<data_dir>/kartograf` | root of the store (DEV-19.2); `config show` reports it, the commands take the store from `--output` until the data-output change |
 | `data_dir` | `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR` | user data directory of `nogat` | parent of the stores |
 | `cache_dir` | `KARTOGRAF_CACHE_DIR`, `NOGAT_CACHE_DIR` | user cache directory of `nogat` | parent of the caches: the metadata cache is `<cache_dir>/kartograf/metadata.db` |
-| `lang` | `KARTOGRAF_LANG`, `NOGAT_LANG` | `pl` | `pl` or `en`; the human-readable output is Polish until the message catalogue lands (Next item 25) |
+| `lang` | `KARTOGRAF_LANG`, `NOGAT_LANG` | `pl` | `pl` or `en`, and `--lang` on every command: the language of the text for people (the `Error:` line, the status lines); the `--json` document, the error line on stderr and the MCP server are English; the library texts move into the message catalog area by area (ADR-053, Next item 25) |
 | `debug` | `KARTOGRAF_DEBUG` | off | tracebacks of unexpected errors and every library log record in the `--json` mode |
 
 The credential `CLMS_CREDENTIALS` (section 6) is read from the environment only, never from

@@ -14,6 +14,15 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 
 **Breaking**
 
+- The `message` and the `hint` of the error document `kartograf-error/1` are English for the
+  classes that already moved into the message catalog: the hints of an invalid argument
+  (`Allowed values of --product: a, b. Example: kartograf ...`, `Options: --sheet, --bbox.`), of
+  a wrong command line (`The options of the command: ...`), of a sheet code (`Sheet code
+  formats: ...`), of the cache, of a sidecar and of an I/O or internal error, and the messages
+  `interrupted (Ctrl-C)` and `terminated (SIGTERM)`. The text mode of the CLI prints them in
+  Polish by default (`--lang pl`); the last line of stderr is always English. The other
+  library texts follow area by area (ADR-053, PROGRESS Next 25); a client that matched the
+  Polish `hint` matches the English one or the `code` and `details`.
 - The package lives in `src/kartograf/` (ECO-011). Import paths do not change;
   repeat an editable install made before (`uv sync --locked --all-extras`).
 - `kartograf.__version__` is `0.8.0.dev0` on `develop` (REL-1.1); the release
@@ -134,6 +143,15 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 
 **Added**
 
+- The message catalog `kartograf.messages` (ADR-053): `message(key, lang="en", **values)`
+  renders a `Text(en, pl)` entry of `kartograf.messages.<area>` as a `Message`, a `str` that
+  remembers its key and values (`Message.localized(lang)`, `localize`, `reason`), with counted
+  nouns written `{n:plural(file|files)}`. `KartografError.localized(lang)`,
+  `Notice.localized(lang)`, `error_report(exc, lang=)`, `config.human_language` and the
+  CLI-only option `--lang pl|en` of every command (after it `KARTOGRAF_LANG`, `NOGAT_LANG`,
+  `nogat.toml`, then `pl`) follow it. `tests/unit/test_messages.py` checks every entry,
+  every `message(...)` call and the Polish literals that remain outside the catalog
+  (`_PENDING`, shrinking area by area).
 - `kartograf commands guide --format agents|llms|agents-md-block` (library: `agent_guide`,
   the document `AgentGuide` = `kartograf-guide/1` with `format` and `text`) renders the guide
   for AI agents of AGI section 8 from the command catalog, the error registry and the

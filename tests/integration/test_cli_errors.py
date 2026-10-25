@@ -158,7 +158,7 @@ def test_json_input_error_is_an_error_document(capsys):
     assert document["command"] == "elevation download"
     assert document["details"] == {"reason": "invalid_input", "option": "output_dir"}
     # the hint is a command line of the catalog that works as it stands
-    example = document["hint"].removeprefix("Przyklad: kartograf ")
+    example = document["hint"].removeprefix("Example: kartograf ")
     assert example != document["hint"]
     assert parse_command(example).command == "elevation download"
 
@@ -175,8 +175,8 @@ def test_json_input_error_lists_allowed_values_and_an_example(capsys, tmp_path):
         "allowed": ["EVRF2007", "KRON86"],
     }
     assert document["hint"].startswith(
-        "Dozwolone wartosci --vertical-crs: EVRF2007, KRON86. "
-        "Przyklad: kartograf elevation download "
+        "Allowed values of --vertical-crs: EVRF2007, KRON86. "
+        "Example: kartograf elevation download "
     )
 
 
@@ -193,7 +193,7 @@ def test_json_input_error_hint_example_is_of_the_product_and_country_of_the_line
     document = error_document(err)
     assert code == 2 and out == ""
     assert document["details"]["option"] == "level"
-    example = parse_command(document["hint"].split("Przyklad: kartograf ", 1)[1])
+    example = parse_command(document["hint"].split("Example: kartograf ", 1)[1])
     assert example.command == "boundaries download"
     assert example.options["product"] == "admin"
     assert example.options["country"] == "auto"
@@ -230,9 +230,10 @@ def test_json_usage_error_of_a_known_command_names_it_and_gives_an_example(
     assert document["details"]["reason"] == "usage"
     assert message in document["message"]
     assert document["command"] == "elevation download"
-    where, example = document["hint"].split(" Przyklad: kartograf ", 1)
+    where, example = document["hint"].split(" Example: kartograf ", 1)
     assert where == (
-        'Parametry komendy: kartograf commands schema --command "elevation download".'
+        "The options of the command: kartograf commands schema "
+        '--command "elevation download".'
     )
     assert parse_command(example).command == "elevation download"
 
@@ -260,8 +261,9 @@ def test_json_usage_error_in_a_task_line_is_about_the_line_not_the_task(
     assert document["details"]["reason"] == "usage"
     assert document["command"] == "project add"
     assert document["hint"].startswith(
-        'Parametry komendy: kartograf commands schema --command "elevation download".'
-        " Przyklad: "
+        "The options of the command: kartograf commands schema "
+        '--command "elevation download".'
+        " Example: "
     )
 
 
@@ -297,7 +299,7 @@ def test_json_parse_error_uses_invalid_sheet_code(capsys):
     assert document["details"]["reason"] == "invalid_sheet_code"
     assert document["command"] == "sheet parse"
     assert document["details"] == {"reason": "invalid_sheet_code", "option": "sheet"}
-    assert document["hint"].startswith("Formaty godel: ")
+    assert document["hint"].startswith("Sheet code formats: ")
 
 
 def test_json_interrupt_is_130(capsys):
@@ -308,7 +310,7 @@ def test_json_interrupt_is_130(capsys):
     assert code == 130 and out == ""
     assert document["code"] == "cancelled"
     assert document["exit_code"] == 130
-    assert document["message"] == "przerwano (Ctrl-C)"
+    assert document["message"] == "interrupted (Ctrl-C)"
     assert document["command"] == "sheet parse"
 
 
@@ -340,7 +342,7 @@ def test_sigterm_is_143_with_the_error_document_in_json_mode(
     assert code == 143 and out == ""
     assert document["code"] == "terminated"
     assert document["exit_code"] == 143
-    assert document["message"] == "przerwano (SIGTERM)"
+    assert document["message"] == "terminated (SIGTERM)"
     assert document["command"] == "sheet parse"
 
 
