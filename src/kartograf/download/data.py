@@ -114,7 +114,7 @@ from kartograf.download.options import (
     validate_request,
 )
 from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, ImageCutoutResult
-from kartograf.download.plan import PlanItem, UpdatePlan
+from kartograf.download.plan import PlanItem, UpdatePlan, plain_items
 from kartograf.exceptions import (
     DownloadError,
     KartografError,
@@ -142,7 +142,7 @@ from kartograf.notices import (
     NoticeSink,
     count_text,
 )
-from kartograf.output import Mode
+from kartograf.output import Mode, Staging, plain_of, refuse, writing
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
@@ -348,6 +348,7 @@ class _Run:
     plans: list[UpdatePlan] = field(default_factory=list)
     causes: dict[UnitFailure, DownloadError] = field(default_factory=dict)
     dry: bool = False
+    preflight: bool = False
     root: Path | None = None
     output_dir: Path | None = None
 
@@ -378,9 +379,10 @@ class _Run:
         """Return True when the metadata cache is refreshed, not read.
 
         Metadata cache refreshed, not read: the check (``--check``
-        always asks the source), ``--upgrade`` and ``--force``.
+        always asks the source), ``--upgrade`` and ``--force``; the check run of
+        a plain write's preflight (``preflight``) reads the cache like the download.
         """
-        return self.check or refreshes_cache(self.update)
+        return (self.check and not self.preflight) or refreshes_cache(self.update)
 
     def add_stale(self, stale: Sequence[PlanItem]) -> int:
         self.stale.extend(stale)
@@ -459,9 +461,43 @@ def _task(**kwargs: Any) -> SimpleNamespace:
     return task
 
 
+def _preflight(task: SimpleNamespace, run: _Run) -> None:
+    """Refuse a plain write that would conflict, before its first byte (DEV-19.6).
+
+    The check run of the same request lists the target of every track (the names are
+    known before the transfer) and one plan judges them all together: a name that
+    two tracks share, a store, a file that exists. Failures of the check run are not
+    reported here: the run reports them again when it fetches.
+    """
+    probe = _Run(
+        sink=NoticeSink(None),
+        update=run.update,
+        check=True,
+        loaded=None,
+        cache=run.cache,
+        workers=run.workers,
+        on_progress=None,
+        preflight=True,
+    )
+    _execute(task, probe)
+    write = plain_of(task.root)
+    assert write is not None  # only a plain write is checked
+    refuse(write.plan([item.name for plan in probe.plans for item in plan.items]))
+
+
+def _rejudged(write: Staging, plans: list[UpdatePlan]) -> list[UpdatePlan]:
+    """Judge the targets of all plans of a plain check together (DEV-19.10)."""
+    judged = iter(plain_items(write, [item for plan in plans for item in plan.items]))
+    return [
+        replace(plan, items=tuple(next(judged) for _ in plan.items)) for plan in plans
+    ]
+
+
 def _start(
     kwargs: dict[str, Any],
     *,
+    output_dir: str | Path | None,
+    force: bool = False,
     update: UpdateMode | None,
     plan: UpdatePlan | None,
     check: bool,
@@ -487,15 +523,33 @@ def _start(
         workers=workers,
         on_progress=on_progress,
     )
-    task = _task(**kwargs)
-    run.root = task.root
-    return run, _execute(task, run)
+    with writing(
+        output_dir=output_dir,
+        root=kwargs["root"],
+        update=update,
+        plan=plan,
+        all_campaigns=kwargs["all_campaigns"],
+        force=force,
+    ) as root:
+        task = _task(**{**kwargs, "root": root})
+        write = plain_of(root)
+        if write is None:
+            run.root = task.root
+        else:
+            run.output_dir = write.directory
+            if not check:
+                _preflight(task, run)
+        rc = _execute(task, run)
+        if write is not None and check:
+            run.plans = _rejudged(write, run.plans)
+    return run, rc
 
 
 def download_data(
     *,
     product: str | None,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -557,8 +611,14 @@ def download_data(
     the sheet, ``<sheet>_<direction>.tif``); ``None`` = all four.
     ``bbox`` may be in any supported CRS; ``geometry`` is a SHP/GPKG file.
     ``update``/``plan``: modes of every track (``plan`` from ``check_data``
-    with ``update="upgrade"``). ``cache``: ``True`` = default metadata cache
-    in the current directory, a ``MetadataCache`` = that cache, ``False`` =
+    with ``update="upgrade"``). ``output_dir`` writes plain files, named as in the
+    store, into that directory instead of the store at ``root`` (the default root
+    when neither is given): no sidecar, no version, no link; ``update="force"``
+    replaces existing files, any other existing file or a name two files share is
+    a ``conflict`` before the first byte; it excludes ``root``,
+    ``update="upgrade"``, ``plan`` and ``all_campaigns``. ``cache``: ``True`` =
+    default metadata cache in the current directory, a ``MetadataCache`` = that
+    cache, ``False`` =
     none. ``on_notice`` receives each data notice when it is emitted (e.g.
     country clipping before the first download); ``on_progress`` receives
     the sheet and tile progress.
@@ -576,6 +636,7 @@ def download_data(
     """
     run, rc = _start(
         _selection_kwargs(locals()),
+        output_dir=output_dir,
         update=update,
         plan=plan,
         check=False,
@@ -601,6 +662,7 @@ def check_data(
     *,
     product: str | None,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     sheet: str | None = None,
     bbox: BBox | None = None,
     geometry: str | Path | None = None,
@@ -622,6 +684,7 @@ def check_data(
     all_campaigns: bool = False,
     full_sheet: bool = False,
     min_density: int | None = None,
+    force: bool = False,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
@@ -632,10 +695,15 @@ def check_data(
     was checked, else its error is raised (``DownloadError``; the states of
     the data keep their class - ``NoCoverageError`` when no sheet has data,
     ``YearRangeError`` when the data are outside the years - as in the
-    download, where they are the ``kind`` of the failure).
+    download, where they are the ``kind`` of the failure). With ``output_dir`` the
+    positions are the targets of a plain write, each with its ``action`` (``write``,
+    ``replace`` with ``force``, ``conflict``), ``path`` and ``reason``; a plan that
+    lists conflicts is a result, not an error.
     """
     run, _ = _start(
         _selection_kwargs(locals()),
+        output_dir=output_dir,
+        force=force,
         update=None,
         plan=None,
         check=True,

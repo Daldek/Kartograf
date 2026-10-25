@@ -20,7 +20,6 @@ import requests
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.config import resolve_root
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.download.cz_cutout import (
     _all_nodata,
@@ -52,6 +51,7 @@ from kartograf.download.storage import storage_for_provider
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import UNVERIFIED_LOCAL, Notice, NoticeSink
+from kartograf.output import plain_of, preflight, writing
 from kartograf.providers.cuzk.raster import CuzkRasterProvider
 from kartograf.sources.registry import get_source
 from kartograf.sources.sidecar import emit_sidecar
@@ -177,6 +177,7 @@ def _run_cz_sheet(
     # the route (variant, channel, pinned operations) before any request
     route = provider.route(sheet)
     slot = _sheet_slot(provider, sheet, root)
+    preflight(root, [slot.name])
     probe = (lambda: provider.file_signal(sheet)) if route.files else None
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
@@ -216,12 +217,15 @@ def _run_cz_sheet(
         received = response_signal(response)
 
     def fetch(staged: Path) -> dict[str, Any] | None:
+        nonlocal empty
         provider.download(
             sheet,
             staged,
             on_download=on_download,
             on_response=on_response if route.files else None,
         )
+        if plain_of(root) is not None:  # no sidecar says it: look at the raster
+            empty = _all_nodata(staged, read_tif_nodata(staged))
         return received if route.files else None
 
     def write_sidecar(
@@ -321,6 +325,7 @@ def check_cz_sheet(
     *,
     sheet: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     product: str,
     vertical_crs: str,
     resolution: str | None = None,
@@ -332,11 +337,15 @@ def check_cz_sheet(
     A file route compares the openzu ZIP's HTTP signal (one HEAD request and
     the sheet index, both from the source: the metadata cache is refreshed,
     never read); an ImageServer tile has no remote signal and reads only the
-    local store. Invalid choices raise the same errors as the download.
+    local store. Invalid choices raise the same errors as the download. With
+    ``output_dir`` the position is the target of a plain write (``action``,
+    ``path``); nothing is probed.
     """
-    root = resolve_root(root)
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=True, on_notice=sink.add) as metadata:
+    with (
+        writing(output_dir=output_dir, root=root) as store,
+        open_cache(cache, force=True, on_notice=sink.add) as metadata,
+    ):
         provider = _sheet_provider(
             sheet,
             product=product,
@@ -344,13 +353,14 @@ def check_cz_sheet(
             resolution=resolution,
             cache=metadata,
         )
-        return _check_sheet(provider, sheet, root=root)
+        return _check_sheet(provider, sheet, root=store)
 
 
 def download_cz_sheet(
     *,
     sheet: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     product: str,
     vertical_crs: str,
     resolution: str | None = None,
@@ -373,6 +383,10 @@ def download_cz_sheet(
     version exists; an ImageServer tile has no cheap signal. ``plan`` (from
     ``check_cz_sheet`` with ``update="upgrade"``) downloads only a matching
     ``missing``/``newer`` position; a changed position lands in ``stale``.
+    ``output_dir`` writes the plain file ``<sheet>.<ext>`` into that directory
+    instead of the store (no sidecar, no version; ``update="force"`` replaces an
+    existing file, a conflict stops before the first byte; it excludes ``root``,
+    ``update="upgrade"`` and ``plan``).
     ``cache``: ``True`` = default metadata cache in the current directory, a
     ``MetadataCache`` = that cache, ``False`` = none. ``on_notice`` receives
     each data notice when emitted; ``on_download`` is called right before
@@ -390,12 +404,14 @@ def download_cz_sheet(
     DownloadError
         CUZK service failure; no new version is committed.
     """
-    root = resolve_root(root)
     validate_update(update, check="check_cz_sheet")
     sink = NoticeSink(on_notice)
-    with open_cache(
-        cache, force=refreshes_cache(update), on_notice=sink.add
-    ) as metadata:
+    with (
+        writing(output_dir=output_dir, root=root, update=update, plan=plan) as store,
+        open_cache(
+            cache, force=refreshes_cache(update), on_notice=sink.add
+        ) as metadata,
+    ):
         provider = _sheet_provider(
             sheet,
             product=product,
@@ -406,7 +422,7 @@ def download_cz_sheet(
         result = _run_cz_sheet(
             provider,
             sheet,
-            root=root,
+            root=store,
             update=update,
             plan=plan,
             on_download=on_download,

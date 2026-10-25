@@ -15,7 +15,6 @@ from typing import Any, cast
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.download.fetch import (
     FileSlot,
@@ -41,6 +40,7 @@ from kartograf.download.storage import bbox_slot
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import ValidationError
 from kartograf.notices import ALL_NODATA, Notice, NoticeSink
+from kartograf.output import plain_of, preflight, writing
 from kartograf.providers.cuzk.client import wkid
 from kartograf.providers.cuzk.raster import (
     CUZK_NODATA,
@@ -174,15 +174,23 @@ def _cutout_slot(
 
 
 def _result(
-    file: VersionedFile | None, stale: tuple[PlanItem, ...] = ()
+    file: VersionedFile | None,
+    stale: tuple[PlanItem, ...] = (),
+    *,
+    all_nodata: bool | None = None,
 ) -> CzCutoutResult:
-    """Read the nodata flag from the immutable version sidecar, not the raster."""
+    """Read the nodata flag from the immutable version sidecar, not the raster.
+
+    A plain file has no sidecar: ``all_nodata`` is the flag the run measured.
+    """
     if file is None:
         return CzCutoutResult(None, stale=stale)
 
-    version = read_version(file.version_path.parent, file.version_path.name)
-    extra = version.meta.get("extra", {}) if version is not None else {}
-    return CzCutoutResult(file, all_nodata=extra.get("all_nodata") is True, stale=stale)
+    if all_nodata is None:
+        version = read_version(file.version_path.parent, file.version_path.name)
+        extra = version.meta.get("extra", {}) if version is not None else {}
+        all_nodata = extra.get("all_nodata") is True
+    return CzCutoutResult(file, all_nodata=all_nodata, stale=stale)
 
 
 def _check_cutout(
@@ -227,6 +235,8 @@ def _run_cz_cutout(
     # the route (pinned operations) before any request
     route = provider.route()
     bbox, image_sr, slot = _cutout_slot(provider, bbox, root, image_crs)
+    preflight(root, [slot.name])
+    plain_empty: bool | None = None
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
         fresh = inspect_version(
@@ -248,7 +258,10 @@ def _run_cz_cutout(
             )
 
     def fetch(staged: Path) -> None:
+        nonlocal plain_empty
         provider.download_bbox(bbox, staged, on_download=on_download)
+        if plain_of(root) is not None:  # no sidecar says it: look at the raster
+            plain_empty = _all_nodata(staged, read_tif_nodata(staged))
 
     def sidecar(
         data: Path, ref: VersionRef, digest: ContentDigest, http: dict[str, Any] | None
@@ -281,7 +294,7 @@ def _run_cz_cutout(
         version=VersionRef.downloaded(),
         write_sidecar=sidecar,
     )
-    return _result(file, stale)
+    return _result(file, stale, all_nodata=plain_empty)
 
 
 def _image_crs(target_crs: str) -> str | None:
@@ -321,6 +334,7 @@ def check_cz_cutout(
     *,
     bbox: BBox,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     product: str,
     horizontal_crs: str,
     vertical_crs: str,
@@ -333,9 +347,10 @@ def check_cz_cutout(
     The cutout channel has no remote version signal: the plan reads only the
     local store (no network, no metadata cache). ``cache`` and ``on_notice``
     are accepted for symmetry with the download. Invalid choices raise the
-    same ``ValidationError``/``TransformError`` as the download.
+    same ``ValidationError``/``TransformError`` as the download. With
+    ``output_dir`` the position is the target of a plain write (``action``,
+    ``path``).
     """
-    root = resolve_root(root)
     from kartograf.download.options import validate_request_bbox
 
     bbox = validate_request_bbox(bbox)
@@ -347,15 +362,17 @@ def check_cz_cutout(
         resolution=resolution,
         cache=None,
     )
-    return _check_cutout(
-        provider, bbox, root=root, image_crs=_image_crs(horizontal_crs)
-    )
+    with writing(output_dir=output_dir, root=root) as store:
+        return _check_cutout(
+            provider, bbox, root=store, image_crs=_image_crs(horizontal_crs)
+        )
 
 
 def download_cz_cutout(
     *,
     bbox: BBox,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     product: str,
     horizontal_crs: str,
     vertical_crs: str,
@@ -376,7 +393,11 @@ def download_cz_cutout(
     DMR 4G; ``"nmpt"``: ``"0.5m"`` DMP OK / ``"2m"`` DMP 1G). The grid
     starts at ``bbox`` converted to ``horizontal_crs``. ``plan`` (from
     ``check_cz_cutout`` with ``update="upgrade"``) downloads only its missing
-    position; a changed position lands in ``stale``. ``cache``: ``True`` =
+    position; a changed position lands in ``stale``. ``output_dir`` writes the
+    plain file ``bbox_<coords>.tif`` into that directory instead of the store (no
+    sidecar, no version; ``update="force"`` replaces an existing file, a conflict
+    stops before the first byte; it excludes ``root``, ``update="upgrade"`` and
+    ``plan``). ``cache``: ``True`` =
     default metadata cache in the current directory, a ``MetadataCache`` =
     that cache, ``False`` = none. ``on_notice`` receives each data notice
     when emitted; ``on_download`` is called right before the first service
@@ -391,15 +412,17 @@ def download_cz_cutout(
     DownloadError
         CUZK service failure.
     """
-    root = resolve_root(root)
     from kartograf.download.options import validate_request_bbox
 
     bbox = validate_request_bbox(bbox)
     validate_update(update, check="check_cz_cutout")
     sink = NoticeSink(on_notice)
-    with open_cache(
-        cache, force=refreshes_cache(update), on_notice=sink.add
-    ) as metadata:
+    with (
+        writing(output_dir=output_dir, root=root, update=update, plan=plan) as store,
+        open_cache(
+            cache, force=refreshes_cache(update), on_notice=sink.add
+        ) as metadata,
+    ):
         provider = _cz_provider(
             product=product,
             horizontal_crs=horizontal_crs,
@@ -410,7 +433,7 @@ def download_cz_cutout(
         result = _run_cz_cutout(
             provider,
             bbox,
-            root=root,
+            root=store,
             image_crs=_image_crs(horizontal_crs),
             update=update,
             plan=plan,

@@ -380,6 +380,21 @@ changes and the migration guide ("Migration guide: data output") are written wit
   make a new one) and its items `action`, `path`, `reason` (plain plans). The Python attributes
   `item.file.path`, `.status`, `.label` are unchanged. Consumers: Hydrolog and Hydraulik read
   `files[].path`, Archiwista and Retman the report of a download.
+- Plain mode at the seam of the tracks (ADR-054 decision 3, DEV-19.4 to DEV-19.9): the download
+  and check functions of `laz`, `cz_laz`, `cz_sheets`, `cz_contours`, `cz_cutout`, `cutout` (PL
+  WCS), `orto_cutout` and `cz_orto` take the keyword `output_dir` beside `root` and write ordinary
+  files, named as in the store, into that directory: no sidecar, no version, no link, no
+  `versions/`. The targets are checked as a whole before the first byte (`conflict`:
+  `duplicate_output_name`, `output_in_store`, `output_exists`, every path in `details.paths`);
+  `update="force"` replaces existing files, each with `os.replace`; `update="upgrade"`, `plan`
+  and `all_campaigns` are `validation_error` `store_only_option` (hint `--root`). The files go
+  through `<output_dir>/.kartograf-incoming/<host>_<pid>_<token>/`, which is created at the first
+  transfer and removed on success, error, SIGINT and SIGTERM. `download_data(output_dir=)` and
+  `check_data(output_dir=, force=)` run the check of the whole request first, so a request over
+  two countries is judged as one list; the reports have `mode` `plain`, `output_dir` and the
+  file statuses `written` and `replaced`, and a check lists `action`, `path` and `reason` of each
+  target (a conflict is a result). The PL sheets, the collections, land cover and HSG follow in
+  the next steps.
 
 ### Breaking changes
 

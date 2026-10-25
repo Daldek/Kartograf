@@ -9,6 +9,7 @@ import time
 
 import pytest
 
+from kartograf.download.plan import PlanItem, new_plan, plain_items
 from kartograf.exceptions import ConflictError, ValidationError
 from kartograf.interrupt import Terminated
 from kartograf.marker import STORE_MARKERS, store_below
@@ -16,9 +17,12 @@ from kartograf.output import (
     STAGING,
     Staging,
     digest_of,
+    plain_of,
     plan_plain,
+    preflight,
     refuse,
     resolve_target,
+    writing,
 )
 
 
@@ -281,7 +285,8 @@ def test_leftovers_older_than_24_hours_are_removed_by_the_next_run(tmp_path):
     stale = time.time() - 25 * 60 * 60
     os.utime(old, (stale, stale))
 
-    with Staging(out):
+    with Staging(out) as staging:
+        stage(staging, "f.bin", b"x")  # the first transfer opens the staging directory
         assert not old.exists()
         assert fresh.exists()  # the directory of a run that may be alive stays
     assert fresh.exists()
@@ -318,3 +323,138 @@ def test_plain_output_needs_no_hard_links(tmp_path, monkeypatch):
 
     assert result.status == "written"
     assert (tmp_path / "a" / "f.bin").read_bytes() == b"data"
+
+
+# --------------------------------------------------------------------------
+# The write of a request: the handle root, the lazy directory, the store-only options
+# --------------------------------------------------------------------------
+
+
+def test_nothing_is_created_before_the_first_transfer(tmp_path):
+    out = tmp_path / "new" / "out"
+
+    with Staging(out) as staging:
+        assert staging.plan(["a.asc"])[0].action == "write"
+
+    assert not (
+        tmp_path / "new"
+    ).exists()  # a refused or invalid request leaves no trace
+
+
+def test_the_handle_root_names_the_open_write_and_no_store(tmp_path):
+    with Staging(tmp_path / "out") as staging:
+        assert plain_of(staging.handle) is staging
+        assert plain_of(staging.handle / "nmt" / "versions") is staging
+        assert plain_of(tmp_path / "store") is None
+        assert plain_of(None) is None
+    assert plain_of(staging.handle) is None  # forgotten when the write ends
+
+
+def test_the_handle_is_found_through_a_symbolic_link(tmp_path):
+    real = tmp_path / "real"
+    real.mkdir()
+    (tmp_path / "link").symlink_to(real)
+
+    with Staging(tmp_path / "link" / "out") as staging:
+        assert plain_of(staging.handle.resolve()) is staging
+        assert plain_of(staging.handle) is staging
+
+
+def test_writing_gives_the_store_root_or_the_handle_of_a_plain_write(tmp_path):
+    with writing(root=tmp_path / "store") as root:
+        assert root == tmp_path / "store"
+        assert plain_of(root) is None
+
+    with writing(output_dir=tmp_path / "out") as handle:
+        write = plain_of(handle)
+        assert write is not None and write.directory == tmp_path / "out"
+        with writing(root=handle) as same:  # a track inside the write joins it
+            assert same == handle
+        assert plain_of(handle) is write
+
+    assert not (tmp_path / "out").exists()
+
+
+def open_write(handle) -> Staging:
+    write = plain_of(handle)
+    assert write is not None
+    return write
+
+
+def test_force_lets_the_write_replace_and_an_update_that_needs_versions_is_refused(
+    tmp_path,
+):
+    with writing(output_dir=tmp_path, update="force") as handle:
+        assert open_write(handle).force is True
+    with writing(output_dir=tmp_path, force=True) as handle:
+        assert open_write(handle).force is True
+    with writing(output_dir=tmp_path) as handle:
+        assert open_write(handle).force is False
+
+    for options, flag in (
+        ({"update": "upgrade"}, "--upgrade"),
+        ({"plan": object()}, "--plan"),
+        ({"all_campaigns": True}, "--all-campaigns"),
+    ):
+        with (
+            pytest.raises(ValidationError) as error,
+            writing(output_dir=tmp_path, **options),
+        ):
+            raise AssertionError("not reached")
+        assert error.value.details() == {
+            "reason": "store_only_option",
+            "option": flag,
+        }
+        assert "--root" in str(error.value.hint)
+    # the same options are fine with the store
+    with writing(root=tmp_path / "store", update="upgrade", all_campaigns=True):
+        pass
+
+
+def test_preflight_lists_every_path_of_a_plain_write_and_ignores_a_store(tmp_path):
+    (tmp_path / "a.laz").write_bytes(b"old")
+
+    with writing(output_dir=tmp_path) as handle:
+        with pytest.raises(ConflictError) as error:
+            preflight(handle, ["a.laz", "b.laz", "b.laz"])
+        preflight(handle, ["c.laz"])
+
+    assert error.value.reason == "duplicate_output_name"
+    assert error.value.details()["paths"] == [
+        str(tmp_path / "a.laz"),
+        str(tmp_path / "b.laz"),
+        str(tmp_path / "b.laz"),
+    ]
+    preflight(tmp_path / "store", ["a.laz", "a.laz"])  # a store has no such rule
+
+
+def test_a_plan_of_the_handle_is_the_plan_of_the_directory_with_one_action_each(
+    tmp_path,
+):
+    (tmp_path / "old.laz").write_bytes(b"old")
+
+    def item(name):
+        return PlanItem("cz_laz", "", "", name, name, None, None, None, None, "missing")
+
+    with writing(output_dir=tmp_path) as handle:
+        plan = new_plan(
+            handle, [item("new.laz"), item("old.laz"), item("dup.laz"), item("dup.laz")]
+        )
+        refused = plain_items(open_write(handle), [item("old.laz")])
+    with writing(output_dir=tmp_path, force=True) as handle:
+        (replaced,) = plain_items(open_write(handle), [item("old.laz")])
+
+    assert (plan.mode, plan.root, plan.output_dir) == (
+        "plain",
+        None,
+        str(tmp_path.resolve()),
+    )
+    assert [(i.name, i.action, i.reason, i.status) for i in plan.items] == [
+        ("new.laz", "write", None, "missing"),
+        ("old.laz", "conflict", "output_exists", "unverifiable"),
+        ("dup.laz", "conflict", "duplicate_output_name", "unverifiable"),
+        ("dup.laz", "conflict", "duplicate_output_name", "unverifiable"),
+    ]
+    assert plan.items[0].path == tmp_path / "new.laz"
+    assert refused[0].action == "conflict"
+    assert (replaced.action, replaced.status) == ("replace", "unverifiable")

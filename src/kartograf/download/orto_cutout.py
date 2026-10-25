@@ -57,7 +57,6 @@ import rasterio
 from rasterio.errors import RasterioError
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.config import resolve_root
 from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.download.area import bbox_to_2180
 from kartograf.download.fetch import (
@@ -84,6 +83,7 @@ from kartograf.download.storage import bbox_slot, token_segment
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.notices import CUTOUT_SIZE, Notice, NoticeSink
+from kartograf.output import preflight, writing
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
     GugikImageProvider,
@@ -466,6 +466,7 @@ def _run(
     version is stored (``_no_image_error``).
     """
     slot = cutout.slot
+    preflight(slot.root, [slot.name])
     signal = cutout.channel.update_signal
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
@@ -557,6 +558,7 @@ def check_image_cutout(
     bbox: BBox,
     horizontal_crs: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     resolution: str,
     coverage: str | None = None,
     cache: MetadataCache | bool = True,
@@ -568,26 +570,28 @@ def check_image_cutout(
 
     The WCS channel has no remote version signal, so the plan (track
     ``pl_cutout``) reads only the local store: no request is made. ``cache``
-    and ``on_notice`` are accepted for symmetry with the download.
+    and ``on_notice`` are accepted for symmetry with the download. With
+    ``output_dir`` the position is the target of a plain write (``action``,
+    ``path``).
 
     Raises ``ValidationError`` for an invalid choice and ``TransformError``
     when a Czech CRS has no safe pinned operation, exactly as the download.
     """
-    root = resolve_root(root)
     del cache, on_notice  # same signature as the download (Z2); unused here
-    cutout = _prepare(
-        bbox,
-        key=_cutout_key(product),
-        horizontal_crs=horizontal_crs,
-        root=root,
-        coverage=coverage,
-        resolution=resolution,
-    )
-    slot = cutout.slot
-    item = inspect_version(
-        slot, track=_TRACK, unit=slot.std.stem, signal=cutout.channel.update_signal
-    )
-    return new_plan(store_id(slot.root), (item,))
+    with writing(output_dir=output_dir, root=root) as store:
+        cutout = _prepare(
+            bbox,
+            key=_cutout_key(product),
+            horizontal_crs=horizontal_crs,
+            root=store,
+            coverage=coverage,
+            resolution=resolution,
+        )
+        slot = cutout.slot
+        item = inspect_version(
+            slot, track=_TRACK, unit=slot.std.stem, signal=cutout.channel.update_signal
+        )
+        return new_plan(store_id(slot.root), (item,))
 
 
 def download_image_cutout(
@@ -596,6 +600,7 @@ def download_image_cutout(
     bbox: BBox,
     horizontal_crs: str,
     root: str | Path | None = None,
+    output_dir: str | Path | None = None,
     resolution: str,
     coverage: str | None = None,
     update: UpdateMode | None = None,
@@ -620,7 +625,11 @@ def download_image_cutout(
     ``update="upgrade"`` use a local version without a request;
     ``update="force"`` downloads again. ``plan`` (from
     ``check_image_cutout``) downloads only its missing position; a changed
-    position lands in ``stale``. ``parent_request`` goes to the sidecar only
+    position lands in ``stale``. ``output_dir`` writes the plain file
+    ``bbox_<coords>.tif`` into that directory instead of the store (no sidecar,
+    no version; ``update="force"`` replaces an existing file, a conflict stops
+    before the first byte; it excludes ``root``, ``update="upgrade"`` and
+    ``plan``). ``parent_request`` goes to the sidecar only
     when given. ``cache`` is accepted for symmetry with the other tracks (the
     cutout reads no metadata); ``on_notice`` receives each data notice when
     it is emitted.
@@ -646,19 +655,19 @@ def download_image_cutout(
         WCS failure, an error document or a raster off the requested grid;
         no version is committed.
     """
-    root = resolve_root(root)
     validate_update(update, check="check_image_cutout")
-    cutout = _prepare(
-        bbox,
-        key=_cutout_key(product),
-        horizontal_crs=horizontal_crs,
-        root=root,
-        coverage=coverage,
-        resolution=resolution,
-    )
-    del cache  # the WCS cutout reads no metadata (symmetry, Z2)
-    sink = NoticeSink(on_notice)
-    result = _run(
-        cutout, update=update, plan=plan, parent_request=parent_request, sink=sink
-    )
+    with writing(output_dir=output_dir, root=root, update=update, plan=plan) as store:
+        cutout = _prepare(
+            bbox,
+            key=_cutout_key(product),
+            horizontal_crs=horizontal_crs,
+            root=store,
+            coverage=coverage,
+            resolution=resolution,
+        )
+        del cache  # the WCS cutout reads no metadata (symmetry, Z2)
+        sink = NoticeSink(on_notice)
+        result = _run(
+            cutout, update=update, plan=plan, parent_request=parent_request, sink=sink
+        )
     return replace(result, notices=sink.notices)

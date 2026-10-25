@@ -53,4 +53,15 @@ MESSAGES = {
         "{path} appeared while the files were fetched; --force replaces it",
         "{path} pojawil sie w trakcie pobierania plikow; --force go zastepuje",
     ),
+    # ``output``: an option that acts on the versions of a store, given with output_dir.
+    "store_only_option": Text(
+        "{option} acts on the versions of a store and does not apply to plain files "
+        "(--output-dir)",
+        "{option} dziala na wersjach magazynu i nie dotyczy zwyklych plikow "
+        "(--output-dir)",
+    ),
+    "store_only_option_hint": Text(
+        "Use --root to write the store, or leave out {option} for plain files",
+        "Uzyj --root, aby zapisac magazyn, albo pomin {option} dla zwyklych plikow",
+    ),
 }
