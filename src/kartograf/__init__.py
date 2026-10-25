@@ -39,7 +39,9 @@ return the ``kartograf-result/1`` envelope (``CommandResult``: ``status``, ``ite
 ``notices`` and the report as ``result``), as the CLI ``--json`` prints it. Other
 reports of the document family: ``describe_sheet``, ``find_sheets``, ``list_sources``,
 ``list_layers``, ``get_cache_info``, ``get_cache_path``, ``clear_cache``,
-``get_config``, ``describe_store``, ``list_store_entries`` and ``read_store_sidecar``.
+``get_config``, ``store_root`` (the default store root with its source and marker,
+without reading the store), ``describe_store``, ``list_store_entries`` and
+``read_store_sidecar``.
 
 Example usage::
 
@@ -122,7 +124,7 @@ from kartograf.commands import (
     run_command,
     validate_command,
 )
-from kartograf.config import Config, get_config
+from kartograf.config import Config, StoreRoot, get_config, store_root
 from kartograf.core.bbox import BBox, transform_bbox
 from kartograf.core.geometry import find_sheets_for_geometry, get_overall_bbox
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
@@ -490,6 +492,8 @@ __all__ = [
     # The user settings as data (DEV-18.6)
     "get_config",
     "Config",
+    "store_root",
+    "StoreRoot",
     # Sheet codes and the catalog of the commands as data (spec 5.4.4, 5.4.5, 8.5)
     "describe_sheet",
     "SheetInfo",

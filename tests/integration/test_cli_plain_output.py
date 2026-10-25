@@ -218,7 +218,7 @@ def test_without_a_target_the_default_store_is_written_and_root_names_another(
     code, stdout, _ = run_nmt(capsys, fake)
 
     assert code == 0
-    assert store_root() == default_root
+    assert store_root().root == default_root
     assert default_root.joinpath("kartograf-store.json").is_file()
     assert sorted(p.name for p in default_root.rglob("*.asc")) == [f"{G}.asc"] * 2
     assert "nowa wersja" in stdout and "zapisano" not in stdout

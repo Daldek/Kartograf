@@ -46,8 +46,9 @@ changes land before the first release and no data is migrated (ECO-020).
    of `kartograf-project/1`. All of them are `root` now. `DownloadManager(provider, *, root=None,
    output_dir=None, ...)` takes the provider first, as the target options are keyword-only.
 2. **Default root (DEV-19.2, DEV-18.2).** A command given neither writes the store at the first of `--root`,
-   `KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml` and `<data_dir>/kartograf` (`kartograf.config.
-   store_root()`, in place since ADR-050; `kartograf config show --json` names the root, its source, whether
+   `KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml` and `<data_dir>/kartograf` (`kartograf.store_root()`,
+   the read-only accessor that returns the root, its source and whether its marker exists without
+   reading the store; IMGWTools has the same; `kartograf config show --json` names the root, its source, whether
    it exists and its size). The store commands that only read (`store overview` and `store entries`) use it
    too. A project has the root of its manifest: `project init` without `--root` writes
    the resolved default root, as an absolute path, into the manifest, and every other project command reads

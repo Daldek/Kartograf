@@ -497,6 +497,14 @@ each; "Migration guide: data output" at the end of this section lists what a cal
   `kartograf_store_init` is offered as a plan on a server that does not write (37 tools instead
   of 36).
 
+- `store_root()` (`kartograf.store_root`, `kartograf.config.store_root`; `StoreRoot` with `root`,
+  `source`, `name` and `marker_exists`) is the public read-only accessor of the default store root
+  (DEV-19.2): the root by the order of DEV-18.1 (`KARTOGRAF_ROOT`, `[kartograf] root`,
+  `<data_dir>/kartograf`), the layer that gave it and whether `kartograf-store.json` is a file in it.
+  It reads no store: nothing is listed or measured, unlike `get_config().store` (which measures the
+  size); IMGWTools exposes the same function. It replaces the internal `config.store_root()` that
+  returned the bare path (use `.root`).
+
 ### Migration guide: data output (ADR-054, DEV §19)
 
 What a caller of Kartograf (Python, `kartograf`, MCP) or a reader of its files has to change. The

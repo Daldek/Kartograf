@@ -529,7 +529,8 @@ kartograf/
 │                        # (kartograf-sources/1, -layers/1; source registry, no network)
 ├── cache_info.py        # get_cache_info/get_cache_path/clear_cache -> CacheInfo (kartograf-cache/1)
 ├── config.py            # user settings (DEV-18, ADR-050): nogat.toml, KARTOGRAF_*/NOGAT_*,
-│                        # get_config -> Config (kartograf-config/1), check_config -> ConfigError
+│                        # get_config -> Config (kartograf-config/1), check_config -> ConfigError,
+│                        # store_root -> StoreRoot (root, source, marker; reads no store, DEV-19.2)
 ├── store_documents.py   # describe_store -> StoreOverview, list_store_entries -> StoreEntries,
 │                        # read_store_sidecar -> StoreSidecar (reading the store as documents, ADR-045)
 ├── commands.py          # command layer (KB-2..KB-5): parse_command, validate_command,
