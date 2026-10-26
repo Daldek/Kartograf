@@ -423,6 +423,27 @@ def _zone(parser: SheetParser) -> int | None:
     return int(parser.sheet.split(".")[0]) if parser.sheet_system == "2000" else None
 
 
+def _filters(parser: SheetParser, query: SkorowidzQuery) -> dict[str, Any]:
+    """Return the hard filter of a sheet's records (``select_sheet_record``)."""
+    return {
+        "sheet": parser.sheet,
+        "system": parser.sheet_system,
+        "zone": _zone(parser),
+        "resolution_m": query.resolution_m,
+        "predicate": query.predicate,
+        "require_resolution": query.require_resolution,
+    }
+
+
+def _newest_first(records: list[SkorowidzRecord]) -> list[SkorowidzRecord]:
+    """Return the campaigns without a repeated URL (the first kept), newest first."""
+    return sorted(
+        {record.url: record for record in reversed(records)}.values(),
+        key=_campaign_key,
+        reverse=True,
+    )
+
+
 def _cached_no_coverage_message(sheet: str) -> str:
     """Return the message of a cached no-coverage entry written without one.
 
@@ -548,6 +569,17 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             retries=self.MAX_RETRIES,
         )
 
+    def _cached_layer(
+        self, parser: SheetParser, endpoint: str, layer: str
+    ) -> list[SkorowidzRecord] | None:
+        """Return the sheet's records of a layer group from a cached answer.
+
+        Provider hook (``WfsSkorowidzLayersMixin``: an area answer of the index
+        that holds the sheet, ADR-056); ``None`` = ask the index. Records read
+        here write no entry of the sheet: the answer keeps its own age.
+        """
+        return None
+
     @staticmethod
     def _missing_endpoint(query: SkorowidzQuery, sheet: str) -> DownloadError:
         return DownloadError(
@@ -562,7 +594,12 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     def _resolve_record(
         self, parser: SheetParser, timeout: int, query: SkorowidzQuery
     ) -> SkorowidzRecord:
-        """Resolve a sheet over layers: cache, product filter and no-coverage hint."""
+        """Resolve a sheet over layers: cache, product filter and no-coverage hint.
+
+        The record cache, then per layer group a cached answer that holds the
+        sheet (``_cached_layer``), then the index; a group whose cached answer
+        has no matching record asks the index, which gives the hints.
+        """
         sheet = parser.sheet
         if self._cache is not None:
             cached = self._cache.get_record(*query.cache_key)
@@ -583,21 +620,19 @@ class SkorowidzLayersMixin(SourceInfoMixin):
 
         if query.endpoint is None:
             raise self._missing_endpoint(query, sheet)
+        filters = _filters(parser, query)
         rejected: list[SkorowidzRecord] = []
         query_bbox = self._query_bbox(parser)
         for layer in self._layers(query.endpoint, timeout):
+            held = self._cached_layer(parser, query.endpoint, layer)
+            chosen = None if held is None else select_sheet_record(held, **filters)
+            if chosen is not None:
+                self._remember_source(sheet, self.record_source(chosen))
+                return chosen
             records = self._query_layer(
                 parser, query.endpoint, layer, timeout, query_bbox
             )
-            chosen = select_sheet_record(
-                records,
-                sheet=sheet,
-                system=parser.sheet_system,
-                zone=_zone(parser),
-                resolution_m=query.resolution_m,
-                predicate=query.predicate,
-                require_resolution=query.require_resolution,
-            )
+            chosen = select_sheet_record(records, **filters)
             if chosen is not None:
                 source = self.record_source(chosen)
                 self._remember_source(sheet, source)
@@ -626,8 +661,10 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         """All campaigns of a sheet from every layer (newest first).
 
         A partially scanned ``campaigns_cache`` entry is stale (P5), as is a
-        pre-ADR-031 payload. A failed layer never writes to the cache. File
-        format remains outside the provider's hard filter (errata 2 N-2).
+        pre-ADR-031 payload. Then cached answers that hold the sheet in every
+        layer group (``_cached_layer``) when they have a matching record, else
+        the index. A failed layer never writes to the cache. File format
+        remains outside the provider's hard filter (errata 2 N-2).
         """
         sheet = parser.sheet
         if self._cache is not None:
@@ -648,31 +685,32 @@ class SkorowidzLayersMixin(SourceInfoMixin):
 
         if query.endpoint is None:
             raise self._missing_endpoint(query, sheet)
-        found: list[SkorowidzRecord] = []
+        filters = _filters(parser, query)
+        layers = self._layers(query.endpoint, timeout)
+        held = [self._cached_layer(parser, query.endpoint, layer) for layer in layers]
+        answered = [records for records in held if records is not None]
+        if len(answered) == len(held):
+            found = _newest_first(
+                [
+                    record
+                    for records in answered
+                    for record in select_campaign_records(records, **filters)
+                ]
+            )
+            if found:
+                return found
+        found = []
         rejected: list[SkorowidzRecord] = []
         query_bbox = self._query_bbox(parser)
-        for layer in self._layers(query.endpoint, timeout):
+        for layer in layers:
             records = self._query_layer(
                 parser, query.endpoint, layer, timeout, query_bbox
             )
-            matched = select_campaign_records(
-                records,
-                sheet=sheet,
-                system=parser.sheet_system,
-                zone=_zone(parser),
-                resolution_m=query.resolution_m,
-                predicate=query.predicate,
-                require_resolution=query.require_resolution,
-            )
-            found.extend(matched)
+            found.extend(select_campaign_records(records, **filters))
             # rejected serves only the hints when found is empty, i.e. when no
             # layer matched anything — then it holds all records
             rejected.extend(records)
-        found = sorted(
-            {r.url: r for r in reversed(found)}.values(),
-            key=_campaign_key,
-            reverse=True,
-        )
+        found = _newest_first(found)
         if not found:
             error = query.no_coverage(parser, rejected)
             if self._cache is not None:

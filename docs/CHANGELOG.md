@@ -1421,6 +1421,11 @@ from the key `root`, and the MCP tool names.
 
 ### Added
 
+- `MetadataCache(..., refresh_ttl_seconds=0)` and `MetadataCache.index_area_keys(prefix)`
+  (ADR-056): in refresh mode (a check, `--upgrade`, `--force`) an entry younger than
+  `refresh_ttl_seconds` is read in every table, so a caller that plans right after
+  `check_availability` with the same cache asks the index nothing; the default `0` keeps
+  `--check` asking the source for everything.
 - `find_sheet_outlines(bbox, target_scale, sheet_system) -> list[SheetOutline]` (ADR-055): the
   sheets of `find_sheets_for_bbox` with their PL-2000 `zone` (`None` for PL-1992), the
   `outline` a map draws (GeoJSON in EPSG:4326: the sheet with its edges split at 1 km, and for a
@@ -2027,6 +2032,15 @@ from the key `root`, and the MCP tool names.
 
 ### Changed
 
+- One cached GUGiK index answer for the availability report and the downloads (ADR-056): the
+  report keeps the WFS answer of its area as the XML of its features (a cache written before
+  is a miss, so the first report asks again once) and the yearly types under
+  `wfs-types|<endpoint>`; the NMT/NMPT sheet download reads the types and the records of a
+  sheet the area holds from them, the archive sheets those of an area inside it, the LAZ tiles
+  those of the same area - the default download mode within the TTL, a check within the
+  cache's `refresh_ttl_seconds`. A record read from a cached answer writes no entry of its own.
+  The check of the 34 hints of the recorded Kraków NMT, NMPT and LAZ reports asked 288 requests;
+  with the report's answers it asks none and plans the same positions.
 - New runtime dependency `shapely>=2.1` (ADR-055): the PL-2000 zone areas of the sheet search.
 - AI agent interface (ADR-046), changes to existing APIs and behaviours:
   `calculate_hsg(..., summary=False)` and `HsgReport.summary` (HSG statistics after

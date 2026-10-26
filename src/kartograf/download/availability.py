@@ -45,7 +45,9 @@ envelopes, ``split_bbox_by_country``) in one report.
 The index answers, the feature types, the land mask, the CZ sheets and the
 ``HEAD`` answers go through the metadata cache (``index_area_cache``, TTL as
 the index records): a repeated report asks no service; ``force=True`` asks
-again and overwrites the entries.
+again and overwrites the entries. The index answers and the feature types
+are the entries the sheet download reads too (``skorowidz_wfs.area_features``,
+ADR-056), so a plan of a hint right after the report asks the index nothing.
 """
 
 import functools
@@ -126,6 +128,8 @@ from kartograf.providers.pl.skorowidz_wfs import (
     EDGE_TOLERANCE_M,
     WfsIndex,
     area_envelope,
+    area_features,
+    cached_feature_types,
     feature_footprint,
     feature_text,
     index_feature_issue,
@@ -350,7 +354,7 @@ class AvailabilityReport(Document):
 
 @dataclass(frozen=True)
 class _Entry:
-    """One feature of an index answer (cached as JSON).
+    """One feature of an index answer.
 
     ``sheet`` is the canonical code (as published when ``issue`` is set),
     ``year`` the year of the feature type, ``footprint`` the (E, N) frame in
@@ -932,19 +936,7 @@ def _feature_types(
     service: _Service, sessions: SessionPerThread, cache: MetadataCache | None
 ) -> list[str]:
     """Yearly feature types of the service (GetCapabilities or the cache)."""
-    key = f"wfs-types|{service.ref.endpoint}"
-    if cache is not None:
-        cached = cache.get_index_area(key)
-        if (
-            isinstance(cached, list)
-            and cached
-            and all(isinstance(name, str) for name in cached)
-        ):
-            return cached
-    types = _index(service, sessions).feature_types()
-    if cache is not None:
-        cache.set_index_area(key, types)
-    return types
+    return cached_feature_types(_index(service, sessions), cache)
 
 
 def _no_layer_error(
@@ -986,43 +978,16 @@ def _index_entries(
     sessions: SessionPerThread,
     cache: MetadataCache | None,
 ) -> list[_Entry]:
-    """Every record of ``types`` in the envelope (one GetFeature, all pages)."""
-    key = f"wfs|{service.ref.endpoint}|{','.join(types)}|{_mm(envelope)}"
-    if cache is not None:
-        restored = _restore_entries(cache.get_index_area(key))
-        if restored is not None:
-            return restored
+    """Every record of ``types`` in the envelope (one GetFeature, all pages).
+
+    The answer goes through the cache as the index gave it
+    (``area_features``), the entry the sheet download reads too (ADR-056).
+    """
     parse = _laz_entry if service.ref.layer_prefix.endswith("LIDAR") else _sheet_entry
-    entries = [
+    return [
         parse(feature)
-        for feature in _index(service, sessions).features(envelope, types)
+        for feature in area_features(_index(service, sessions), envelope, types, cache)
     ]
-    if cache is not None:
-        cache.set_index_area(key, [asdict(entry) for entry in entries])
-    return entries
-
-
-def _restore_entries(payload: object) -> list[_Entry] | None:
-    """Entries of a cache payload; ``None`` (a miss) for an unreadable one."""
-    if not isinstance(payload, list):
-        return None
-    entries = []
-    try:
-        for item in payload:
-            footprint = item.pop("footprint")
-            entries.append(
-                _Entry(
-                    **item,
-                    footprint=(
-                        None
-                        if footprint is None
-                        else tuple((float(x), float(y)) for x, y in footprint)
-                    ),
-                )
-            )
-    except (AttributeError, KeyError, TypeError, ValueError):
-        return None
-    return entries
 
 
 def _sheet_entry(feature: ET.Element) -> _Entry:

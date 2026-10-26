@@ -655,7 +655,11 @@ def check_command(
     force : bool
         Plan the replacement of existing plain files.
     cache : MetadataCache or bool
-        As in the library functions.
+        As in the library functions. The check asks the source for every
+        answer the cache holds, except those a ``MetadataCache`` got less than
+        its ``refresh_ttl_seconds`` ago (ADR-056): a check of a PL hint right
+        after ``check_availability`` of the same area with that cache asks the
+        GUGiK index nothing.
     on_notice : callable, optional
         As in the library functions.
 

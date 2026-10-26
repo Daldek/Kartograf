@@ -31,7 +31,8 @@ def open_cache(
     """Use a cache for one request, closing only connections opened here.
 
     Forced requests use a separate connection to the same database rather than
-    changing the refresh mode of a cache shared with other requests.
+    changing the refresh mode of a cache shared with other requests; it reads
+    the entries younger than the given cache's ``refresh_ttl_seconds``.
     """
     if cache is False:
         yield None
@@ -55,6 +56,7 @@ def open_cache(
             refresh=True,
             on_disabled=callback,
             strict=cache._strict,
+            refresh_ttl_seconds=cache._refresh_ttl_seconds,
         )
     else:
         owned = MetadataCache(default_cache_path(), refresh=force, on_disabled=callback)

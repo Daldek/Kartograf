@@ -521,7 +521,8 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         Archive formats are published on sheets of several scales (1:25000
         and 1:10000 frames of the same variant, PL-2000 sheets), so their
         sheets come from the index, not from the sheet grid: one GetFeature
-        for the envelope of ``areas`` (convex EPSG:2180 polygons, (E, N)),
+        for the envelope of ``areas`` (convex EPSG:2180 polygons, (E, N)) -
+        or a cached answer of an envelope containing it (``_area_features``) -,
         types and records within the year bounds, the variant's format and
         resolution, horizontal system ``system`` ("1992" or "2000"); a
         record counts when its frame overlaps an area by more than an edge
@@ -549,8 +550,7 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             return []
         wanted = variant.resolution_m
         found: set[str] = set()
-        index = self._wfs_index(endpoint)
-        for feature in index.features(area_envelope(areas), types):
+        for feature in self._area_features(endpoint, area_envelope(areas), types):
             record = parse_index_feature(feature)
             if (
                 record is None

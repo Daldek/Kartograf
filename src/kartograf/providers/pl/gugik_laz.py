@@ -60,6 +60,8 @@ from kartograf.providers.base import DataSourceProvider
 from kartograf.providers.pl.skorowidz_wfs import (
     GML_NS,
     WfsIndex,
+    cached_answer_by_type,
+    cached_feature_types,
     corner_xy,
     feature_footprint,
     feature_text,
@@ -663,6 +665,8 @@ class GugikLazProvider(DataSourceProvider):
         # In-memory cache of available years per height system
         self._available_years: dict[str, list[int]] = {}
         self._years_lock = threading.Lock()
+        # Cached index answers of an area by type (endpoint, bbox) - read once.
+        self._held: dict[tuple[str, BBox], dict[str, list[ET.Element]] | None] = {}
         self.descriptor_key = "pl.gugik.laz"
 
     @property
@@ -707,14 +711,15 @@ class GugikLazProvider(DataSourceProvider):
         Fetch available acquisition years from WFS GetCapabilities.
 
         Returns a list of years (descending) parsed from the
-        ``SkorowidzDanychPomiarowychLIDAR<year>`` feature-type names.
+        ``SkorowidzDanychPomiarowychLIDAR<year>`` feature-type names - the
+        cached answer of GetCapabilities when there is one (ADR-056).
 
         Raises
         ------
         DownloadError
             If the request fails or no LIDAR feature types are found.
         """
-        types = self._index(vertical_crs, timeout).feature_types()
+        types = cached_feature_types(self._index(vertical_crs, timeout), self._cache)
         return sorted({type_year(name) for name in types}, reverse=True)
 
     def _get_available_years(
@@ -937,13 +942,24 @@ class GugikLazProvider(DataSourceProvider):
     ) -> Iterator[LazTile]:
         """Tiles of one yearly type (every page, ``WfsIndex.features``).
 
+        A cached answer for the same bbox that holds the type stands for the
+        query (``cached_answer_by_type``: the availability report's, ADR-056).
         A response whose tiles all miss the bbox means an axis-order mismatch
         (the server answered in E,N), never "no tiles": ``DownloadError``.
         """
         index = self._index(vertical_crs, timeout)
         layer = f"{index.layer_prefix}{year}"
+        key = (index.endpoint, bbox)
+        if key not in self._held:
+            self._held[key] = cached_answer_by_type(self._cache, *key)
+        held = self._held[key]
+        features: Iterable[ET.Element] = (
+            held[layer]
+            if held is not None and layer in held
+            else index.features(bbox, [f"gugik:{layer}"])
+        )
         returned = kept = 0
-        for feature in index.features(bbox, [f"gugik:{layer}"]):
+        for feature in features:
             tile = laz_tile(feature)
             if tile is None:
                 continue

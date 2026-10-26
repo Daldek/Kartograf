@@ -103,7 +103,7 @@ class MetadataCache:
     feed indexes with their ``ETag``) - all with the TTL (default 7 days) -
     and ``sheet_cache`` (CZ sheet index, SM5, fixed TTL of 30 days).
     ``refresh=True`` turns every read into a miss while writes still happen
-    (CLI ``--force``).
+    (CLI ``--force``), except for entries younger than ``refresh_ttl_seconds``.
 
     Parameters
     ----------
@@ -121,7 +121,8 @@ class MetadataCache:
         Refresh mode (E14, CLI ``--force``): every read
         (``get_record``/``get_campaigns``/``get_teryt``/
         ``get_teryts_for_bbox``/``get_sheet``/``get_index_area``/
-        ``get_atom_entries``) is a miss, while writes
+        ``index_area_keys``/``get_atom_entries``) of an entry older than
+        ``refresh_ttl_seconds`` is a miss, while writes
         work normally - a freshly fetched record (or a confirmed lack of
         coverage) replaces the old entry, so the next run WITHOUT ``--force``
         gets the new record. Default ``False``.
@@ -138,6 +139,16 @@ class MetadataCache:
         ``error`` property reports the state without raising.
         ``DownloadManager`` lets the ``CacheError`` through when downloading
         sequentially and records it as a failed sheet in the parallel pool.
+    refresh_ttl_seconds : int, optional
+        The TTL of refresh mode: an entry cached less than this many seconds
+        ago is read even in refresh mode (``refresh=True`` and the connection
+        ``open_cache`` opens for a check, an upgrade or a forced download),
+        since asking the source again would give what it has just answered;
+        an older entry is a miss there and stays for normal reads. For a
+        caller that asks the source and acts on the answers right after with
+        the same cache (``check_availability``, then ``check_command`` of one
+        of its hints, ADR-056). Default ``0``: refresh mode reads nothing
+        (``--check`` always asks the source).
 
     Examples
     --------
@@ -155,8 +166,10 @@ class MetadataCache:
         refresh: bool = False,
         on_disabled: Callable[[str], None] | None = None,
         strict: bool = False,
+        refresh_ttl_seconds: int = 0,
     ):
         self._refresh = refresh
+        self._refresh_ttl_seconds = refresh_ttl_seconds
         self._on_disabled = on_disabled
         self._strict = strict
         # Message of the error that disabled the cache (for strict mode).
@@ -181,6 +194,14 @@ class MetadataCache:
     def error(self) -> sqlite3.Error | None:
         """SQLite error that disabled the cache, or None while it works."""
         return self._error
+
+    def _max_age(self, ttl: float) -> float:
+        """Return the age below which an entry is read.
+
+        The TTL of its table; in refresh mode at most ``refresh_ttl_seconds``
+        (``0``: nothing is read).
+        """
+        return min(ttl, self._refresh_ttl_seconds) if self._refresh else ttl
 
     @contextmanager
     def _db_errors(self) -> Iterator[None]:
@@ -380,7 +401,8 @@ class MetadataCache:
         sheet: str,
     ) -> dict[str, Any] | None:
         """Return the index record or None (missing/expired/refresh mode), 7-day TTL."""
-        if self._refresh:
+        max_age = self._max_age(self._ttl_seconds)
+        if self._refresh and max_age <= 0:
             return None
         # The lock also guards this read (not just writes): CPython caches a
         # prepared statement per Connection, keyed by SQL text, and reuses it
@@ -408,7 +430,8 @@ class MetadataCache:
                 return None
 
             payload, cached_at = row
-            if time.time() - cached_at >= self._ttl_seconds:
+            age = time.time() - cached_at
+            if age >= self._ttl_seconds:
                 logger.debug(f"Record cache expired for {sheet} ({product})")
                 # Opportunistically delete the expired entry (same critical
                 # section - threading.Lock is not reentrant).
@@ -421,6 +444,8 @@ class MetadataCache:
                 )
                 conn.commit()
                 return None
+            if age >= max_age:
+                return None  # refresh mode: older than refresh_ttl_seconds
 
             logger.debug(f"Record cache hit for {sheet} ({product})")
             result: dict[str, Any] = json.loads(payload)
@@ -475,7 +500,8 @@ class MetadataCache:
 
         Key as in record_cache; `--min-year` is NOT part of the key.
         """
-        if self._refresh:
+        max_age = self._max_age(self._ttl_seconds)
+        if self._refresh and max_age <= 0:
             return None
         # The lock covers the read too - see the comment in get_record().
         with self._write_lock, self._db_errors():
@@ -493,7 +519,8 @@ class MetadataCache:
                 return None
 
             payload, cached_at = row
-            if time.time() - cached_at >= self._ttl_seconds:
+            age = time.time() - cached_at
+            if age >= self._ttl_seconds:
                 logger.debug(f"Campaigns cache expired for {sheet} ({product})")
                 conn.execute(
                     """
@@ -504,6 +531,8 @@ class MetadataCache:
                 )
                 conn.commit()
                 return None
+            if age >= max_age:
+                return None  # refresh mode: older than refresh_ttl_seconds
 
             logger.debug(f"Campaigns cache hit for {sheet} ({product})")
             result: dict[str, Any] = json.loads(payload)
@@ -560,9 +589,10 @@ class MetadataCache:
         -------
         str or None
             Cached TERYT code if found and not expired, None otherwise
-            (always None in ``refresh`` mode)
+            (in ``refresh`` mode: None unless younger than ``refresh_ttl_seconds``)
         """
-        if self._refresh:
+        max_age = self._max_age(self._ttl_seconds)
+        if self._refresh and max_age <= 0:
             return None
         # Lock guards the read too - see comment in get_record().
         with self._write_lock, self._db_errors():
@@ -578,7 +608,8 @@ class MetadataCache:
                 return None
 
             teryt, cached_at = row
-            if time.time() - cached_at >= self._ttl_seconds:
+            age = time.time() - cached_at
+            if age >= self._ttl_seconds:
                 logger.debug(f"TERYT cache expired for ({x}, {y})")
                 # Opportunistically delete the expired entry (same critical
                 # section - threading.Lock is not reentrant).
@@ -588,6 +619,8 @@ class MetadataCache:
                 )
                 conn.commit()
                 return None
+            if age >= max_age:
+                return None  # refresh mode: older than refresh_ttl_seconds
 
             logger.debug(f"TERYT cache hit for ({x}, {y}): {teryt}")
             found: str = teryt
@@ -625,10 +658,11 @@ class MetadataCache:
         """Return the cached powiat TERYT codes of an EPSG:2180 area (or None).
 
         An empty list is a valid cached answer (no powiat: sea, abroad).
-        Always None in ``refresh`` mode. Lock guards the read too - see the
-        comment in get_record().
+        In ``refresh`` mode None unless younger than ``refresh_ttl_seconds``.
+        Lock guards the read too - see the comment in get_record().
         """
-        if self._refresh:
+        max_age = self._max_age(self._ttl_seconds)
+        if self._refresh and max_age <= 0:
             return None
         key = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
         with self._write_lock, self._db_errors():
@@ -643,7 +677,8 @@ class MetadataCache:
             if row is None:
                 return None
             teryts, cached_at = row
-            if time.time() - cached_at >= self._ttl_seconds:
+            age = time.time() - cached_at
+            if age >= self._ttl_seconds:
                 logger.debug(f"TERYT area cache expired for {key}")
                 # Same critical section - threading.Lock is not reentrant.
                 conn.execute(
@@ -653,6 +688,8 @@ class MetadataCache:
                 )
                 conn.commit()
                 return None
+            if age >= max_age:
+                return None  # refresh mode: older than refresh_ttl_seconds
             logger.debug(f"TERYT area cache hit for {key}: {teryts}")
             return list(json.loads(teryts))
         return None  # disabled by an SQLite error (_db_errors)
@@ -687,9 +724,10 @@ class MetadataCache:
         """Return the decoded sheet payload or None (missing/expired).
 
         Lock guards the read too - see comment in get_record(). In
-        ``refresh`` mode: always None.
+        ``refresh`` mode: None unless younger than ``refresh_ttl_seconds``.
         """
-        if self._refresh:
+        max_age = self._max_age(SHEET_TTL_SECONDS)
+        if self._refresh and max_age <= 0:
             return None
         with self._write_lock, self._db_errors():
             conn = self._existing_connection()
@@ -703,7 +741,8 @@ class MetadataCache:
             if row is None:
                 return None
             payload, cached_at = row
-            if time.time() - cached_at >= SHEET_TTL_SECONDS:
+            age = time.time() - cached_at
+            if age >= SHEET_TTL_SECONDS:
                 logger.debug(f"Sheet cache expired for {system}/{sheet}")
                 # Same critical section - threading.Lock is not reentrant.
                 conn.execute(
@@ -712,6 +751,8 @@ class MetadataCache:
                 )
                 conn.commit()
                 return None
+            if age >= max_age:
+                return None  # refresh mode: older than refresh_ttl_seconds
             logger.debug(f"Sheet cache hit for {system}/{sheet}")
             result: dict[str, Any] = json.loads(payload)
             return result
@@ -741,10 +782,12 @@ class MetadataCache:
         """Return the cached payload of ``key`` or None (missing/expired/refresh).
 
         The caller builds the key (``"wfs|<endpoint>|<types>|<bbox in mm>"``
-        -> index records with footprints, ``"wfs-types|<endpoint>"``,
-        ``"prg|<bbox in mm>"``); TTL as the records (``ttl_seconds``).
+        -> the features of a WFS index answer, ``"wfs-types|<endpoint>"``,
+        ``"prg|<bbox in mm>"``); TTL as the records (``ttl_seconds``; in refresh
+        mode ``refresh_ttl_seconds``).
         """
-        if self._refresh:
+        max_age = self._max_age(self._ttl_seconds)
+        if self._refresh and max_age <= 0:
             return None
         # Lock guards the read too - see comment in get_record().
         with self._write_lock, self._db_errors():
@@ -757,11 +800,14 @@ class MetadataCache:
             if row is None:
                 return None
             payload, cached_at = row
-            if time.time() - cached_at >= self._ttl_seconds:
+            age = time.time() - cached_at
+            if age >= self._ttl_seconds:
                 # Same critical section - threading.Lock is not reentrant.
                 conn.execute("DELETE FROM index_area_cache WHERE key=?", (key,))
                 conn.commit()
                 return None
+            if age >= max_age:
+                return None  # refresh mode: older than refresh_ttl_seconds
             cached: object = json.loads(payload)
             return cached
         return None  # disabled by an SQLite error (_db_errors)
@@ -780,6 +826,28 @@ class MetadataCache:
             conn.commit()
         logger.debug(f"Cached index area {key[:80]}")
 
+    def index_area_keys(self, prefix: str) -> list[str]:
+        """Return the keys starting with ``prefix`` that ``get_index_area`` reads.
+
+        Newest first, so a caller can find a cached answer that covers its own
+        query (an area answer of a larger envelope) before asking the source.
+        """
+        max_age = self._max_age(self._ttl_seconds)
+        if self._refresh and max_age <= 0:
+            return []
+        # Lock guards the read too - see comment in get_record().
+        with self._write_lock, self._db_errors():
+            conn = self._existing_connection()
+            if conn is None:
+                return []
+            rows = conn.execute(
+                "SELECT key FROM index_area_cache WHERE substr(key, 1, ?) = ? "
+                "AND cached_at > ? ORDER BY cached_at DESC",
+                (len(prefix), prefix, time.time() - max_age),
+            ).fetchall()
+            return [str(key) for (key,) in rows]
+        return []  # disabled by an SQLite error (_db_errors)
+
     # =========================================================================
     # ATOM feed cache (index of a CUZK ATOM service feed, ADR-042 D12)
     # =========================================================================
@@ -791,9 +859,11 @@ class MetadataCache:
 
         ``fresh`` = younger than the TTL. An older index is returned too: its
         ``ETag`` revalidates it with a conditional GET (``304`` keeps it).
-        ``None``: nothing stored or ``refresh`` mode.
+        ``None``: nothing stored, or in ``refresh`` mode an index older than
+        ``refresh_ttl_seconds``.
         """
-        if self._refresh:
+        max_age = self._max_age(self._ttl_seconds)
+        if self._refresh and max_age <= 0:
             return None
         # Lock guards the read too - see comment in get_record().
         with self._write_lock, self._db_errors():
@@ -806,7 +876,10 @@ class MetadataCache:
             if row is None:
                 return None
             etag, payload, cached_at = row
-            fresh = time.time() - cached_at < self._ttl_seconds
+            age = time.time() - cached_at
+            if age >= max_age and self._refresh:
+                return None
+            fresh = age < self._ttl_seconds
             return etag, json.loads(payload), fresh
         return None  # disabled by an SQLite error (_db_errors)
 

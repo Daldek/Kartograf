@@ -1811,3 +1811,88 @@ class TestIndexAreaCache:
         cache.set_index_area(self.KEY, self.PAYLOAD)
         assert cache.get_index_area(self.KEY) == self.PAYLOAD
         cache.close()
+
+
+_RECORD_KEY = ("nmt", "1m", "EVRF2007", SHEET)
+_AREA = BBox(1, 2, 3, 4, "EPSG:2180")
+# (write an entry, read it: truthy = a hit) for every reader of the cache.
+_READERS = {
+    "record": (
+        lambda c: c.set_record(*_RECORD_KEY, {"source": {"url": "https://x"}}),
+        lambda c: c.get_record(*_RECORD_KEY),
+    ),
+    "campaigns": (
+        lambda c: c.set_campaigns(*_RECORD_KEY, {"sources": []}),
+        lambda c: c.get_campaigns(*_RECORD_KEY),
+    ),
+    "teryt": (
+        lambda c: c.set_teryt(1.0, 2.0, "1261"),
+        lambda c: c.get_teryt(1.0, 2.0),
+    ),
+    "teryt area": (
+        lambda c: c.set_teryts_for_bbox(_AREA, ["1261"]),
+        lambda c: c.get_teryts_for_bbox(_AREA),
+    ),
+    "sheet": (
+        lambda c: c.set_sheet("sm5", "CTES86", {"sheet": "CTES86"}),
+        lambda c: c.get_sheet("sm5", "CTES86"),
+    ),
+    "index area": (
+        lambda c: c.set_index_area(TestIndexAreaCache.KEY, ["feature"]),
+        lambda c: c.get_index_area(TestIndexAreaCache.KEY),
+    ),
+    "index area keys": (
+        lambda c: c.set_index_area(TestIndexAreaCache.KEY, ["feature"]),
+        lambda c: c.index_area_keys("wfs|"),
+    ),
+    "atom feed": (
+        lambda c: c.set_atom_entries("feed", '"etag"', {"entry": {}}),
+        lambda c: c.get_atom_entries("feed"),
+    ),
+}
+
+
+class TestRefreshTtl:
+    """``refresh_ttl_seconds`` (ADR-056): refresh mode reads an entry younger
+    than it - what asking again would give - and misses an older one, which
+    stays for the reads of the normal mode."""
+
+    @pytest.mark.parametrize(("write", "read"), _READERS.values(), ids=_READERS)
+    def test_refresh_reads_only_entries_younger_than_its_ttl(
+        self, tmp_path, write, read
+    ):
+        path = tmp_path / "cache.db"
+        normal = MetadataCache(path)
+        write(normal)
+        written = time.time()
+        recent = MetadataCache(path, refresh=True, refresh_ttl_seconds=60)
+        forced = MetadataCache(path, refresh=True)
+
+        with patch("time.time", return_value=written + 59):
+            assert read(recent)
+            assert not read(forced)
+        with patch("time.time", return_value=written + 61):
+            assert not read(recent)
+            assert read(normal)
+        for cache in (normal, recent, forced):
+            cache.close()
+
+    def test_index_area_keys_of_a_prefix_newest_first_within_the_ttl(self, tmp_path):
+        cache = MetadataCache(tmp_path / "cache.db", ttl_seconds=60)
+        first = time.time()
+        for offset, key in (
+            (0, "wfs|a|t|1,2,3,4"),
+            (10, "wfs|a|t|5,6,7,8"),
+            (20, "wfs|b|t|1,2,3,4"),
+        ):
+            with patch("time.time", return_value=first + offset):
+                cache.set_index_area(key, [])
+
+        with patch("time.time", return_value=first + 30):
+            assert cache.index_area_keys("wfs|a|") == [
+                "wfs|a|t|5,6,7,8",
+                "wfs|a|t|1,2,3,4",
+            ]
+        with patch("time.time", return_value=first + 65):
+            assert cache.index_area_keys("wfs|a|") == ["wfs|a|t|5,6,7,8"]
+        cache.close()
