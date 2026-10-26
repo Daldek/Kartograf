@@ -17,6 +17,7 @@ import dataclasses
 import functools
 import json
 import shlex
+import time
 from unittest.mock import patch
 
 import pytest
@@ -795,6 +796,80 @@ def test_check_asks_the_index_despite_cached_records(tmp_path):
         asked.append([url for url in session.urls if "GetFeature" in url])
 
     assert asked[0] and asked[1] == asked[0]
+
+
+@pytest.mark.parametrize(
+    ("product", "place"), [("nmt", "krakow"), ("nmt", "pomorze"), ("laz", "krakow")]
+)
+def test_a_check_right_after_the_report_asks_the_index_nothing(
+    tmp_path, product, place
+):
+    """ADR-056: with a cache that reads the answers of the last minutes
+    (``refresh_ttl_seconds``), every hint of the report - sheets inside the
+    area and at its edge, PL-2000 scales, ``--full-sheet``, archives, LAZ
+    tiles - is planned from the answers the report got, without a request,
+    and the plan is the one asking the index gives."""
+    path = tmp_path / "cache.db"
+    coast = place == "pomorze"
+    bbox = KRAKOW if place == "krakow" else POMORZE
+    reported = MetadataCache(path)
+    report = _check(
+        RecordedIndex(_areas(product, place), coast=coast),
+        product=product,
+        country="pl",
+        bbox=bbox,
+        cache=reported,
+    )
+    reported.close()
+    hints = [hint for combo in report.combinations for hint in combo.download_hint]
+    assert any("--sheet " in hint for hint in hints) == coast
+
+    for hint in hints:
+        kwargs = _arguments(hint, tmp_path / "store")
+        asking = RecordedIndex(_areas(product, place), coast=coast)
+        with patch(SESSION, return_value=asking):
+            asked = check_data(**{**kwargs, "cache": False})
+        reading = RecordedIndex(_areas(product, place), coast=coast)
+        recent = MetadataCache(path, refresh_ttl_seconds=600)
+        with patch(SESSION, return_value=reading):
+            planned = check_data(**{**kwargs, "cache": recent})
+        recent.close()
+
+        assert asking.urls and reading.urls == [], hint
+        assert (planned.items, planned.notices) == (asked.items, asked.notices), hint
+
+
+def test_a_plan_from_the_reports_answers_keeps_their_age(tmp_path):
+    """ADR-056: a plan read from the report's answers writes no answers of
+    its own, so once the report's answers are older than the TTL the check
+    asks the index again - never answers older than the TTL."""
+    path = tmp_path / "cache.db"
+    reported = MetadataCache(path, ttl_seconds=60)
+    report = _check(
+        RecordedIndex(_areas("nmt", "krakow")),
+        product="nmt",
+        country="pl",
+        bbox=KRAKOW,
+        cache=reported,
+    )
+    reported.close()
+    asked_at = time.time()
+    (hint,) = _combo(report, 2025, "PL-1992", "1m").download_hint
+    kwargs = _arguments(hint, tmp_path / "store")
+
+    asked = []
+    for later in (30, 61):
+        session = RecordedIndex(_areas("nmt", "krakow"))
+        cache = MetadataCache(path, ttl_seconds=60, refresh_ttl_seconds=60)
+        with (
+            patch(SESSION, return_value=session),
+            patch("time.time", return_value=asked_at + later),
+        ):
+            check_data(**{**kwargs, "cache": cache})
+            cache.close()
+        asked.append(bool(session.urls))
+
+    assert asked == [False, True]
 
 
 # =============================================================================

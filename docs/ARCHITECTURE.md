@@ -3585,8 +3585,9 @@ for a sheet code one command per sheet. Every hint passes the validation of
 **Cache:** table `index_area_cache` in `MetadataCache`
 (`get_index_area`/`set_index_area`, JSON payload, TTL like records —
 `DEFAULT_TTL_SECONDS`, 7 days): keys `wfs-types|<endpoint>` (yearly types
-of the service), `wfs|<endpoint>|<types>|<envelope in mm>` (envelope records
-with outlines), `prg|<envelope in mm>` (land mask) and CZ
+of the service), `wfs|<endpoint>|<types>|<envelope in mm>` (the answer as the
+XML of its features, read by the sheet download, the archive sheets and the LAZ
+tiles too, ADR-056), `prg|<envelope in mm>` (land mask) and CZ
 `cz-sheets|<system>|<area in mm>` (index sheets) and `head|<url>`
 (result of a file `HEAD`, also 404); WFS index tiles of a collection (3D mesh,
 `transport/index_records.py::wfs_records(cache=)`) - key

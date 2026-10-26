@@ -21,6 +21,17 @@ of ``SkorowidzRecord.raw`` used by ``to_source`` and ``CampaignRef``, so the
 download of a sheet, the campaign flow and the availability report read one
 parser. ``WfsSkorowidzLayersMixin`` gives the sheet flow of NMT/NMPT
 (``SkorowidzLayersMixin``: cache, hard filter, campaigns) the WFS index.
+
+One answer, one cache entry, every reader (ADR-056): the yearly types are
+kept under ``wfs-types|<endpoint>`` (``cached_feature_types``) and the answer
+of a GetFeature as the XML of its features under
+``wfs|<endpoint>|<types>|<bbox in mm>`` (``area_features``), so each reader
+parses what the index gave with its own parser. The availability report
+writes the answer of its area; the sheet records of a sheet that area holds
+(``WfsSkorowidzLayersMixin``), the archive sheets of an area inside it and the
+LAZ tiles of the same area (``cached_answer_by_type``) are read from it, so a
+plan made right after the report asks the index nothing
+(``MetadataCache.refresh_ttl_seconds``).
 """
 
 import functools
@@ -34,6 +45,7 @@ from urllib.parse import urlencode
 
 import requests
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
 from kartograf.core.coverage import (
     AREA_EPS,
@@ -42,6 +54,7 @@ from kartograf.core.coverage import (
     expand_convex,
     normalize_convex,
     polygon_area,
+    rectangle,
 )
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
@@ -77,6 +90,9 @@ QUERY_HALF_M = 10.0
 EDGE_TOLERANCE_M = 1.0
 # Points per edge of a sheet frame transformed to EPSG:2180 (curved edges).
 _FRAME_POINTS = 16
+# Keys of the shared index answers in the metadata cache (``index_area_cache``).
+_AREA = "wfs"
+_TYPES = "wfs-types"
 
 
 def localname(tag: str) -> str:
@@ -544,14 +560,152 @@ def sheet_query_bbox(parser: SheetParser) -> BBox:
     )
 
 
+def _area_key(endpoint: str, types: Sequence[str], bbox: BBox) -> str:
+    """Return the cache key of the answer of a GetFeature of ``types`` in ``bbox``.
+
+    ``wfs|<endpoint>|<types as asked>|<EPSG:2180 bbox in whole millimetres>``
+    (``index_area_cache``), the one entry of every reader of the answer.
+    """
+    return "|".join((_AREA, endpoint, ",".join(types), _mm(bbox)))
+
+
+def _mm(bbox: BBox) -> str:
+    """Key part: the envelope in whole millimetres."""
+    return ",".join(
+        str(round(value * 1000))
+        for value in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
+    )
+
+
+def _key_area(key: str) -> tuple[tuple[str, ...], BBox] | None:
+    """Return the types and the envelope of an ``area_key`` (``None``: another key)."""
+    parts = key.split("|")
+    if len(parts) != 4 or parts[0] != _AREA:
+        return None
+    try:
+        x0, y0, x1, y1 = (int(value) / 1000 for value in parts[3].split(","))
+        return tuple(parts[2].split(",")), BBox(x0, y0, x1, y1, "EPSG:2180")
+    except (ValueError, ValidationError):
+        return None
+
+
+def cached_feature_types(index: WfsIndex, cache: MetadataCache | None) -> list[str]:
+    """Return the yearly types of the service (``WfsIndex.feature_types``).
+
+    The answer of GetCapabilities is kept under ``wfs-types|<endpoint>`` for
+    every reader: the availability report, the sheet records and the LAZ tiles.
+    """
+    key = f"{_TYPES}|{index.endpoint}"
+    if cache is not None:
+        cached = cache.get_index_area(key)
+        if (
+            isinstance(cached, list)
+            and cached
+            and all(isinstance(name, str) for name in cached)
+        ):
+            return cached
+    types = index.feature_types()
+    if cache is not None:
+        cache.set_index_area(key, types)
+    return types
+
+
+def area_features(
+    index: WfsIndex, bbox: BBox, types: Sequence[str], cache: MetadataCache | None
+) -> list[ET.Element]:
+    """Return the features of ``types`` intersecting ``bbox`` (``WfsIndex.features``).
+
+    The answer is kept as the XML of its features (``_area_key``), so each
+    reader parses what the index gave with its own parser; within the TTL of
+    the cache the same query asks nothing.
+    """
+    key = _area_key(index.endpoint, types, bbox)
+    if cache is not None:
+        restored = cached_features(cache, key)
+        if restored is not None:
+            return restored
+    features = list(index.features(bbox, types))
+    if cache is not None:
+        cache.set_index_area(
+            key, [ET.tostring(feature, encoding="unicode") for feature in features]
+        )
+    return features
+
+
+def cached_answers(
+    cache: MetadataCache, endpoint: str
+) -> list[tuple[tuple[str, ...], BBox, str]]:
+    """Return the cached GetFeature answers of a service, newest first.
+
+    Each as the types it asked, its EPSG:2180 envelope and its key.
+    """
+    found = []
+    for key in cache.index_area_keys(f"{_AREA}|{endpoint}|"):
+        area = _key_area(key)
+        if area is not None:
+            found.append((*area, key))
+    return found
+
+
+def cached_features(cache: MetadataCache, key: str) -> list[ET.Element] | None:
+    """Return the features of a cached answer; ``None``: none or unreadable."""
+    payload = cache.get_index_area(key)
+    if not isinstance(payload, list) or not all(isinstance(f, str) for f in payload):
+        return None
+    try:
+        return [ET.fromstring(feature) for feature in payload]
+    except ET.ParseError:
+        return None
+
+
+def cached_answer_by_type(
+    cache: MetadataCache | None, endpoint: str, bbox: BBox
+) -> dict[str, list[ET.Element]] | None:
+    """Return the features of the newest cached answer for ``bbox``, by type.
+
+    Every type the answer asked is a key (its local name; ``[]`` for a type
+    without features): an answer of several types holds, per type, what a
+    query of that type alone gives (recorded 2026-10-15), so it stands for
+    such a query. ``None`` when no cached answer has this envelope.
+    """
+    if cache is None:
+        return None
+    target = _mm(bbox)
+    for asked, envelope, key in cached_answers(cache, endpoint):
+        if _mm(envelope) != target:
+            continue
+        features = cached_features(cache, key)
+        if features is None:
+            continue
+        by_type: dict[str, list[ET.Element]] = {
+            name.rsplit(":", 1)[-1]: [] for name in asked
+        }
+        for feature in features:
+            by_type.setdefault(localname(feature.tag), []).append(feature)
+        return by_type
+    return None
+
+
+def _contains(outer: BBox, inner: BBox) -> bool:
+    return (
+        outer.min_x <= inner.min_x
+        and outer.min_y <= inner.min_y
+        and outer.max_x >= inner.max_x
+        and outer.max_y >= inner.max_y
+    )
+
+
 class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
     """Sheet records of NMT/NMPT from the WFS index of the provider's variant.
 
-    ``_layers`` gives ONE group: every yearly type of the service, queried by
-    one ``GetFeature`` around the sheet centre (``_query_layer``); cache,
-    hard filter (``SkorowidzQuery``), campaigns and no-coverage hints stay in
-    ``SkorowidzLayersMixin``. The derived class sets ``self._sessions`` and
-    ``self._index_refs`` (endpoint -> ``IndexRef`` of the services it may ask).
+    ``_layers`` gives ONE group: every yearly type of the service (its cached
+    answer or GetCapabilities), queried by one ``GetFeature`` around the sheet
+    centre (``_query_layer``) unless a cached answer of the group for an area
+    the sheet's frame overlaps holds the sheet's records (``_cached_layer``);
+    cache, hard filter (``SkorowidzQuery``), campaigns and no-coverage hints
+    stay in ``SkorowidzLayersMixin``. The derived class sets ``self._sessions``
+    and ``self._index_refs`` (endpoint -> ``IndexRef`` of the services it may
+    ask).
     """
 
     _index_refs: dict[str, IndexRef]
@@ -560,6 +714,8 @@ class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
         super().__init__()
         self._wfs_lock = threading.Lock()
         self._wfs: dict[str, WfsIndex] = {}
+        # Cached answers read by this provider: key -> sheet -> its features.
+        self._answers: dict[str, dict[str, list[ET.Element]]] = {}
 
     def _wfs_index(
         self,
@@ -596,9 +752,80 @@ class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
         """
         with self._layers_lock:
             if endpoint not in self._validated_layers:
-                types = self._wfs_index(endpoint, timeout=timeout).feature_types()
+                types = cached_feature_types(
+                    self._wfs_index(endpoint, timeout=timeout), self._cache
+                )
                 self._validated_layers[endpoint] = [",".join(types)]
             return self._validated_layers[endpoint]
+
+    def _cached_layer(
+        self, parser: SheetParser, endpoint: str, layer: str
+    ) -> list[SkorowidzRecord] | None:
+        """Return the sheet's records from a cached answer of the group's types.
+
+        The index gives every record its sheet frame (recorded 2026-10-15), so
+        the answer for an envelope the frame overlaps by more than an edge
+        sliver holds every record of the sheet - all the records a query
+        around its centre selects from. The newest such answer; ``None`` when
+        there is none.
+        """
+        if self._cache is None:
+            return None
+        types = tuple(layer.split(","))
+        frame = sheet_frame_2180(parser.sheet)
+        for asked, envelope, key in cached_answers(self._cache, endpoint):
+            area = rectangle(
+                envelope.min_x, envelope.min_y, envelope.max_x, envelope.max_y
+            )
+            if asked != types or not overlaps_area(frame, area):
+                continue
+            by_sheet = self._answer(key)
+            if by_sheet is not None:
+                return [
+                    record
+                    for feature in by_sheet.get(parser.sheet, ())
+                    if (record := parse_index_feature(feature)) is not None
+                ]
+        return None
+
+    def _answer(self, key: str) -> dict[str, list[ET.Element]] | None:
+        """Return the usable features of a cached answer by their sheet (read once)."""
+        assert self._cache is not None
+        with self._wfs_lock:
+            if key in self._answers:
+                return self._answers[key]
+        features = cached_features(self._cache, key)
+        if features is None:
+            return None
+        by_sheet: dict[str, list[ET.Element]] = {}
+        for feature in features:
+            if index_feature_issue(feature) is None:
+                sheet = SheetParser(feature_text(feature, "godlo") or "").sheet
+                by_sheet.setdefault(sheet, []).append(feature)
+        with self._wfs_lock:
+            self._answers[key] = by_sheet
+        return by_sheet
+
+    def _area_features(
+        self, endpoint: str, envelope: BBox, types: Sequence[str]
+    ) -> list[ET.Element]:
+        """Return the features of ``types`` in ``envelope``, or more of them.
+
+        A cached answer of these types (or more) for an envelope that contains
+        this one gives its features of the types: a superset of the answer for
+        ``envelope`` that the caller filters by the overlap of a frame with its
+        area. Else the index is asked (``area_features``).
+        """
+        if self._cache is not None:
+            wanted = {name.rsplit(":", 1)[-1] for name in types}
+            for asked, cached, key in cached_answers(self._cache, endpoint):
+                held = {name.rsplit(":", 1)[-1] for name in asked}
+                if not (wanted <= held and _contains(cached, envelope)):
+                    continue
+                features = cached_features(self._cache, key)
+                if features is not None:
+                    return [f for f in features if localname(f.tag) in wanted]
+        return area_features(self._wfs_index(endpoint), envelope, types, self._cache)
 
     def _query_layer(
         self,

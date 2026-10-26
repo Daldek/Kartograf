@@ -385,6 +385,8 @@ class _Run:
         Metadata cache refreshed, not read: the check (``--check``
         always asks the source), ``--upgrade`` and ``--force``; the check run of
         a plain write's preflight (``preflight``) reads the cache like the download.
+        A refreshed cache still reads the answers younger than its
+        ``refresh_ttl_seconds`` (ADR-056).
         """
         return (self.check and not self.preflight) or refreshes_cache(self.update)
 

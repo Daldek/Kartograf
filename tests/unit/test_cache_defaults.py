@@ -101,6 +101,22 @@ def test_force_with_user_cache_does_not_flip_shared_instance(tmp_path):
         shared.close()
 
 
+def test_a_forced_request_reads_what_its_cache_got_within_the_refresh_ttl(tmp_path):
+    """ADR-056: the refreshing connection keeps ``refresh_ttl_seconds``, so a
+    check reads an answer just written instead of asking for it again."""
+    shared = MetadataCache(tmp_path / "custom.db", refresh_ttl_seconds=600)
+    try:
+        shared.set_record(*KEY, OLD)
+        with open_cache(shared, force=True) as refreshing:
+            assert refreshing is not None and refreshing is not shared
+            assert refreshing.get_record(*KEY) == OLD
+        with open_cache(MetadataCache(shared.db_path), force=True) as refreshing:
+            assert refreshing is not None
+            assert refreshing.get_record(*KEY) is None
+    finally:
+        shared.close()
+
+
 @pytest.mark.parametrize("directory", ["readonly", "zażółć"])
 def test_disabled_cache_emits_notice(tmp_path, monkeypatch, directory):
     cache_dir = tmp_path / directory

@@ -527,7 +527,8 @@ def check_laz_area(
     The tile selection queries the WFS (as the download does); no LAZ bytes
     are transferred. Raises the same errors as the download's selection.
     The source is always asked (``--check``): the metadata cache is
-    refreshed, never read. With ``output_dir`` the positions are the targets of a
+    refreshed, read only for answers younger than its ``refresh_ttl_seconds``
+    (ADR-056). With ``output_dir`` the positions are the targets of a
     plain write (``action``, ``path``) and ``all_campaigns`` is refused.
     """
     bbox = _validate_area(bbox, sheet)
