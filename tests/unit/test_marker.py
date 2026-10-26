@@ -16,6 +16,7 @@ from kartograf import (
     ValidationError,
     error_report,
     init_store,
+    store_state,
 )
 from kartograf.marker import (
     MARKER,
@@ -291,6 +292,92 @@ def test_the_managed_trees_are_the_product_directories_and_hsg():
     assert {"nmt", "nmpt", "orto", "laz", "boundaries", "landcover", "soil", "hsg"} <= (
         trees
     )
+
+
+# -- the state of a root, read only ----------------------------------------------------
+
+
+def _staging_only(root: Path) -> None:
+    staging = root / SEGMENT / "versions" / ".incoming" / "token"
+    staging.mkdir(parents=True)
+    (staging / "half.asc").write_text("x")
+
+
+def _other_files(root: Path) -> None:
+    root.mkdir()
+    (root / "notes.txt").write_text("mine")
+
+
+# what a write does with a root of each state: uses or marks it (no refusal), or
+# refuses it with this reason
+_REFUSAL_OF_STATE = {
+    "marked": None,
+    "new": None,
+    "layout": "no_marker",
+    "foreign": "not_empty",
+}
+
+
+@pytest.mark.parametrize(
+    ("build", "state"),
+    [
+        pytest.param(prepare_store, "marked", id="marked"),
+        pytest.param(seed_layout, "layout", id="layout"),
+        pytest.param(lambda root: None, "new", id="missing"),
+        pytest.param(Path.mkdir, "new", id="empty"),
+        pytest.param(_staging_only, "new", id="staging"),
+        pytest.param(_other_files, "foreign", id="other-files"),
+        pytest.param(lambda root: root.write_text("mine"), "foreign", id="a-file"),
+    ],
+)
+def test_the_state_of_a_root_is_what_a_write_makes_of_it_and_writes_nothing(
+    tmp_path, build, state
+):
+    root = tmp_path / "root"
+    build(root)
+    before = sorted(tmp_path.rglob("*"))
+
+    found = store_state(str(root))
+
+    assert found == state
+    assert sorted(tmp_path.rglob("*")) == before
+    refusal = store_refusal(root)
+    assert (None if refusal is None else refusal.reason) == _REFUSAL_OF_STATE[found]
+
+
+def test_the_state_of_a_root_raises_what_every_write_is_refused_with(tmp_path):
+    (tmp_path / "imgw").mkdir()
+    (tmp_path / "imgw" / "imgw-store.json").write_text("{}")
+    prepare_store(tmp_path / "ours")
+    (tmp_path / "bad").mkdir()
+    (tmp_path / "bad" / MARKER).write_text(json.dumps({"schema": "kartograf-store/2"}))
+
+    for name in ("imgw", "ours/nmt/inner", "."):  # holds, lies in, has below
+        with pytest.raises(ConflictError) as nested:
+            store_state(tmp_path / name)
+        assert nested.value.reason == "nested_store"
+    with pytest.raises(InvalidLayoutError):
+        store_state(tmp_path / "bad")
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+    reason="a file without read permission is readable here",
+)
+def test_a_marker_that_cannot_be_read_is_an_io_error_not_a_verdict_on_its_schema(
+    tmp_path,
+):
+    prepare_store(tmp_path)
+    (tmp_path / MARKER).chmod(0)
+    try:
+        with pytest.raises(PermissionError):
+            store_state(tmp_path)
+        with pytest.raises(PermissionError) as caught:
+            prepare_store(tmp_path)
+    finally:
+        (tmp_path / MARKER).chmod(0o644)
+
+    assert error_report(caught.value).code == "io_error"
 
 
 # -- store init ----------------------------------------------------------------------

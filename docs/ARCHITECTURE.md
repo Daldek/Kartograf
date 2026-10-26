@@ -413,8 +413,9 @@ kartograf/
 ├── interrupt.py         # Interruption: run_parallel (pool with queue cancellation and a stop flag for
 │                        # running units), check_stop, Stopped/Terminated, sigterm_interrupts
 ├── marker.py            # The store marker kartograf-store.json (ADR-054): prepare_store, lenient_store,
-│                        # store_refusal (the error a write is refused with), init_store (`store init`),
-│                        # store_around/store_below (stores of any tool by marker name)
+│                        # store_refusal (the error a write is refused with), store_state (the same
+│                        # judgement read only: marked/layout/new/foreign, for consumers), init_store
+│                        # (`store init`), store_around/store_below (stores of any tool by marker name)
 ├── output.py            # Plain output (ADR-054, 3.7): Target/resolve_target, plan_plain, refuse, Staging
 │                        # (.kartograf-incoming/<host>_<pid>_<token>/), FileResult, digest_of; guard_store,
 │                        # directory_refusal (the target is refused before any request), writing, writes
@@ -1527,7 +1528,8 @@ for Archiwista and other readers - a single `data/` contract
 from 3.2-3.3, with no private parser on the consumer side. In
 `kartograf.__all__`: `list_segments`, `list_partitions`, `iter_store`,
 `read_sidecar`, `describe_segment`, `link_target` (module `src/kartograf/store.py`),
-`file_footprint`, `pinned_transform` (`src/kartograf/store_geometry.py`), the types
+`file_footprint`, `pinned_transform` (`src/kartograf/store_geometry.py`), `store_state`
+(`src/kartograf/marker.py`), the types
 below and `InvalidSidecarError` (attribute `path`). The functions do not create
 directories, caches or files in the store; the index and cache are kept
 locally by the caller. Public records:
@@ -1543,6 +1545,17 @@ locally by the caller. Public records:
 of all real second-level directories (excluding symbolic links
 and names starting with `.`), including those unknown to the registry.
 A missing `root` is an `OSError`, not an empty store (a detached share).
+
+`store_state(root)` says what a directory is to a write into the store, by the
+judgement of the writer itself (`marker._inspect`, which `prepare_store`, `lenient_store`
+and `init_store` use): `marked` (`kartograf-store.json` of `kartograf-store/1`),
+`layout` (files in the product trees and no marker: a write is `store_unavailable`,
+`no_marker`), `new` (missing or without a file: the first write marks it) or `foreign` (a
+file, or other files and no layout: `conflict`, `not_empty`). A nested store raises
+`ConflictError` (`nested_store`), a marker of another schema `InvalidLayoutError`, and a
+marker that cannot be read the `OSError` (ADR-054 erratum 2). The read API itself does not
+require the marker, so a consumer asks `store_state` before it reads a root instead of
+judging the marker and the layout by file names.
 
 `iter_store(root, *, segment=None, units=None, skip_versions=None,
 partition=None)` is a generator; without `segment` it walks the segments
