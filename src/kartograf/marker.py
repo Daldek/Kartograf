@@ -13,6 +13,9 @@ imported between the tools (``STORE_MARKERS``).
   ``store_unavailable`` (``no_marker``), a root that holds other files is ``conflict``
   (``not_empty``);
 - ``lenient_store`` makes the same checks for a plan or a read and creates nothing;
+- ``store_state`` is the same judgement, read only, for a consumer that reads a store:
+  ``marked``, ``layout``, ``new`` or ``foreign``, and the refusals that every check
+  raises (a nested store, a marker that is not ``kartograf-store/1``);
 - ``init_store`` is ``kartograf store init``: it verifies the layout of a root that has
   one and no marker, then writes the marker; ``check_store`` is ``store init --check``,
   the plan of that write;
@@ -31,7 +34,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 
 from kartograf import _clock
 from kartograf._version import build_version
@@ -52,6 +55,7 @@ __all__ = [
     "MARKER_SCHEMA",
     "STORE_MARKERS",
     "StoreInit",
+    "StoreState",
     "check_store",
     "has_layout",
     "init_store",
@@ -61,6 +65,7 @@ __all__ = [
     "store_around",
     "store_below",
     "store_refusal",
+    "store_state",
 ]
 
 MARKER: Final = "kartograf-store.json"
@@ -71,6 +76,9 @@ STORE_MARKERS: Final[tuple[str, ...]] = (MARKER, "imgw-store.json")
 """File names that mark the root of a store of any Nogat tool (DEV-19.12)."""
 MAX_PROBLEMS: Final = 20
 INCOMING: Final = ".incoming"  # the staging directory of a version
+
+StoreState = Literal["marked", "layout", "new", "foreign"]
+"""What a directory is to a write into the store (``store_state``)."""
 
 
 @dataclass(frozen=True)
@@ -279,11 +287,13 @@ def _read_marker(path: Path) -> dict[str, str]:
     ------
     InvalidLayoutError
         The marker is not a JSON object of the schema ``kartograf-store/1``.
+    OSError
+        The marker cannot be read: that says nothing of its schema.
     """
     marker = path / MARKER
     try:
         document = json.loads(marker.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except ValueError:  # not JSON, or not UTF-8
         document = None
     if not isinstance(document, dict) or document.get("schema") != MARKER_SCHEMA:
         raise InvalidLayoutError(
@@ -315,8 +325,8 @@ def _not_empty(path: Path) -> ConflictError:
     )
 
 
-def _inspect(path: Path) -> str:
-    """Check the root and say what it is.
+def _inspect(path: Path) -> StoreState:
+    """Check the root and say what it is (``store_state`` of an absolute path).
 
     Returns
     -------
@@ -330,6 +340,8 @@ def _inspect(path: Path) -> str:
         ``nested_store``.
     InvalidLayoutError
         The marker is not a ``kartograf-store/1`` document.
+    OSError
+        The marker cannot be read.
     """
     if (path / MARKER).is_file():
         _check_nested(path, below=True)
@@ -418,6 +430,8 @@ def prepare_store(root: str | os.PathLike[str]) -> Path:
         ``no_marker``: the layout of a store without its marker.
     InvalidLayoutError
         The marker is not a ``kartograf-store/1`` document.
+    OSError
+        The marker cannot be read.
     """
     path = _absolute(root)
     state = _inspect(path)
@@ -455,6 +469,8 @@ def lenient_store(root: str | os.PathLike[str]) -> Path:
         ``no_marker``.
     InvalidLayoutError
         The marker is not a ``kartograf-store/1`` document.
+    OSError
+        The marker cannot be read.
     """
     path = _absolute(root)
     state = _inspect(path)
@@ -490,6 +506,54 @@ def store_refusal(
     except (ConflictError, StoreUnavailableError, InvalidLayoutError) as refusal:
         return refusal
     return None
+
+
+def store_state(root: str | os.PathLike[str]) -> StoreState:
+    """
+    Say what the directory ``root`` is to a write into the store; nothing is written.
+
+    The judgement of the writer itself (``prepare_store``, ``init_store``), so that a
+    consumer that reads a store (Archiwista, Retman) asks Kartograf instead of judging
+    the marker and the layout by file names (DEV-19.12 to DEV-19.14). It reads the
+    marker, the top of the root, the product trees up to their first file, the
+    ancestors of the root and what lies below it outside the product trees.
+
+    Parameters
+    ----------
+    root : str or os.PathLike
+        The directory; it need not exist.
+
+    Returns
+    -------
+    {"marked", "layout", "new", "foreign"}
+        ``marked``: the root holds ``kartograf-store.json`` of the schema
+        ``kartograf-store/1``, a store a write uses as it is. ``layout``: files in the
+        product trees of Kartograf (``nmt/``, ``laz/``..., of this version or of 0.7.x)
+        and no marker: a write is ``store_unavailable`` (``no_marker``) until
+        ``kartograf store init`` verifies the layout and writes the marker. ``new``:
+        missing, or a directory without a file (a staging directory ``.incoming``
+        does not count): the first write creates the marker. ``foreign``: a file, or
+        a directory that holds other files and no layout: a write is ``conflict``
+        (``not_empty``).
+
+    Raises
+    ------
+    ConflictError
+        ``nested_store``: the root lies in a store of any tool, holds the marker of
+        another tool or has a store below it (markers found by their file names,
+        ``STORE_MARKERS``).
+    InvalidLayoutError
+        The marker is not a ``kartograf-store/1`` document.
+    OSError
+        The marker cannot be read, or a directory above the root cannot be searched.
+
+    Examples
+    --------
+    >>> from kartograf import store_state
+    >>> store_state("/srv/nogat/kartograf")  # doctest: +SKIP
+    'marked'
+    """
+    return _inspect(_absolute(root))
 
 
 def _verify_layout(path: Path) -> None:
@@ -574,6 +638,8 @@ def init_store(
         The layout of a root without a marker is not that of a Kartograf store
         (``details.problems``), or the existing marker is not a
         ``kartograf-store/1`` document.
+    OSError
+        The existing marker cannot be read.
     """
     from kartograf.config import resolve_root
 
@@ -627,6 +693,8 @@ def check_store(root: str | os.PathLike[str] | None = None) -> "UpdatePlan":
         The layout of a root without a marker is not that of a Kartograf store
         (``details.problems``), or the existing marker is not a ``kartograf-store/1``
         document.
+    OSError
+        The existing marker cannot be read.
     """
     from kartograf.config import resolve_root
     from kartograf.download.plan import PlanItem, conflict_plan, new_plan

@@ -4,7 +4,8 @@
 **Status:** Accepted (the author approved the Nogat convention on 2026-10-24; this ADR applies it to
 Kartograf); supersedes ADR-048 of the branch `claude/vigilant-faraday-finqvd` (documents only, never merged;
 its decisions D12 and D13 are adopted, see decision 15); amends ADR-028, ADR-032, ADR-033, ADR-036, ADR-040,
-ADR-045, ADR-050, ADR-051 and ADR-052
+ADR-045, ADR-050, ADR-051 and ADR-052; erratum 1: the command layer takes every command; erratum 2:
+`store_state(root)`, and a marker that cannot be read is an `io_error`
 **Standard:** Nogat 2.1: DEV-19.1 to DEV-19.20, DEV-18.2, AGI-3.4, AGI-5.8, ERR-1, ECO-051; plan
 `docs/plans/2026-10-24-data-output.md` of Nogat (item 2)
 
@@ -205,6 +206,20 @@ migration guide of the CHANGELOG and in PROGRESS. The first write into an existi
 **Erratum 1 (2026-10-25, ADR-052 erratum 1):** the gap to AGI-2.1 that decision 14 keeps open is closed in part:
 `validate_command`, `check_command` and `run_command` take every command of the catalog, and `store init` has a
 `--check` (`check_store`).
+
+**Erratum 2 (2026-10-26, request of Archiwista; Retman keeps the same copy):** decision 8 leaves the
+consumer to decide what to do with a root without its marker, and the public API had no function that
+says what a root is, so Archiwista's probe and Retman's doctor each copied the judgement of the writer
+(the marker names, the product trees, the search for another store). `kartograf.store_state(root)`
+gives that judgement and writes nothing: `marked`, `layout` (a write is `store_unavailable`,
+`no_marker`), `new` (the first write marks it) or `foreign` (`conflict`, `not_empty`). A nested store
+raises `ConflictError` (`nested_store`) and a marker that is not `kartograf-store/1`
+`InvalidLayoutError`, as every write does: a fifth state for them would drop the text, the reason and
+the path that the writer's error carries. It is the one judgement `prepare_store`, `lenient_store` and
+`init_store` use (`marker._inspect`), so it cannot drift from the writer. A marker that cannot be read
+(no permission) is the `OSError` of the read (`io_error`, exit 9) in `store_state`, in every write and
+plan of a store and in `store init`, no longer `invalid_layout` (`data_error`): that the file cannot be
+read says nothing of its schema, and a consumer tells an unreadable store from a broken one.
 
 **Open questions:**
 - Whether a plain `--force` should compare the source signal before it replaces a file (it replaces on

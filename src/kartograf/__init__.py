@@ -24,7 +24,9 @@ project, ADR-040). Every data report (``DataReport``, ``CollectionReport``,
 ``failed`` (``UnitFile``/``UnitFailure``), ``stale``, ``notices`` and ``ok``.
 The store is read without writing to it (ADR-045): ``list_segments``,
 ``list_partitions``, ``iter_store``, ``read_sidecar``, ``describe_segment``,
-``file_footprint``, ``link_target`` and ``pinned_transform``.
+``file_footprint``, ``link_target`` and ``pinned_transform``; ``store_state`` says what
+a directory is to a write into the store (``marked``, ``layout``, ``new``,
+``foreign``), the judgement of the writer, for a consumer that reads a store.
 
 Every result is a JSON document (ADR-046): ``to_dict()``/``to_json()`` of a
 report give the same ``kartograf-<kind>/1`` document as the CLI ``--json``
@@ -239,7 +241,7 @@ from kartograf.landcover.manager import (
     download_landcover,
     download_soil,
 )
-from kartograf.marker import StoreInit, check_store, init_store
+from kartograf.marker import StoreInit, check_store, init_store, store_state
 from kartograf.notices import Notice
 from kartograf.project import (
     FileCheck,
@@ -461,6 +463,7 @@ __all__ = [
     "init_store",
     "check_store",
     "StoreInit",
+    "store_state",
     "StoreOverview",
     "list_store_entries",
     "StoreEntries",

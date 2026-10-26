@@ -504,6 +504,15 @@ each; "Migration guide: data output" at the end of this section lists what a cal
   It reads no store: nothing is listed or measured, unlike `get_config().store` (which measures the
   size); IMGWTools exposes the same function. It replaces the internal `config.store_root()` that
   returned the bare path (use `.root`).
+- `store_state(root)` (`kartograf.store_state`, `kartograf.marker.store_state`; requested by
+  Archiwista, whose adapter kept a copy of the judgement, as Retman does) says what a directory is
+  to a write into the store and writes nothing: `marked`, `layout` (a write is `no_marker`), `new`
+  (the first write marks it) or `foreign` (`not_empty`), by the judgement of the writer itself
+  (`prepare_store`, `init_store`). A nested store raises `ConflictError` (`nested_store`) and a
+  marker of another schema `InvalidLayoutError`, as a write does. A marker that cannot be read is
+  now the `OSError` of the read (`io_error`, exit 9) in `store_state`, in every write and plan of
+  a store and in `store init`, not `invalid_layout` (`data_error`, exit 7): a file that cannot be
+  read says nothing of its schema (ADR-054 erratum 2).
 
 ### Migration guide: data output (ADR-054, DEV §19)
 
@@ -587,13 +596,17 @@ from the key `root`, and the MCP tool names.
   changes); `probe` follows DEV-19.12 and DEV-19.13 (a root with the layout and no marker is
   `store_unavailable`, `no_marker`; the read API itself does not require the marker); read the
   marker fields and `producer`, `producer_version` of the sidecar; the statuses are `new`,
-  `unchanged`, `relabeled`. `docs/PLAN_v0.1.md` (lines 45-50, 826) quotes the old names.
+  `unchanged`, `relabeled`. `docs/PLAN_v0.1.md` (lines 45-50, 826) quotes the old names. The
+  judgement of the marker in `adapter/kartograf/marker.py` is `kartograf.store_state(root)`.
 - **Retman** (`src/retman/tools/kartograf/`): `client.py:188`, `:195`, `:258` and `:273` pass
   `output_dir=` (and the flag `--output-dir`) for the store: pass `root=` (`--root`); `store_dir`
   need not stay required, since a default store exists; `handlers.py:84` and `:137` build
   `DownloadManager(output_dir=...)`: `DownloadManager(provider, root=...)`; a step that writes into
   its result folder can pass `output_dir` (plain files; `--force` where it may repeat) and read
-  `files[].path`; `check_updates` becomes `check`.
+  `files[].path`; `check_updates` becomes `check`. `src/retman/stores.py`
+  (`kartograf_store_state`, `KARTOGRAF_TREES` and the search for other stores) copies the
+  judgement that `kartograf.store_state(root)` gives: `marked`, `layout`, `new`, `foreign`, with
+  `nested_store` and a marker of another schema raised.
 - **Hydrolog:** no package dependency; `docs/INTEGRATION.md` (lines 410-452) calls
   `download_soil(output_dir=...)` for plain files and `HSGCalculator()`: both are real now
   (`output_dir` plain, `root` the store, neither the default store), and `AGENTS.md:143`

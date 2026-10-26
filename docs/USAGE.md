@@ -1907,6 +1907,15 @@ the root as `path`): the plan is `ok`, exits 0 and asks nothing; the plan of a r
 marker fails as the run does (exit 8). An `output_dir` that is, or lies in, a store is refused
 the same way (`output_in_store`).
 
+**What a root is, without writing.** `kartograf.store_state(root)` answers with the
+judgement above and writes nothing: `marked` (a store with its marker), `layout` (the layout
+and no marker: a write is `no_marker`), `new` (missing or without a file: the first write
+marks it) or `foreign` (other files: `not_empty`). A root that a write refuses as a nested
+store or for a marker of another schema raises that error (`nested_store`, `invalid_layout`),
+and a marker that cannot be read is an `OSError` (`io_error`, exit 9, also for a write). A
+program that reads a store (Archiwista, Retman) asks it instead of judging the marker and the
+layout by file names.
+
 The reasons of the errors above are listed in 9.3 and in the migration guide of the CHANGELOG.
 
 ---
