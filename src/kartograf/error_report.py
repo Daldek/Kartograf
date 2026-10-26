@@ -106,6 +106,16 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "has a value that is not valid",
     ),
     ErrorCodeSpec(
+        "ProjectLockedError",
+        "validation_error",
+        "project_locked",
+        2,
+        "the lock of a project manifest (.kartograf-project.lock, "
+        "kartograf.PROJECT_LOCK) stayed past the wait of a change: another process "
+        "holds it or an interrupted change left it; details.path names the lock "
+        "directory",
+    ),
+    ErrorCodeSpec(
         "DownloadError",
         "source_unavailable",
         None,

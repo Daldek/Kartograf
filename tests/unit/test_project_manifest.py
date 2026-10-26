@@ -13,11 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from kartograf.exceptions import ValidationError
+from kartograf.error_report import error_report
+from kartograf.exceptions import ProjectLockedError, ValidationError
 from kartograf.project import manifest
 from kartograf.project.manifest import (
-    LOCK_NAME,
     MANIFEST_NAME,
+    PROJECT_LOCK,
     commit_tasks,
     create_manifest,
     read_manifest,
@@ -263,14 +264,19 @@ def test_commit_add_conflicts_with_concurrent_add(project):
 
 def test_lock_busy_times_out_without_takeover(project, monkeypatch):
     monkeypatch.setattr(manifest, "LOCK_TIMEOUT_S", 0.2)
-    lock = project / LOCK_NAME
+    lock = project / PROJECT_LOCK
     lock.mkdir()
     (lock / "owner").write_text("lab-3 4121 2026-10-20T08:15:02+00:00\n")
     before = (project / MANIFEST_NAME).read_bytes()
     _, state = read_manifest(project)
-    with pytest.raises(ValidationError) as caught:
+    with pytest.raises(ProjectLockedError) as caught:
         commit_tasks(project, {"pokrycie": (state["pokrycie"], None)})
     assert "host lab-3, pid 4121" in str(caught.value)
+    assert error_report(caught.value).details == {
+        "reason": "project_locked",
+        "path": str(lock),
+    }
+    assert caught.value.exit_code == 2  # still a ValidationError
     assert (lock / "owner").read_text() == "lab-3 4121 2026-10-20T08:15:02+00:00\n"
     assert (project / MANIFEST_NAME).read_bytes() == before
 

@@ -4,8 +4,10 @@ A project records which data its analysis ordered (tasks: data commands of
 the CLI groups with their options) and exactly which store versions it used
 (pinned files with SHA-256), so the data can be verified, checked for newer
 source content and restored in another store. CLI: ``kartograf project``.
+``PROJECT_LOCK`` is the file name of the lock a change of the manifest takes.
 """
 
+from kartograf.project.manifest import PROJECT_LOCK
 from kartograf.project.model import (
     FileCheck,
     PinnedFile,
@@ -27,6 +29,7 @@ from kartograf.project.operations import (
 )
 
 __all__ = [
+    "PROJECT_LOCK",
     "FileCheck",
     "PinnedFile",
     "Project",

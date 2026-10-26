@@ -1434,6 +1434,13 @@ from the key `root`, and the MCP tool names.
 
 ### Added
 
+- A lock of a project manifest that stays past the wait of a change (5 s) is
+  `ProjectLockedError` (a `ValidationError`: `validation_error`, exit 2) with `details.reason`
+  `project_locked` and the lock directory in `details.path`; a task of `project download`
+  whose pins met it fails with that reason. The name of the lock is public:
+  `kartograf.PROJECT_LOCK` (`.kartograf-project.lock`; `kartograf.project.manifest.LOCK_NAME`
+  is renamed). Requested by Archiwista, which recognised a left lock by the directory beside the
+  manifest (ADR-040 erratum 3).
 - `MetadataCache(..., refresh_ttl_seconds=0)` and `MetadataCache.index_area_keys(prefix)`
   (ADR-056): in refresh mode (a check, `--upgrade`, `--force`) an entry younger than
   `refresh_ttl_seconds` is read in every table, so a caller that plans right after

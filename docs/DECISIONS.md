@@ -2998,7 +2998,7 @@ flags and the content of `--help` are unchanged except for the new `--json` flag
 ## ADR-040: Project manifest and pinned versions
 
 **Date:** 2026-10-15
-**Status:** Accepted — amended by ADR-042 (collection command entries), ADR-046 (names and kinds of options of data commands from the catalog) and ADR-054 (`root` instead of `output_dir`, projects store-only); partly superseded by ADR-044 (D2: the name `project_status`); amends ADR-039 (the data command sets `_task` for `project add`); erratum 2: `project download --force` repairs a corrupted pinned version (E2E test 0.8.0)
+**Status:** Accepted — amended by ADR-042 (collection command entries), ADR-046 (names and kinds of options of data commands from the catalog) and ADR-054 (`root` instead of `output_dir`, projects store-only); partly superseded by ADR-044 (D2: the name `project_status`); amends ADR-039 (the data command sets `_task` for `project add`); erratum 2: `project download --force` repairs a corrupted pinned version (E2E test 0.8.0); erratum 3: a lock that stays is `project_locked` with its path, `PROJECT_LOCK` is public
 
 **Context:** The versioned store (ADR-036) is shared by many
 projects, and the standard path points to the newest local version, so
@@ -3083,6 +3083,17 @@ data commands (`elevation download --force` etc.) still do not overwrite
 and do not repair (`commit_version` treats the same SHA from the sidecar as the
 same content); repair at that level would require changing the
 `kartograf-download/1` documents - a separate decision.
+
+**Erratum 3 (2026-10-26, request of Archiwista):** the refusal of a lock that stays past
+`LOCK_TIMEOUT_S` (D7) is `ProjectLockedError`, a subclass of `ValidationError` (code and exit code
+unchanged: `validation_error`, 2) with `details.reason` `project_locked` and the lock directory in
+`details.path`, and the name of the lock is public: `kartograf.PROJECT_LOCK`
+(`.kartograf-project.lock`). Before, the refusal had the reason `invalid_input` and no path, so
+Archiwista recognised a left lock by the directory beside the manifest. A failed task of
+`download_project` whose pins met the lock reports the same reason (`TaskResult.reason`). The
+registry would also allow `conflict` ("lock held"); the code stays, because a change of the exit
+code was not asked for and `download_project` treats every `ValidationError` of a commit as the
+problem of its task.
 
 ---
 
