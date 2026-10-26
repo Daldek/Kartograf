@@ -220,6 +220,7 @@ from kartograf.exceptions import (
     MissingDependencyError,
     NoCoverageError,
     ParseError,
+    ProjectLockedError,
     StoreUnavailableError,
     UsageError,
     ValidationError,
@@ -244,6 +245,7 @@ from kartograf.landcover.manager import (
 from kartograf.marker import StoreInit, check_store, init_store, store_state
 from kartograf.notices import Notice
 from kartograf.project import (
+    PROJECT_LOCK,
     FileCheck,
     PinnedFile,
     Project,
@@ -430,6 +432,7 @@ __all__ = [
     "hsg_statistics",
     "hsg_from_rasters",
     # Project manifest (kartograf-project.json, ADR-040)
+    "PROJECT_LOCK",
     "init_project",
     "open_project",
     "add_project_task",
@@ -488,6 +491,7 @@ __all__ = [
     "InvalidLayoutError",
     "StoreUnavailableError",
     "ConflictError",
+    "ProjectLockedError",
     "ForbiddenError",
     "MissingDependencyError",
     # Sources, layers and the metadata cache as data (spec 5.4.6-5.4.9)

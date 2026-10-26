@@ -4,8 +4,9 @@ Reading validates the whole structure and names the place of an error
 (``ValidationError``: ``kartograf-project.json: zadanie teren: files[2].version:
 ...``). Writing is atomic - a temporary file in the project directory,
 ``fsync``, ``os.replace``, ``fsync`` of the directory - under a short
-directory lock ``.kartograf-project.lock`` (``mkdir``, owner file with host,
-pid and time) held only for read-merge-write and never taken over.
+directory lock ``.kartograf-project.lock`` (``PROJECT_LOCK``: ``mkdir``, owner file
+with host, pid and time) held only for read-merge-write and never taken over; a
+lock that stays past ``LOCK_TIMEOUT_S`` is ``ProjectLockedError`` (``project_locked``).
 ``commit_tasks`` merges per task: a task changed by another process since
 the operation read it is a conflict and is left as it is. No SQLite and no
 byte-range locks: the project may live on a network share (SCOPE 3.3).
@@ -30,14 +31,15 @@ from typing import Any, NoReturn
 
 from kartograf import _clock
 from kartograf.catalog.kinds import check_options_json
-from kartograf.exceptions import ValidationError
+from kartograf.exceptions import ProjectLockedError, ValidationError
 from kartograf.messages import message, reason
 from kartograf.project.commands import COMMANDS, data_commands_text
 from kartograf.project.model import PinnedFile, Project, ProjectTask
 
 MANIFEST_NAME = "kartograf-project.json"
 PROJECT_SCHEMA = "kartograf-project/1"
-LOCK_NAME = ".kartograf-project.lock"
+PROJECT_LOCK = ".kartograf-project.lock"
+"""File name of the lock of a project manifest: a directory beside the manifest."""
 # A busy lock is retried every LOCK_RETRY_S seconds for LOCK_TIMEOUT_S.
 LOCK_TIMEOUT_S = 5.0
 LOCK_RETRY_S = 0.1
@@ -427,16 +429,16 @@ def _owner_text(lock: Path) -> str:
     try:
         host, pid, since = (lock / "owner").read_text(encoding="utf-8").split()
     except (OSError, ValueError):
-        return message("project.lock_owner_unknown", lock_name=LOCK_NAME)
+        return message("project.lock_owner_unknown", lock_name=PROJECT_LOCK)
     return message(
-        "project.lock_owner", lock_name=LOCK_NAME, host=host, pid=pid, since=since
+        "project.lock_owner", lock_name=PROJECT_LOCK, host=host, pid=pid, since=since
     )
 
 
 @contextmanager
 def _locked(directory: Path) -> Iterator[None]:
     """Take the project lock for one read-merge-write (never taken over)."""
-    lock = directory / LOCK_NAME
+    lock = directory / PROJECT_LOCK
     deadline = time.monotonic() + LOCK_TIMEOUT_S
     while True:
         try:
@@ -444,12 +446,13 @@ def _locked(directory: Path) -> Iterator[None]:
             break
         except FileExistsError:
             if time.monotonic() >= deadline:
-                raise ValidationError(
+                raise ProjectLockedError(
                     message(
                         "project.project_locked",
                         owner_text=_owner_text(lock),
                         lock=lock,
-                    )
+                    ),
+                    path=lock,
                 ) from None
             time.sleep(LOCK_RETRY_S)
         except OSError as e:

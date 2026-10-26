@@ -3263,6 +3263,12 @@ download_project(project_dir, tasks=["teren"], update="upgrade", workers=8)
 defaults),
 and `check_project`, `get_project_status` and `verify_project` return
 `ProjectCheck` (`files`, `not_downloaded`, `notices`, `ok`).
+A change of the manifest (`init`, `add`, `remove`, the pins of `download`) takes the lock
+`.kartograf-project.lock` (`kartograf.PROJECT_LOCK`, a directory beside the manifest) for its
+read-merge-write and waits 5 s for a busy one; it never takes the lock over. A lock that stays
+is `ProjectLockedError` (`validation_error`, exit 2, `details.reason` `project_locked`,
+`details.path` the lock): another process holds it, or an interrupted change left it; when no
+program works on the project, remove the directory.
 `open_project(project_dir)` reads and validates the manifest; the API also provides
 `remove_project_task`. Project operations by default work without the
 SQLite cache (`cache=False`); `cache=True` creates the cache in the current
@@ -3532,6 +3538,7 @@ failed units; the result lists them (`items`) and no error document is written.
 | `validation_error` | `usage` | `UsageError` | 2 | wrong use of a command: unknown command or flag, a missing positional argument, a value outside the allowed choices |
 | `validation_error` | `invalid_sheet_code` | `ParseError` | 2 | the sheet code is not a PL or CZ code or lies outside the nomenclature |
 | `validation_error` | `invalid_config` | `ConfigError` | 2 | the user settings cannot be used: nogat.toml is unreadable, not UTF-8 text, not valid TOML or has a section that is not a table, or a setting has a value that is not valid |
+| `validation_error` | `project_locked` | `ProjectLockedError` | 2 | the lock of a project manifest (.kartograf-project.lock, kartograf.PROJECT_LOCK) stayed past the wait of a change: another process holds it or an interrupted change left it; details.path names the lock directory |
 | `source_unavailable` | - | `DownloadError` | 5 | network, HTTP, timeout or the response of the source |
 | `no_data` | `no_coverage` | `NoCoverageError` | 14 | the source has no data for the sheet (a state of the data, retrying does not help) |
 | `no_data` | `year_out_of_range` | `YearRangeError` | 14 | data exists but not in the requested year range (found before any download) |
