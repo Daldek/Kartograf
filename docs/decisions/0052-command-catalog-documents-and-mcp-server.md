@@ -3,7 +3,8 @@
 **Date:** 2026-10-24
 **Status:** Accepted — amended by ADR-054 (the options `output_dir` and `root`, `check` instead of
 `check_updates`, `store init`); erratum 1: the command layer drives every command (AGI-2.1, decision 6);
-erratum 2: every example is the line `format_command` writes.
+erratum 2: every example is the line `format_command` writes; erratum 3: `project add` gives
+`add_project_task` the library arguments of its task.
 The catalog documents (decisions 1 to 8), the MCP rebuild (decision 9) and the guide for agents
 (decision 10) are implemented.
 
@@ -205,3 +206,16 @@ flags too, so a tool that exchanges command lines compares them as text. The fla
 of a `project add` example are declared as words, so their order is the author's: the HSG task had
 `--sheet` before `--depth`, and the parameters of `soil hsg` put `--depth` first. A contract test
 (`tests/contract/test_commands_schema.py`) writes every example back and compares the text.
+
+**Erratum 3 (2026-10-26, AGI-1.2; request of Archiwista):** the options of a `project add` call are the
+JSON form of its task (erratum 1), and `add_project_task` takes library arguments (ADR-040), but
+`run_command` and the MCP tool `kartograf_project_add` passed the options on unconverted: a box (`bbox`
+with `bbox_crs`) passed `validate_command` and was then refused (`option 'bbox_crs' does not belong to
+the task`), where `kartograf project add` converted it. The three now convert the options of the task
+with one function, `kartograf.project.commands.task_arguments` (`convert_arguments` with the kinds of
+the data command): the box becomes one `BBox`, a path a `Path`, a list a tuple, and the manifest holds
+the same task from every interface (`tests/integration/test_commands_catalog.py` compares it with the
+CLI, `tests/integration/test_mcp_server.py` the tool with `run_command`). Rejected: `add_project_task`
+taking both forms (two forms of one argument), and the conversion in `convert_arguments` for the kind
+`options` (the generic conversion would have to know the project commands, and `validate_command`
+checks the carried command in the JSON form).

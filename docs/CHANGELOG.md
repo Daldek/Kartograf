@@ -2185,6 +2185,13 @@ from the key `root`, and the MCP tool names.
 
 ### Fixed
 
+- `run_command("project add", ...)` and the MCP tool `kartograf_project_add` give
+  `add_project_task` the options of the task as library arguments, as `kartograf project add`
+  does (request of Archiwista; ADR-052 erratum 3): a task with a box (`bbox` with `bbox_crs`, the
+  JSON form of the call and of `kartograf commands schema`) passed `validate_command` and was then
+  refused with `option 'bbox_crs' does not belong to the task`, because the options reached the
+  function unconverted. The three share `kartograf.project.commands.task_arguments`;
+  `tests/integration/test_commands_catalog.py` compares the task with the one the CLI writes.
 - A validation error reaches a Polish reader in Polish (ADR-053 erratum 2):
   `validate_command("elevation download", {..., "year": 1800})` and the CLI with `--lang pl`
   said `--year must be an integer 1900..2100, got 1800`, because the year bounds were renamed

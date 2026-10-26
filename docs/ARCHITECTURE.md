@@ -3972,7 +3972,8 @@ for the parser only (`dest`, `metavar`...). The declarations produce:
 - project data command options (`project/commands.py::COMMANDS`: `TaskCommand.options` =
   `Command.task_options`) and the JSON <-> library arguments conversion
   (`catalog/kinds.py::convert_arguments`), shared by `project add`, `parse_command` and the MCP
-  server;
+  server; the options of a `project add` call reach `add_project_task` through
+  `project/commands.py::task_arguments` in the CLI, `run_command` and the MCP tool alike;
 - MCP tool specifications (`catalog/tools.py`) and error hints
   (`catalog/hints.py::example_for`: a command example in `hint`).
 
