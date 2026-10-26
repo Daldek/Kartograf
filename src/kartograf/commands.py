@@ -65,7 +65,11 @@ from kartograf.exceptions import UsageError, ValidationError
 from kartograf.messages import message, reason
 from kartograf.notices import Notice
 from kartograf.output import resolve_target
-from kartograf.project.commands import data_commands_text, task_command
+from kartograf.project.commands import (
+    data_commands_text,
+    task_arguments,
+    task_command,
+)
 from kartograf.project.model import ProjectCheck
 from kartograf.serialization import Document
 
@@ -326,6 +330,24 @@ def _validate_task(declaration: Command, arguments: Mapping[str, Any]) -> None:
         validate_command(arguments[name.name], arguments[task.name])
 
 
+def _task_arguments(
+    declaration: Command, arguments: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    """Return the arguments of a call with the data command it carries converted.
+
+    ``project add``: the options of its task, in the JSON form, become the library
+    arguments of the command (``bbox`` with ``bbox_crs`` one ``BBox``), which
+    ``add_project_task`` takes, as ``kartograf project add`` gives them. Any other
+    call keeps its arguments.
+    """
+    carrying = _nested(declaration)
+    if carrying is None:
+        return arguments
+    _, name, task = carrying
+    options = task_arguments(arguments[name.name], arguments[task.name])
+    return {**arguments, task.name: options}
+
+
 def validate_command(
     command: str,
     options: Mapping[str, object],
@@ -545,7 +567,10 @@ def run_command(
     command : str
         A command of the catalog (``elevation download``) or its ``operation_id``.
     options : Mapping
-        The options in the JSON form (``validate_command``).
+        The options in the JSON form (``validate_command``). ``project add`` has the
+        options of its task in that form too (``bbox`` with ``bbox_crs``), and
+        ``add_project_task`` gets them as library arguments, as ``kartograf project
+        add`` gives them (``kartograf.project.commands.task_arguments``).
     output_dir : str or Path, optional
         Write plain files, named as in the store, into this directory (no sidecar,
         no version; ``update="force"`` replaces existing files). Excludes ``root``,
@@ -620,7 +645,10 @@ def run_command(
     _validate_task(declaration, arguments)
     function = _function(declaration.function)
     hooks = _hooks(function, cache=cache, on_progress=on_progress, on_notice=on_notice)
-    return wrap(declaration.id, function(**arguments, **hooks))
+    return wrap(
+        declaration.id,
+        function(**_task_arguments(declaration, arguments), **hooks),
+    )
 
 
 def check_command(

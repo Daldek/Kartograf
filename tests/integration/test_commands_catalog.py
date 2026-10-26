@@ -540,3 +540,59 @@ def test_project_add_and_remove_change_the_manifest_as_run_command(tmp_path):
     assert [t.name for t in added.result.tasks] == ["teren"]  # type: ignore[attr-defined]
     assert removed.result.tasks == ()  # type: ignore[attr-defined]
     assert added.to_dict()["result"]["schema"] == "kartograf-project-state/1"
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {
+            "product": "nmt",
+            "country": "pl",
+            "bbox": [565000, 242000, 565500, 242500],
+            "bbox_crs": "EPSG:2180",
+            "sheet_system": "1992",
+            "resolution": "5m",
+            "vertical_crs": "EVRF2007",
+        },
+        {
+            "product": "nmt",
+            "country": "cz",
+            "bbox": [-447000, -1114000, -446000, -1113000],
+            "bbox_crs": "EPSG:5514",
+            "cutout": True,
+            "horizontal_crs": "EPSG:5514",
+            "resolution": "5m",
+            "vertical_crs": "Bpv",
+        },
+    ],
+    ids=["pl-sheets", "cz-cutout"],
+)
+def test_project_add_takes_a_box_in_the_json_form_and_adds_the_task_of_the_cli(
+    tmp_path, options
+):
+    """A box of the task (``bbox`` with ``bbox_crs``, the form of the call) reaches
+    ``add_project_task`` as one ``BBox``: the manifest holds the task that ``kartograf
+    project add`` writes for the same line (Archiwista's request)."""
+    layer, cli = tmp_path / "layer", tmp_path / "cli"
+    for project in (layer, cli):
+        init_project(project, root=tmp_path / "store")
+    words = shlex.split(format_command("elevation download", options))[1:]
+
+    added = run_command(
+        "project add",
+        {
+            "project_dir": str(layer),
+            "name": "teren",
+            "command": "elevation download",
+            "options": options,
+        },
+    )
+    code = main(["project", "add", "--project", str(cli), "teren", *words])
+
+    def tasks(project: Path) -> object:
+        manifest = project / "kartograf-project.json"
+        return json.loads(manifest.read_text(encoding="utf-8"))["tasks"]
+
+    assert code == 0
+    assert tasks(layer) == tasks(cli)
+    assert added.to_dict()["result"]["tasks"][0]["options"] == options

@@ -26,7 +26,6 @@ from kartograf import (
     remove_project_task,
     verify_project,
 )
-from kartograf.catalog.kinds import convert_arguments
 from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.cli._language import language, localized
 from kartograf.cli._parser import create_parser
@@ -37,7 +36,7 @@ from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
 from kartograf.messages import message
 from kartograf.output import store_only
-from kartograf.project.commands import project_command, task_command
+from kartograf.project.commands import project_command, task_arguments
 
 
 def cmd_project_init(args: argparse.Namespace) -> int:
@@ -154,7 +153,7 @@ def cmd_project_add(args: argparse.Namespace) -> int:
         args.project,
         name=args.name,
         command=call.command,
-        options=convert_arguments(task_command(call.command).options, call.options),
+        options=task_arguments(call.command, call.options),
     )
     if wants_json(args):
         return emit_result(command_id(args), project)

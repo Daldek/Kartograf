@@ -1549,6 +1549,36 @@ def test_project_and_store_tools_work_on_real_files(tmp_path):
 
 
 @needs_mcp
+def test_project_add_takes_a_box_in_the_json_form_as_run_command_does(tmp_path):
+    """The box of a task (``bbox`` with ``bbox_crs``) is one ``BBox`` for
+    ``add_project_task``: the tool adds the task ``run_command`` adds."""
+    options = {
+        "product": "nmt",
+        "country": "cz",
+        "bbox": [-447000, -1114000, -446000, -1113000],
+        "bbox_crs": "EPSG:5514",
+        "cutout": True,
+        "horizontal_crs": "EPSG:5514",
+        "resolution": "5m",
+        "vertical_crs": "Bpv",
+    }
+    tool, layer = tmp_path / "tool", tmp_path / "layer"
+    for project in (tool, layer):
+        kartograf.init_project(project, root=tmp_path / "store")
+    task = {"name": "teren", "command": "elevation download", "options": options}
+
+    added = call(
+        "kartograf_project_add", {"project_dir": str(tool), **task}, **writing(tmp_path)
+    )
+    expected = run_command("project add", {"project_dir": str(layer), **task})
+
+    assert added.is_error is False, added.structured_content
+    tasks = added.structured_content["result"]["tasks"]
+    assert tasks == expected.to_dict()["result"]["tasks"]
+    assert tasks[0]["options"] == options
+
+
+@needs_mcp
 def test_a_cancelled_call_is_abandoned_not_stopped(tmp_path):
     from mcp.shared.exceptions import MCPError
 

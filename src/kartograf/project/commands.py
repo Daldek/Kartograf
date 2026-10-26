@@ -14,7 +14,8 @@ here.
 Options exist in two forms: library arguments (``BBox``, ``Path``, per
 country mappings, sequences) and the JSON form of ``tasks[].options``; the
 conversion between them (``options_to_json``, ``options_from_json``,
-``check_options_json``) is in ``kartograf.catalog.kinds``.
+``check_options_json``) is in ``kartograf.catalog.kinds``, and ``task_arguments``
+gives the library arguments of the options of a call (``project add``).
 """
 
 import shlex
@@ -26,6 +27,7 @@ from typing import Any, Protocol
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.commands import declared_commands
+from kartograf.catalog.kinds import convert_arguments
 from kartograf.catalog.spec import Kind
 from kartograf.download.collections import (
     check_collection,
@@ -597,3 +599,28 @@ def task_command(name: str) -> TaskCommand:
             allowed=tuple(COMMANDS),
         )
     return command
+
+
+def task_arguments(name: str, options: Mapping[str, object]) -> Options:
+    """Return the options of a task in the JSON form as the library arguments.
+
+    The form ``add_project_task`` takes: ``bbox`` with ``bbox_crs`` becomes one
+    ``BBox``, a path a ``Path`` (a relative one stays relative), a list a tuple.
+    ``kartograf project add``, ``run_command("project add", ...)`` and the MCP tool
+    ``kartograf_project_add`` read the options of the task in the JSON form (the
+    keys of ``kartograf commands schema``) and convert them with this function.
+
+    Parameters
+    ----------
+    name : str
+        The data command of the task (``elevation download``).
+    options : Mapping
+        Its options in the JSON form.
+
+    Raises
+    ------
+    ValidationError
+        Not a data command (``option="command"``, ``allowed``), an option the
+        command does not have or a value of a wrong form (``option`` names it).
+    """
+    return convert_arguments(task_command(name).options, options)

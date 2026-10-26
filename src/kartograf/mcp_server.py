@@ -76,6 +76,7 @@ from kartograf.exceptions import (
     UsageError,
     ValidationError,
 )
+from kartograf.project.commands import task_arguments
 
 if TYPE_CHECKING:
     import anyio
@@ -642,6 +643,11 @@ class _Toolbox:
             spec.kinds, {k: v for k, v in arguments.items() if k != CHECK_OPTION}
         )
         converted.update(spec.fixed)
+        if spec.command == "project add":
+            # the options of the task as the library arguments of its command
+            converted["options"] = task_arguments(
+                converted["command"], converted["options"]
+            )
         if _takes(name, "cache"):
             converted["cache"] = self._cache
         takes_progress = not check and _takes(name, "on_progress")
