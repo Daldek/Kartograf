@@ -11,11 +11,14 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+import shapely
+
 from kartograf.core import parser_registry
 
 # BBox is re-exported: Hydrograf, Hydrolog, Retman and the tests import it from here.
 from kartograf.core.bbox import BBox as BBox
-from kartograf.core.bbox import transform_bbox, validate_bbox
+from kartograf.core.bbox import transform_bbox, transform_shape, validate_bbox
 from kartograf.exceptions import ParseError, ValidationError
 from kartograf.messages import message
 
@@ -957,6 +960,13 @@ def series_scale(parts: int) -> str:
 _EDGE_TOL = 1e-9
 # degrees (~1 cm) - expands a point/line bbox on its max side (PL-1992, sheet_parser.py)
 _DEGENERATE_EPS_DEG = 1e-7
+# A sheet counts for an area when the area covers more than this share of it: a
+# positive area without the numerical slivers of an edge it only touches (the
+# zone rule of ADR-055 and the geometry rule of ADR-058).
+_MIN_SHARE = 1e-9
+# shapely type ids of the single parts (1 = LineString); above them multi-parts
+# and collections
+_POINT, _RING, _POLYGON = 0, 2, 3
 
 
 def _axis_overlaps(a_min: float, a_max: float, b_min: float, b_max: float) -> bool:
@@ -1246,6 +1256,151 @@ def find_sheet_outlines(
             )
         )
     return outlines
+
+
+def find_sheets_for_shape(
+    shape: Any,
+    target_scale: str,
+    sheet_system: str,
+) -> list[str]:
+    """
+    Find the codes of the sheets whose frame a geometry meets (ADR-058).
+
+    The envelope of the points, the lines and the polygons of ``shape`` only
+    pre-selects candidates (``find_sheets_for_bbox``); a candidate stays when
+    the geometry meets its frame in the CRS of the sheet system: WGS84 degrees
+    for PL-1992, the zone CRS for PL-2000, where only the part of a sheet
+    inside its zone counts (ADR-055, ``sheets_meeting_2000``):
+
+    - a polygon: a positive area in the frame (more than ``_MIN_SHARE`` of the
+      sheet), so a sheet it only touches along an edge or at a corner does not
+      count;
+    - a line: a positive length in the frame or along its edge; one that only
+      crosses a corner or ends on an edge does not count;
+    - a point: the one sheet ``find_sheets_for_bbox`` gives for it (east/north
+      of a grid line).
+
+    Parameters
+    ----------
+    shape : shapely.Geometry
+        Geometry in EPSG:2180, its edges densified in the CRS it was drawn in
+        (``core.geometry``: at most 100 m), so that its vertices follow the
+        curves its straight edges become in WGS84 and the zone CRSs
+    target_scale : str
+        As for ``find_sheets_for_bbox``
+    sheet_system : str
+        "1992" or "2000", as for ``find_sheets_for_bbox``
+
+    Returns
+    -------
+    list[str]
+        Sorted sheet codes; ``[]`` for an empty geometry
+
+    Raises
+    ------
+    ValidationError
+        As ``find_sheets_for_bbox``
+    """
+    points, lines, polygons = shape_parts(shape)
+    found: set[str] = set()
+    if points is not None:
+        for x, y in shapely.get_coordinates(points).tolist():
+            point = BBox(x, y, x, y, "EPSG:2180")
+            found.update(find_sheets_for_bbox(point, target_scale, sheet_system))
+    for dimension, part in ((1, lines), (2, polygons)):
+        if part is None:
+            continue
+        min_x, min_y, max_x, max_y = (float(v) for v in part.bounds)
+        envelope = BBox(min_x, min_y, max_x, max_y, "EPSG:2180")
+        candidates = find_sheets_for_bbox(envelope, target_scale, sheet_system)
+        if not candidates:
+            continue
+        moved = transform_shape(part, "EPSG:2180", "EPSG:4326")
+        wgs84 = shape_parts(moved)[dimension]
+        if wgs84 is None:
+            continue
+        if sheet_system == "2000":
+            from kartograf.core.parser_2000 import sheets_meeting_2000
+
+            found.update(sheets_meeting_2000(candidates, wgs84))
+            continue
+        frames = [SheetParser(sheet).get_bbox("EPSG:4326") for sheet in candidates]
+        boxes = np.array([(b.min_x, b.min_y, b.max_x, b.max_y) for b in frames])
+        meets = frames_meeting(boxes, wgs84)
+        found.update(s for s, kept in zip(candidates, meets, strict=True) if kept)
+    return sorted(found)
+
+
+def shape_parts(shape: Any) -> tuple[Any, Any, Any]:
+    """
+    Split a geometry into its points, lines and polygons.
+
+    An invalid geometry is repaired first (``make_valid``: a polygon that
+    collapsed to a line is a line); multi-parts and collections are opened.
+
+    Returns
+    -------
+    tuple
+        ``(points, lines, polygons)``: a MultiPoint, a MultiLineString and the
+        union of the polygons, each ``None`` when the geometry has no such part
+    """
+    if not shapely.is_valid(shape):
+        shape = shapely.make_valid(shape)
+    found: tuple[list[Any], list[Any], list[Any]] = ([], [], [])
+    stack = [shape]
+    while stack:
+        item = stack.pop()
+        if item.is_empty:
+            continue
+        kind = shapely.get_type_id(item)
+        if kind > _POLYGON:
+            stack.extend(shapely.get_parts(item))
+        elif kind == _POINT:
+            found[0].append(item)
+        elif kind == _POLYGON:
+            found[2].append(item)
+        else:  # a ring is a closed line
+            found[1].append(shapely.LineString(item.coords) if kind == _RING else item)
+    points, lines, polygons = found
+    return (
+        shapely.multipoints(points) if points else None,
+        shapely.multilinestrings(lines) if lines else None,
+        shapely.union_all(polygons) if polygons else None,
+    )
+
+
+def frames_meeting(boxes: np.ndarray, shape: Any) -> np.ndarray:
+    """
+    Check which sheet frames a line or polygon geometry meets.
+
+    The rule of ``find_sheets_for_shape``: a polygon covers more than
+    ``_MIN_SHARE`` of the frame, a line has more than ``_EDGE_TOL`` of its
+    length in the frame (its edge included).
+
+    Parameters
+    ----------
+    boxes : numpy.ndarray
+        ``(n, 4)`` frames ``(min_x, min_y, max_x, max_y)`` in the CRS of ``shape``
+    shape : shapely.Geometry
+        A (Multi)LineString or a (Multi)Polygon, valid
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(n,)`` booleans, ``True`` for a frame the geometry meets
+    """
+    frames = shapely.box(boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3])
+    meets = np.zeros(len(frames), dtype=bool)
+    shapely.prepare(shape)
+    near = shapely.intersects(shape, frames)
+    if not near.any():
+        return meets
+    common = shapely.intersection(frames[near], shape)
+    if shapely.get_dimensions(shape) == 2:
+        meets[near] = shapely.area(common) > _MIN_SHARE * shapely.area(frames[near])
+    else:
+        meets[near] = shapely.length(common) > _EDGE_TOL
+    return meets
 
 
 def _find_1m_sheets(wgs_bbox: BBox) -> list[str]:

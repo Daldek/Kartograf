@@ -939,8 +939,17 @@ def overlaps_area(frame: Polygon, area: Polygon) -> bool:
     The frame with its edges moved ``EDGE_TOLERANCE_M`` inwards must still
     intersect the convex area (both (E, N) in EPSG:2180, compared in local
     coordinates). Shared by the archive sheet selection and the
-    availability report: a neighbour sharing an edge never counts.
+    availability report: a neighbour sharing an edge never counts. Separate
+    envelopes answer first - an area of many convex pieces (a polygon of a
+    geometry file, ADR-058) clips only the pieces near the frame.
     """
+    if (
+        max(x for x, _ in frame) <= min(x for x, _ in area)
+        or min(x for x, _ in frame) >= max(x for x, _ in area)
+        or max(y for _, y in frame) <= min(y for _, y in area)
+        or min(y for _, y in frame) >= max(y for _, y in area)
+    ):
+        return False
     ox, oy = area[0]
     local_frame = tuple((x - ox, y - oy) for x, y in frame)
     local_area = tuple((x - ox, y - oy) for x, y in area)

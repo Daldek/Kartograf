@@ -10,19 +10,29 @@ PL-2000 uses dot-separated numeric format: zone.row.column[.subdivisions]
 import json
 import math
 import re
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
 import shapely
 
 from kartograf.core import pl2000_zones
-from kartograf.core.bbox import BBox, _transformer, transform_bbox, validate_bbox
+from kartograf.core.bbox import (
+    BBox,
+    _transformer,
+    transform_bbox,
+    transform_shape,
+    validate_bbox,
+)
 from kartograf.core.sheet_parser import (
     _DEGENERATE_EPS_DEG,
     _EDGE_TOL,
+    _MIN_SHARE,
     SheetOutline,
     _axis_overlaps,
     _expand_degenerate,
+    frames_meeting,
+    shape_parts,
 )
 from kartograf.exceptions import ParseError, ValidationError
 from kartograf.messages import message
@@ -601,12 +611,13 @@ class Parser2000:
 # (1.6 m off the chord of an 8 km edge); 1 km keeps it within 3 cm. Neighbour
 # sheets share their split points, so the drawn sheets of a zone leave no gap.
 _EDGE_STEP_M = 1000.0
-# A sheet counts when its part inside its zone and the bbox is larger than this
-# share of its part inside the bbox: a positive area without the numerical
-# slivers of a zone boundary.
-_MIN_SHARE = 1e-9
 # degrees (~1 km) around the sheets when the zone area is cut out
 _ZONE_MARGIN_DEG = 0.01
+# degrees (~1 km): the edges a cut along a zone boundary leaves on a geometry (a
+# meridian of a nominal strip) are split at this length before the geometry
+# moves to the zone CRS, 3 cm off the curve; its own edges are shorter, densified
+# where it was drawn (ADR-058)
+_ZONE_CUT_STEP_DEG = 0.01
 
 # What a map draws of a sheet: its GeoJSON outline (EPSG:4326) and the WGS84
 # envelope of the whole sheet.
@@ -733,6 +744,67 @@ def find_sheet_outlines_2000(
         )
         if drawn is not None
     ]
+
+
+def sheets_meeting_2000(sheets: Sequence[str], shape: Any) -> list[str]:
+    """
+    Keep the PL-2000 sheets whose part inside their zone meets a geometry.
+
+    The geometry rule of ``find_sheets_for_shape`` (ADR-058) on the zone grid:
+    for each zone of ``sheets`` the geometry is cut to the area of the zone
+    (ADR-055; the long edges of the cut split at ``_ZONE_CUT_STEP_DEG``),
+    moved to the zone CRS (``transform_shape``) and compared with the sheet
+    rectangles there (``frames_meeting``), so a sheet never counts for a part
+    of the geometry that lies in another zone.
+
+    Parameters
+    ----------
+    sheets : Sequence[str]
+        PL-2000 sheet codes (the candidates of ``find_sheets_2000_for_bbox``)
+    shape : shapely.Geometry
+        A (Multi)LineString or a (Multi)Polygon in EPSG:4326, valid, its edges
+        densified where it was drawn
+
+    Returns
+    -------
+    list[str]
+        The kept sheet codes, by zone in the order of ``sheets``
+    """
+    by_zone: dict[int, list[Parser2000]] = {}
+    for sheet in sheets:
+        parser = Parser2000(sheet)
+        by_zone.setdefault(parser.zone, []).append(parser)
+    dimension = int(shapely.get_dimensions(shape))
+    west, south, east, north = (float(v) for v in shape.bounds)
+    window = (
+        west - _ZONE_MARGIN_DEG,
+        south - _ZONE_MARGIN_DEG,
+        east + _ZONE_MARGIN_DEG,
+        north + _ZONE_MARGIN_DEG,
+    )
+    kept: list[str] = []
+    for zone in sorted(by_zone):
+        area = pl2000_zones.zone_area(zone, window)
+        if shapely.covers(area, shape):
+            inside = shape
+        else:
+            cut = shape_parts(shapely.intersection(shape, area))[dimension]
+            if cut is None:
+                continue
+            inside = shapely.segmentize(cut, _ZONE_CUT_STEP_DEG)
+        moved = transform_shape(inside, "EPSG:4326", ZONE_EPSG[zone])
+        native = shape_parts(moved)[dimension]
+        if native is None:
+            continue
+        frames = [parser.get_bbox() for parser in by_zone[zone]]
+        boxes = np.array([(b.min_x, b.min_y, b.max_x, b.max_y) for b in frames])
+        meets = frames_meeting(boxes, native)
+        kept.extend(
+            parser.sheet
+            for parser, met in zip(by_zone[zone], meets, strict=True)
+            if met
+        )
+    return kept
 
 
 def _find_2000(
@@ -932,6 +1004,9 @@ def _in_zone(
         sheets = _wgs84_rectangles(zone_crs, boxes)
         inside = shapely.area(shapely.intersection(sheets, part))
         base = shapely.area(shapely.intersection(sheets, view))
+        # a sheet counts when its part inside its zone and the bbox is larger
+        # than this share of its part inside the bbox: a positive area without
+        # the numerical slivers of a zone boundary
         keep = inside > _MIN_SHARE * base
 
     kept = [c for c, k in zip(candidates, keep, strict=True) if k]

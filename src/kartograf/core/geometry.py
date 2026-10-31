@@ -1,8 +1,11 @@
 """
-Reading geometry files (SHP, GPKG) for spatial data selection.
+Reading geometry files (SHP, GPKG, GeoJSON) for spatial data selection.
 
-Extracts per-feature bounding boxes from geometry files and maps them
-to map sheet codes for tile-based downloads.
+Reads the features of a geometry file - their envelopes (``read_feature_bboxes``:
+SHP and GPKG from the file headers) or their whole geometry
+(``find_sheets_for_geometry``, ``read_feature_areas``) - and maps them to
+map sheet codes for tile-based downloads. A feature selects the sheets its
+geometry meets, not every sheet of its envelope (ADR-058).
 """
 
 import logging
@@ -10,18 +13,54 @@ import sqlite3
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+import shapely
+import shapely.geometry
 from pyproj import CRS
 
-from kartograf.core.bbox import BBox, transform_bbox
-from kartograf.core.sheet_parser import find_sheets_for_bbox
+from kartograf.core.bbox import BBox, transform_bbox, transform_shape
+from kartograf.core.coverage import (
+    COLLINEAR_TOL_M,
+    Point,
+    Polygon,
+    normalize_convex,
+    rectangle,
+)
+from kartograf.core.sheet_parser import find_sheets_for_shape, shape_parts
 from kartograf.exceptions import ValidationError
 from kartograf.messages import message, reason
 
 logger = logging.getLogger(__name__)
 
-# Supported file extensions
-_SUPPORTED_EXTENSIONS = {".shp", ".gpkg"}
+# Supported file extensions; a GeoJSON file is ``.geojson`` or ``.json``
+_GEOJSON_EXTENSIONS = frozenset({".geojson", ".json"})
+_SUPPORTED_EXTENSIONS = {".shp", ".gpkg", *_GEOJSON_EXTENSIONS}
+# The GDAL driver of a GeoJSON file (RFC 7946: FeatureCollection, Feature or a
+# geometry); a ``.json`` file read by another driver (Esri JSON, TopoJSON) is
+# not an area file
+_GEOJSON_DRIVER = "GeoJSON"
+# The CRS of GeoJSON (RFC 7946: WGS84 longitude, latitude) when GDAL names none
+_GEOJSON_CRS = "EPSG:4326"
+# metres: longest edge of a feature before it leaves the CRS of its file; the
+# image of a straight edge is a curve (65 m off a 50 km chord in EPSG:2180)
+_SEGMENT_M = 100.0
+# metres per degree of latitude: the edge length of a feature in degrees
+_METRES_PER_DEGREE = 111_320.0
+# Bytes of the envelope of a GeoPackage geometry by its contents indicator
+# (flags bits 1-3): none, xy, xyz, xym, xyzm
+_GPKG_ENVELOPE_BYTES = {0: 0, 1: 32, 2: 48, 3: 48, 4: 64}
+
+
+def _unsupported_format(ext: str) -> ValidationError:
+    """Build the error of a geometry file that is not SHP, GPKG or GeoJSON."""
+    return ValidationError(
+        message(
+            "core.unsupported_geometry_format",
+            ext=ext,
+            supported_extensions=", ".join(sorted(_SUPPORTED_EXTENSIONS)),
+        )
+    )
 
 
 # =========================================================================
@@ -244,6 +283,63 @@ def _read_shp_bboxes(filepath: Path, target_crs: str) -> list[BBox]:
     return bboxes
 
 
+def _read_shp_shapes(filepath: Path) -> list[Any]:
+    """
+    Read the geometry of every feature of a shapefile (ADR-058).
+
+    The features of ``_read_shp_bboxes`` (NULL shapes skipped), each as a
+    shapely geometry in the CRS of the file. The rings of a polygon become
+    its exteriors and holes by ``shapefile.organize_polygon_rings`` (clockwise
+    exteriors; a shape of counter-clockwise rings only is taken as exteriors,
+    without the warning pyshp logs for it in ``__geo_interface__``); the other
+    shapes come from their GeoJSON form.
+
+    Raises
+    ------
+    ValidationError
+        A shape that is no geometry (``core.unreadable_feature_geometry``)
+    """
+    import shapefile
+
+    polygon_types = (shapefile.POLYGON, shapefile.POLYGONZ, shapefile.POLYGONM)
+    shapes = []
+    with shapefile.Reader(str(filepath)) as sf:
+        for number, shape in enumerate(sf.iterShapes(), start=1):
+            if shape.shapeType == 0 or not shape.points:  # NULL or empty shape
+                continue
+            try:
+                if shape.shapeType in polygon_types:
+                    ends = [*shape.parts[1:], len(shape.points)]
+                    rings = [
+                        [(p[0], p[1]) for p in shape.points[start:end]]
+                        for start, end in zip(shape.parts, ends, strict=True)
+                    ]
+                    found = {
+                        "type": "MultiPolygon",
+                        "coordinates": shapefile.organize_polygon_rings(rings),
+                    }
+                else:
+                    found = shape.__geo_interface__
+                geometry = shapely.geometry.shape(found)
+            except Exception as e:  # pyshp raises a plain Exception, shapely its own
+                raise _unreadable(filepath, number, reason(e)) from e
+            if not geometry.is_empty:
+                shapes.append(geometry)
+    return shapes
+
+
+def _unreadable(filepath: Path, number: int, error: str) -> ValidationError:
+    """Build the error of a feature whose geometry cannot be read."""
+    return ValidationError(
+        message(
+            "core.unreadable_feature_geometry",
+            number=number,
+            filepath=filepath,
+            error=error,
+        )
+    )
+
+
 # =========================================================================
 # GPKG Reading
 # =========================================================================
@@ -407,9 +503,10 @@ def resolve_layer(filepath: Path, layer: str | None = None) -> LayerChoice:
     Parameters
     ----------
     filepath : Path
-        Path to SHP or GPKG file
+        Path to SHP, GPKG or GeoJSON file
     layer : str or None
         Requested GPKG layer (None = first feature table); ignored for SHP
+        and GeoJSON (one layer each)
 
     Returns
     -------
@@ -423,7 +520,7 @@ def resolve_layer(filepath: Path, layer: str | None = None) -> LayerChoice:
         layer does not exist
     """
     ext = filepath.suffix.lower()
-    if ext == ".shp":
+    if ext == ".shp" or ext in _GEOJSON_EXTENSIONS:
         return LayerChoice(None, (), defaulted=False)
     if ext == ".gpkg":
         conn = sqlite3.connect(str(filepath))
@@ -431,13 +528,7 @@ def resolve_layer(filepath: Path, layer: str | None = None) -> LayerChoice:
             return _gpkg_layer_choice(conn, filepath, layer)
         finally:
             conn.close()
-    raise ValidationError(
-        message(
-            "core.unsupported_geometry_format",
-            ext=ext,
-            supported_extensions=", ".join(sorted(_SUPPORTED_EXTENSIONS)),
-        )
-    )
+    raise _unsupported_format(ext)
 
 
 def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> list[BBox]:
@@ -490,6 +581,287 @@ def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> lis
         conn.close()
 
 
+def _gpkg_wkb(blob: bytes, filepath: Path, number: int) -> bytes | None:
+    """
+    Return the WKB of the GeoPackage geometry blob of feature ``number``.
+
+    ``None`` for an empty geometry or a blob that is not GeoPackage Binary -
+    the features ``_parse_gpkg_envelope`` skips too.
+
+    Raises
+    ------
+    ValidationError
+        An envelope contents indicator the specification does not define (5-7)
+    """
+    if len(blob) < 8 or blob[0:2] != b"GP":
+        return None
+    flags = blob[3]
+    if (flags >> 4) & 0x01:
+        return None  # the empty geometry flag
+    indicator = (flags >> 1) & 0x07
+    size = _GPKG_ENVELOPE_BYTES.get(indicator)
+    if size is None:
+        text = message("core.gpkg_invalid_envelope_indicator", indicator=indicator)
+        raise _unreadable(filepath, number, text)
+    return blob[8 + size :]
+
+
+def _read_gpkg_shapes(filepath: Path, layer: str | None) -> tuple[CRS, list[Any]]:
+    """
+    Read the CRS and the geometry of every feature of a GeoPackage layer.
+
+    The layer and the features of ``_read_gpkg_bboxes`` (NULL and empty
+    geometries skipped), each parsed from its WKB by shapely (ADR-058), in
+    the CRS of the layer.
+
+    Raises
+    ------
+    ValidationError
+        As ``_read_gpkg_bboxes``, and a blob whose WKB cannot be read
+        (``core.unreadable_feature_geometry``)
+    """
+    conn = sqlite3.connect(str(filepath))
+    try:
+        table_name = _resolve_gpkg_layer(conn, filepath, layer)
+        crs = _read_gpkg_crs(conn, table_name)
+        cursor = conn.execute(
+            "SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ?",
+            (table_name,),
+        )
+        geom_col = cursor.fetchone()[0]
+        cursor = conn.execute(
+            f'SELECT "{geom_col}" FROM "{table_name}"'  # noqa: S608
+        )
+        shapes = []
+        for number, (blob,) in enumerate(cursor, start=1):
+            wkb = None if blob is None else _gpkg_wkb(blob, filepath, number)
+            if wkb is None:
+                continue
+            try:
+                geometry = shapely.from_wkb(wkb)
+            except shapely.errors.ShapelyError as e:
+                raise _unreadable(filepath, number, reason(e)) from e
+            if not geometry.is_empty:
+                shapes.append(geometry)
+        return crs, shapes
+    finally:
+        conn.close()
+
+
+# =========================================================================
+# GeoJSON Reading
+# =========================================================================
+
+
+def _geojson_info(filepath: Path) -> dict[str, Any]:
+    """
+    Return the pyogrio layer info of a GeoJSON file.
+
+    GDAL reads GeoJSON (pyogrio), as it reads the OGC API Features pages of
+    ``transform.gpkg``: RFC 7946 coordinates are WGS84 longitude and latitude,
+    a legacy ``crs`` member (GeoJSON 2008) names the CRS of the coordinates.
+
+    Raises
+    ------
+    ValidationError
+        A file GDAL does not read as GeoJSON (``core.not_geojson``): plain
+        JSON, Esri JSON, TopoJSON
+    """
+    import pyogrio
+    from pyogrio.errors import DataLayerError, DataSourceError
+
+    try:
+        info: dict[str, Any] = pyogrio.read_info(str(filepath))
+    except (DataSourceError, DataLayerError) as e:
+        raise ValidationError(message("core.not_geojson", filepath=filepath)) from e
+    driver = info.get("driver")
+    if driver != _GEOJSON_DRIVER:
+        raise ValidationError(
+            message("core.not_geojson_driver", filepath=filepath, driver=driver)
+        )
+    return info
+
+
+def _read_geojson_crs(filepath: Path) -> CRS:
+    """Read the CRS of a GeoJSON file (WGS84 unless a legacy ``crs`` names one)."""
+    return CRS.from_user_input(_geojson_info(filepath).get("crs") or _GEOJSON_CRS)
+
+
+def _read_geojson_shapes(filepath: Path) -> tuple[CRS, list[Any]]:
+    """
+    Read the CRS and the geometry of every feature of a GeoJSON file.
+
+    A FeatureCollection, a Feature or a bare geometry (one feature); features
+    without a geometry are skipped. A GeoJSON file has one layer, so a
+    ``layer`` does not apply to it (as to a shapefile).
+
+    Raises
+    ------
+    ValidationError
+        As ``_geojson_info``, and a geometry that cannot be read
+        (``core.unreadable_feature_geometry``)
+    """
+    import pyogrio.raw
+    from pyogrio.errors import DataLayerError, DataSourceError
+
+    crs = _read_geojson_crs(filepath)
+    try:
+        _meta, _fids, geometries, _fields = pyogrio.raw.read(
+            str(filepath), columns=[], read_geometry=True
+        )
+    except (DataSourceError, DataLayerError) as e:
+        raise ValidationError(message("core.not_geojson", filepath=filepath)) from e
+    shapes = []
+    for number, wkb in enumerate(geometries, start=1):
+        if wkb is None:
+            continue
+        try:
+            geometry = shapely.from_wkb(wkb)
+        except shapely.errors.ShapelyError as e:
+            raise _unreadable(filepath, number, reason(e)) from e
+        if not geometry.is_empty:
+            shapes.append(geometry)
+    return crs, shapes
+
+
+def _read_geojson_bboxes(filepath: Path, target_crs: str) -> list[BBox]:
+    """Read per-feature bounding boxes of a GeoJSON file in ``target_crs``."""
+    crs, shapes = _read_geojson_shapes(filepath)
+    label = crs.to_wkt()  # the transformer cache key: one transformer per file
+    bboxes = []
+    for shape in shapes:
+        min_x, min_y, max_x, max_y = (float(v) for v in shape.bounds)
+        source_bbox = BBox(min_x, min_y, max_x, max_y, label)
+        bboxes.append(transform_bbox(source_bbox, target_crs))
+    return bboxes
+
+
+# =========================================================================
+# Feature geometry (ADR-058)
+# =========================================================================
+
+
+def _read_shapes(filepath: Path, layer: str | None) -> tuple[CRS, list[Any]]:
+    """Read the CRS and the feature geometries of a SHP, a GPKG layer or GeoJSON."""
+    ext = filepath.suffix.lower()
+    if ext == ".shp":
+        return _read_shp_crs(filepath), _read_shp_shapes(filepath)
+    if ext == ".gpkg":
+        return _read_gpkg_shapes(filepath, layer)
+    if ext in _GEOJSON_EXTENSIONS:
+        return _read_geojson_shapes(filepath)
+    raise _unsupported_format(ext)
+
+
+def _segment_length(crs: CRS) -> float:
+    """Return the longest edge of a feature before it leaves ``crs`` (~100 m)."""
+    if crs.is_geographic:
+        return _SEGMENT_M / _METRES_PER_DEGREE
+    axes = crs.axis_info
+    return _SEGMENT_M / (axes[0].unit_conversion_factor if axes else 1.0)
+
+
+def _shapes_2180(crs: CRS, shapes: list[Any]) -> list[Any]:
+    """
+    Move feature geometries to EPSG:2180, their edges densified first.
+
+    Densified ONCE, in the CRS of the file (``_SEGMENT_M``; also when it is
+    EPSG:2180, as the sheet frames are compared in WGS84 and the zone CRSs):
+    the new vertices lie on the straight edges, so they move exactly.
+    """
+    label = crs.to_wkt()  # the transformer cache key: one transformer per layer
+    step = _segment_length(crs)
+    return [
+        transform_shape(shapely.segmentize(shape, step), label, "EPSG:2180")
+        for shape in shapes
+    ]
+
+
+def _turn(o: Point, a: Point, b: Point) -> float:
+    """Cross product of ``o -> a`` and ``o -> b``: positive for a left turn."""
+    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+
+def _convex_pieces(polygons: Any) -> list[Polygon]:
+    """
+    Cut polygons (EPSG:2180) into convex counter-clockwise pieces.
+
+    Vertices within ``COLLINEAR_TOL_M`` of the line of their neighbours go
+    first (the densified edges of a feature from another CRS). A convex
+    polygon without holes is one piece; any other is triangulated (constrained
+    Delaunay: the triangles cover the polygon, its holes stay out) and the
+    triangles are joined across their shared edges while the union stays
+    convex (Hertel-Mehlhorn: at most four times the fewest convex pieces).
+    """
+    pieces: list[Polygon] = []
+    for polygon in shapely.get_parts(shapely.simplify(polygons, COLLINEAR_TOL_M)):
+        if polygon.is_empty:
+            continue
+        if shapely.get_num_interior_rings(polygon) == 0:
+            convex = normalize_convex(polygon.exterior.coords)
+            if convex is not None:
+                pieces.append(convex)
+                continue
+        triangles = shapely.get_parts(shapely.constrained_delaunay_triangles(polygon))
+        pieces.extend(_merge_triangles(triangles))
+    return pieces
+
+
+def _merge_triangles(triangles: Any) -> list[Polygon]:
+    """Join triangles across their shared edges while each union stays convex."""
+    rings: list[list[Point] | None] = []
+    for triangle in triangles:
+        a, b, c = (
+            (float(x), float(y)) for x, y in shapely.get_coordinates(triangle)[:3]
+        )
+        turn = _turn(a, b, c)
+        if turn != 0:
+            rings.append([a, b, c] if turn > 0 else [a, c, b])
+    owner: dict[tuple[Point, Point], int] = {}
+    for index, ring in enumerate(rings):
+        assert ring is not None
+        owner.update(dict.fromkeys(_edges(ring), index))
+    for p, q in list(owner):
+        first, second = owner.get((p, q)), owner.get((q, p))
+        if first is None or second is None or first == second:
+            continue
+        kept, absorbed = rings[first], rings[second]
+        assert kept is not None and absorbed is not None
+        joined = _joined(kept, absorbed, p, q)
+        if joined is None:
+            continue
+        rings[first], rings[second] = joined, None
+        del owner[(p, q)], owner[(q, p)]
+        owner.update(dict.fromkeys(_edges(joined), first))
+    return [tuple(ring) for ring in rings if ring is not None]
+
+
+def _edges(ring: list[Point]) -> list[tuple[Point, Point]]:
+    """Return the directed edges of a closed ring given without its closing vertex."""
+    return list(zip(ring, ring[1:] + ring[:1], strict=True))
+
+
+def _joined(
+    first: list[Point], second: list[Point], p: Point, q: Point
+) -> list[Point] | None:
+    """
+    Return the union of two convex CCW rings that share an edge.
+
+    ``p -> q`` is an edge of ``first`` and ``q -> p`` of ``second``; ``None``
+    when the union is not convex at ``p`` or ``q``.
+    """
+    at = first.index(q)
+    around_first = first[at:] + first[:at]  # q ... p
+    at = second.index(p)
+    around_second = second[at:] + second[:at]  # p ... q
+    if (
+        _turn(around_first[-2], p, around_second[1]) < 0
+        or _turn(around_second[-2], q, around_first[1]) < 0
+    ):
+        return None
+    return around_first + around_second[1:-1]
+
+
 # =========================================================================
 # Public API
 # =========================================================================
@@ -503,10 +875,13 @@ def read_feature_bboxes(
     """
     Read per-feature bounding boxes from a geometry file.
 
+    SHP and GPKG from their headers (pyshp ``bbox``, the GeoPackage envelope),
+    GeoJSON from its geometries (GDAL).
+
     Parameters
     ----------
     filepath : Path
-        Path to SHP or GPKG file
+        Path to SHP, GPKG or GeoJSON file
     layer : str or None
         Layer name for GPKG (None = first layer; with several layers a
         logger WARNING names the choice)
@@ -527,16 +902,11 @@ def read_feature_bboxes(
 
     if ext == ".shp":
         return _read_shp_bboxes(filepath, target_crs)
-    elif ext == ".gpkg":
+    if ext == ".gpkg":
         return _read_gpkg_bboxes(filepath, layer, target_crs)
-    else:
-        raise ValidationError(
-            message(
-                "core.unsupported_geometry_format",
-                ext=ext,
-                supported_extensions=", ".join(sorted(_SUPPORTED_EXTENSIONS)),
-            )
-        )
+    if ext in _GEOJSON_EXTENSIONS:
+        return _read_geojson_bboxes(filepath, target_crs)
+    raise _unsupported_format(ext)
 
 
 def read_source_crs(filepath: Path, layer: str | None = None) -> CRS:
@@ -551,7 +921,7 @@ def read_source_crs(filepath: Path, layer: str | None = None) -> CRS:
     Parameters
     ----------
     filepath : Path
-        Path to SHP or GPKG file
+        Path to SHP, GPKG or GeoJSON file
     layer : str or None
         Layer name for GPKG (None = first feature table; with several layers a
         logger WARNING names the choice)
@@ -559,7 +929,8 @@ def read_source_crs(filepath: Path, layer: str | None = None) -> CRS:
     Returns
     -------
     CRS
-        pyproj CRS object
+        pyproj CRS object; GeoJSON: WGS84 (RFC 7946) unless a legacy ``crs``
+        member names another CRS
 
     Raises
     ------
@@ -576,14 +947,9 @@ def read_source_crs(filepath: Path, layer: str | None = None) -> CRS:
             return _read_gpkg_crs(conn, _resolve_gpkg_layer(conn, filepath, layer))
         finally:
             conn.close()
-
-    raise ValidationError(
-        message(
-            "core.unsupported_geometry_format",
-            ext=ext,
-            supported_extensions=", ".join(sorted(_SUPPORTED_EXTENSIONS)),
-        )
-    )
+    if ext in _GEOJSON_EXTENSIONS:
+        return _read_geojson_crs(filepath)
+    raise _unsupported_format(ext)
 
 
 def get_overall_bbox(
@@ -597,7 +963,7 @@ def get_overall_bbox(
     Parameters
     ----------
     filepath : Path
-        Path to SHP or GPKG file
+        Path to SHP, GPKG or GeoJSON file
     layer : str or None
         Layer name for GPKG (None = first layer; with several layers a
         logger WARNING names the choice)
@@ -627,6 +993,51 @@ def get_overall_bbox(
     return BBox(min_x, min_y, max_x, max_y, target_crs)
 
 
+def read_feature_areas(filepath: Path, layer: str | None = None) -> list[Polygon]:
+    """
+    Read the features of a geometry file as convex (E, N) polygons in EPSG:2180.
+
+    The area of the archive sheet selection (``GugikProvider.index_sheets``)
+    and of the availability report (ADR-058): a polygon is its own shape, cut
+    into convex pieces (its holes stay out), so a sheet frame or a pixel
+    counts only where the polygon is, not anywhere in its envelope. A feature
+    without an area (a point, a line) is its envelope, as before: zero area
+    for a point or a line along an axis.
+
+    Parameters
+    ----------
+    filepath : Path
+        Path to SHP, GPKG or GeoJSON file
+    layer : str or None
+        Layer name for GPKG (None = first layer; with several layers a
+        logger WARNING names the choice)
+
+    Returns
+    -------
+    list[Polygon]
+        Convex counter-clockwise polygons, one or more per feature; ``[]`` for
+        a layer without features
+
+    Raises
+    ------
+    ValidationError
+        If the format is unsupported, the file cannot be read or a feature's
+        geometry cannot be read
+    """
+    crs, shapes = _read_shapes(filepath, layer)
+    label = crs.to_wkt()
+    areas: list[Polygon] = []
+    for source, shape in zip(shapes, _shapes_2180(crs, shapes), strict=True):
+        polygons = shape_parts(shape)[2]
+        if polygons is not None:
+            areas.extend(_convex_pieces(polygons))
+            continue
+        min_x, min_y, max_x, max_y = (float(v) for v in source.bounds)
+        box = transform_bbox(BBox(min_x, min_y, max_x, max_y, label), "EPSG:2180")
+        areas.append(rectangle(box.min_x, box.min_y, box.max_x, box.max_y))
+    return areas
+
+
 def find_sheets_for_geometry(
     filepath: Path,
     target_scale: str,
@@ -635,16 +1046,21 @@ def find_sheets_for_geometry(
     sheet_system: str,
 ) -> list[str]:
     """
-    Find map sheets intersecting features in a geometry file.
+    Find the map sheets that the features of a geometry file meet (ADR-058).
 
-    Extracts per-feature bounding boxes and finds sheets for each,
-    then deduplicates. This ensures that scattered features only
-    download tiles they actually intersect, not the full bounding box.
+    Every feature is read whole and moved to EPSG:2180 with its edges
+    densified; ``find_sheets_for_shape`` keeps the sheets whose frame it
+    meets in the CRS of the sheet system: a polygon - the sheets it overlaps
+    with a positive area (a sheet it only touches along an edge or at a corner
+    does not count), a line - the sheets it runs through, a point - the one
+    sheet it lies in. The envelope of a feature only pre-selects candidates,
+    so a diagonal or an L-shaped area does not take every sheet of its
+    envelope and scattered features take only their own sheets.
 
     Parameters
     ----------
     filepath : Path
-        Path to SHP or GPKG file
+        Path to SHP, GPKG or GeoJSON file
     target_scale : str
         PL-1992: 1:1000000, 1:500000, 1:200000, 1:100000,
         1:50000, 1:25000 or 1:10000 (GUGiK publishes 1:10000).
@@ -652,7 +1068,7 @@ def find_sheets_for_geometry(
     layer : str or None
         Layer name for GPKG (None = first layer; with several layers a
         logger WARNING names the choice)
-    system : str
+    sheet_system : str
         "1992" for the PL-1992 sheet grid, or "2000" for the PL-2000
         grid (whose finer scales differ).
 
@@ -660,15 +1076,15 @@ def find_sheets_for_geometry(
     -------
     list[str]
         Sorted, deduplicated list of sheet codes
+
+    Raises
+    ------
+    ValidationError
+        If the format is unsupported, the file or a feature's geometry cannot
+        be read, or as ``find_sheets_for_bbox``
     """
-    bboxes = read_feature_bboxes(filepath, layer=layer, target_crs="EPSG:2180")
-
-    if not bboxes:
-        return []
-
-    all_sheets: set[str] = set()
-    for bbox in bboxes:
-        sheets = find_sheets_for_bbox(bbox, target_scale, sheet_system=sheet_system)
-        all_sheets.update(sheets)
-
-    return sorted(all_sheets)
+    crs, shapes = _read_shapes(filepath, layer)
+    found: set[str] = set()
+    for shape in _shapes_2180(crs, shapes):
+        found.update(find_sheets_for_shape(shape, target_scale, sheet_system))
+    return sorted(found)

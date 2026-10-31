@@ -873,10 +873,16 @@ def _area_polygons(
 
     The area a download of the same choice covers: the sheet frame (LAZ too: tiles
     of the frame, not of its envelope), the bbox envelope (``bbox``: the PL part of
-    ``auto``), NMT/NMPT the feature envelopes of the geometry file (sheets per
-    feature), LAZ the envelope of the whole geometry (tiles of one bbox).
+    ``auto``), NMT/NMPT the features of the geometry file - a polygon its own
+    convex pieces, a point or a line its envelope (``read_feature_areas``: the
+    sheets the features meet, ADR-058) -, LAZ the envelope of the whole geometry
+    (tiles of one bbox).
     """
-    from kartograf.core.geometry import get_overall_bbox, read_feature_bboxes
+    from kartograf.core.geometry import (
+        get_overall_bbox,
+        read_feature_areas,
+        read_feature_bboxes,
+    )
 
     laz = request.product == "laz"
     if request.sheet is not None:
@@ -902,7 +908,7 @@ def _area_polygons(
             request.geometry, layer=layer_name, target_crs="EPSG:2180"
         )
         raise geometry_area_error(overall, message("availability.availability_report"))
-    return [rectangle(b.min_x, b.min_y, b.max_x, b.max_y) for b in boxes]
+    return read_feature_areas(request.geometry, layer_name)
 
 
 # =============================================================================

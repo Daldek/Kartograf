@@ -14,12 +14,12 @@ MESSAGES = {
         "(np. 302_5550)",
     ),
     "geometry_description": Text(
-        "Vector file (SHP or GPKG): PL sheets and LAZ tiles that intersect its "
-        "features; CZ LAZ and contours: the sheets that intersect its extent; cutout: "
-        "its extent.",
-        "Plik geometrii obszaru (SHP albo GPKG): PL - arkusze i kafle LAZ "
-        "przecinajace obiekty; CZ LAZ i warstwice - arkusze przecinajace obwiednie "
-        "geometrii; wycinek (--cutout) - obwiednia geometrii",
+        "Vector file (SHP, GPKG or GeoJSON): PL sheets that intersect its features "
+        "(a polygon, not its extent); LAZ tiles, CZ LAZ and contours: those that "
+        "intersect its extent; cutout: its extent.",
+        "Plik geometrii obszaru (SHP, GPKG albo GeoJSON): PL - arkusze przecinajace "
+        "obiekty (wielobok, nie jego obwiednie); kafle LAZ, CZ LAZ i warstwice - "
+        "przecinajace obwiednie geometrii; wycinek (--cutout) - obwiednia geometrii",
     ),
     "resolution_description": Text(
         "Grid resolution label such as `1m`; required where the product offers a "
@@ -227,10 +227,12 @@ MESSAGES = {
         "TM33 (np. 760_5518); obszar = rama arkusza",
     ),
     "geometry_description_2": Text(
-        "Vector file (SHP or GPKG): the area is the extent of its features (LAZ: of "
-        "the whole layer; CZ: of the geometry), as in `elevation download`.",
-        "Plik geometrii obszaru (SHP albo GPKG): obszar = obwiednie obiektow (LAZ: "
-        "obwiednia calej warstwy; CZ: obwiednia geometrii) - jak w elevation download",
+        "Vector file (SHP, GPKG or GeoJSON): the area is its features (a polygon, "
+        "not its extent; LAZ: the extent of the whole layer; CZ: of the geometry), as "
+        "in `elevation download`.",
+        "Plik geometrii obszaru (SHP, GPKG albo GeoJSON): obszar = obiekty (wielobok, "
+        "nie jego obwiednia; LAZ: obwiednia calej warstwy; CZ: obwiednia geometrii) - "
+        "jak w elevation download",
     ),
     "availability_year_description": Text(
         "Only this year (the yearly layer of the GUGiK index). Excludes `min_year` "

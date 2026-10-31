@@ -211,8 +211,8 @@ in `--sheet` like any sheet code (since 0.8.0, ADR-043 D10).
   (section 7).
 - Archive sheets have different scales (among others 1:25000 and 1:10000, PL-2000),
   so they are determined by the sheet index: variant records from the year range whose
-  frame intersects the task area (`--sheet` = sheet frame, `--bbox`,
-  envelopes of `--geometry` features); a sheet touching the area
+  frame intersects the task area (`--sheet` = sheet frame, `--bbox`, the polygons of
+  `--geometry` features, a point or a line by its envelope); a sheet touching the area
   only along an edge does not count. No such records gives `Error:
   Skorowidz GUGiK nie ma plikow ... - dostepne dane obszaru: kartograf
   elevation availability`.
@@ -312,8 +312,12 @@ kartograf elevation download --geometry zlewnia.gpkg --layer catchments --produc
 kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 --root ./data
 ```
 
-- The default `--bbox-crs` is `EPSG:2180`; the geometry file is SHP or GPKG.
-  `--layer` selects a GPKG layer. Without this flag a GPKG with several layers
+- The default `--bbox-crs` is `EPSG:2180`; the geometry file is SHP, GPKG or GeoJSON
+  (`.geojson`, or `.json` holding a GeoJSON FeatureCollection, Feature or geometry; read
+  by GDAL: RFC 7946 coordinates are WGS84 longitude and latitude, a legacy `crs` member
+  such as a QGIS export in EPSG:2180 is honoured; other JSON is refused with `Not a
+  GeoJSON ...`). A GeoJSON or a SHP has one layer (`--layer` does not apply); a file
+  without features is refused. `--layer` selects a GPKG layer. Without this flag a GPKG with several layers
   uses the first; the library emits one `Notice`
   `geometry_layer_default` with the selected layer, the list of the others
   and the hint `--layer NAZWA` (CLI: `Info:`, also with `-q`).
@@ -325,6 +329,16 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
 - PL without `--cutout` saves a **list of sheets** in the sheet code hierarchy;
   a sheet without GUGiK data is skipped with `Warning:` (code 0 when at least
   one sheet was downloaded).
+- **PL sheets are those the features meet, not their envelopes (ADR-058):** a polygon
+  selects the sheets it overlaps with a positive area in the CRS of the sheet system
+  (PL-1992: WGS84, PL-2000: the zone CRS, a sheet only by its part inside its zone), so a
+  sheet it touches only along an edge or at a corner does not count; a line selects the
+  sheets it runs through, a point its one sheet. A diagonal or L-shaped area takes far
+  fewer sheets than its envelope (a 300 m x 11 km diagonal strip near Kraków: 37 PL-2000
+  sheets 1:1000 instead of 216). The feature edges are densified (100 m) before they move
+  between CRSs. By the envelope of the whole geometry, by design: `--cutout`, LAZ tiles,
+  the CZ part, and the units of `landcover`, `soil` and the collections (TERYT, sheets,
+  tiles, KU of the area).
 - **Point or line in `--geometry` (since 0.8.0):** an envelope with zero
   area (a point, a line parallel to an axis) selects the sheets, units
   and pixels in which it lies — NMT/orthophoto sheets, `boundaries`, `soil
@@ -1037,8 +1051,9 @@ How to read the table:
   2018 in Kraków: XYZ/TBD archives only for part of the area).
 - The area is the same one that the download covers: `--sheet` = the sheet code frame
   (the measurement skips the 1 m strip at the frame — the frame computed from the sheet code differs from
-  the GUGiK frame by centimetres), `--bbox` and `--geometry` (envelopes of features,
-  like the sheets of `elevation download`) are measured exactly; LAZ — the sheet
+  the GUGiK frame by centimetres), `--bbox` and `--geometry` (the polygons of the features,
+  holes left out, a point or a line by its envelope - like the sheets of `elevation
+  download`, ADR-058) are measured exactly; LAZ — the sheet
   frame or the envelope of the whole geometry, as when downloading tiles. A sheet
   touching the area only along an edge does not belong to the combination.
 - Order: year descending, then sheet system, resolution, vertical
@@ -3715,7 +3730,7 @@ in the default state (`kartograf.mcp_server.INSTRUCTIONS`); a test compares it:
 <!-- generated: mcp-instructions from kartograf.mcp_server by scripts/generate_docs.py; do not edit -->
 ```text
 Kartograf downloads spatial data of Poland and Czechia (GUGiK, CUZK, Copernicus, ISRIC) into a versioned store (root: one directory per product, versions never overwritten) or, with output_dir, as plain files named as in the store. Order: discover, check, run, read. Discover with kartograf_commands_list (groups, products and commands) and kartograf_commands_schema(command="elevation download") (the options of one command, its allowed values with their meanings, rules, examples and errors). What years, grids and CRSs an area has: kartograf_elevation_availability. Read the store: kartograf_store_overview, kartograf_store_entries, kartograf_store_sidecar; the sidecar of a file has its CRS, source and licence.
-Shared arguments. Target of a write: output_dir (plain files), root (the store) or neither (the default store), never both. Paths (root, output_dir, geometry, path) are absolute. Area: sheet (a sheet code, for example N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no default) or geometry (a SHP or GPKG file; layer is its GPKG layer), exactly one; some commands also take teryt, ku or whole_country. country is pl, cz or auto: required with bbox and geometry, implied by a sheet code. Select data explicitly (product, resolution, vertical_crs, ...): nothing is guessed. A value per country is a string or {"pl": ..., "cz": ...}.
+Shared arguments. Target of a write: output_dir (plain files), root (the store) or neither (the default store), never both. Paths (root, output_dir, geometry, path) are absolute. Area: sheet (a sheet code, for example N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no default) or geometry (a SHP, GPKG or GeoJSON file; layer is its GPKG layer), exactly one; some commands also take teryt, ku or whole_country. country is pl, cz or auto: required with bbox and geometry, implied by a sheet code. Select data explicitly (product, resolution, vertical_crs, ...): nothing is guessed. A value per country is a string or {"pl": ..., "cz": ...}.
 Updates. update omitted fetches what is missing, update=upgrade fetches newer content when the source signals it (store only), update=force fetches again: a store never overwrites a version, plain files are replaced and an existing one is otherwise a conflict. check=true plans without fetching (with output_dir each target is write, replace or conflict): a store plan (the result of the envelope, kartograf-plan/1) runs later with update=upgrade and plan.
 This server does not write: a command that writes only plans (check is true; update, plan, workers and summary are forbidden). Start kartograf-mcp with --allow-writes and --allow-dir DIR to download.
 Results. A result is the envelope kartograf-result/1: status (ok, partial, failed), result (the document of the command), items (one per unit; a failed one has code and reason) and notices. partial and failed are results (isError false): read items. An error (isError true) is kartograf-error/1 with code, message, hint and details; details.option names the argument to fix. forbidden is a path outside --allow-dir or a write on a server that only plans.

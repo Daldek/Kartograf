@@ -460,6 +460,61 @@ class TestDownloadArchive:
             "countries": ["PL"],
         }
 
+    def test_geometry_sheets_overlap_its_polygon_not_its_envelope(self, tmp_path):
+        """An L over three of the four 1:25000 frames of a 1:50000 sheet
+        (ADR-058): the fourth frame lies in the envelope of the L, but touches
+        the L only along its edges, so it is not a sheet of the request."""
+        import shapefile
+        from pyproj import CRS
+
+        quarters = [f"N-34-58-D-c-{quarter}" for quarter in (1, 2, 3, 4)]
+        frames = {q: SheetParser(q).get_bbox("EPSG:4326") for q in quarters}
+        west = min(frame.min_x for frame in frames.values())
+        south = min(frame.min_y for frame in frames.values())
+        east = max(frame.max_x for frame in frames.values())
+        north = max(frame.max_y for frame in frames.values())
+        (left_out,) = [
+            q
+            for q, frame in frames.items()
+            if (frame.max_x, frame.max_y) == (east, north)
+        ]
+        cut = frames[left_out]
+        path = tmp_path / "area" / "ell.shp"
+        path.parent.mkdir()
+        with shapefile.Writer(str(path)) as writer:
+            writer.field("name", "C", 10)
+            writer.poly(
+                [
+                    [
+                        (west, south),
+                        (west, north),
+                        (cut.min_x, north),
+                        (cut.min_x, cut.min_y),
+                        (east, cut.min_y),
+                        (east, south),
+                        (west, south),
+                    ]
+                ]
+            )
+            writer.record("ell")
+        path.with_suffix(".prj").write_text(CRS.from_epsg(4326).to_wkt())
+        session = _index_session([_record(q) for q in quarters])
+
+        with patch(SESSION_FACTORY, return_value=session):
+            plan = check_data(
+                product="nmt",
+                root=tmp_path / "store",
+                geometry=path,
+                country="pl",
+                sheet_system="1992",
+                cache=False,
+                **TBD_25M,
+            )
+
+        assert sorted(item.unit for item in plan.items) == sorted(
+            q for q in quarters if q != left_out
+        )
+
     def test_partial_archive_is_stored_without_coverage(self, tmp_path, caplog):
         """An archive of a sheet not declared full is kept as published: no
         valid-pixel share is measured (no ``extra.coverage``, no warning)."""

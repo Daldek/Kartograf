@@ -18,9 +18,9 @@ MESSAGES = {
         "naroznikami",
     ),
     "geometry_description": Text(
-        "Vector file (SHP or GPKG) with the area: the extent of its features is the "
-        "area.",
-        "Plik geometrii (SHP albo GPKG); obszar = obwiednia obiektow",
+        "Vector file (SHP, GPKG or GeoJSON) with the area: the extent of its features "
+        "is the area.",
+        "Plik geometrii (SHP, GPKG albo GeoJSON); obszar = obwiednia obiektow",
     ),
     "layer_description": Text(
         "GPKG layer of geometry (default: the first one).",

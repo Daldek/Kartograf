@@ -380,7 +380,7 @@ def find_sheets(
     bbox : BBox, optional
         The area as a rectangle (EPSG:2180, EPSG:4326 or a PL-2000 zone CRS).
     geometry : str or path, optional
-        The area as a SHP or GPKG file (the sheets its features intersect).
+        The area as a SHP, GPKG or GeoJSON file (the sheets its features intersect).
     layer : str, optional
         The GPKG layer of ``geometry`` (default: the first one).
     scale : str

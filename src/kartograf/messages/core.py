@@ -59,6 +59,25 @@ MESSAGES = {
         "No features with geometry in: {filepath}",
         "Brak obiektow z geometria w: {filepath}",
     ),
+    "unreadable_feature_geometry": Text(
+        "Cannot read the geometry of feature {number} of {filepath}: {error}",
+        "Nie da sie odczytac geometrii obiektu {number} z {filepath}: {error}",
+    ),
+    "gpkg_invalid_envelope_indicator": Text(
+        "the GeoPackage geometry header has the invalid envelope contents "
+        "indicator {indicator}",
+        "naglowek geometrii GeoPackage ma nieprawidlowy wskaznik obwiedni {indicator}",
+    ),
+    "not_geojson": Text(
+        "Not a GeoJSON FeatureCollection, Feature or geometry: {filepath}",
+        "To nie jest GeoJSON (FeatureCollection, Feature ani geometria): {filepath}",
+    ),
+    "not_geojson_driver": Text(
+        "Not a GeoJSON FeatureCollection, Feature or geometry: {filepath} (GDAL "
+        "reads it as {driver})",
+        "To nie jest GeoJSON (FeatureCollection, Feature ani geometria): {filepath} "
+        "(GDAL czyta go jako {driver})",
+    ),
     # ``core.parser_2000``.
     "sheet_code_must_be_string": Text(
         "The sheet code must be a string, got: {sheet_type}",

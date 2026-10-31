@@ -646,7 +646,7 @@ def test_every_combination_is_a_registered_variant():
     assert {c.source for r in reports for c in r.combinations} <= registered
 
 
-def test_geometry_request_measures_feature_envelopes(tmp_path):
+def test_geometry_request_measures_each_feature(tmp_path):
     import shapefile
     from pyproj import CRS
 
@@ -680,6 +680,42 @@ def test_geometry_request_measures_feature_envelopes(tmp_path):
         "--sheet-system 1992"
     )
     assert report.request["geometry"] == str(path)
+
+
+def test_geometry_request_measures_the_polygon_not_its_envelope(tmp_path):
+    """A triangle over half of the recorded Krakow square (ADR-058): its own
+    area is measured (pixel centres on its diagonal: 4000 m2 either way), not
+    the 16 km2 of its envelope, its records are those of the sheets it meets,
+    and the hint keeps ``--geometry``: its download plans only them."""
+    import shapefile
+    from pyproj import CRS
+
+    from kartograf.core.geometry import find_sheets_for_geometry
+
+    path = tmp_path / "trojkat.shp"
+    with shapefile.Writer(str(path)) as writer:
+        writer.field("name", "C", 10)
+        writer.poly([[(565000, 242000), (569000, 246000), (569000, 242000)]])
+        writer.record("a")
+    path.with_suffix(".prj").write_text(CRS.from_epsg(2180).to_wkt())
+    session = RecordedIndex(_areas("nmt", "krakow"))
+
+    report = _check(session, product="nmt", country="pl", geometry=path)
+
+    (area,) = report.areas
+    assert area.area_m2 == pytest.approx(8_000_000, abs=4_000)
+    combo = _combo(report, 2025, "PL-1992", "1m")
+    assert combo.complete
+    assert set(combo.sheets_full) == set(
+        find_sheets_for_geometry(path, "1:10000", sheet_system="1992")
+    )
+    assert len(combo.sheets_full) < len(
+        _combo(_report("nmt", "krakow"), 2025, "PL-1992", "1m").sheets_full
+    )
+    assert combo.download_hint[0].startswith(
+        f"elevation download --product nmt --country pl --geometry {path} "
+        "--sheet-system 1992"
+    )
 
 
 # =============================================================================

@@ -59,6 +59,36 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - `kartograf commands schema` keeps every fact (`operation_id: <id>`, `effects: ...`) whole on
   one line; the wrap of the text split `operation_id:` from the id once the project fact was gone.
 
+### Geometry requests by their features (ADR-058)
+
+**Fixed**
+
+- A `--geometry` request selects the sheets its features meet, not every sheet of their
+  envelopes (reported by the author through Archiwista: downloading for a polygon behaved as if
+  it were a rectangle; a diagonal 11 km strip near Kraków took 200 PL-2000 sheets 1:1000 where it
+  meets 32). Behaviour change: fewer sheets for non-rectangular areas. `find_sheets_for_geometry`
+  (the PL-1992 and PL-2000 sheets of `elevation download`, `imagery download`, `sheet find` and
+  of the availability hints) reads each feature whole and keeps a sheet when the feature meets
+  its frame in the CRS of the sheet system: a polygon with a positive area (an edge or a corner
+  contact does not count), a line along a positive length, a point in its one sheet as before; a
+  PL-2000 sheet only by its part inside its zone (ADR-055). A 300 m wide diagonal strip of 11 km
+  takes 37 sheets 1:1000 instead of 216, 6 of 12 at 1:5000 and 8 of 20 PL-1992 sheets. The
+  archive sheets (`--format`) and the area of `elevation availability` are the polygons too
+  (`read_feature_areas`: convex pieces, holes left out): a triangle over half of a 4 x 4 km square
+  measures its 8 km2 and its 5 sheets, not the 16 km2 and 6 sheets of the square. A point or a
+  line keeps its envelope there. Unchanged by design (they cut or select by the area envelope):
+  `--cutout`, LAZ tiles, the CZ part, and the units of collections, land cover, soils and HSG. A
+  feature whose geometry cannot be read is an error (`core.unreadable_feature_geometry`).
+
+**Added**
+
+- GeoJSON for `--geometry` (and `geometry=` of the library and MCP): `.geojson`, and `.json`
+  holding a GeoJSON FeatureCollection, Feature or geometry (other JSON - Esri JSON, TopoJSON - is
+  `Not a GeoJSON ...`), read by GDAL: RFC 7946 coordinates are WGS84 longitude and latitude, a
+  legacy `crs` member (GeoJSON 2008, e.g. a QGIS export) is honoured. One layer (`--layer` does
+  not apply, as for SHP); a file without features is refused as an empty GPKG layer. Archiwista
+  passes its area as a WGS84 GeoJSON file.
+
 ### Nogat standard 2.1 adoption (so far)
 
 **Breaking**

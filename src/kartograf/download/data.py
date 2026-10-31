@@ -944,8 +944,9 @@ def _dispatch_area(
 ) -> int:
     """Split an area request (bbox or geometry envelope) into countries and run them.
 
-    With ``filepath`` the PL part works on the file (sheets per feature, not
-    the envelope); the bbox recognizes countries and gives ``parent_request``.
+    With ``filepath`` the PL part works on the file (the sheets its features
+    meet, not the envelope); the bbox recognizes countries and gives
+    ``parent_request``.
     """
     if filepath is not None and (task.cutout or task.product == "laz"):
         # a point picks sheets, units or pixels; these two cut or select by AREA
@@ -1564,9 +1565,9 @@ def _download_pl_geometry(
 ) -> int:
     """Download or check the PL part of a geometry request.
 
-    PL part of a geometry request: sheets per feature, a cutout of the
-    (clipped) envelope with ``cutout``, or the voivodeship files of a file
-    variant for that envelope.
+    PL part of a geometry request: the sheets the features meet (ADR-058), a
+    cutout of the (clipped) envelope with ``cutout``, or the voivodeship files
+    of a file variant for that envelope.
     """
     from kartograf.core.geometry import find_sheets_for_geometry
 
@@ -1576,15 +1577,14 @@ def _download_pl_geometry(
     if task.cutout:
         return _download_pl_cutout(task, run, bbox, parent_request)
     if is_source_file_request(task):
-        from kartograf.core.coverage import rectangle
-        from kartograf.core.geometry import read_feature_bboxes
+        from kartograf.core.geometry import read_feature_areas
 
-        areas = [
-            rectangle(b.min_x, b.min_y, b.max_x, b.max_y)
-            for b in read_feature_bboxes(filepath, task.layer, "EPSG:2180")
-        ]
         return _download_pl_archive(
-            task, run, areas, parent_request, what=f"geometry {filepath.name}"
+            task,
+            run,
+            read_feature_areas(filepath, task.layer),
+            parent_request,
+            what=f"geometry {filepath.name}",
         )
     target_scale = pl_target_scale(task)
     sheets = find_sheets_for_geometry(
@@ -1684,8 +1684,9 @@ def _download_pl_archive(
     Archives lie on sheets of several scales (1:25000 and 1:10000 frames of
     one variant, PL-2000 sheets), so the sheets are the variant's records of
     the WFS index overlapping ``areas`` (convex EPSG:2180 polygons: the sheet
-    frame, the bbox, the feature envelopes of a geometry), within the year
-    bounds - then the usual sheet flow (campaigns, versions, sidecars).
+    frame, the bbox, the features of a geometry - ``read_feature_areas``),
+    within the year bounds - then the usual sheet flow (campaigns, versions,
+    sidecars).
     """
     if run.dry:
         return 0

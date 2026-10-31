@@ -5,19 +5,33 @@ Tests for reading SHP/GPKG geometry files, GPKG envelope parsing,
 CRS transformation, and sheet lookup from geometry.
 """
 
+import json
+import math
 import sqlite3
 import struct
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
+import pyogrio.raw
 import pytest
+import shapely
+import shapely.affinity
+from pyproj import CRS, Transformer
 
+from kartograf.core import pl2000_zones
+from kartograf.core.bbox import BBox
+from kartograf.core.coverage import normalize_convex, polygon_area, rectangle
 from kartograf.core.geometry import (
     _parse_gpkg_envelope,
     find_sheets_for_geometry,
     get_overall_bbox,
+    read_feature_areas,
     read_feature_bboxes,
+    read_source_crs,
+    resolve_layer,
 )
+from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox
 from kartograf.exceptions import ValidationError  # noqa: I001
 
 # =========================================================================
@@ -835,10 +849,10 @@ class TestReadFeatureBboxes:
 
     def test_unsupported_format(self, tmp_path):
         """Nieobslugiwany format raises ValidationError."""
-        geojson = tmp_path / "test.geojson"
-        geojson.write_text("{}")
+        kml = tmp_path / "test.kml"
+        kml.write_text("<kml/>")
         with pytest.raises(ValidationError, match="Unsupported geometry format: '"):
-            read_feature_bboxes(geojson)
+            read_feature_bboxes(kml)
 
 
 # =========================================================================
@@ -918,8 +932,8 @@ class TestReadSourceCrs:
     def test_unsupported_format_raises(self, tmp_path):
         from kartograf.core.geometry import read_source_crs
 
-        path = tmp_path / "area.geojson"
-        path.write_text("{}", encoding="utf-8")
+        path = tmp_path / "area.kml"
+        path.write_text("<kml/>", encoding="utf-8")
         with pytest.raises(ValidationError, match="Unsupported geometry format: '"):
             read_source_crs(path)
 
@@ -931,60 +945,6 @@ class TestReadSourceCrs:
 
 class TestFindSheetsForGeometry:
     """Tests for find_sheets_for_geometry."""
-
-    @patch("kartograf.core.geometry.find_sheets_for_bbox")
-    def test_single_feature(self, mock_find, shp_epsg4326):
-        """Single feature calls find_sheets_for_bbox once."""
-        mock_find.return_value = ["M-34-76-A-a-1-1"]
-
-        result = find_sheets_for_geometry(
-            shp_epsg4326, target_scale="1:10000", sheet_system="1992"
-        )
-
-        assert result == ["M-34-76-A-a-1-1"]
-        assert mock_find.call_count == 1
-
-    @patch("kartograf.core.geometry.find_sheets_for_bbox")
-    def test_two_features_deduplication(self, mock_find, shp_epsg2180):
-        """Two features with overlapping sheets are deduplicated."""
-        mock_find.side_effect = [
-            ["M-34-76-A-a-1-1", "M-34-76-A-a-1-2"],
-            ["M-34-76-A-a-1-2", "N-34-130-D-d-2-4"],
-        ]
-
-        result = find_sheets_for_geometry(
-            shp_epsg2180, target_scale="1:10000", sheet_system="1992"
-        )
-
-        # Deduplicated and sorted
-        assert result == [
-            "M-34-76-A-a-1-1",
-            "M-34-76-A-a-1-2",
-            "N-34-130-D-d-2-4",
-        ]
-        assert mock_find.call_count == 2
-
-    @patch("kartograf.core.geometry.find_sheets_for_bbox")
-    def test_empty_result(self, mock_find, shp_epsg4326):
-        """No matching sheets returns empty list."""
-        mock_find.return_value = []
-
-        result = find_sheets_for_geometry(
-            shp_epsg4326, target_scale="1:10000", sheet_system="1992"
-        )
-        assert result == []
-
-    @patch("kartograf.core.geometry.find_sheets_for_bbox")
-    def test_passes_target_scale(self, mock_find, shp_epsg4326):
-        """Target scale is passed to find_sheets_for_bbox."""
-        mock_find.return_value = ["M-34-76-A-a-1-1"]
-
-        find_sheets_for_geometry(
-            shp_epsg4326, target_scale="1:25000", sheet_system="1992"
-        )
-
-        call_args = mock_find.call_args
-        assert call_args[0][1] == "1:25000"
 
     def test_find_sheets_for_geometry_with_points(self, shp_points_epsg2180):
         """Each point gives EXACTLY one 1:10000 sheet containing that point."""
@@ -1022,18 +982,24 @@ class TestFindSheetsForGeometry:
         assert result == []
 
     def test_gpkg_layer_param(self, gpkg_multi_layer):
-        """Layer parameter is forwarded for GPKG."""
-        with patch("kartograf.core.geometry.find_sheets_for_bbox") as mock_find:
-            mock_find.return_value = ["N-34-130-D-d-2-4"]
-            result = find_sheets_for_geometry(
+        """Only the features of the chosen layer select sheets (the point of
+        each layer's WKB: its own 1:10000 sheet)."""
+
+        def sheets_of(layer):
+            return find_sheets_for_geometry(
                 gpkg_multi_layer,
-                layer="layer_b",
+                layer=layer,
                 target_scale="1:10000",
                 sheet_system="1992",
             )
-            assert result == ["N-34-130-D-d-2-4"]
-            # Should have been called once (one feature in layer_b)
-            assert mock_find.call_count == 1
+
+        for layer, (x, y) in (
+            ("layer_a", (420000, 230000)),
+            ("layer_b", (500000, 300000)),
+        ):
+            point = BBox(x, y, x, y, "EPSG:2180")
+            assert sheets_of(layer) == find_sheets_for_bbox(point, "1:10000", "1992")
+        assert sheets_of("layer_a") != sheets_of("layer_b")
 
 
 # =========================================================================
@@ -1097,3 +1063,412 @@ class TestReadersUseCoreBBox:
         shp = _shp_with_rects(tmp_path / "same.shp", self.RECTS[:1])
         (bbox,) = read_feature_bboxes(shp, target_crs="EPSG:2180")
         assert tuple(bbox) == (420000, 230000, 421000, 231000, "EPSG:2180")
+
+
+# =========================================================================
+# Tests - the sheets of the feature geometry, not of its envelope (ADR-058)
+# =========================================================================
+
+
+def _strip(x0: float, y0: float, x1: float, y1: float, width: float) -> shapely.Polygon:
+    """A ``width`` wide strip from ``(x0, y0)`` to ``(x1, y1)``."""
+    length = math.hypot(x1 - x0, y1 - y0)
+    nx, ny = -(y1 - y0) / length * width / 2, (x1 - x0) / length * width / 2
+    return shapely.Polygon(
+        [
+            (x0 + nx, y0 + ny),
+            (x1 + nx, y1 + ny),
+            (x1 - nx, y1 - ny),
+            (x0 - nx, y0 - ny),
+        ]
+    )
+
+
+# 300 m wide, 11 km long diagonal across Krakow (EPSG:2180): the shape of the area
+# Archiwista measured (its envelope 200 PL-2000 sheets 1:1000, the strip 32).
+STRIP = _strip(560000, 240000, 567800, 247800, 300)
+# An L of two 1 km wide, 6 km long arms (EPSG:2180)
+ELL = shapely.Polygon(
+    [
+        (560000, 240000),
+        (566000, 240000),
+        (566000, 241000),
+        (561000, 241000),
+        (561000, 246000),
+        (560000, 246000),
+    ]
+)
+# A 4 km square with a 2 km hole (EPSG:2180)
+RING = shapely.Polygon(
+    [(560000, 240000), (564000, 240000), (564000, 244000), (560000, 244000)],
+    [[(561000, 241000), (563000, 241000), (563000, 243000), (561000, 243000)]],
+)
+
+
+def _gpkg(path: Path, shapes, crs: str = "EPSG:2180") -> Path:
+    """A GeoPackage written by GDAL (pyogrio): one feature per geometry."""
+    pyogrio.raw.write(
+        str(path),
+        geometry=np.array([shapely.to_wkb(shape) for shape in shapes], dtype=object),
+        field_data=[],
+        fields=[],
+        crs=crs,
+        driver="GPKG",
+        geometry_type="Unknown",
+        layer="area",
+    )
+    return path
+
+
+def _envelope_sheets(shape, scale: str, system: str) -> list[str]:
+    """The sheets of the EPSG:2180 envelope of ``shape``: the former selection."""
+    min_x, min_y, max_x, max_y = shape.bounds
+    envelope = BBox(min_x, min_y, max_x, max_y, "EPSG:2180")
+    return find_sheets_for_bbox(envelope, scale, system)
+
+
+def _densified(shape, source: str, target: str):
+    """``shape`` moved by pyproj, its edges split at 10 m (1e-4 deg) first."""
+    step = 1e-4 if CRS.from_user_input(source).is_geographic else 10.0
+    move = Transformer.from_crs(source, target, always_xy=True).transform
+    return shapely.transform(shapely.segmentize(shape, step), move, interleaved=False)
+
+
+def _met(shape, crs: str, sheets, system: str, *, zones: bool = False) -> list[str]:
+    """The sheets of ``sheets`` whose frame ``shape`` (in ``crs``) meets.
+
+    Computed apart from Kartograf: the geometry moved by pyproj to the CRS of the
+    frame (PL-1992: WGS84, PL-2000: the zone CRS) and intersected with the frame
+    rectangle by shapely; a polygon counts with a positive area, a line with a
+    positive length. ``zones``: a PL-2000 frame counts only by its part inside
+    the area of its zone (ADR-055), compared in WGS84.
+    """
+    found = []
+    for sheet in sheets:
+        frame = SheetParser(sheet).get_bbox("EPSG:4326" if system == "1992" else None)
+        box = shapely.box(frame.min_x, frame.min_y, frame.max_x, frame.max_y)
+        common = shapely.intersection(box, _densified(shape, crs, frame.crs))
+        if zones and not common.is_empty:
+            box = _densified(box, frame.crs, "EPSG:4326")
+            west, south, east, north = box.bounds
+            window = (west - 0.01, south - 0.01, east + 0.01, north + 0.01)
+            zone = pl2000_zones.zone_area(int(sheet.split(".")[0]), window)
+            common = shapely.intersection(
+                _densified(common, frame.crs, "EPSG:4326"), zone
+            )
+        share = common.area / box.area if shape.area else common.length / box.length
+        if share > 1e-6:
+            found.append(sheet)
+    return sorted(found)
+
+
+class TestSheetsOfTheFeatures:
+    """A feature selects the sheets its geometry meets, not every sheet of its
+    envelope; the envelope only pre-selects (ADR-058)."""
+
+    @pytest.mark.parametrize(
+        ("system", "scale"),
+        [("1992", "1:10000"), ("2000", "1:5000"), ("2000", "1:1000")],
+    )
+    @pytest.mark.parametrize("area", [STRIP, ELL], ids=["diagonal", "L"])
+    def test_polygon_selects_the_sheets_it_overlaps(
+        self, tmp_path, area, system, scale
+    ):
+        path = _gpkg(tmp_path / "area.gpkg", [area])
+        envelope = _envelope_sheets(area, scale, system)
+
+        sheets = find_sheets_for_geometry(path, scale, sheet_system=system)
+
+        assert sheets == _met(area, "EPSG:2180", envelope, system)
+        assert len(sheets) < len(envelope)
+
+    def test_sheets_inside_a_hole_are_not_selected(self, tmp_path):
+        path = _gpkg(tmp_path / "ring.gpkg", [RING])
+        shell = shapely.Polygon(RING.exterior)
+        envelope = _envelope_sheets(RING, "1:1000", "2000")
+
+        sheets = find_sheets_for_geometry(path, "1:1000", sheet_system="2000")
+
+        assert sheets == _met(RING, "EPSG:2180", envelope, "2000")
+        assert set(_met(shell, "EPSG:2180", envelope, "2000")) - set(sheets)
+
+    @pytest.mark.parametrize(
+        ("system", "scale"), [("1992", "1:10000"), ("2000", "1:1000")]
+    )
+    def test_polygon_of_a_sheet_frame_selects_only_that_sheet(
+        self, tmp_path, system, scale
+    ):
+        """The neighbours share only an edge or a corner with the polygon; its
+        EPSG:2180 envelope took them all."""
+        point = BBox(566500, 243500, 566500, 243500, "EPSG:2180")
+        (sheet,) = find_sheets_for_bbox(point, scale, system)
+        frame = SheetParser(sheet).get_bbox("EPSG:4326" if system == "1992" else None)
+        polygon = shapely.box(frame.min_x, frame.min_y, frame.max_x, frame.max_y)
+        path = _gpkg(tmp_path / "sheet.gpkg", [polygon], crs=frame.crs)
+        (envelope,) = read_feature_bboxes(path)
+
+        assert find_sheets_for_geometry(path, scale, sheet_system=system) == [sheet]
+        assert len(find_sheets_for_bbox(envelope, scale, system)) > 1
+
+    def test_wgs84_rectangle_on_grid_lines_takes_its_sheets_only(self, tmp_path):
+        """A WGS84 rectangle on PL-1992 grid lines, 1 deg wide, takes the 6 x 32
+        sheets of 1.25' x 1.875' inside it (the 7-part codes Kartograf labels
+        1:10000): the rows and columns along its edges only touch it."""
+        rectangle_wgs84 = shapely.box(19.25, 50.0, 20.25, 50.125)
+        path = _gpkg(tmp_path / "rectangle.gpkg", [rectangle_wgs84], crs="EPSG:4326")
+        (envelope,) = read_feature_bboxes(path)
+        candidates = find_sheets_for_bbox(envelope, "1:10000", "1992")
+
+        sheets = find_sheets_for_geometry(path, "1:10000", sheet_system="1992")
+
+        assert sheets == _met(rectangle_wgs84, "EPSG:4326", candidates, "1992")
+        assert len(sheets) == 6 * 32 < len(candidates)
+
+    def test_straight_edge_follows_its_curve_in_wgs84(self, tmp_path):
+        """A 50 km EPSG:2180 strip across 19 E: its straight top edge is a curve
+        in WGS84, 26 m north of the grid parallel 50.125 N on 19 E and 32 m south
+        of it at both ends (it crosses the parallel mid-column, 16.8 km from
+        19 E). The edges are densified before they move, so the sheets north of
+        the parallel near 19 E count, as for the dense oracle."""
+        to_2180 = Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)
+        _x, y = to_2180.transform(19.0, 50.125)
+        strip = shapely.box(475000, y - 270, 525000, y + 26.3)
+        path = _gpkg(tmp_path / "strip.gpkg", [strip])
+        envelope = _envelope_sheets(strip, "1:10000", "1992")
+
+        sheets = find_sheets_for_geometry(path, "1:10000", sheet_system="1992")
+
+        assert sheets == _met(strip, "EPSG:2180", envelope, "1992")
+        north = [
+            s for s in sheets if SheetParser(s).get_bbox("EPSG:4326").min_y > 50.12
+        ]
+        assert north
+
+    def test_shapefile_polygon(self, tmp_path):
+        import shapefile
+
+        path = tmp_path / "strip.shp"
+        with shapefile.Writer(str(path)) as writer:
+            writer.field("name", "C", 10)
+            writer.poly([list(STRIP.exterior.coords)])
+            writer.record("strip")
+        _write_prj(path.with_suffix(".prj"), 2180)
+        envelope = _envelope_sheets(STRIP, "1:1000", "2000")
+
+        sheets = find_sheets_for_geometry(path, "1:1000", sheet_system="2000")
+
+        assert sheets == _met(STRIP, "EPSG:2180", envelope, "2000")
+
+    def test_line_selects_the_sheets_it_runs_through(self, tmp_path):
+        line = shapely.LineString([(560000, 240000), (567800, 247800)])
+        path = _gpkg(tmp_path / "line.gpkg", [line])
+        envelope = _envelope_sheets(line, "1:1000", "2000")
+
+        sheets = find_sheets_for_geometry(path, "1:1000", sheet_system="2000")
+
+        assert sheets == _met(line, "EPSG:2180", envelope, "2000")
+        assert len(sheets) < len(envelope)
+
+    def test_points_of_one_feature_select_their_own_sheets(self, tmp_path):
+        """A multipoint: the one sheet of each point, not those between them."""
+        points = [(560000.0, 240000.0), (567800.0, 247800.0)]
+        path = _gpkg(tmp_path / "points.gpkg", [shapely.MultiPoint(points)])
+        own = {
+            sheet
+            for x, y in points
+            for sheet in find_sheets_for_bbox(
+                BBox(x, y, x, y, "EPSG:2180"), "1:10000", "1992"
+            )
+        }
+
+        sheets = find_sheets_for_geometry(path, "1:10000", sheet_system="1992")
+
+        assert sheets == sorted(own)
+        assert len(sheets) == 2
+
+    def test_every_feature_of_the_layer_counts_once(self, tmp_path):
+        """The strip, an L over part of it and a point: the sorted union of the
+        sheets each one meets."""
+        ell = shapely.affinity.translate(ELL, 3000, 3000)
+        point = (570000.0, 250000.0)
+        path = _gpkg(tmp_path / "areas.gpkg", [STRIP, ell, shapely.Point(point)])
+        on_strip = _met(
+            STRIP, "EPSG:2180", _envelope_sheets(STRIP, "1:5000", "2000"), "2000"
+        )
+        on_ell = _met(ell, "EPSG:2180", _envelope_sheets(ell, "1:5000", "2000"), "2000")
+        on_point = find_sheets_for_bbox(
+            BBox(*point, *point, "EPSG:2180"), "1:5000", "2000"
+        )
+
+        sheets = find_sheets_for_geometry(path, "1:5000", sheet_system="2000")
+
+        assert set(on_strip) & set(on_ell)
+        assert sheets == sorted({*on_strip, *on_ell, *on_point})
+
+    def test_sheet_counts_only_inside_its_zone(self, tmp_path):
+        """A strip across the boundary of zones 6 and 7 (the powiats cut by
+        19.5 E, ADR-055): a sheet whose frame reaches the strip only inside the
+        other zone is not selected."""
+        to_2180 = Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)
+        (x0, x1), (y0, y1) = to_2180.transform([19.40, 19.62], [50.20, 50.23])
+        strip = _strip(x0, y0, x1, y1, 200)
+        path = _gpkg(tmp_path / "strip.gpkg", [strip])
+        envelope = _envelope_sheets(strip, "1:2000", "2000")
+
+        sheets = find_sheets_for_geometry(path, "1:2000", sheet_system="2000")
+
+        assert sheets == _met(strip, "EPSG:2180", envelope, "2000", zones=True)
+        assert {s.split(".")[0] for s in sheets} == {"6", "7"}
+        assert set(_met(strip, "EPSG:2180", envelope, "2000")) - set(sheets)
+
+    def test_unreadable_geometry_names_the_feature(self, tmp_path):
+        """A WKB of an unknown geometry type behind a valid GeoPackage header."""
+        blob = _make_gpkg_blob(420000, 230000, 421000, 231000, wkb_type=99)
+        path = _build_gpkg(tmp_path / "unknown.gpkg", [blob])
+        with pytest.raises(ValidationError, match="geometry of feature 1 of"):
+            find_sheets_for_geometry(path, "1:10000", sheet_system="1992")
+
+
+def _geojson(path: Path, shapes, *, crs_name: str | None = None) -> Path:
+    """A GeoJSON FeatureCollection, one feature per geometry; ``crs_name``: the
+    legacy ``crs`` member of GeoJSON 2008."""
+    document: dict = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": json.loads(shapely.to_geojson(shape)),
+            }
+            for shape in shapes
+        ],
+    }
+    if crs_name is not None:
+        document["crs"] = {"type": "name", "properties": {"name": crs_name}}
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return path
+
+
+class TestGeoJsonFiles:
+    """A GeoJSON area file: RFC 7946 (WGS84 longitude, latitude), read by GDAL;
+    ``.geojson``, or ``.json`` holding a FeatureCollection, a Feature or a
+    geometry."""
+
+    @pytest.mark.parametrize(
+        ("system", "scale"), [("1992", "1:10000"), ("2000", "1:1000")]
+    )
+    @pytest.mark.parametrize("area", [STRIP, ELL], ids=["diagonal", "L"])
+    def test_same_sheets_as_the_geopackage(self, tmp_path, area, system, scale):
+        """The polygon in WGS84 (its EPSG:2180 edges densified to 10 m)."""
+        gpkg = _gpkg(tmp_path / "area.gpkg", [area])
+        wgs84 = _densified(area, "EPSG:2180", "EPSG:4326")
+        geojson = _geojson(tmp_path / "area.geojson", [wgs84])
+
+        sheets = find_sheets_for_geometry(geojson, scale, sheet_system=system)
+
+        assert sheets == find_sheets_for_geometry(gpkg, scale, sheet_system=system)
+        assert len(sheets) < len(_envelope_sheets(area, scale, system))
+
+    def test_json_with_a_feature_or_a_geometry(self, tmp_path):
+        wgs84 = json.loads(
+            shapely.to_geojson(_densified(STRIP, "EPSG:2180", "EPSG:4326"))
+        )
+        feature = tmp_path / "feature.json"
+        feature.write_text(
+            json.dumps({"type": "Feature", "properties": {}, "geometry": wgs84}),
+            encoding="utf-8",
+        )
+        geometry = tmp_path / "geometry.json"
+        geometry.write_text(json.dumps(wgs84), encoding="utf-8")
+        expected = find_sheets_for_geometry(
+            _gpkg(tmp_path / "strip.gpkg", [STRIP]), "1:5000", sheet_system="2000"
+        )
+
+        for path in (feature, geometry):
+            assert (
+                find_sheets_for_geometry(path, "1:5000", sheet_system="2000")
+                == expected
+            )
+
+    def test_legacy_crs_member_names_the_crs(self, tmp_path):
+        """GDAL honours the ``crs`` member of GeoJSON 2008 (a QGIS export)."""
+        path = _geojson(
+            tmp_path / "puwg.geojson", [ELL], crs_name="urn:ogc:def:crs:EPSG::2180"
+        )
+        gpkg = _gpkg(tmp_path / "ell.gpkg", [ELL])
+
+        assert read_source_crs(path) == CRS.from_epsg(2180)
+        assert find_sheets_for_geometry(
+            path, "1:2000", sheet_system="2000"
+        ) == find_sheets_for_geometry(gpkg, "1:2000", sheet_system="2000")
+
+    def test_one_layer_and_wgs84(self, tmp_path):
+        """RFC 7946 coordinates are WGS84; a layer does not apply (as for SHP)."""
+        path = _geojson(tmp_path / "area.geojson", [shapely.Point(19.9, 50.05)])
+
+        assert read_source_crs(path) == CRS.from_epsg(4326)
+        choice = resolve_layer(path, "area")
+        assert (choice.name, choice.available, choice.defaulted) == (None, (), False)
+        (bbox,) = read_feature_bboxes(path, target_crs="EPSG:4326")
+        assert bbox == BBox(19.9, 50.05, 19.9, 50.05, "EPSG:4326")
+
+    @pytest.mark.parametrize(
+        ("name", "content", "match"),
+        [
+            (
+                "esri.json",
+                {
+                    "geometryType": "esriGeometryPoint",
+                    "spatialReference": {"wkid": 4326},
+                    "features": [{"attributes": {}, "geometry": {"x": 19.9, "y": 50}}],
+                },
+                "GDAL reads it as ESRIJSON",
+            ),
+            ("plain.json", {"area": 1}, "Not a GeoJSON FeatureCollection"),
+            ("empty.geojson", {}, "Not a GeoJSON FeatureCollection"),
+        ],
+    )
+    def test_other_json_is_refused(self, tmp_path, name, content, match):
+        path = tmp_path / name
+        path.write_text(json.dumps(content), encoding="utf-8")
+
+        with pytest.raises(ValidationError, match=match):
+            read_feature_bboxes(path)
+        with pytest.raises(ValidationError, match=match):
+            find_sheets_for_geometry(path, "1:10000", sheet_system="1992")
+
+    def test_without_features_is_refused_like_an_empty_layer(
+        self, tmp_path, gpkg_no_features_geom
+    ):
+        path = _geojson(tmp_path / "empty.geojson", [])
+
+        for empty in (path, gpkg_no_features_geom):
+            assert find_sheets_for_geometry(empty, "1:10000", sheet_system="1992") == []
+            with pytest.raises(ValidationError, match="No features with geometry in"):
+                get_overall_bbox(empty)
+
+
+class TestReadFeatureAreas:
+    """The area of the availability report and of the archive sheets: the
+    polygons of the features in convex pieces (ADR-058)."""
+
+    @pytest.mark.parametrize("area", [ELL, RING, STRIP], ids=["L", "hole", "diagonal"])
+    def test_polygon_is_its_convex_pieces(self, tmp_path, area):
+        path = _gpkg(tmp_path / "area.gpkg", [area])
+
+        pieces = read_feature_areas(path)
+
+        assert all(normalize_convex(piece) == piece for piece in pieces)
+        assert sum(polygon_area(piece) for piece in pieces) == pytest.approx(area.area)
+        union = shapely.union_all([shapely.Polygon(piece) for piece in pieces])
+        assert union.symmetric_difference(area).area == pytest.approx(0, abs=1e-3)
+
+    def test_feature_without_an_area_keeps_its_envelope(self, tmp_path):
+        line = shapely.LineString([(560000, 240000), (567800, 247800)])
+        point = shapely.Point(570000, 250000)
+        path = _gpkg(tmp_path / "features.gpkg", [line, point])
+
+        assert read_feature_areas(path) == [
+            rectangle(560000, 240000, 567800, 247800),
+            rectangle(570000, 250000, 570000, 250000),
+        ]

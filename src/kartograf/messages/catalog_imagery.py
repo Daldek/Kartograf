@@ -12,10 +12,10 @@ MESSAGES = {
         "6.129.30.25.3) albo CZ SM5 (np. CTES96, AS91; JPEG i trzy pliki JGW)",
     ),
     "geometry_description": Text(
-        "Vector file (SHP or GPKG): the sheets that intersect its features; for a "
-        "cutout, its extent.",
-        "Plik geometrii obszaru (SHP albo GPKG): arkusze przecinajace obiekty; "
-        "wycinek (--cutout) - obwiednia geometrii",
+        "Vector file (SHP, GPKG or GeoJSON): the sheets that intersect its features; "
+        "for a cutout, its extent.",
+        "Plik geometrii obszaru (SHP, GPKG albo GeoJSON): arkusze przecinajace "
+        "obiekty; wycinek (--cutout) - obwiednia geometrii",
     ),
     "direction_description": Text(
         "Oblique orthophotos only: view directions `n`, `e`, `s`, `w`; default all "

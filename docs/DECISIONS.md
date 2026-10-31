@@ -36,7 +36,7 @@ each relation is recorded on both sides.
 | [ADR-012](#adr-012-gugikortoprovider-as-a-separate-class-does-not-inherit-from-gugikprovider) | GugikOrtoProvider as a separate class (does not inherit from GugikProvider) | 2026-02-07 | Accepted |
 | [ADR-013](#adr-013-renaming-storage-subdirectories-from-1m5m-to-nmt_1mnmt_5m) | Renaming storage subdirectories from 1m/5m to nmt_1m/nmt_5m | 2026-02-07 | Superseded by [ADR-026](#adr-026-data-layout-per-product--segments-and-templates-in-descriptors); partly supersedes [ADR-005](#adr-005-nmt-directory-structure-split-by-resolution) (directory names) |
 | [ADR-014](#adr-014-bdot10k-category-based-extraction-pt-vs-hydro) | BDOT10k category-based extraction (pt vs hydro) | 2026-02-08 | Superseded by [ADR-016](#adr-016-bdot10k--removing-category-filtering-downloading-the-whole-file) |
-| [ADR-015](#adr-015-pyshp--sqlite3-instead-of-fiona-for-reading-geometry) | pyshp + sqlite3 instead of fiona for reading geometry | 2026-02-08 | Accepted — amended by [ADR-042](#adr-042-channel-engines-unit_package-feature_bbox-atom_files-and-plan-cd-data) (GPKG writing via pyogrio; envelope reading unchanged) |
+| [ADR-015](#adr-015-pyshp--sqlite3-instead-of-fiona-for-reading-geometry) | pyshp + sqlite3 instead of fiona for reading geometry | 2026-02-08 | Accepted — amended by [ADR-042](#adr-042-channel-engines-unit_package-feature_bbox-atom_files-and-plan-cd-data) (GPKG writing via pyogrio; envelope reading unchanged) and [ADR-058](decisions/0058-geometry-requests-select-by-features.md) (the whole feature geometry read and compared; GeoJSON read by GDAL) |
 | [ADR-016](#adr-016-bdot10k--removing-category-filtering-downloading-the-whole-file) | BDOT10k — removing category filtering, downloading the whole file | 2026-03-02 | Accepted; supersedes [ADR-014](#adr-014-bdot10k-category-based-extraction-pt-vs-hydro) |
 | [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) | PL-2000 sheet naming — composition pattern with auto-detection | 2026-02-24 | Accepted — amended by [ADR-026](#adr-026-data-layout-per-product--segments-and-templates-in-descriptors) (PL-2000's own segments; erratum 1) and [ADR-055](decisions/0055-pl2000-zones-by-powiat.md) (a zone of `find_sheets_2000_for_bbox` is the area of its powiats) |
 | [ADR-018](#adr-018-threadpoolexecutor-for-parallel-downloads) | ThreadPoolExecutor for parallel downloads | 2026-03-03 | Accepted; erratum 2: download pools via `kartograf.interrupt.run_parallel`: Ctrl-C cancels the queue and stops transfers (E2E test 0.8.0) |
@@ -79,6 +79,7 @@ each relation is recorded on both sides.
 | [ADR-055](decisions/0055-pl2000-zones-by-powiat.md) | PL-2000 zones are areas of powiats (§ 22), not longitude strips | 2026-10-25 | Accepted; amends [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (zones of the PL-2000 sheet search; `find_sheet_outlines`); erratum 1: `SheetOutline.bbox`, the envelope of the whole sheet |
 | [ADR-056](decisions/0056-shared-index-answers-and-refresh-ttl.md) | One cached index answer for the report and the plans; the TTL of refresh mode | 2026-10-26 | Accepted; amends [ADR-036](#adr-036-versioned-store) (a refreshing cache reads the answers younger than its `refresh_ttl_seconds`) and [ADR-041](#adr-041-product-variant-registry-wfs-sheet-index-for-nmtnmpt-and-availability-report) (the report's index answers serve the sheet download, the archive sheets and the LAZ tiles) |
 | [ADR-057](decisions/0057-projects-move-to-archiwista.md) | Projects move to Archiwista | 2026-10-31 | Accepted; supersedes [ADR-040](#adr-040-project-manifest-and-pinned-versions); partly supersedes [ADR-051](decisions/0051-result-envelope-and-outcome-exit-codes.md) (decision 1: `check` of `exit_code_of`; decision 3: the units of `download_project` and of the project checks) and [ADR-052](decisions/0052-command-catalog-documents-and-mcp-server.md) (decision 9: the family `project`, the hidden project tools and the paths nested in `project add`; erratum 3) |
+| [ADR-058](decisions/0058-geometry-requests-select-by-features.md) | A geometry request selects by its features, not their envelopes; GeoJSON area files | 2026-10-31 | Accepted; amends [ADR-015](#adr-015-pyshp--sqlite3-instead-of-fiona-for-reading-geometry) (feature geometry read and compared, not only envelopes; GeoJSON read by GDAL) |
 
 ---
 
@@ -396,7 +397,7 @@ of positive area from (a) and the wider envelope of the EPSG:2180 bbox are uncha
 ## ADR-015: pyshp + sqlite3 instead of fiona for reading geometry
 
 **Date:** 2026-02-08
-**Status:** Accepted — amended by ADR-042 (GPKG writing via pyogrio; envelope reading unchanged)
+**Status:** Accepted — amended by ADR-042 (GPKG writing via pyogrio; envelope reading unchanged) and ADR-058 (the whole feature geometry read and compared; GeoJSON read by GDAL)
 
 **Context:** The user needs to download data for areas defined by SHP/GPKG files. A library is needed to read the geometry.
 

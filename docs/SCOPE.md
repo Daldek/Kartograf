@@ -25,7 +25,7 @@ Kartograf automates this process by offering:
 - **Unified API** - a uniform interface for different data sources
 - **Sheet code parser** - validation and parsing of topographic map sheet codes
 - **Data providers** - an abstraction over various services (GUGiK, CUZK, Copernicus, ISRIC)
-- **Area selection** - sheet code, bbox, geometry file (SHP/GPKG), unit code (TERYT, KU), whole country
+- **Area selection** - sheet code, bbox, geometry file (SHP/GPKG/GeoJSON; PL sheets by the features, not their envelopes - ADR-058), unit code (TERYT, KU), whole country
 - **Automatic download** - downloading many files with one command
 - **File organisation** - automatic directory structure
 
@@ -51,7 +51,7 @@ Kartograf automates this process by offering:
 - Reverse lookup: bbox → sheet codes (find_sheets_for_bbox, find_sheets_2000_for_bbox;
   bbox in EPSG:2180, EPSG:4326 or EPSG:2176-2179 for both systems)
 - Reverse lookup: geometry file → sheet codes (find_sheets_for_geometry)
-- Area selection: sheet code, bbox, geometry file (SHP/GPKG)
+- Area selection: sheet code, bbox, geometry file (SHP/GPKG/GeoJSON)
 - Download by sheet code → ASC (OpenData); sheet record from the GUGiK WFS
   sheet index (since 0.8.0; yearly types from GetCapabilities, hard filter on sheet code,
   CRS, resolution and format — ADR-041)
@@ -1204,7 +1204,7 @@ kartograf/
 │   ├── parser_2000.py       # Parser2000 — PL-2000 sheet code parser
 │   ├── parser_tm33.py       # ParserTM33 — computable CZ 2x2 km tile grid (EPSG:3045)
 │   ├── parser_registry.py   # Sheet system registry (pl1992, pl2000, cz_tm33, cz_sm5)
-│   ├── geometry.py          # SHP/GPKG reading, find_sheets_for_geometry, get_overall_bbox
+│   ├── geometry.py          # SHP/GPKG/GeoJSON reading, find_sheets_for_geometry, get_overall_bbox
 │   └── coverage.py          # Convex polygons (intersection/difference/buffer) — LAZ tile selection (ADR-029)
 ├── sources/               # Source descriptors as data (zero IO on import)
 │   ├── descriptor.py        # SourceDescriptor (+variants), AccessChannel (+endpoint, +params: UnitPackageParams/FeatureBBoxParams, ADR-042), TransportKind, LicenseInfo, CountryProfile

@@ -56,10 +56,10 @@ MESSAGES = {
         "Uklad wspolrzednych bbox (wymagany z bbox): {pl_bbox_crs}",
     ),
     "geometry_description": Text(
-        "Vector file (SHP or GPKG): the sheets that intersect its features; exactly "
-        "one of `bbox` and `geometry`.",
-        "Plik geometrii (SHP albo GPKG): godla przecinajace obiekty pliku; dokladnie "
-        "jeden z --bbox i --geometry",
+        "Vector file (SHP, GPKG or GeoJSON): the sheets that intersect its features; "
+        "exactly one of `bbox` and `geometry`.",
+        "Plik geometrii (SHP, GPKG albo GeoJSON): godla przecinajace obiekty pliku; "
+        "dokladnie jeden z --bbox i --geometry",
     ),
     "layer_description": Text(
         "GPKG layer of `geometry` (default: the first one).",

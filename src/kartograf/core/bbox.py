@@ -2,12 +2,13 @@
 Bounding box and its envelope in another coordinate system.
 
 A leaf module of the ``core`` layer (dependencies: ``pyproj``, ``numpy``,
-``kartograf.exceptions``): the single place that decides "how to convert a
-bbox between CRSs". The envelope is ALWAYS computed from densified edges: the
-image of a rectangle in another CRS is a quadrilateral with curved sides, and
-four corners miss the strip near the central meridian of the target CRS (19E
-for EPSG:2180, 15/18/21/24E for PL-2000 zones; up to ~480 m for a 2 x 0.2 deg
-bbox).
+``shapely``, ``kartograf.exceptions``): the single place that decides "how to
+convert a bbox between CRSs". The envelope is ALWAYS computed from densified
+edges: the image of a rectangle in another CRS is a quadrilateral with curved
+sides, and four corners miss the strip near the central meridian of the
+target CRS (19E for EPSG:2180, 15/18/21/24E for PL-2000 zones; up to ~480 m
+for a 2 x 0.2 deg bbox). A geometry (``transform_shape``) moves vertex by
+vertex: its edges are densified once, in its own CRS, by the caller.
 
 A pinned operation (ADR-024, ``kartograf.transform.crs.PinnedTransform``)
 comes in through duck typing (``transformer=``): ``core`` does not import
@@ -170,6 +171,37 @@ def transform_bbox(bbox: BBox, target_crs: str, *, transformer: Any = None) -> B
         float(np.max(out_y)),
         target_crs,
     )
+
+
+def transform_shape(shape: Any, source_crs: str, target_crs: str) -> Any:
+    """
+    Move a shapely geometry to another CRS, vertex by vertex (ADR-058).
+
+    The vertices go through the cached pyproj transformer of the CRS pair, the
+    one ``transform_bbox`` uses. The image of a straight edge is a curve
+    (``transform_bbox``), so a caller densifies a geometry ONCE, in the CRS it
+    was drawn in (``shapely.segmentize``): its new vertices lie on its edges
+    there, and they move exactly; densifying again in another CRS would put
+    vertices on the chords of the curves.
+
+    Parameters
+    ----------
+    shape : shapely.Geometry
+        Geometry in ``source_crs``
+    source_crs, target_crs : str
+        Labels or WKT, as for ``transform_bbox``
+
+    Returns
+    -------
+    shapely.Geometry
+        The geometry in ``target_crs``; the same CRS -> ``shape`` itself.
+    """
+    if _same_crs(source_crs, target_crs):
+        return shape
+    import shapely
+
+    transformer = _transformer(source_crs, target_crs)
+    return shapely.transform(shape, transformer.transform, interleaved=False)
 
 
 def is_czech_crs(label: str) -> bool:

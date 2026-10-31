@@ -434,8 +434,8 @@ kartograf/
 │   ├── parser_registry.py  # Registry of sheet systems (SYSTEMS: pl2000, cz_tm33, cz_sm5,
 │   │                       # pl1992), detect_system/path_parts with strip(), CZ patterns
 │   │                       # (SM5: 2 or 4 letters + 2 digits, e.g. CTES96, AS91)
-│   ├── geometry.py         # Reading SHP/GPKG, resolve_layer (layer choice),
-│   │                       # find_sheets_for_geometry, get_overall_bbox
+│   ├── geometry.py         # Reading SHP/GPKG/GeoJSON, resolve_layer (layer choice),
+│   │                       # find_sheets_for_geometry, read_feature_areas, get_overall_bbox
 │   └── coverage.py         # Convex polygons: intersection, difference, buffer (LAZ tile selection)
 ├── sources/             # Source descriptors as data (zero IO on import)
 │   ├── descriptor.py    # SourceDescriptor (+ resolve_subdir, variants), AccessChannel,
@@ -2355,7 +2355,13 @@ The bbox goes to `download_data` (`download/data.py`), which resolves the countr
 (section 4.6), and the Polish part goes to the PL sheet track. `find_sheets_for_bbox` (pure grid
 mathematics, no network queries — ADR-010) returns the list of 1:10000 sheet codes, which
 `DownloadManager` downloads in parallel. In `--geometry` mode the sheets are determined by
-the geometry of each object (`find_sheets_for_geometry`), not by its envelope.
+the geometry of each object (`find_sheets_for_geometry` -> `find_sheets_for_shape`, ADR-058),
+not by its envelope: the envelope pre-selects the sheets of `find_sheets_for_bbox`, and a sheet
+stays when the object meets its frame in the CRS of the sheet system (PL-1992 WGS84, PL-2000 the
+zone CRS and only the part of the sheet inside its zone): a polygon with a positive area, a line
+along a positive length, a point in its one sheet. The object's edges are densified once, at
+100 m in the CRS of its file, before its vertices move (`core.bbox.transform_shape`). The file
+is SHP, GPKG or GeoJSON (GDAL; RFC 7946 WGS84, a legacy `crs` member honoured).
 When `--geometry` points to a GPKG with several layers and `--layer` is not given,
 the library selects the first `gpkg_contents` layer and emits ONCE before
 the work a `Notice` `GEOMETRY_LAYER_DEFAULT` with its name, the remaining layers
@@ -2404,7 +2410,8 @@ PL-2000 sheets), so they are not determined by the sheet code grid but by the sh
 `download_data` -> `_download_pl_archive` (`download/data.py`) with the area
 as convex polygons in EPSG:2180 (`--sheet` = sheet frame
 `sheet_frame_2180`, `--bbox` = envelope `bbox_to_2180`, `--geometry` =
-envelopes of the objects) calls `GugikProvider.index_sheets(areas, system=,
+the polygons of the objects in convex pieces, a point or a line by its envelope,
+`read_feature_areas`, ADR-058) calls `GugikProvider.index_sheets(areas, system=,
 min_year=, max_year=)`: variant records (hard filter on format,
 resolution and system) of the yearly types within the year range whose frame
 (`msGeometry`, otherwise the sheet frame) intersects the area by more than an edge
@@ -3372,8 +3379,9 @@ or a CZ sheet code = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    that the download of this selection covers: NMT/NMPT `sheet` = sheet code frame
    (`sheet_frame_2180`: corners in the sheet system, densified edges;
    the PL-2000 frame is not a rectangle in EPSG:2180), `bbox` = envelope
-   `bbox_to_2180`, `geometry` = envelopes of the layer's objects
-   (`read_feature_bboxes`, like the `download_data` sheets); LAZ `sheet` = sheet code
+   `bbox_to_2180`, `geometry` = the polygons of the layer's objects in convex pieces, a point
+   or a line by its envelope (`read_feature_areas`, the sheets `download_data` selects,
+   ADR-058); LAZ `sheet` = sheet code
    frame as for NMT, `geometry` = envelope of the whole layer (like
    `download_laz_area`).
 2. **Services and types:** the WFS services of the product from the registry (`variants(product=)`
