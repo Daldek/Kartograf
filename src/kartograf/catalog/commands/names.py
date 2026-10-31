@@ -25,14 +25,12 @@ def _content(products: Products) -> tuple[Param, ...]:
             format_help,
             metavar="FORMAT",
             allowed=lambda: choice_values(products(), "format"),
-            task=True,
         ),
         Param(
             "horizontal_crs",
             "str",
             message("catalog_names.horizontal_crs_description"),
             metavar=message("catalog.metavar_epsg_code"),
-            task=True,
         ),
     )
 

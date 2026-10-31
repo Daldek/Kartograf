@@ -7,13 +7,12 @@ import pytest
 
 import kartograf
 
-# Modules of the data and project tracks (``check_source_grid`` is a mosaic
-# helper, not a check of a download).
+# Modules of the data tracks (``check_source_grid`` is a mosaic helper, not a check
+# of a download).
 _TRACK_MODULES = (
     "kartograf.download.",
     "kartograf.landcover.",
     "kartograf.hydrology.",
-    "kartograf.project.",
 )
 
 
@@ -30,12 +29,9 @@ def _download_and_check_functions() -> list[str]:
 def test_download_and_check_functions_are_keyword_only(name):
     """Every download/check function of ``kartograf.__all__`` takes its
     selection by name, as ``download_data`` (``download_pl_cutout(bbox, ...)``
-    is a ``TypeError``); a project function keeps only the project directory
-    positional - the handle shared by all project functions."""
+    is a ``TypeError``)."""
     params = inspect.signature(getattr(kartograf, name)).parameters.values()
-    positional = [p.name for p in params if p.kind is not p.KEYWORD_ONLY]
-    expected = ["project_dir"] if name.endswith("_project") else []
-    assert positional == expected
+    assert [p.name for p in params if p.kind is not p.KEYWORD_ONLY] == []
 
 
 # Functions that return a document (spec 5.5): all arguments by name, except the

@@ -38,7 +38,6 @@ def _content(products: Products) -> tuple[Param, ...]:
             metavar=message("catalog.metavar_scale"),
             allowed=lambda: choice_values(products(), "scale"),
             required=True,
-            task=True,
         ),
         Param(
             "format",
@@ -47,7 +46,6 @@ def _content(products: Products) -> tuple[Param, ...]:
             metavar="FORMAT",
             allowed=lambda: choice_values(products(), "format"),
             required=True,
-            task=True,
         ),
         Param(
             "sheet_system",
@@ -55,7 +53,6 @@ def _content(products: Products) -> tuple[Param, ...]:
             sheet_system_help,
             metavar=message("catalog.metavar_crs"),
             allowed=lambda: choice_values(products(), "sheet_system"),
-            task=True,
         ),
     )
 

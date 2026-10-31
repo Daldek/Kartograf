@@ -35,9 +35,9 @@ from tests.integration.test_manager_campaigns import (
     tag,
 )
 from tests.integration.test_plain_output_products import URL_0208, URL_0224
+from tests.support.data_fixtures import pl_sheets
 from tests.support.errors import error_document, without_error_document
 from tests.support.fake_packages import FakePackageSession
-from tests.support.project_fixtures import pl_sheets
 
 NMT = [
     *("elevation", "download", "--product", "nmt", "--sheet", G),
@@ -356,29 +356,6 @@ def test_a_plain_land_cover_package_is_one_file_and_the_plan_says_write(
     assert refused[0] == 4 and get.call_count == 1
     assert listing(out) == ["1465.gpkg"]
     assert not out.joinpath(STAGING).exists()
-
-
-def test_a_project_takes_no_output_dir_and_says_so(capsys, tmp_path, default_root):
-    project = tmp_path / "project"
-    project.mkdir()
-    assert run(capsys, "project", "init", "--project", project)[0] == 0
-
-    code, _, stderr = run(
-        capsys,
-        *("project", "add", "--project", project, "area"),
-        *NMT,
-        *("-o", tmp_path / "out"),
-    )
-
-    assert code == 2
-    document = error_document(stderr)
-    assert (document["details"]["reason"], document["details"]["option"]) == (
-        "store_only_option",
-        "--output-dir",
-    )
-    assert "--root" in document["hint"]
-    manifest = json.loads((project / "kartograf-project.json").read_text())
-    assert manifest["tasks"] == []
 
 
 def test_a_plain_write_needs_no_link_of_any_kind(capsys, tmp_path, monkeypatch):

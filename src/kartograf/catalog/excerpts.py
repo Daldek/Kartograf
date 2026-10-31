@@ -109,31 +109,6 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
         "product": "corine",
         "years": [{"year": 2018, "data": "clms"}],
     },
-    "kartograf-project-state/1": {
-        "schema": "kartograf-project-state/1",
-        "directory": "/work/project",
-        "root": _STORE,
-        "tasks": [
-            {
-                "name": "teren",
-                "command": "elevation download",
-                "options": {"product": "nmt", "sheet": "N-34-130-D-d-2-4"},
-            }
-        ],
-    },
-    "kartograf-project-report/1": {
-        "schema": "kartograf-project-report/1",
-        "project": {"directory": "/work/project", "root": _STORE},
-        "tasks": [{"name": "teren", "ok": True}],
-        "ok": True,
-    },
-    "kartograf-project-check/1": {
-        "schema": "kartograf-project-check/1",
-        "project": {"directory": "/work/project", "root": _STORE},
-        "files": [{"path": _PATH, "status": "ok"}],
-        "not_downloaded": [],
-        "ok": True,
-    },
     "kartograf-cache/1": {
         "schema": "kartograf-cache/1",
         "action": "stats",

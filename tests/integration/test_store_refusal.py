@@ -53,12 +53,6 @@ from kartograf.landcover.manager import (
     download_soil,
 )
 from kartograf.marker import MARKER
-from kartograf.project.operations import (
-    add_project_task,
-    check_project,
-    download_project,
-    init_project,
-)
 from kartograf.testing import build_fixture_store
 from tests.integration.test_collections import AREA
 from tests.integration.test_cz_contours import AREA as CONTOURS_AREA
@@ -444,65 +438,6 @@ def test_a_plain_run_into_a_store_is_the_conflict_output_in_store_before_a_reque
     assert error.hint is not None and "--root" in error.hint
     assert asked == []  # the directory says it, no list of targets is needed
     assert not out.exists()
-
-
-# --------------------------------------------------------------------------
-# The project: before any task
-# --------------------------------------------------------------------------
-
-
-def project_in(tmp_path: Path, root: Path):
-    project = tmp_path / "project"
-    init_project(project, root=root)
-    add_project_task(
-        project,
-        name="area",
-        command="elevation download",
-        options={"sheet": SHEETS, **PL_SHEETS},
-    )
-    return project
-
-
-@pytest.mark.parametrize("refusal", REFUSALS)
-def test_a_project_download_is_refused_before_its_first_task(tmp_path, asked, refusal):
-    expected = REFUSALS[refusal]
-    root = expected.prepare(tmp_path)
-    project = project_in(tmp_path, root)
-    before = tree(tmp_path)
-
-    with pytest.raises(expected.error) as caught:
-        download_project(project)
-
-    assert (caught.value.code, caught.value.reason) == (expected.code, expected.reason)
-    assert asked == []
-    assert tree(tmp_path) == before
-
-
-@pytest.mark.parametrize("refusal", CONFLICTS)
-def test_the_check_of_a_project_lists_the_conflict_of_every_task(
-    tmp_path, asked, refusal
-):
-    root = REFUSALS[refusal].prepare(tmp_path)
-    project = project_in(tmp_path, root)
-
-    report = check_project(project)
-
-    (entry,) = report.files
-    assert (entry.task, entry.status) == ("area", "conflict")
-    assert entry.detail is not None and entry.unit == entry.path == ""
-    assert report.ok and report.not_downloaded == ()
-    assert asked == []
-
-
-def test_the_check_of_a_project_in_an_unmarked_store_fails_as_the_download(
-    tmp_path, asked
-):
-    project = project_in(tmp_path, unmarked(tmp_path))
-
-    with pytest.raises(StoreUnavailableError):
-        check_project(project)
-
-    assert asked == []
 
 
 # --------------------------------------------------------------------------

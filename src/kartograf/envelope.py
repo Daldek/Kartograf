@@ -36,7 +36,6 @@ from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.hydrology.hsg import HsgReport
 from kartograf.landcover.manager import LandCoverReport, SoilReport
 from kartograf.notices import Notice
-from kartograf.project.model import FileCheck, ProjectCheck, ProjectReport, TaskResult
 from kartograf.serialization import Document, EncodeContext, encode
 
 __all__ = [
@@ -109,8 +108,7 @@ class CommandResult[T: Document](Document):
     command : str
         The catalog id of the command (``elevation download``).
     check : bool
-        The run was a plan without effects (the result is ``kartograf-plan/1``, or the
-        check of a project).
+        The run was a plan without effects (the result is ``kartograf-plan/1``).
     status : {"ok", "partial", "failed", "cancelled"}
         The outcome; ``partial`` has an ``ok`` and a ``failed`` item, ``failed`` has
         no ``ok`` item. ``cancelled`` is never produced: a cancelled command is the
@@ -192,7 +190,7 @@ def _stale_item(position: PlanItem) -> ResultItem:
     )
 
 
-def _download(report: _DownloadReport, check: bool) -> _Reading:
+def _download(report: _DownloadReport) -> _Reading:
     """Read a ``kartograf-download/1`` report: a unit per file, failure and stale pin.
 
     A failed part of a successful report (``--country auto`` with one country down,
@@ -223,12 +221,12 @@ def _position_item(position: PlanItem) -> ResultItem:
     return ResultItem(position.store_path, "ok")
 
 
-def _plan(plan: UpdatePlan, check: bool) -> _Reading:
+def _plan(plan: UpdatePlan) -> _Reading:
     """Read a plan: a position per unit; only one the source could not tell fails."""
     return plan.ok, tuple(_position_item(item) for item in plan.items), plan.notices
 
 
-def _availability(report: AvailabilityReport, check: bool) -> _Reading:
+def _availability(report: AvailabilityReport) -> _Reading:
     """Read an availability report: a unit per country, a country not checked fails."""
     items = [
         ResultItem(country, "ok")
@@ -238,73 +236,9 @@ def _availability(report: AvailabilityReport, check: bool) -> _Reading:
     return report.ok, tuple(items), report.notices
 
 
-def _task_item(task: TaskResult) -> ResultItem:
-    if task.outcome != "failed":
-        return ResultItem(task.name, "ok")
-    return ResultItem(
-        task.name,
-        "failed",
-        task.code or "internal_error",
-        task.reason,
-        "; ".join(task.errors) or None,
-    )
-
-
-def _project_report(report: ProjectReport, check: bool) -> _Reading:
-    """Read the run of a project: a unit per task."""
-    return report.ok, tuple(_task_item(task) for task in report.tasks), report.notices
-
-
-# the states of a pinned file that fail its task: (code, reason)
-_CHECK_FAILURES: Mapping[str, tuple[str, str]] = {
-    "missing": ("not_found", "missing_file"),
-    "corrupt": ("data_error", "corrupt_file"),
-    "check_failed": ("source_unavailable", "check_failed"),
-}
-
-
-def _file_item(file: FileCheck, check: bool) -> ResultItem:
-    """Return the item of a file: its task, failed by a state the command rejects.
-
-    ``missing`` is not a failure of a check (the plan restores the version).
-    """
-    if file.status in _CHECK_FAILURES and not (check and file.status == "missing"):
-        code, reason = _CHECK_FAILURES[file.status]
-        return ResultItem(file.task, "failed", code, reason, file.detail)
-    return ResultItem(file.task, "ok")
-
-
-def _project_check(report: ProjectCheck, check: bool) -> _Reading:
-    """Read ``project status``, ``verify`` and the check of a download: a unit per task.
-
-    A task fails by its first file in a state the command rejects; a task with no pins
-    is a failure of ``status`` and ``verify`` but only a plan of a check (the download
-    will pin it).
-    """
-    tasks: dict[str, ResultItem] = {}
-    for name in report.not_downloaded:
-        tasks[name] = (
-            ResultItem(name, "ok")
-            if check
-            else ResultItem(
-                name,
-                "failed",
-                "not_found",
-                "not_downloaded",
-                "The task has no pinned files yet.",
-            )
-        )
-    for file in report.files:
-        item = _file_item(file, check)
-        known = tasks.get(item.id)
-        if known is None or (known.status == "ok" and item.status == "failed"):
-            tasks[item.id] = item
-    return report.ok, tuple(tasks.values()), report.notices
-
-
 # document type -> its reader (by type: a document with a verdict nobody reads is a
 # program error, not a success)
-_READERS: Mapping[type[Document], Callable[[Any, bool], _Reading]] = {
+_READERS: Mapping[type[Document], Callable[[Any], _Reading]] = {
     DataReport: _download,
     CollectionReport: _download,
     LandCoverReport: _download,
@@ -312,23 +246,16 @@ _READERS: Mapping[type[Document], Callable[[Any, bool], _Reading]] = {
     HsgReport: _download,
     UpdatePlan: _plan,
     AvailabilityReport: _availability,
-    ProjectReport: _project_report,
-    ProjectCheck: _project_check,
 }
 
 
-def outcome_of(
-    document: Document | None, *, check: bool = False, command: str = ""
-) -> Outcome:
+def outcome_of(document: Document | None, *, command: str = "") -> Outcome:
     """Return the status, the units and the notices of the document of a command.
 
     Parameters
     ----------
     document : Document or None
         The domain document of the command; ``None`` (nothing produced) is ``ok``.
-    check : bool
-        The command was a plan: a project task with no pins is a unit to download, not
-        a failure.
     command : str
         The catalog id of the command: the id of the unit that stands for a verdict
         ``ok: false`` the document gives no failed unit for.
@@ -348,7 +275,7 @@ def outcome_of(
                 "kartograf.envelope"
             )
         return Outcome("ok", (), ())
-    ok, items, notices = reader(document, check)
+    ok, items, notices = reader(document)
     if ok:
         return Outcome("ok", items, notices)
     if not any(item.status == "failed" for item in items):
@@ -379,12 +306,12 @@ def wrap[T: Document](
     check : bool
         The run was a plan without effects.
     """
-    outcome = outcome_of(document, check=check, command=command)
+    outcome = outcome_of(document, command=command)
     return CommandResult(
         command, check, outcome.status, document, outcome.items, outcome.notices
     )
 
 
-def exit_code_of(document: Document | None, *, check: bool = False) -> int:
+def exit_code_of(document: Document | None) -> int:
     """Return the exit code of the CLI for the document of a command (0, 10 or 11)."""
-    return OUTCOMES[outcome_of(document, check=check).status]
+    return OUTCOMES[outcome_of(document).status]

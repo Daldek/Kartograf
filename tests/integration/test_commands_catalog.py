@@ -2,7 +2,7 @@
 
 ``parse_command``, ``validate_command``, ``format_command``, ``run_command`` and
 ``check_command`` take any command of ``kartograf commands list``, not only the data
-commands of a project task: what they call, check and write comes from the declaration
+commands: what they call, check and write comes from the declaration
 of the command (``kartograf.catalog``). The tests run every command through the layer
 and against the CLI (the envelope ``--json`` prints), and check the checks against
 the declarations themselves.
@@ -21,7 +21,6 @@ from kartograf import (
     check_command,
     command_schema,
     format_command,
-    init_project,
     init_store,
     list_commands,
     parse_command,
@@ -33,26 +32,32 @@ from kartograf.catalog.commands import declared
 from kartograf.catalog.formatting import example_command_line
 from kartograf.catalog.spec import RUN_OPTIONS, TARGET_OPTIONS, Command
 from kartograf.cli import main
+from kartograf.data_commands import DATA_COMMANDS
 from kartograf.exceptions import (
     ConflictError,
     InvalidLayoutError,
     StoreUnavailableError,
 )
 from kartograf.marker import MARKER, store_refusal
-from kartograf.project.commands import COMMANDS
 from kartograf.testing import build_fixture_store
-from tests.contract.test_cli_json import OFFLINE, _json_add, _offline_lines, _project
-from tests.support.project_fixtures import pl_sheets
+from tests.contract.test_cli_json import OFFLINE, _offline_lines
 
 CATALOG = {command.id: command for command in declared().commands}
 # What runs offline has a command line in the CLI tests of ``--json``. The other
 # commands are the twelve data commands (``test_commands_layer``, the parity tests)
 # and ``elevation availability`` (``test_availability``, ``test_cli_json``).
-NETWORK = {"elevation availability", *COMMANDS}
+NETWORK = {"elevation availability", *DATA_COMMANDS}
 PLANNED = {command.id for command in CATALOG.values() if command.check_function}
-# The commands that the generic check of a call applies to: the data commands of a
-# project task have the checks of their own function.
-GENERIC = [c for c in CATALOG.values() if not c.project_task]
+# The commands that the generic check of a call applies to: the data commands have
+# the checks of their own function.
+GENERIC = [c for c in CATALOG.values() if c.kind != "data"]
+# A valid call of ``elevation download``.
+ELEVATION = {
+    "product": "nmt",
+    "sheet": "N-34-130-D-d-2-4",
+    "resolution": "1m",
+    "vertical_crs": "EVRF2007",
+}
 
 
 def _targets(run: dict[str, object]) -> dict[str, Any]:
@@ -61,9 +66,10 @@ def _targets(run: dict[str, object]) -> dict[str, Any]:
 
 
 def _environment(base: Path) -> dict[str, list[str]]:
-    """A project and a store in ``base``: the line of every offline command."""
+    """A store in ``base``: the line of every offline command."""
     base.mkdir()
-    return _offline_lines(_project(base), base)
+    build_fixture_store(base / "store")
+    return _offline_lines(base)
 
 
 def _named(text: str, base: Path) -> object:
@@ -87,19 +93,17 @@ def test_every_command_of_the_catalog_is_driven_by_a_test():
 def test_run_command_gives_the_envelope_the_cli_prints(
     command, tmp_path, monkeypatch, capsys
 ):
-    """The document of every read-only command, the marker of ``store init`` and the
-    commands of a project: ``run_command`` of the line the CLI is given has the
-    envelope ``--json`` prints (two copies of the project and of the store)."""
+    """The document of every read-only command and the marker of ``store init``:
+    ``run_command`` of the line the CLI is given has the envelope ``--json`` prints
+    (two copies of the store)."""
     monkeypatch.chdir(tmp_path)
     cli_lines = _environment(tmp_path / "cli")
     api_lines = _environment(tmp_path / "api")
     argv = cli_lines[command]
-    with pl_sheets():
-        code = main(_json_add(argv) if command == "project add" else [*argv, "--json"])
+    code = main([*argv, "--json"])
     printed = capsys.readouterr().out
     call = parse_command(api_lines[command])
-    with pl_sheets():
-        envelope = run_command(call.command, call.options, **_targets(call.run))
+    envelope = run_command(call.command, call.options, **_targets(call.run))
 
     assert (envelope.command, envelope.check) == (command, False)
     assert envelope.exit_code == code
@@ -155,7 +159,7 @@ def test_the_commands_with_a_plan_are_the_ones_that_say_check_in_the_catalog():
     entry = command_schema("store init").commands[0]
 
     assert {name for name, check in listed.items() if check} == PLANNED
-    assert {*COMMANDS, "project download", "store init"} == PLANNED
+    assert {*DATA_COMMANDS, "store init"} == PLANNED
     assert (entry.check, entry.function) == ("store init", "init_store")
     assert "check" in {option.name for option in entry.options}
 
@@ -278,12 +282,9 @@ def test_the_options_of_a_call_are_the_arguments_that_are_no_target_or_run_optio
 
     assert not names & {*TARGET_OPTIONS, *RUN_OPTIONS}
     assert all(param.fixed is None for param in command.call_options)
-    if command.project_task:
-        assert names == set(command.task_options)
-    # every option can be written on a line: as a flag, as a word, or - the data
-    # command of ``project add`` - as the words after the task name
+    # every option can be written on a line: as a flag or as a word
     for param in command.call_options:
-        assert param.cli_flag or param.positional or command.id == "project add"
+        assert param.cli_flag or param.positional
 
 
 @pytest.mark.parametrize("command", GENERIC, ids=lambda c: c.id)
@@ -328,7 +329,6 @@ WRONG = {
     "path": "",
     "str_list": "a,b",
     "bbox": [1, 2, 3],
-    "options": "x",
 }
 
 
@@ -428,9 +428,9 @@ def test_a_target_and_the_options_of_a_run_are_given_by_name(tmp_path):
     with pytest.raises(ValidationError) as no_workers:
         run_command("store overview", {}, root=root, workers=2)
     with pytest.raises(ValidationError) as low:
-        run_command("project download", {"project_dir": "."}, workers=0)
+        run_command("elevation download", ELEVATION, root=root, workers=0)
     with pytest.raises(ValidationError) as mode:
-        run_command("project download", {"project_dir": "."}, update="check")  # type: ignore[arg-type]
+        run_command("elevation download", ELEVATION, root=root, update="check")  # type: ignore[arg-type]
 
     assert overview.result.root == root  # type: ignore[attr-defined]
     assert in_options.value.option == "root"
@@ -466,133 +466,3 @@ def test_an_unknown_command_names_the_commands_of_the_catalog(call):
 
     assert caught.value.option == "command"
     assert caught.value.allowed == tuple(CATALOG)
-
-
-# -- project add: its task is a data command carried as ``command`` and ``options`` ----
-
-
-def test_project_add_is_one_call_of_the_layer_in_both_directions():
-    words = (
-        "teren elevation download --product nmt --sheet N-34-130-D-d-2-4 "
-        "--resolution 1m --vertical-crs EVRF2007"
-    )
-    options = {
-        "product": "nmt",
-        "sheet": "N-34-130-D-d-2-4",
-        "resolution": "1m",
-        "vertical_crs": "EVRF2007",
-    }
-
-    call = parse_command(f"project add --project p {words}")
-
-    assert call.command == "project add" and call.run == {}
-    assert call.options == {
-        "project_dir": "p",
-        "name": "teren",
-        "command": "elevation download",
-        "options": options,
-    }
-    line = format_command(call.command, call.options)
-    assert line == f"kartograf project add --project p {words}"
-    assert parse_command(line) == call
-    validate_command(call.command, call.options)
-    with pytest.raises(ValidationError) as nested:
-        validate_command(call.command, {**call.options, "options": {"product": "x"}})
-    assert nested.value.option == "product"
-
-
-@pytest.mark.parametrize(
-    ("line", "option"),
-    [
-        ("project add t sheet parse N-34", "command"),
-        ("project add t elevation download --product nmt --upgrade", "upgrade"),
-        ("project add t elevation download --product nmt --root ./data", "root"),
-        ("project add t elevation download --product nmt --json", "json"),
-    ],
-)
-def test_project_add_takes_only_a_data_command_without_the_flags_of_a_run(line, option):
-    with pytest.raises(ValidationError) as caught:
-        parse_command(line)
-
-    assert caught.value.option == option
-
-
-def test_project_add_and_remove_change_the_manifest_as_run_command(tmp_path):
-    project = tmp_path / "project"
-    init_project(project, root=tmp_path / "store")
-    task = {
-        "project_dir": str(project),
-        "name": "teren",
-        "command": "elevation download",
-        "options": {
-            "product": "nmt",
-            "sheet": "N-34-130-D-d-2-4",
-            "resolution": "1m",
-            "vertical_crs": "EVRF2007",
-        },
-    }
-
-    added = run_command("project add", task)
-    removed = run_command(
-        "project remove", {"project_dir": str(project), "name": "teren"}
-    )
-
-    assert [t.name for t in added.result.tasks] == ["teren"]  # type: ignore[attr-defined]
-    assert removed.result.tasks == ()  # type: ignore[attr-defined]
-    assert added.to_dict()["result"]["schema"] == "kartograf-project-state/1"
-
-
-@pytest.mark.parametrize(
-    "options",
-    [
-        {
-            "product": "nmt",
-            "country": "pl",
-            "bbox": [565000, 242000, 565500, 242500],
-            "bbox_crs": "EPSG:2180",
-            "sheet_system": "1992",
-            "resolution": "5m",
-            "vertical_crs": "EVRF2007",
-        },
-        {
-            "product": "nmt",
-            "country": "cz",
-            "bbox": [-447000, -1114000, -446000, -1113000],
-            "bbox_crs": "EPSG:5514",
-            "cutout": True,
-            "horizontal_crs": "EPSG:5514",
-            "resolution": "5m",
-            "vertical_crs": "Bpv",
-        },
-    ],
-    ids=["pl-sheets", "cz-cutout"],
-)
-def test_project_add_takes_a_box_in_the_json_form_and_adds_the_task_of_the_cli(
-    tmp_path, options
-):
-    """A box of the task (``bbox`` with ``bbox_crs``, the form of the call) reaches
-    ``add_project_task`` as one ``BBox``: the manifest holds the task that ``kartograf
-    project add`` writes for the same line (Archiwista's request)."""
-    layer, cli = tmp_path / "layer", tmp_path / "cli"
-    for project in (layer, cli):
-        init_project(project, root=tmp_path / "store")
-    words = shlex.split(format_command("elevation download", options))[1:]
-
-    added = run_command(
-        "project add",
-        {
-            "project_dir": str(layer),
-            "name": "teren",
-            "command": "elevation download",
-            "options": options,
-        },
-    )
-    code = main(["project", "add", "--project", str(cli), "teren", *words])
-
-    def tasks(project: Path) -> object:
-        manifest = project / "kartograf-project.json"
-        return json.loads(manifest.read_text(encoding="utf-8"))["tasks"]
-
-    assert code == 0
-    assert tasks(layer) == tasks(cli)
-    assert added.to_dict()["result"]["tasks"][0]["options"] == options

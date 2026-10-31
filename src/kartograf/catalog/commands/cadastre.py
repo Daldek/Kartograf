@@ -29,7 +29,6 @@ def _content(products: Products) -> tuple[Param, ...]:
             format_help,
             metavar="FORMAT",
             allowed=lambda: choice_values(products(), "format"),
-            task=True,
         ),
     )
 

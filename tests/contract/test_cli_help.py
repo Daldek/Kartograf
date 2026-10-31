@@ -1,11 +1,11 @@
 """Help, examples and ``kartograf sheet parse`` of the 0.8.0 UX review: what
 ``--help`` offers is what the commands accept, without network."""
 
-import shlex
 from collections.abc import Iterator
 
 import pytest
 
+from kartograf import parse_command, validate_command
 from kartograf.catalog.commands import declared_commands
 from kartograf.cli._parser import _subparsers, create_parser
 from kartograf.cli.commands import main
@@ -42,9 +42,7 @@ _DATA_EXAMPLES = sorted(
     {
         example
         for example in _examples()
-        if len(words := example.split()) > 2
-        and words[2] in ("download", "hsg")
-        and words[1] != "project"
+        if len(words := example.split()) > 2 and words[2] in ("download", "hsg")
     }
 )
 
@@ -60,23 +58,17 @@ def test_every_download_command_has_examples():
         for name, parser in top.choices.items()
         if (commands := _subparsers(parser)) is not None
         and "download" in commands.choices
-        and name != "project"
     }
     assert groups == with_download
 
 
 @pytest.mark.parametrize("example", _DATA_EXAMPLES)
-def test_help_example_is_a_valid_task(example, tmp_path, capsys, monkeypatch):
-    """A data example of ``--help`` passes the checks of ``project add``
-    (all choices, no network): the store comes from the project, so
-    ``--root`` and the display flag ``--summary`` are left out."""
-    monkeypatch.chdir(tmp_path)
-    assert main(["project", "init", "--root", "store"]) == 0
-    argv = shlex.split(example)[1:]
-    argv = [a for a in argv if a != "--summary"]
-    at = argv.index("--root")
-    del argv[at : at + 2]
-    assert main(["project", "add", "t", *argv]) == 0, capsys.readouterr().err
+def test_help_example_is_a_valid_call(example, tmp_path):
+    """A data example of ``--help`` passes the checks of ``validate_command``
+    (all choices, no network)."""
+    call = parse_command(example)
+
+    validate_command(call.command, call.options, root=tmp_path)
 
 
 @pytest.mark.parametrize(

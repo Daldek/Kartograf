@@ -1,7 +1,7 @@
 """The MCP server (AGI section 5; test row 12.8).
 
 The calls run through ``mcp.Client`` connected to the server in memory, with the
-sources of the download tests replaced by their fakes (``tests/project_fixtures``);
+sources of the download tests replaced by their fakes (``tests/support/data_fixtures``);
 the gate test of AGI-5.13 and the others on the protocol start
 ``python -m kartograf.mcp_server`` and speak to it over stdio. The tools that
 download need a server that writes (``writing``: ``--allow-writes`` inside a
@@ -50,7 +50,7 @@ from kartograf.mcp_server import (
 )
 from tests.integration.test_hsg import RasterSoilGrids
 from tests.integration.test_manager_campaigns import C14, REC, FakeCampaignProvider
-from tests.support.project_fixtures import (
+from tests.support.data_fixtures import (
     HSG_SHEET,
     PL_SHEET,
     landcover_sources,
@@ -183,7 +183,7 @@ def test_the_instructions_state_the_mode_of_the_server(tmp_path):
     limited = build_instructions(families=("core", "store"))
 
     assert reading == INSTRUCTIONS
-    assert "does not write" in reading and "kartograf_project_init" in reading
+    assert "does not write" in reading
     assert "Paths must lie inside" not in reading
     assert f"Paths must lie inside {tmp_path.as_posix()}" in allowed
     assert "Writes are enabled inside" in writes and tmp_path.as_posix() in writes
@@ -405,7 +405,7 @@ def test_list_tools_equals_tool_specs(mode, tmp_path):
     tools = run_session(scenario, **arguments)
     specs = tool_specs(allow_writes=mode == "writes")
 
-    assert len(tools) == (40 if mode == "writes" else 37)
+    assert len(tools) == 34
     assert [t.name for t in tools] == [s.name for s in specs]
     for tool, spec in zip(tools, specs, strict=True):
         assert tool.title == spec.title
@@ -423,17 +423,12 @@ def test_list_tools_equals_tool_specs(mode, tmp_path):
 
 
 @needs_mcp
-def test_a_server_that_does_not_write_lists_plans_and_leaves_out_three_tools():
+def test_a_server_that_does_not_write_lists_plans():
     async def scenario(client):
         return {t.name: t for t in (await client.list_tools()).tools}
 
     tools = run_session(scenario)
 
-    assert not {
-        "kartograf_project_init",
-        "kartograf_project_add",
-        "kartograf_project_remove",
-    } & set(tools)
     plan = tools["kartograf_elevation_download"]
     properties = plan.input_schema["properties"]
     assert plan.annotations.read_only_hint is True
@@ -696,7 +691,6 @@ def test_check_refuses_the_options_of_a_run(tmp_path):
     here = str(tmp_path)
     selection = {**PL_SHEET, "root": here, "check": True}
     hsg = {"depth": "0-5cm", "sheet": HSG_SHEET, "root": here}
-    project = {"project_dir": here, "check": True}
     cases = [
         ("kartograf_elevation_download", selection | {"update": "upgrade"}, "update"),
         ("kartograf_elevation_download", selection | {"plan": {}}, "plan"),
@@ -706,8 +700,6 @@ def test_check_refuses_the_options_of_a_run(tmp_path):
             hsg | {"summary": True, "check": True},
             "summary",
         ),
-        ("kartograf_project_download", project | {"update": "upgrade"}, "update"),
-        ("kartograf_project_download", project | {"workers": 2}, "workers"),
     ]
 
     for tool, arguments, option in cases:
@@ -840,12 +832,6 @@ def test_check_input_errors(tmp_path):
             "store overview",
         ),
         ("kartograf_store_sidecar", {"path": "x.meta.json"}, "path", "store sidecar"),
-        (
-            "kartograf_project_status",
-            {"project_dir": "."},
-            "project_dir",
-            "project status",
-        ),
         (
             "kartograf_commands_schema",
             {"command": "nope nope"},
@@ -1006,48 +992,6 @@ def test_unknown_tool_is_a_protocol_error():
 
 
 @needs_mcp
-def test_a_tool_that_writes_and_is_not_offered_answers_forbidden(tmp_path):
-    """``project init``, ``project add`` and ``project remove`` have no plan: on a
-    server that does not write they are not listed and a call is ``forbidden``,
-    not an unknown tool (a client with a cached list may still call them)."""
-    calls = [
-        ("kartograf_project_init", {"project_dir": "p", "root": "s"}),
-        ("kartograf_project_add", {}),
-        ("kartograf_project_remove", {"project_dir": str(tmp_path)}),
-    ]
-
-    for tool, arguments in calls:
-        report = error_of(call(tool, arguments), code="forbidden")
-
-        assert report["exit_code"] == 12
-        assert report["command"] == tool.removeprefix("kartograf_").replace("_", " ")
-        assert FORBIDDEN_HINT in report["hint"]
-        assert "does not write" in report["message"]
-    assert list(tmp_path.iterdir()) == []
-    # a family the hidden tool is not in does not know it either
-    from mcp.shared.exceptions import MCPError
-
-    async def scenario(client):
-        try:
-            await client.call_tool("kartograf_project_init", {})
-        except MCPError as error:
-            return error
-        return None
-
-    error = run_session(scenario, families=["core"])
-    assert (
-        error is not None and "Unknown tool 'kartograf_project_init'" in error.message
-    )
-    # the server that writes lists and runs them
-    done = call(
-        "kartograf_project_init",
-        {"project_dir": str(tmp_path / "p"), "root": str(tmp_path / "s")},
-        **writing(tmp_path),
-    )
-    assert done.is_error is False
-
-
-@needs_mcp
 @pytest.mark.parametrize(
     ("tool", "option", "value"),
     [
@@ -1056,8 +1000,6 @@ def test_a_tool_that_writes_and_is_not_offered_answers_forbidden(tmp_path):
         ("kartograf_elevation_download", "workers", 2),
         ("kartograf_soil_hsg", "summary", True),
         ("kartograf_elevation_download", "check", False),
-        ("kartograf_project_download", "update", "upgrade"),
-        ("kartograf_project_download", "workers", 2),
     ],
 )
 def test_a_server_that_does_not_write_refuses_a_run_with_forbidden(
@@ -1070,7 +1012,6 @@ def test_a_server_that_does_not_write_refuses_a_run_with_forbidden(
             "sheet": HSG_SHEET,
             "root": str(tmp_path),
         },
-        "kartograf_project_download": {"project_dir": str(tmp_path)},
     }[tool]
 
     report = error_of(call(tool, {**base, option: value}), code="forbidden")
@@ -1166,29 +1107,6 @@ def test_output_dir_is_confined_like_every_path_and_excludes_root(tmp_path):
 
 
 @needs_mcp
-def test_a_plan_only_project_download_calls_the_check_of_the_library(
-    tmp_path, monkeypatch
-):
-    seen = []
-
-    def check(project_dir, *, cache, **kwargs):
-        seen.append((project_dir, {**kwargs, "cache": cache}))
-        return kartograf.command_schema("commands list")
-
-    def download(*args, **kwargs):
-        raise AssertionError("a server that does not write must not download")
-
-    monkeypatch.setattr(kartograf, "check_project", check)
-    monkeypatch.setattr(kartograf, "download_project", download)
-
-    result = call("kartograf_project_download", {"project_dir": str(tmp_path)})
-
-    assert result.is_error is False
-    assert result.structured_content["check"] is True
-    assert seen == [(tmp_path, {"cache": False})]
-
-
-@needs_mcp
 def test_progress_is_strictly_increasing(tmp_path):
     """Events from four threads with the same ``current`` reach the client as
     1, 2, 3, ... with the text of the event; the total stays unknown."""
@@ -1275,18 +1193,6 @@ def test_allow_dir_rejects_paths_outside_after_resolve(tmp_path):
         allow_dirs=[allowed],
     )
     assert error_of(planned, code="forbidden")["details"]["option"] == "root"
-    # and for the paths nested in a call
-    task = call(
-        "kartograf_project_add",
-        {
-            "project_dir": str(allowed),
-            "name": "t",
-            "command": "elevation download",
-            "options": {"product": "nmt", "geometry": str(outside / "area.gpkg")},
-        },
-        **writing(allowed),
-    )
-    assert error_of(task, code="forbidden")["details"]["option"] == "geometry"
     # reading a file of the store is confined as well
     sidecar = call(
         "kartograf_store_sidecar",
@@ -1301,25 +1207,6 @@ def test_a_server_without_allow_dir_reads_any_absolute_path(tmp_path):
     result = call("kartograf_store_overview", {"root": str(tmp_path)})
 
     assert result.is_error is False
-
-
-@needs_mcp
-def test_a_relative_path_inside_task_options_is_refused(tmp_path):
-    report = error_of(
-        call(
-            "kartograf_project_add",
-            {
-                "project_dir": str(tmp_path),
-                "name": "t",
-                "command": "elevation download",
-                "options": {"product": "nmt", "geometry": "area.gpkg"},
-            },
-            **writing(tmp_path),
-        )
-    )
-
-    assert report["details"]["option"] == "geometry"
-    assert "Give an absolute path" in report["hint"]
 
 
 @needs_mcp
@@ -1426,90 +1313,19 @@ def test_function_tools_get_library_types_and_the_server_cache(tmp_path, monkeyp
 
 
 @needs_mcp
-def test_project_download_passes_its_arguments_and_reports_progress(
-    tmp_path, monkeypatch
-):
-    seen = []
-
-    def download(project_dir, *, cache, on_progress=None, **kwargs):
-        seen.append((project_dir, {**kwargs, "cache": cache}))
-        assert on_progress is not None
-        on_progress(DownloadProgress(1, 2, "N-1", "downloading"))
-        on_progress(DownloadProgress(2, 2, "N-1", "completed"))
-        return kartograf.command_schema("commands list")
-
-    monkeypatch.setattr(kartograf, "download_project", download)
-    received = []
-
-    async def on_progress(progress, total, message):
-        received.append((progress, total, message))
-
-    result = call(
-        "kartograf_project_download",
-        {
-            "project_dir": str(tmp_path),
-            "update": "upgrade",
-            "workers": 2,
-            "tasks": ["a", "b"],
-        },
-        progress=on_progress,
-        **writing(tmp_path),
-    )
-
-    assert result.is_error is False
-    assert result.structured_content["check"] is False
-    assert seen == [
-        (
-            tmp_path,
-            {"update": "upgrade", "workers": 2, "tasks": ("a", "b"), "cache": False},
-        )
-    ]
-    assert received == [
-        (1, None, "downloading N-1 (1/2)"),
-        (2, None, "completed N-1 (2/2)"),
-    ]
-
-
-@needs_mcp
 @pytest.mark.usefixtures("frozen_clock")
-def test_project_and_store_tools_work_on_real_files(tmp_path):
-    project, store = tmp_path / "project", tmp_path / "store"
-    here = {"project_dir": str(project)}
+def test_store_tools_work_on_real_files(tmp_path):
+    store = tmp_path / "store"
     server = writing(tmp_path)
 
     def go(tool, arguments):
         return call(tool, arguments, **server)
 
-    init = go("kartograf_project_init", {**here, "root": str(store)})
-    added = go(
-        "kartograf_project_add",
-        {**here, "name": "area", "command": "elevation download", "options": PL_SHEET},
-    )
-    before = go("kartograf_project_status", here)
     with pl_sheets():
-        downloaded = go("kartograf_project_download", here)
-        checked = go("kartograf_project_download", {**here, "check": True})
-    after = go("kartograf_project_status", here)
-    verified = go("kartograf_project_verify", here)
-
-    assert init.structured_content["result"]["schema"] == "kartograf-project-state/1"
-    assert [t["name"] for t in added.structured_content["result"]["tasks"]] == ["area"]
-    # a task that is not downloaded is ok: false, a result with the status failed
-    # (the CLI's exit 11), not an error
-    assert before.is_error is False
-    assert before.structured_content["status"] == "failed"
-    assert before.structured_content["result"]["ok"] is False
-    assert before.structured_content["result"]["not_downloaded"] == ["area"]
-    assert (
-        downloaded.is_error is False and downloaded.structured_content["check"] is False
-    )
-    result_schema = downloaded.structured_content["result"]["schema"]
-    assert result_schema == "kartograf-project-report/1"
-    assert checked.is_error is False and checked.structured_content["check"] is True
-    assert checked.structured_content["command"] == "project download"
-    assert checked.structured_content["result"]["schema"] == "kartograf-project-check/1"
-    assert (after.is_error, verified.is_error) == (False, False)
-    assert verified.structured_content["result"]["ok"] is True
+        downloaded = go(
+            "kartograf_elevation_download", {**PL_SHEET, "root": str(store)}
+        )
+    assert downloaded.is_error is False, downloaded.structured_content
 
     overview = go("kartograf_store_overview", {"root": str(store)})
     segment = overview.structured_content["result"]["segments"][0]["segment"]
@@ -1543,39 +1359,6 @@ def test_project_and_store_tools_work_on_real_files(tmp_path):
         {"root": str(store), "segment": segment, "units": [], "limit": 1},
     )
     assert one.is_error is False
-
-    removed = go("kartograf_project_remove", {**here, "name": "area"})
-    assert removed.structured_content["result"]["tasks"] == []
-
-
-@needs_mcp
-def test_project_add_takes_a_box_in_the_json_form_as_run_command_does(tmp_path):
-    """The box of a task (``bbox`` with ``bbox_crs``) is one ``BBox`` for
-    ``add_project_task``: the tool adds the task ``run_command`` adds."""
-    options = {
-        "product": "nmt",
-        "country": "cz",
-        "bbox": [-447000, -1114000, -446000, -1113000],
-        "bbox_crs": "EPSG:5514",
-        "cutout": True,
-        "horizontal_crs": "EPSG:5514",
-        "resolution": "5m",
-        "vertical_crs": "Bpv",
-    }
-    tool, layer = tmp_path / "tool", tmp_path / "layer"
-    for project in (tool, layer):
-        kartograf.init_project(project, root=tmp_path / "store")
-    task = {"name": "teren", "command": "elevation download", "options": options}
-
-    added = call(
-        "kartograf_project_add", {"project_dir": str(tool), **task}, **writing(tmp_path)
-    )
-    expected = run_command("project add", {"project_dir": str(layer), **task})
-
-    assert added.is_error is False, added.structured_content
-    tasks = added.structured_content["result"]["tasks"]
-    assert tasks == expected.to_dict()["result"]["tasks"]
-    assert tasks[0]["options"] == options
 
 
 @needs_mcp
@@ -1758,12 +1541,11 @@ def test_allow_writes_flag_lists_the_tools_that_write(tmp_path, monkeypatch):
 
     tools = run_session(scenario, server=server)
 
-    assert len(tools) == 40
+    assert len(tools) == 34
     download = tools["kartograf_elevation_download"]
     assert download.annotations.read_only_hint is False
     assert download.annotations.destructive_hint is False
     assert {"update", "plan", "workers"} <= set(download.input_schema["properties"])
-    assert tools["kartograf_project_remove"].annotations.destructive_hint is True
 
 
 @needs_mcp
@@ -1836,7 +1618,7 @@ def test_the_gate_of_agi_5_13_over_stdio(tmp_path):
     names = [tool.name for tool in listed]
     assert names == [tool.name for tool in again]  # deterministic (AGI-5.2)
     assert names == [s.name for s in tool_specs(allow_writes=False)]
-    assert len(set(names)) == len(names) == 37
+    assert len(set(names)) == len(names) == 34
     for tool in listed:
         assert re.fullmatch(r"kartograf_[a-z0-9_]+", tool.name) and len(tool.name) <= 48
         hints = tool.annotations  # AGI-5.4: the title and the four hints are set
@@ -1914,22 +1696,18 @@ def test_stdio_server_with_writes_downloads_inside_its_directory(tmp_path):
                 "kartograf_store_overview", {"root": str(outside)}
             )
             created = await client.call_tool(
-                "kartograf_project_init",
-                {
-                    "project_dir": str(inside / "p"),
-                    "root": str(inside / "s"),
-                },
+                "kartograf_store_init", {"root": str(inside / "s")}
             )
             return tools, refused, created
 
     tools, refused, created = anyio.run(scenario)
 
-    assert len(tools) == 40
+    assert len(tools) == 34
     assert error_of(refused, code="forbidden")["details"]["allowed"] == [
         inside.resolve().as_posix()
     ]
     assert created.is_error is False
-    assert (inside / "p").is_dir()
+    assert (inside / "s").is_dir()
     assert list(outside.iterdir()) == []
 
 
@@ -2011,7 +1789,7 @@ def test_stdio_stdout_has_only_protocol_frames(monkeypatch):
     assert by_id[1]["instructions"] == INSTRUCTIONS
     # the keys of the protocol are camelCase; the five hints are always set
     tools = {t["name"]: t for t in by_id[2]["tools"]}
-    assert len(tools) == 37
+    assert len(tools) == 34
     plan = tools["kartograf_elevation_download"]
     assert plan["annotations"] == {
         "title": plan["title"],

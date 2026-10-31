@@ -614,8 +614,7 @@ class HSGCalculator:
         Every check of ``calculate_hsg``/``check_hsg`` before the first
         request: one selection and the input depth (no network, nothing
         written; a ``geometry`` file is read for its envelope) - the same
-        exception type and text as ``calculate_hsg`` (``project add``,
-        ADR-040).
+        exception type and text as ``calculate_hsg`` (``validate_command``).
 
         Raises
         ------
@@ -836,7 +835,7 @@ class HSGCalculator:
                 on_notice=sink.add,
             )
             # one raster per input (a plan may leave it without a file); its
-            # unit names the property, as the inputs pinned by a project
+            # unit names the property (``<property> <unit>``)
             inputs += [replace(i, unit=f"{prop} {i.unit}") for i in report.files]
             failed += [replace(i, unit=f"{prop} {i.unit}") for i in report.failed]
             stale.extend(report.stale)
@@ -1179,8 +1178,7 @@ def validate_hsg_request(
     Every check of ``calculate_hsg``/``check_hsg`` before the first
     request: the store, one selection and the input depth (no network,
     nothing written; a ``geometry`` file is read for its envelope) - the
-    same exception type and text as ``calculate_hsg`` (``project add``,
-    ADR-040).
+    same exception type and text as ``calculate_hsg`` (``validate_command``).
 
     Raises
     ------

@@ -62,12 +62,11 @@ _TYPES = {
     "per_country": "string",
     "str_list": "array",
     "plan": "object",
-    "options": "object",
 }
 _ITEMS = {"bbox": "number", "str_list": "string"}
 _UNITS = {"bbox": "m, or degrees for EPSG:4326"}
 # What changes the world outside the process (``Command.effects``).
-_WRITING = frozenset({"store_write", "project_write", "cache_write", "cache_delete"})
+_WRITING = frozenset({"store_write", "cache_write", "cache_delete"})
 
 
 def is_option(command: Command, param: Param) -> bool:
@@ -179,7 +178,7 @@ def _option(command: Command, param: Param, summaries: dict[str, str]) -> Option
 def effects(command: Command) -> EffectsEntry:
     """Return what a declared command changes (AGI-2.2 ``effects``).
 
-    The command is read only when it writes neither the store, a project, nor the
+    The command is read only when it writes neither the store nor the
     cache; ``writes`` is ``delete`` for a command that removes data and ``add`` for
     every other that writes (a store never overwrites a version; a plain write
     replaces a file only with ``update`` force, as IMGWTools declares its downloads).

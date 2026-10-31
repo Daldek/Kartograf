@@ -20,27 +20,20 @@ from unittest.mock import patch
 import pytest
 
 from kartograf import (
-    add_project_task,
     calculate_hsg,
     check_availability,
     check_data,
-    check_project,
     clear_cache,
     describe_sheet,
     download_collection,
     download_data,
     download_landcover,
-    download_project,
     download_soil,
     get_cache_info,
     get_cache_path,
     get_config,
-    get_project_status,
-    init_project,
     list_layers,
     list_sources,
-    remove_project_task,
-    verify_project,
 )
 from kartograf._errors import OUTCOMES
 from kartograf.cache.defaults import default_cache_path
@@ -87,7 +80,6 @@ from tests.integration.test_laz_download import _selection, _tile
 from tests.integration.test_manager_campaigns import C14, FakeCampaignProvider
 from tests.support.fake_packages import package_route
 from tests.support.parity import run_both
-from tests.support.project_fixtures import new_project, pl_sheets
 
 SHEET = "N-34-130-D-d-2-4"
 STORE = "<store>"
@@ -582,10 +574,9 @@ def test_json_availability_cz_has_its_notices_in_the_document(tmp_path, monkeypa
 # -- the query and management commands: the document of the library function -
 
 
-def _offline_lines(project: Path, base: Path) -> dict[str, list[str]]:
+def _offline_lines(base: Path) -> dict[str, list[str]]:
     """The command line of every leaf command that runs offline, by command id
-    (``project`` has the task ``teren``; ``project init`` makes ``base/nowy``)."""
-    here = str(project)
+    (the store commands read ``base/store``; ``store init`` makes ``base/marked``)."""
     store = base / "store"
     return {
         **{f"{group} list-sources": [group, "list-sources"] for group in SOURCE_GROUPS},
@@ -613,29 +604,10 @@ def _offline_lines(project: Path, base: Path) -> dict[str, list[str]]:
         "cache path": ["cache", "path"],
         "cache clear": ["cache", "clear"],
         "config show": ["config", "show"],
-        "project init": [
-            *("project", "init", "--project", str(base / "nowy")),
-            *("--root", str(base / "nowy" / "dane")),
-        ],
-        "project add": ["project", "add", "--project", here, "drugi", *ELEVATION],
-        "project remove": ["project", "remove", "--project", here, "teren"],
-        "project status": ["project", "status", "--project", here],
-        "project verify": ["project", "verify", "--project", here],
-        "project download": ["project", "download", "--project", here],
     }
 
 
-OFFLINE = sorted(_offline_lines(Path("."), Path(".")))
-
-
-def _project(tmp_path: Path) -> Path:
-    """A project with one task, ``teren``: the elevation sheet of ``ELEVATION``."""
-    project = new_project(tmp_path)
-    add_project_task(
-        project, name="teren", command="elevation download", options=NMT_SHEET
-    )
-    build_fixture_store(tmp_path / "store")  # what the store commands read
-    return project
+OFFLINE = sorted(_offline_lines(Path(".")))
 
 
 @pytest.mark.parametrize("command", OFFLINE)
@@ -643,13 +615,12 @@ def test_query_and_management_commands_print_one_document(
     command, tmp_path, monkeypatch, capsys
 ):
     """``--json``: all of stdout is one envelope whose result has the schema of the
-    command, stderr is empty, the exit code is that of its status (a project that is
-    not downloaded yet is a result with ``ok: false``)."""
+    command, stderr is empty, the exit code is that of its status."""
     monkeypatch.chdir(tmp_path)
-    argv = _offline_lines(_project(tmp_path), tmp_path)[command]
+    build_fixture_store(tmp_path / "store")  # what the store commands read
+    argv = _offline_lines(tmp_path)[command]
     declaration = next(c for c in declared().commands if c.id == command)
-    with pl_sheets():
-        code = main([*argv, "--json"] if command != "project add" else _json_add(argv))
+    code = main([*argv, "--json"])
     captured = capsys.readouterr()
 
     envelope = json.loads(captured.out)
@@ -662,18 +633,11 @@ def test_query_and_management_commands_print_one_document(
     assert (code == 0) == envelope["result"].get("ok", True)
 
 
-def _json_add(argv: list[str]) -> list[str]:
-    """``project add ... --json``: the flag goes before the name of the task (after
-    it, it is a flag of the data command that is not part of a task)."""
-    return [*argv[:2], "--json", *argv[2:]]
-
-
 def test_every_cli_command_has_a_json_test():
-    """A command added to the catalog is a data command (the parity tests above and
-    ``tests/integration/test_project_cli.py``), ``elevation availability`` or one
-    of ``OFFLINE``."""
+    """A command added to the catalog is a data command (the parity tests above),
+    ``elevation availability`` or one of ``OFFLINE``."""
     leaves = {c.id for c in declared().commands}
-    data = {c.id for c in declared().commands if c.project_task}
+    data = {c.id for c in declared().commands if c.kind == "data"}
     data.add("elevation availability")
 
     assert set(OFFLINE) | data == leaves
@@ -793,106 +757,3 @@ def test_cache_path_is_given_when_the_database_cannot_be_read(
     assert document["size_bytes"] == db.stat().st_size
     assert main(["cache", "path"]) == 0
     assert capsys.readouterr().out == f"{db}\n"
-
-
-# -- project: the documents are the ones of the public API -------------------
-
-
-def _without_dir(text: str, directory: Path) -> str:
-    for form in {directory.as_posix(), directory.resolve().as_posix()}:
-        text = text.replace(form, "<project>")
-    return text
-
-
-@pytest.mark.usefixtures("frozen_clock")
-def test_json_project_commands_print_the_documents_of_the_api(
-    tmp_path, monkeypatch, capsys
-):
-    monkeypatch.chdir(tmp_path)
-    cli_dir, api_dir = tmp_path / "cli", tmp_path / "api"
-    where = ["--project", str(cli_dir)]
-
-    def same(document, command: str, *argv: str, check: bool = False) -> None:
-        """The CLI line printed the envelope of the document of the API call (the
-        project directories aside) and returned the exit code of its status."""
-        code = main(list(argv))
-        captured = capsys.readouterr()
-        envelope = wrap(command, document, check=check)
-        assert captured.err == ""
-        assert _without_dir(captured.out, cli_dir) == _without_dir(
-            envelope.to_json(), api_dir
-        )
-        assert code == envelope.exit_code
-
-    same(
-        init_project(api_dir, root="api/data"),
-        "project init",
-        *("project", "init", *where, "--root", "cli/data", "--json"),
-    )
-    same(
-        add_project_task(
-            api_dir, name="teren", command="elevation download", options=NMT_SHEET
-        ),
-        "project add",
-        *("project", "add", "--json", *where, "teren", *ELEVATION),
-    )
-    with pl_sheets():
-        same(
-            download_project(api_dir),
-            "project download",
-            *("project", "download", *where, "--json"),
-        )
-    same(
-        get_project_status(api_dir),
-        "project status",
-        *("project", "status", *where, "--json"),
-    )
-    same(
-        verify_project(api_dir),
-        "project verify",
-        *("project", "verify", *where, "--json"),
-    )
-    with pl_sheets():
-        same(
-            check_project(api_dir),
-            "project download",
-            *("project", "download", "--check", *where, "--json"),
-            check=True,
-        )
-    same(
-        remove_project_task(api_dir, name="teren"),
-        "project remove",
-        *("project", "remove", *where, "teren", "--json"),
-    )
-
-
-@pytest.mark.parametrize(
-    ("flags", "option"),
-    [
-        (["--json"], "json"),
-        (["-w", "8"], "workers"),
-        (["-w4"], "workers"),  # the default written out is a flag that was given
-        (["--check"], "check"),
-        (["--upgrade"], "upgrade"),
-        (["--force"], "force"),
-        (["--plan", "plan.json", "--upgrade"], "upgrade"),
-    ],
-)
-def test_project_add_uses_parse_command(tmp_path, capsys, flags, option):
-    """``project add`` reads the data command with ``parse_command``: a flag of a
-    run is rejected as an input error that names it, also when it equals the
-    default of the flag, and the manifest is not touched."""
-    project = new_project(tmp_path)
-    manifest = (project / "kartograf-project.json").read_bytes()
-    argv = ["project", "add", "--json", "--project", str(project), "teren"]
-
-    code = main([*argv, *ELEVATION, *flags])
-    captured = capsys.readouterr()
-
-    document = json.loads(captured.err.splitlines()[-1])
-    assert code == 2 and captured.out == ""
-    assert document["schema"] == "kartograf-error/1"
-    assert document["code"] == "validation_error"
-    assert document["details"]["reason"] == "invalid_input"
-    assert document["details"]["option"] == option
-    assert (project / "kartograf-project.json").read_bytes() == manifest

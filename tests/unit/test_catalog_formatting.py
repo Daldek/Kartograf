@@ -26,15 +26,15 @@ def _declared(*params: Param, id: str = "elevation download") -> Command:
 
 
 _PARAMS = (
-    Param("product", "str", task=True),
-    Param("sheet", "str", task=True, accepts=("pl1992",)),
-    Param("bbox", "bbox", task=True),
-    Param("bbox_crs", "bbox_crs", task=True, cli_default="EPSG:2180"),
-    Param("geometry", "path", task=True),
-    Param("resolution", "per_country", task=True, short="-r"),
-    Param("layers", "str_list", task=True),
-    Param("year", "int", task=True),
-    Param("cutout", "flag", task=True),
+    Param("product", "str"),
+    Param("sheet", "str", accepts=("pl1992",)),
+    Param("bbox", "bbox"),
+    Param("bbox_crs", "bbox_crs", cli_default="EPSG:2180"),
+    Param("geometry", "path"),
+    Param("resolution", "per_country", short="-r"),
+    Param("layers", "str_list"),
+    Param("year", "int"),
+    Param("cutout", "flag"),
     Param("root", "path", flag="--root", short="-o", dest="output"),
     Param("workers", "int", short="-w"),
     Param("quiet", "flag", argument=None, short="-q"),
@@ -119,28 +119,25 @@ def test_positional_arguments_stay_where_they_are_declared():
         Param("descendants", "str"),
         id="sheet parse",
     )
-    project = _declared(
-        Param("project_dir", "path", flag="--project", dest="project", cli_default="."),
-        Param("name", "str", positional=True),
-        Param("arguments", "str_list", positional=True, nargs="REMAINDER"),
-        Param("tasks", "str_list", positional=True, nargs="*"),
-        id="project add",
+    entries = _declared(
+        Param("root", "path", flag="--root", dest="output", cli_default="."),
+        Param("segment", "str", positional=True),
+        Param("paths", "str_list", positional=True, nargs="*"),
+        id="store entries",
     )
 
     assert (
         format_command_line(parse, {"sheet": "N-34-130-D", "descendants": "1:10000"})
         == "kartograf sheet parse N-34-130-D --descendants 1:10000"
     )
-    assert format_command_line(
-        project,
-        {"name": "teren", "arguments": ["elevation", "download", "--product", "nmt"]},
-        run={"project_dir": "/p q", "tasks": ["a", "b"]},
-    ) == (
-        "kartograf project add --project '/p q' teren elevation download "
-        "--product nmt a b"
+    assert (
+        format_command_line(
+            entries, {"segment": "nmt"}, run={"root": "/p q", "paths": ["a", "b"]}
+        )
+        == "kartograf store entries --root '/p q' nmt a b"
     )
-    assert format_command_line(project, {"name": "x"}, run={"project_dir": "."}) == (
-        "kartograf project add x"
+    assert format_command_line(entries, {"segment": "x"}, run={"root": "."}) == (
+        "kartograf store entries x"
     )
 
 

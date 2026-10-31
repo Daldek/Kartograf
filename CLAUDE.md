@@ -14,16 +14,16 @@ Profile: `tool` (DEV §1). What it is for: `README.md`; scope: `docs/SCOPE.md`. 
 - Secrets only from environment variables. CLMS credentials (`CLMS_CREDENTIALS`) are read only by the Auth Proxy subprocess (`kartograf.auth.proxy`), never by the main process (DEV-13.1).
 - Every HTTP request has a timeout and goes through `transport/http.py` (`download_to`, `get_with_retry`, `head_signal`: retries, backoff, atomic writes); providers have no retry loops of their own (DEV-13.2).
 - UTF-8, LF, final newline (DEV-14.1). `docs/DECISIONS.md` is LF too.
-- Generated files are never edited by hand: `AGENTS.md` and `llms.txt` (`kartograf commands guide --format agents|llms`), `src/kartograf/_errors.py` (`scripts/generate_errors.py`), `src/kartograf/_output_schema.py` (`scripts/generate_output_schema.py`) and the tables of `docs/USAGE.md` 9.3 and 9.6 (`scripts/generate_docs.py`). After a change of the catalog, the error registry or a template in `src/kartograf/_data/agents/`, regenerate them; contract tests compare them byte for byte.
+- Generated files are never edited by hand: `AGENTS.md` and `llms.txt` (`kartograf commands guide --format agents|llms`), `src/kartograf/_errors.py` (`scripts/generate_errors.py`), `src/kartograf/_output_schema.py` (`scripts/generate_output_schema.py`) and the tables of `docs/USAGE.md` 8.3 and 8.6 (`scripts/generate_docs.py`). After a change of the catalog, the error registry or a template in `src/kartograf/_data/agents/`, regenerate them; contract tests compare them byte for byte.
 - A decision with alternatives is an ADR (`docs/decisions/NNNN-slug.md`, indexed in `docs/DECISIONS.md`). The change goes into `docs/CHANGELOG.md` in the same commit (DOC-7.2); `docs/PROGRESS.md` is updated before the last commit of a session (DEV-17.3).
 
 ## Rules for code
 
 - The CLI only translates: a handler in `src/kartograf/cli/` turns flags into the arguments of one library function and prints its result. No data logic there: no validation of values, no choice of countries, sheets or campaigns, no `parent_request`, no reading of sidecars to decide (ADR-037; `tests/contract/test_cli_translation.py`).
-- A command is a declaration in `src/kartograf/catalog/commands/<group>.py`. The CLI parser, the options of project tasks and the MCP tools are built from it, and the library and `catalog` never import `kartograf.cli` or `mcp` (ADR-046).
+- A command is a declaration in `src/kartograf/catalog/commands/<group>.py`. The CLI parser and the MCP tools are built from it, a data command also has its entry in `src/kartograf/data_commands.py`, and the library and `catalog` never import `kartograf.cli` or `mcp` (ADR-046).
 - Command-level functions take keyword-only arguments, check their types before any network or write (`download/arguments.py`) and have no default that changes which data is chosen (product, variant, resolution, vertical CRS, area, output): a missing value is an error that names the option and its allowed values (ADR-044).
 - Every exception is a `KartografError` subclass with its own registry `code` and a `reason` (ADR-049). Invalid input is `ValidationError` (a sheet code `ParseError`), never `ValueError`; validators set `option`, `options` and `allowed` (the API argument, not the flag); keep the chain with `raise ... from err`; carry facts as attributes, not in the text.
-- Data messages are `Notice(level, code, text)` in the `notices` of the result (`notices.py`); the library does not print. Results are `@dataclass(frozen=True)` with the `Document` mixin (`serialization.py`): a new document is a class, a row in `tests/contract/test_json_contract.py` and a row in ARCHITECTURE 3.6; schemas `/1` only grow (ADR-046).
+- Data messages are `Notice(level, code, text)` in the `notices` of the result (`notices.py`); the library does not print. Results are `@dataclass(frozen=True)` with the `Document` mixin (`serialization.py`): a new document is a class, a row in `tests/contract/test_json_contract.py` and a row in ARCHITECTURE 3.5; schemas `/1` only grow (ADR-046).
 - Logging: `logging.getLogger(__name__)`, `%`-style arguments, never an f-string; the library does not call `print` or configure handlers (DEV-12).
 - Tests: `test_<unit>_<scenario>[_<expected>]`, arrange-act-assert, recorded server answers in `tests/fixtures/`, a flag or a track needs a CLI = API scenario in `tests/contract/test_parity*.py` (DEV-10.5, ADR-037).
 
@@ -47,7 +47,7 @@ For agents of Hydrograf, Archiwista, Retman, IMGWTools and others that edit Kart
 - change it only on a branch from `develop` (`feat/<topic>`, `fix/<topic>`), never on `develop` or `main`; no merge into them, no push to them, no tag;
 - no release entry (a new `## [x.y.z] - date` heading in `docs/CHANGELOG.md`, a new `__version__`, a tag) without the author's approval; describe the change under `## [Unreleased]` and in the commit;
 - before a tag the review is mandatory: `git log develop..<branch>`, the author reads the diff and `scripts/gate.sh` is green; the tag comes only after the author agrees;
-- the machine interface of Kartograf: `AGENTS.md` and `llms.txt` (the guide for agents), `kartograf commands list --json` (commands, options, allowed values, examples), `--json` on every command (documents `kartograf-*/1`, errors `kartograf-error/1`, exit codes of the Nogat error registry) and the MCP server `kartograf-mcp` (`kartograf[mcp]`); described in `docs/USAGE.md` 9;
+- the machine interface of Kartograf: `AGENTS.md` and `llms.txt` (the guide for agents), `kartograf commands list --json` (commands, options, allowed values, examples), `--json` on every command (documents `kartograf-*/1`, errors `kartograf-error/1`, exit codes of the Nogat error registry) and the MCP server `kartograf-mcp` (`kartograf[mcp]`); described in `docs/USAGE.md` 8;
 - `AGENTS.md` and `llms.txt` are generated (`kartograf commands guide --format agents`, `--format llms`): do not edit them by hand; the rules for work on the code are in this file.
 
 ## Code map (`src/kartograf/`)
@@ -58,6 +58,7 @@ cli/               argparse front end; handlers translate flags to library calls
 catalog/           command declarations (commands/<group>.py), parser, documents, MCP tools
 commands.py        parse_command, validate_command, format_command, run_command, check_command of ANY
                    catalog command (the call is read from its declaration: catalog/arguments.py)
+data_commands.py   DATA_COMMANDS: the data commands with their checks, download and check calls
 download/          data.py (download_data/check_data), collections.py, manager.py (sheets,
                    campaigns, versions), availability.py, laz.py, cutouts, cz_*.py, storage.py
 sources/           registry.py (source descriptors, channels, licences), variants.py
@@ -67,7 +68,6 @@ transform/         pinned CRS transforms (crs.py), GeoPackage writer, raster war
 core/              sheet parsers (PL-1992, PL-2000, CZ), bbox, geometry
 landcover/         BDOT10k, CORINE and SoilGrids orchestration
 hydrology/         hsg.py: hydrologic soil groups from SoilGrids
-project/           project manifest kartograf-project.json: model, operations, commands
 store.py           read API of the store (iter_store, read_sidecar, ...); store_*.py documents
 cache/  auth/      metadata cache (SQLite WAL); CLMS Auth Proxy
 mcp_server.py      MCP server on the catalog (extra mcp); guide.py generates AGENTS.md, llms.txt
@@ -87,12 +87,12 @@ Layers and dependencies: `docs/ARCHITECTURE.md` 2. Tests: `tests/unit`, `tests/i
 | Product requirements (BDOT10k layers, SoilGrids parameters, CORINE years) | `docs/PRD.md` |
 | Modules and layers; source descriptors and sidecar `kartograf-meta/1` | `docs/ARCHITECTURE.md` 2, 3.1, 3.2, 3.4 |
 | Store layout, `versions/`, hard links, `full_sheet/`; read API for Archiwista | ARCHITECTURE 3.3, 3.3.1; ADR-036, ADR-045 |
-| JSON documents `kartograf-*/1` | ARCHITECTURE 3.6; `docs/USAGE.md` 9 |
+| JSON documents `kartograf-*/1` | ARCHITECTURE 3.5; `docs/USAGE.md` 8 |
 | Flows: sheets and campaigns, WCS cutout, CZ, LAZ, land cover, collections | ARCHITECTURE 4.1 to 4.10 |
 | Command catalog, errors, MCP server; adding a command | ARCHITECTURE 4.11; ADR-046, ADR-049, ADR-052 |
 | Adding a source, a country, a provider or a collection product | ARCHITECTURE 5 |
 | Examples, results, campaigns, CLMS, known problems | `docs/USAGE.md` 1 to 7 |
-| Environment, variables, `nogat.toml`, MCP configuration | README; `.env.example`; USAGE 9.6, 10 |
+| Environment, variables, `nogat.toml`, MCP configuration | README; `.env.example`; USAGE 8.6, 9 |
 | Decisions and their errata (index at the top) | `docs/DECISIONS.md`, `docs/decisions/` |
 | Changes per release | `docs/CHANGELOG.md` |
 | The full list of options; the public API | `kartograf <group> <command> --help`, `kartograf commands list --json`; `kartograf.__all__` |

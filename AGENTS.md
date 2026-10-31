@@ -6,7 +6,7 @@
 
 Kartograf downloads official spatial data of Poland (GUGiK) and Czechia (CUZK), with Copernicus (CORINE land cover) and ISRIC (SoilGrids soils): digital elevation models (DEM, Polish NMT) and surface models (NMPT), LAZ point clouds, orthophotos, land cover (BDOT10k, CORINE), soils and hydrologic soil groups (HSG), administrative boundaries, cadastre, 3D models and more. Every file is saved as an immutable version in a store, next to a `kartograf-meta/1` sidecar with its CRS, source and licence. Interfaces: a Python library, a CLI and an MCP server, all from one command catalog.
 
-Use it to get the data of an area (a sheet code, a bbox, a geometry file, a TERYT code or a whole country) and to read what it has already downloaded. Command groups: `boundaries`, `cadastre`, `elevation`, `geodesy`, `hydro`, `imagery`, `landcover`, `maps`, `models3d`, `names`, `project`, `sheet`, `soil`, `store`, `cache`, `commands`, `config`.
+Use it to get the data of an area (a sheet code, a bbox, a geometry file, a TERYT code or a whole country) and to read what it has already downloaded. Command groups: `boundaries`, `cadastre`, `elevation`, `geodesy`, `hydro`, `imagery`, `landcover`, `maps`, `models3d`, `names`, `sheet`, `soil`, `store`, `cache`, `commands`, `config`.
 
 Not for:
 
@@ -99,12 +99,6 @@ One line per command: name, `operation_id`, summary. Options, allowed values, un
 - `maps list-sources` (`kartograf_maps_list_sources`): List the registered data sources of the maps group (offline)
 - `geodesy download` (`kartograf_geodesy_download`): Download control points, county packages, sheet archives or a quasi-geoid
 - `geodesy list-sources` (`kartograf_geodesy_list_sources`): List the registered data sources of the geodesy group (offline)
-- `project init` (`kartograf_project_init`): Create a project manifest and its store
-- `project add` (`kartograf_project_add`): Add a task for a data command to the project without downloading
-- `project remove` (`kartograf_project_remove`): Remove a task and its pins from the manifest, keeping the files
-- `project download` (`kartograf_project_download`): Fetch, restore or update the tasks of a project and pin their files
-- `project status` (`kartograf_project_status`): Check offline that the pinned files of the tasks exist with the pinned size
-- `project verify` (`kartograf_project_verify`): Verify the SHA-256 and the sidecars of the pinned files of the tasks
 - `sheet parse` (`kartograf_sheet_parse`): Recognise a PL or CZ sheet code and show its properties
 - `commands list` (`kartograf_commands_list`): List the commands with their groups, products and MCP families
 - `commands schema` (`kartograf_commands_schema`): Describe one command: its options, result, effects, rules and examples
@@ -146,15 +140,6 @@ Sources and layers (offline): `kartograf landcover list-layers --product bdot10k
 1. `kartograf landcover download --product bdot10k --teryt 1465 --root /data/kartograf --json` - BDOT10k of a county (TERYT code).
 2. `kartograf soil download --property clay --depth 0-5cm --stat mean --bbox 626000,480000,628000,482000 --root /data/kartograf --json` - a SoilGrids layer for an area.
 3. `kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 --root /data/kartograf --summary --json` - the HSG raster from the texture layers, with the share of each group in `result.summary`.
-
-### 4. A project: tasks with pinned versions
-
-Run the lines in the directory of the project; `--json` goes before the name of the task.
-
-1. `kartograf project init --root /data/kartograf --json` - the project and its store.
-2. `kartograf project add --json area elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007` - a task: a data command with its options.
-3. `kartograf project download --json` - fetch and pin the versions.
-4. `kartograf project status --json` - is everything there? `status` reads sizes, `verify` the checksums.
 
 ## Things not to do
 

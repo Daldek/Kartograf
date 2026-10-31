@@ -30,9 +30,9 @@ def _cli_error(capsys, *argv: str) -> str:
     return capsys.readouterr().err
 
 
-def test_layer_without_geometry_is_an_error_in_cli_api_and_project(tmp_path, capsys):
+def test_layer_without_geometry_is_an_error_in_cli_and_api(tmp_path, capsys):
     # UX-01: --layer names a layer of the --geometry file; without it the
-    # value was dropped silently (and written into the project manifest)
+    # value was dropped silently
     text = "--layer applies only to --geometry"
     polish = "--layer dotyczy tylko --geometry"  # the terminal speaks Polish
     err = _cli_error(
@@ -54,13 +54,6 @@ def test_layer_without_geometry_is_an_error_in_cli_api_and_project(tmp_path, cap
             product="nmt", root=tmp_path, sheet=SHEET, layer="x",
             resolution="1m", vertical_crs="EVRF2007",
         )  # fmt: skip
-    assert main(["project", "init", "--project", str(tmp_path), "--root", "data"]) == 0
-    err = _cli_error(
-        capsys,
-        "project", "add", "--project", str(tmp_path), "t1", "boundaries",
-        "download", "--product", "admin", "--teryt", "14", "--layer", "x",
-    )  # fmt: skip
-    assert polish in err
 
 
 @pytest.mark.parametrize(
@@ -328,22 +321,6 @@ def test_survey_network_per_country(tmp_path):
             network="gnss",
         )  # fmt: skip
     assert "common: horizontal, vertical, gravity)" in str(error.value)
-
-
-def test_project_init_with_an_empty_root_is_an_input_error(tmp_path, capsys):
-    err = _cli_error(
-        capsys,
-        "project",
-        "init",
-        "--project",
-        str(tmp_path),
-        "--root",
-        "",
-        "--lang",
-        "en",
-    )
-    assert "Error: root is empty" in err
-    assert not (tmp_path / "kartograf-project.json").exists()
 
 
 @pytest.mark.parametrize("teryt", ["99", "9999", "33"])

@@ -11,13 +11,12 @@ library and answers with the envelope ``kartograf-result/1`` of its command
 
 The server starts read only. Without ``--allow-writes`` a command that writes and has
 a check only plans (``check`` is true, the options of a run are refused with
-``forbidden``) and ``project init``, ``project add`` and ``project remove`` answer
-``forbidden``; ``--allow-writes`` needs ``--allow-dir``. With ``--allow-dir`` every
-path of a call must lie inside one of the directories (``forbidden`` otherwise), also
-the paths nested in the options of ``project add``; without it any absolute path can
-be read. The module is the only one that touches the MCP SDK, and it imports the SDK
-lazily: ``import kartograf.mcp_server`` works without the ``mcp`` package,
-``create_server`` and ``main`` report its absence as ``missing_dependency``.
+``forbidden``) and a command that writes without a check answers ``forbidden``;
+``--allow-writes`` needs ``--allow-dir``. With ``--allow-dir`` every path of a call
+must lie inside one of the directories (``forbidden`` otherwise); without it any
+absolute path can be read. The module is the only one that touches the MCP SDK, and
+it imports the SDK lazily: ``import kartograf.mcp_server`` works without the ``mcp``
+package, ``create_server`` and ``main`` report its absence as ``missing_dependency``.
 
 Run it with ``kartograf-mcp`` or ``python -m kartograf.mcp_server``.
 
@@ -61,7 +60,6 @@ from kartograf.catalog.tools import (
     check_families,
     hidden_tools,
     parse_families,
-    task_paths,
     tool_specs,
 )
 from kartograf.commands import check_command, run_command, validate_command
@@ -76,7 +74,6 @@ from kartograf.exceptions import (
     UsageError,
     ValidationError,
 )
-from kartograf.project.commands import task_arguments
 
 if TYPE_CHECKING:
     import anyio
@@ -150,7 +147,7 @@ def build_instructions(
     shared = (
         "Shared arguments. Target of a write: output_dir (plain files), root (the "
         "store) or neither (the default store), never both. Paths (root, output_dir, "
-        "project_dir, geometry, path) are absolute. Area: sheet (a sheet code, for "
+        "geometry, path) are absolute. Area: sheet (a sheet code, for "
         "example N-34-130-D-d-2-4), bbox "
         "([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no "
         "default) or geometry (a SHP or GPKG file; layer is its GPKG layer), exactly "
@@ -175,10 +172,7 @@ def build_instructions(
         state = (
             "This server does not write: a command that writes only plans "
             "(check is true; update, plan, workers and summary are "
-            "forbidden), and "
-            f"{_tool('project init')}, {_tool('project add')} and "
-            f"{_tool('project remove')} are unavailable. "
-            "Start kartograf-mcp with "
+            "forbidden). Start kartograf-mcp with "
             "--allow-writes and --allow-dir DIR to download."
         )
         if directories:
@@ -202,7 +196,7 @@ def build_instructions(
 
 
 # The instructions of a server in the default state (read only, no directory, every
-# tool): the text quoted in USAGE 9.6.
+# tool): the text quoted in USAGE 8.6.
 INSTRUCTIONS = build_instructions()
 
 
@@ -482,11 +476,8 @@ class _Toolbox:
         check = spec.plan_only or arguments.get(CHECK_OPTION) is True
         if check:
             self._no_run_options(spec, arguments)
-        if spec.task_options:
+        if spec.data_options:
             return self._data_tool(spec, arguments, check=check)
-        if spec.command == "project add":
-            # the paths among the task options follow the rules of a data tool
-            self._check_paths(task_paths(arguments["command"]), arguments["options"])
         return self._function_tool(spec, arguments, check=check)
 
     @staticmethod
@@ -588,8 +579,8 @@ class _Toolbox:
         self, spec: ToolSpec, arguments: Mapping[str, Any], *, check: bool
     ) -> _Plan:
         command = spec.command
-        options = {k: v for k, v in arguments.items() if k in spec.task_options}
-        run_kinds = {k: v for k, v in spec.kinds.items() if k not in spec.task_options}
+        options = {k: v for k, v in arguments.items() if k in spec.data_options}
+        run_kinds = {k: v for k, v in spec.kinds.items() if k not in spec.data_options}
         run = convert_arguments(
             run_kinds, {k: v for k, v in arguments.items() if k in run_kinds}
         )
@@ -643,11 +634,6 @@ class _Toolbox:
             spec.kinds, {k: v for k, v in arguments.items() if k != CHECK_OPTION}
         )
         converted.update(spec.fixed)
-        if spec.command == "project add":
-            # the options of the task as the library arguments of its command
-            converted["options"] = task_arguments(
-                converted["command"], converted["options"]
-            )
         if _takes(name, "cache"):
             converted["cache"] = self._cache
         takes_progress = not check and _takes(name, "on_progress")
@@ -755,7 +741,7 @@ def create_server(
     Parameters
     ----------
     families : sequence of str, optional
-        ``discovery``, ``availability``, ``data``, ``project``, ``store`` or
+        ``discovery``, ``availability``, ``data``, ``store`` or
         ``core`` (``kartograf.catalog.tools.FAMILIES``).
     cache : MetadataCache, Path or False, optional
         The metadata cache of the library calls: an open cache, the file of one

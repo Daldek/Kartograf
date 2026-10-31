@@ -41,33 +41,9 @@ MESSAGES = {
         "document kartograf-plan/1 (object)",
         "dokument kartograf-plan/1 (obiekt)",
     ),
-    "options_object_task": Text("options object of the task", "obiekt opcji zadania"),
-    "of_the_command": Text(" of the command {command}", " komendy {command}"),
-    "option_does_not_belong_task": Text(
-        "option {name!r} does not belong to the task{owner} (options: {names})",
-        "opcja {name!r} nie nalezy do zadania{owner} (opcje: {names})",
-    ),
-    "option_bbox_expected_bbox": Text(
-        "option bbox: expected a BBox, got {value!r}",
-        "opcja bbox: oczekiwano BBox, podano {value!r}",
-    ),
     "option_expected_got": Text(
         "option {name}: expected {kind_text}, got {value!r}",
         "opcja {name}: oczekiwano {kind_text}, podano {value!r}",
-    ),
-    "options_object_expected": Text(
-        "options: an object expected",
-        "options: oczekiwano obiektu",
-    ),
-    "the_command": Text(" the command {command}", " komendy {command}"),
-    "options_option_does_not_belong": Text(
-        "options: option {name!r} does not belong to{owner} (options: {kinds})",
-        "options: opcja {name!r} nie nalezy do{owner} (opcje: {kinds})",
-    ),
-    "the_command_unnamed": Text(" the command", " komendy"),
-    "options_expected": Text(
-        "options.{name}: expected {kind_text}",
-        "options.{name}: oczekiwano {kind_text}",
     ),
     "unknown_option_options": Text(
         "unknown option {name!r} (options: {kinds})",

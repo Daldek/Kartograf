@@ -8,7 +8,7 @@ Interfaces: Python (`kartograf.download_data(product="nmt", sheet="N-34-130-D-d-
 
 Work in four steps: discover (`kartograf commands list`, `kartograf commands schema --command NAME`), check (`--check`), run, read (`status`, `result`, `items`, `notices`). A result is a `kartograf-result/1` envelope; an error is a `kartograf-error/1` document whose `code` is one of: `internal_error` (1), `validation_error` (2), `source_unavailable` (5), `no_data` (14), `store_unavailable` (8), `data_error` (7), `conflict` (4), `missing_dependency` (6), `forbidden` (12), `calculation_error` (13), `unsupported` (15), `io_error` (9), `cancelled` (130), `terminated` (143).
 
-Command groups: `boundaries`, `cadastre`, `elevation`, `geodesy`, `hydro`, `imagery`, `landcover`, `maps`, `models3d`, `names`, `project`, `sheet`, `soil`, `store`, `cache`, `commands`, `config`.
+Command groups: `boundaries`, `cadastre`, `elevation`, `geodesy`, `hydro`, `imagery`, `landcover`, `maps`, `models3d`, `names`, `sheet`, `soil`, `store`, `cache`, `commands`, `config`.
 
 ## Documentation
 

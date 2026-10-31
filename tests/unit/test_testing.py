@@ -1,7 +1,7 @@
 """The producer's test fixtures (``kartograf.testing``, Nogat DEV-10.6).
 
-The fixtures are read back through the public read API and the project
-operations, never through the writers that made them.
+The fixtures are read back through the public read API, never through the
+writers that made them.
 """
 
 import hashlib
@@ -18,14 +18,11 @@ from kartograf import (
     _clock,
     describe_segment,
     file_footprint,
-    get_project_status,
     iter_store,
     link_target,
     list_partitions,
     list_segments,
-    open_project,
     read_sidecar,
-    verify_project,
 )
 from kartograf.exceptions import DownloadError, InvalidSidecarError, ValidationError
 from kartograf.testing import (
@@ -35,7 +32,6 @@ from kartograf.testing import (
     VARIANTS,
     FixtureStore,
     build_fixture_store,
-    build_project,
     make_sidecar,
 )
 
@@ -302,101 +298,6 @@ def test_two_builds_with_the_same_arguments_are_byte_identical(tmp_path, variant
     assert all(
         stamp is not None and stamp.startswith("2026-10-12T") for stamp in stamps
     )
-
-
-def test_projects_built_from_equal_stores_are_byte_identical(tmp_path):
-    manifests = []
-    for name in ("one", "two"):
-        built = build_fixture_store(tmp_path / name / "data")
-        project = build_project(tmp_path / name / "projekt", built)
-        manifests.append((project / "kartograf-project.json").read_bytes())
-    assert manifests[0] == manifests[1]
-
-
-# --- build_project -----------------------------------------------------------------
-
-
-def test_project_pins_the_newest_versions_and_is_accepted_by_the_project_api(
-    tmp_path, store
-):
-    directory = build_project(tmp_path / "projekt", store)
-    project = open_project(directory)
-    assert os.path.samefile(project.root, store.root)
-    assert [t.name for t in project.tasks] == ["nmt-pl", "nmt-cz"]
-    pl_task, cz_task = project.tasks
-    pl, cz = store.file(PL_SEGMENT), store.file(CZ_SEGMENT)
-    for task, file in ((pl_task, pl), (cz_task, cz)):
-        (pin,) = task.files
-        newest = file.versions[-1]
-        assert project.root / pin.version == newest.path
-        assert project.root / pin.path == file.path
-        assert (pin.label, pin.sha256, pin.size_bytes) == (
-            newest.label,
-            newest.sha256,
-            newest.path.stat().st_size,
-        )
-        assert pin.sha256 == _sha256(newest.path) and pin.role == "output"
-        assert task.pinned_at is not None and task.kartograf_version
-    assert pl_task.options["sheet"] == PL_SHEET
-    manifest = json.loads((directory / "kartograf-project.json").read_text())
-    assert manifest["schema"] == "kartograf-project/1"
-    assert manifest["root"] == "../data"
-    for check in (get_project_status(directory), verify_project(directory)):
-        assert check.ok and check.not_downloaded == ()
-        assert [f.status for f in check.files] == ["ok", "ok"]
-
-
-def test_pin_oldest_pins_a_superseded_version_that_still_verifies(tmp_path, store):
-    directory = build_project(tmp_path / "projekt", store, pin="oldest")
-    pl_task = open_project(directory).tasks[0]
-    (pin,) = pl_task.files
-    first = store.file(PL_SEGMENT).versions[0]
-    assert (pin.label, pin.sha256) == (first.label, first.sha256)
-    # the standard path moved on to newer content, the pin keeps its bytes
-    standard = store.root / pin.path
-    assert _sha256(standard) != pin.sha256
-    assert verify_project(directory).ok
-
-
-@pytest.mark.parametrize("task_index", [0, 1])
-def test_verify_detects_a_modified_pinned_file_that_status_cannot_see(
-    tmp_path, store, task_index
-):
-    directory = build_project(tmp_path / "projekt", store)
-    project = open_project(directory)
-    (pin,) = project.tasks[task_index].files
-    pinned = store.root / pin.version
-    content = bytearray(pinned.read_bytes())
-    content[-3] ^= 0x01  # same size, other content
-    pinned.write_bytes(bytes(content))
-
-    assert get_project_status(directory).ok  # size and sidecar only
-    check = verify_project(directory)
-    assert not check.ok
-    bad = [f for f in check.files if f.status != "ok"]
-    assert [(f.task, f.status) for f in bad] == [
-        (project.tasks[task_index].name, "corrupt")
-    ]
-    assert "SHA-256" in (bad[0].detail or "")
-
-
-def test_a_pinned_file_of_another_size_is_corrupt_for_status_too(tmp_path, store):
-    directory = build_project(tmp_path / "projekt", store)
-    pin = open_project(directory).tasks[1].files[0]
-    (store.root / pin.version).write_bytes(b"short")
-    assert not get_project_status(directory).ok
-
-
-def test_build_project_refuses_an_existing_project_and_an_unknown_pin(tmp_path, store):
-    directory = build_project(tmp_path / "projekt", store)
-    before = (directory / "kartograf-project.json").read_bytes()
-    with pytest.raises(ValidationError, match="the project already exists"):
-        build_project(directory, store)
-    with pytest.raises(ValidationError) as unknown:
-        build_project(tmp_path / "other", store, pin="middle")  # type: ignore[arg-type]
-    assert unknown.value.option == "pin"
-    assert (directory / "kartograf-project.json").read_bytes() == before
-    assert not (tmp_path / "other").exists()
 
 
 # --- make_sidecar ------------------------------------------------------------------

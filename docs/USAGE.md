@@ -6,7 +6,7 @@ contracts are in the canonical documents that the sections refer to:
 scope and limitations — [SCOPE.md](SCOPE.md), architecture, `data/` layout
 and sidecar schema — [ARCHITECTURE.md](ARCHITECTURE.md), rationale —
 [DECISIONS.md](DECISIONS.md). Full list of CLI options: `kartograf <group> <command> --help`
-or, machine-readable, `kartograf commands list --json` and `kartograf commands schema --command ... --json` (section 9.4);
+or, machine-readable, `kartograf commands list --json` and `kartograf commands schema --command ... --json` (section 8.4);
 list of the public API: `src/kartograf/__init__.py` (`__all__`).
 
 ## Table of contents
@@ -33,20 +33,15 @@ list of the public API: `src/kartograf/__init__.py` (`__all__`).
 5. [Soils and HSG](#5-soils-and-hsg)
 6. [CLMS API configuration (CORINE GeoTIFF)](#6-clms-api-configuration-corine-geotiff)
 7. [Known issues and limitations](#7-known-issues-and-limitations)
-8. [Project](#8-project)
-   - [8.1 First download and check](#81-first-download-and-check)
-   - [8.2 Freshness and data variant](#82-freshness-and-data-variant)
-   - [8.3 Moving the project and store](#83-moving-the-project-and-store)
-   - [8.4 Python library](#84-python-library)
-9. [Interface for agents](#9-interface-for-agents)
-   - [9.1 JSON documents and commands](#91-json-documents-and-commands)
-   - [9.2 The `--json` contract](#92-the---json-contract)
-   - [9.3 Exit codes and error codes](#93-exit-codes-and-error-codes)
-   - [9.4 Command catalog](#94-command-catalog)
-   - [9.5 Command layer](#95-command-layer)
-   - [9.6 MCP server](#96-mcp-server)
-   - [9.7 Files for agents](#97-files-for-agents)
-10. [Settings and directories](#10-settings-and-directories)
+8. [Interface for agents](#8-interface-for-agents)
+   - [8.1 JSON documents and commands](#81-json-documents-and-commands)
+   - [8.2 The `--json` contract](#82-the---json-contract)
+   - [8.3 Exit codes and error codes](#83-exit-codes-and-error-codes)
+   - [8.4 Command catalog](#84-command-catalog)
+   - [8.5 Command layer](#85-command-layer)
+   - [8.6 MCP server](#86-mcp-server)
+   - [8.7 Files for agents](#87-files-for-agents)
+9. [Settings and directories](#9-settings-and-directories)
 
 Commands are grouped by data type (`kartograf <group> <command>`, ADR-039):
 
@@ -63,11 +58,10 @@ Commands are grouped by data type (`kartograf <group> <command>`, ADR-039):
 | `names` | `download`, `list-sources` | geographic names (`geographic`): PRNG RP (PL), Geonames (CZ); Polish names of the world (`world`, PL) |
 | `maps` | `download`, `list-sources` | topographic maps (`topographic`): BDOT10k visualisations (PL), ZTM (CZ) |
 | `geodesy` | `download`, `list-sources` | geodetic control networks (`control`): PL (GUGiK) and CZ (Bodove pole); quasi-geoids (`geoid`): PL-geoid2021 and QGZU-2013 |
-| `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | project manifest and pinned versions from the store |
 | `store` | `overview`, `entries`, `sidecar` | store reads (no network, no writes): segments, entries with sidecars, the sidecar of one file |
 
-Outside the data groups there are `kartograf sheet parse` and `kartograf sheet find` (group `sheet`), `kartograf cache`, `kartograf config` (settings, section 10)
-and `kartograf commands list`, `kartograf commands schema` and `kartograf commands guide` (group `commands`: the command catalog and the guide for agents, sections 9.4 and 9.7). `kartograf <group>
+Outside the data groups there are `kartograf sheet parse` and `kartograf sheet find` (group `sheet`), `kartograf cache`, `kartograf config` (settings, section 9)
+and `kartograf commands list`, `kartograf commands schema` and `kartograf commands guide` (group `commands`: the command catalog and the guide for agents, sections 8.4 and 8.7). `kartograf <group>
 --help` prints the group's commands, `<group> <command> --help` — options and command
 examples, `list-sources` — the group's sources from the registry (no network): `WYBOR` (the complete
 set of required source-selection flags; `a|b` = one of the values), `KRAJ`, `DOSTAWCA`,
@@ -76,7 +70,8 @@ set of required source-selection flags; `a|b` = one of the values), `KRAJ`, `DOS
 `landcover --source soilgrids` do not work: they end with an error (code 2)
 naming the new command (table: CHANGELOG 0.8.0). `landcover` selects data
 through `--product`, like every group; the former `--source`/`-s` ends with an error
-with a hint pointing to `--product`.
+with a hint pointing to `--product`. Projects (task lists with pinned versions) are kept by
+Archiwista (ADR-057).
 
 Since 0.8.0 the CLI has no default values that affect the data: `--product`,
 `--country` (with `--bbox`/`--geometry`),
@@ -92,7 +87,7 @@ and `--stat` (`soil download`; `soil hsg` — `--depth`) and `--format`
 (CZ contours, `maps`, national `names` files, PRG address points and special
 boundaries, CZ cadastral map, BDOT10k archive with `--year`) are given
 explicitly. A missing value gives an `Error:` with the list of permitted values
-(code 2, before the network; exit codes: section 9.3); the lists and meanings of values are also given by `kartograf
+(code 2, before the network; exit codes: section 8.3); the lists and meanings of values are also given by `kartograf
 <group> <command> --help`. Only the format of NMT and NMPT
 (ASC grid; the GUGiK archive selects `--format`) and of current BDOT10k
 (GPKG), the `--bbox-crs EPSG:2180` CRS, switches and technical parameters
@@ -103,8 +98,7 @@ a command given none works on the default store, the first of `KARTOGRAF_ROOT`, 
 of `nogat.toml` and `<data_dir>/kartograf` (`data_dir`: `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR`,
 `[kartograf] data_dir`, `[nogat] data_dir`, else the user data directory of `nogat`;
 `kartograf config show` names the root and where it comes from). The same holds for the library
-(`root=None`), for `store overview` and `store entries`, and for `project init`, which writes the
-default root, as an absolute path, into the manifest. The MCP server accepts a call without `root`
+(`root=None`) and for `store overview` and `store entries`. The MCP server accepts a call without `root`
 only when the default store lies inside `--allow-dir` (`forbidden` otherwise). Nothing is written
 into the current directory.
 
@@ -338,7 +332,7 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
   below). Cutout (`--cutout`, PL and CZ), LAZ tiles, `soil hsg`
   and `elevation availability` work on an area and end with `Error:
   --geometry: obwiednia obiektow ma zerowa powierzchnie ...` (code 2,
-  `details.option=geometry`) before the network, also in `project add`; pass
+  `details.option=geometry`) before the network; pass
   a polygon or a `--bbox` with positive area.
 - `--country` is required with `--bbox`/`--geometry` (`pl`, `cz` or
   `auto`; with `--sheet` the country follows from the sheet code). Under `auto` countries
@@ -990,7 +984,6 @@ Dostepnosc NMT PL wg skorowidza GUGiK: obszar 16,00 km2, w tym lad 16,00 km2
 
 Najnowsza kompletna kombinacja: 2025 PL-1992 1m EVRF2007 ASC
   Pobranie (dodaj --root KATALOG): kartograf elevation download --product nmt --country pl --bbox 565000,242000,569000,246000 --sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --year 2025
-  W projekcie: kartograf project add NAZWA elevation download --product nmt --country pl --bbox 565000,242000,569000,246000 --sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --year 2025
 ```
 
 Pomerania (NMT, bbox 4 x 2.2 km on the coast — most of the area is sea):
@@ -1017,7 +1010,6 @@ Dostepnosc NMT PL wg skorowidza GUGiK: obszar 8,80 km2, w tym lad 86,38 ha
 
 Najnowsza kompletna kombinacja: 2010 PL-1992 25m KRON86 TBD
   Pobranie (dodaj --root KATALOG): kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TBD --resolution 25m --vertical-crs KRON86 --year 2010
-  W projekcie: kartograf project add NAZWA elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TBD --resolution 25m --vertical-crs KRON86 --year 2010
 ```
 
 How to read the table:
@@ -1054,8 +1046,7 @@ How to read the table:
 
 **Download hint.** The footer gives the latest complete combination
 and the command to download it — **without `--root`**: paste the `Pobranie` line after
-appending `--root KATALOG`, the `W projekcie` line after the task name
-(manifest, section 8; the store comes from the project). The command repeats the
+appending `--root KATALOG`. The command repeats the
 task area, appends `--sheet-system`, the variant (`--format` for
 archives, `--resolution`, `--vertical-crs`) and `--year`; for PL-2000 —
 one command per sheet scale of the combination (`--scale`), and when
@@ -1112,7 +1103,7 @@ Szczegoly kombinacji:
 exactly the text that `check_availability(...).to_json()` returns
 in the library (section 2); stdout is a single document, and notices
 (`Info:`/`Warning:` of text mode) are only in the `notices` field, without
-duplication on stderr (contract of `--json` mode: section 9.2). Fields (after
+duplication on stderr (contract of `--json` mode: section 8.2). Fields (after
 `schema`, the first key): `request`, `checked_at`, `areas`
 (`area_m2`, `land_m2`), `combinations` (among others `source` = descriptor
 key, `year`, `acquisition_dates`, `published`, `campaigns`,
@@ -1222,9 +1213,6 @@ has each list value on a separate line and contains all fields.)
 - **Time:** the land mask is rasterised on a 1 m grid in strips of
   4 Mpx, so the report for a large area (e.g. an entire catchment) takes
   correspondingly longer (section 7).
-- **Project:** `availability` is not a project data command
-  (`kartograf project add NAZWA elevation availability ...` = `Error:`);
-  add the command from the `W projekcie` line to the manifest (section 8).
 
 **Czechia (CUZK).** CUZK does not publish flight years, so a CZ combination is a
 model and sheet system with files in the native vertical CRS: NMT —
@@ -1253,8 +1241,7 @@ one per sheet (`--sheet`, `--resolution`, native
 and `--model` (for a sheet code — one per sheet); with more than
 5 combination commands the footer gives 5 and the number remaining
 (all: `--details` or `--json`). Append `--root
-KATALOG` to the command (in a project: `kartograf project add NAZWA` instead of
-`kartograf`).
+KATALOG` to the command.
 
 Czechia (NMPT, 400 x 400 m bbox at Český Těšín; live output
 2026-10-16, approx. 1.3 s, 0.6 s from cache; E2E report:
@@ -1268,7 +1255,7 @@ CUZK nie publikuje lat nalotu; daty = publikacja pliku
   DMP OK  S-JTSK       0.5m    Bpv        TIFF    1/0              2025-10-10  16,7 MB  tak
   DMP OK  ETRS89-TM33  0.5m    EVRF2007   TIFF    1/0              2026-08-20  29,6 MB  tak
 
-Kompletne kombinacje CZ (pobranie: dodaj --root KATALOG; w projekcie: kartograf project add NAZWA zamiast kartograf):
+Kompletne kombinacje CZ (pobranie: dodaj --root KATALOG):
   DMP OK S-JTSK 0.5m Bpv TIFF
     kartograf elevation download --product nmpt --sheet CTES86 --resolution 0.5m --vertical-crs Bpv
   DMP OK ETRS89-TM33 0.5m EVRF2007 TIFF
@@ -1607,8 +1594,7 @@ downloaded, and the task ends with code 0 with a `Warning:`
 `auto_partial_success` (the same rule as in `elevation` and `imagery`;
 `--check`: `Warning:` `check_failed` and `auto_partial_success`).
 Code 1 is kept for an explicit `--country` and for the failure of all countries
-(no units in either = `no_coverage`). A project task with a partial
-success is not pinned.
+(no units in either = `no_coverage`).
 
 **HY-NET.** The `hydro` group (`--product network`; CZ only — `--country pl`
 is an `Error:`, and `auto` narrows to CZ with an `Info:`) downloads the INSPIRE hydrographic
@@ -1725,10 +1711,7 @@ kartograf names list-sources
 ```
 
 The CLI and API have the same validation, `Notice`, statuses and store layout
-`data/names/` and `data/maps/`. The commands are also suitable for a manifest
-(`kartograf project add <name> names download ...` /
-`kartograf project add <name> maps download ...`); the data directory
-then comes from the project.
+`data/names/` and `data/maps/`.
 
 ### 1.11 3D mesh, trees, geodetic control networks and quasi-geoids
 
@@ -1816,9 +1799,7 @@ kartograf geodesy list-sources
 
 Control points, packages, archives and PL-geoid2021 have no cheap freshness
 signal (`--check`: `nie da sie sprawdzic bez pobrania`; new
-content with `--force`). The `models3d download` and `geodesy download` commands
-are suitable for a manifest (`kartograf project add <name> geodesy download
---product control --network horizontal --teryt 1201`).
+content with `--force`).
 
 ### 1.12 Plain files or the store (`--output-dir`, `--root`)
 
@@ -1830,11 +1811,11 @@ ways (ADR-054, Nogat DEV §19):
 |---|---|---|
 | `-o`, `--output-dir DIR` | `output_dir=` | plain files named as in the store, flat, in `DIR` (created when missing) |
 | `--root DIR` | `root=` | the versioned store: `versions/`, sidecars, the hard-linked standard path |
-| neither | neither | the store at the first of `KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml` and `<data_dir>/kartograf` (section 10) |
+| neither | neither | the store at the first of `KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml` and `<data_dir>/kartograf` (section 9) |
 
 `--output-dir` and `--root` exclude each other (`validation_error`, `details.reason`
-`exclusive_options`). The commands whose input is the store, every `project` command and
-`store init`, take `--root` only.
+`exclusive_options`). The commands whose input is the store and
+`store init` take `--root` only.
 
 ```bash
 # plain files: one NMT sheet as ./dem/N-34-130-D-d-2-4.asc and nothing else
@@ -1897,7 +1878,7 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
   of a run.
 
 **A store root that cannot be written** is the error of the command, before any request, in
-every data command and in `project download`, and not a failed unit of each sheet or file: a
+every data command, and not a failed unit of each sheet or file: a
 root that has the layout of a store and no `kartograf-store.json` is `store_unavailable`
 (`no_marker`, exit 8, the hint is `kartograf store init --root DIR`), a root that holds other
 files is `conflict` (`not_empty`, exit 4), and a root that lies in, holds or has below it a
@@ -1916,7 +1897,7 @@ and a marker that cannot be read is an `OSError` (`io_error`, exit 9, also for a
 program that reads a store (Archiwista, Retman) asks it instead of judging the marker and the
 layout by file names.
 
-The reasons of the errors above are listed in 9.3 and in the migration guide of the CHANGELOG.
+The reasons of the errors above are listed in 8.3 and in the migration guide of the CHANGELOG.
 
 ---
 
@@ -2457,7 +2438,6 @@ default pyproj. Cost, threads and layout variants: ARCHITECTURE 3.3.1.
 | `classes_absent` | info | the package has no file for one of the `--layers` classes (no such objects) | `landcover --product bdoo` |
 | `corine_preview` | info | CORINE without CLMS credentials: WMS preview instead of data | `landcover --product corine` |
 | `cache_disabled` | warning | metadata cache not usable (e.g. read-only directory); the download continues | all |
-| `project_geometry_changed` | warning | the task geometry file has changed since pinning | `project download --check` |
 | `index_unsupported`, `cz_service_only` | info | index records that Kartograf does not download; CZ models without sheet files (DMR 5G, DMP 1G) | `elevation availability` |
 
 The area unit list has two codes because of the printout: `sheet_list`
@@ -2599,8 +2579,7 @@ Details of the modes: section 4.3.
   On an SMB/cifs share the client may temporarily report a wrong link
   count, so even `rsync -aH` will copy them as separate files
   (after such copying, downloading the sheet restores the link, see above).
-  `project verify` confirms the content of the copy, but not the space saving:
-  check its disk usage; if needed, copy on the server side or
+  After such a copy check its disk usage; if needed, copy on the server side or
   from a host with local access to the file system.
 - **Windows:** a hard link works without additional privileges (NTFS), and data
   shared over SMB is seen by the Windows client as ordinary files.
@@ -2785,8 +2764,7 @@ before the network; an `--upgrade --plan` that executed no item (all
 up to date or already executed) says so with an `Info:` line (not in `--json`).
 `--force` downloads
 again and refreshes the metadata cache, but does not overwrite: the same content =
-`bez zmian`, different = a new version (in a project `--force` also repairs
-damaged pinned versions, section 8.1).
+`bez zmian`, different = a new version.
 
 `--check` behaves like a download of the same area with regard to data
 (since 0.8.0): a sheet without data in the sheet index (sea, area abroad, no
@@ -3017,7 +2995,7 @@ proxy).
   to EPSG:2178; for a tool that requires a code, provide it without changing the file:
   `gdal_translate -of VRT -a_srs EPSG:2178 plik.tif plik.vrt`. Do not use
   `gdal_edit.py` on a file in the store — changing bytes breaks the SHA-256 checksum
-  of the version and of project pins. Campaigns with an EPSG code in the file (e.g. Gdańsk
+  of the version. Campaigns with an EPSG code in the file (e.g. Gdańsk
   2024, EPSG:2177) do not require this.
 - ZABAGED: classes are not converted to BDOT10k codes, and the layers of the
   national file have different names than the area result; HY-NET: the area result has no
@@ -3079,203 +3057,7 @@ SCOPE 3.2; plans: SCOPE 3.1.
 
 ---
 
-## 8. Project
-
-A project stores in `kartograf-project.json` **tasks** (data commands
-with options) and **pinned file versions** (full SHA-256 checksums). One
-project points to one `--root` store; many projects can use
-the same store, without copying data into project directories.
-The standard path in the store may point to a newer version, but
-the pin stays on specific bytes. The manifest file can be
-kept together with the project scripts in a version control system.
-
-### 8.1 First download and check
-
-```bash
-mkdir -p ~/projekty/wisla
-cd ~/projekty/wisla
-kartograf project init --root ~/dane/kartograf
-kartograf project add teren elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --year 2022
-kartograf project add pokrycie landcover download --product bdot10k --teryt 1465
-kartograf project add gleby soil hsg --depth 0-5cm --sheet N-34-130-D
-kartograf project download
-kartograf project status
-kartograf project verify
-```
-
-`init` requires an explicit `--root`; it creates the manifest and the store directory
-if they do not exist. `add` takes, by task name, the same commands
-and data selection flags as the ordinary `kartograf elevation download`,
-`imagery download` (also CZ orthophoto and the `--cutout` cutout), `landcover
-download` (also ZABAGED), `soil download`, `soil hsg`,
-`boundaries download`, `cadastre download`, `models3d download`,
-`hydro download`, `names download`, `maps download` and `geodesy download`;
-a CZ orthophoto sheet pins four files (JPEG and three JGW);
-it checks the selections without network and without downloading. A task does not store
-`--root` or the `--upgrade`/`--force` modes: the store comes from the project,
-and the mode is chosen at `project download`. Run options are not
-part of a task: `add` with `--workers` or `soil hsg --summary` ends with
-`Error:` (parallel download: `project download --workers N`; default
-as in the data command). `remove NAME` removes
-the task and its pins from the manifest, it **does not remove files** from the store.
-Task names can be given positionally in `download`, `status` and `verify`;
-without names the command covers all tasks. `--project DIR`
-allows working without `cd` (by default the project is in the current directory;
-command hints in messages then have `--project DIR`):
-
-```bash
-kartograf project verify --project ~/projekty/wisla
-```
-
-The first `download` pins the complete set of task files only after full
-success; the HSG result also pins the three SoilGrids input files.
-A repeated `download` **does not change pins** and does not query the source
-when the pinned files are present. When they are missing, it tries to recreate the
-task: it accepts only the same SHA-256 checksums and writes the bytes under the
-pinned version (`version`, `label`) - the manifest does not change, even
-when the source gives a different label (e.g. a download date of a different day). Different content
-at the source means an error, never a silent replacement; recover a copy of the store or
-explicitly choose `--upgrade`. `status` without network quickly checks the existence
-of versions and sizes; `verify` without network reads whole files and compares
-SHA-256 and version sidecars. Neither changes the manifest. File
-lines have the form `task: unit (file): state`, e.g. `orto_cz:
-CTES96 (CTES96.jpg): ok` - files of one unit (JPEG and three JGW) are
-distinguishable. A task not yet downloaded is the line `teren: nie pobrane
-(pobierz: kartograf project download teren)` and exit code 11 (with `-q` the code only:
-`kartograf project status -q || kartograf project download`).
-
-A damaged pinned version (`status`: different size; `verify`: different SHA-256
-checksum or sidecar) returns from a copy of the store or after `kartograf project
-download --force NAME`: `--force` sets aside the files of the damaged version
-(data and sidecar) into a hidden directory `.<label>_<sha8>.corrupt-<time>`
-next to it - nothing is removed, and the store scan skips hidden directories -
-and downloads the task again. The same bytes return under the pinned version
-(`odtworzono`, manifest unchanged); different content at the source re-pins the task
-like any `--force`. Without network the version stays set aside (`status`: missing
-pinned file), and an ordinary `download NAME` will recreate it from the same
-bytes. Without `--force`, manual repair: remove the version directory and run
-`download`.
-
-### 8.2 Freshness and data variant
-
-```bash
-kartograf project download --check
-kartograf project download --upgrade teren
-kartograf project download --force pokrycie
-```
-
-`--check` queries the source without downloading and compares the state
-**with the pin**, not with the newest local version in the store; it does not change the
-manifest. `--upgrade` explicitly re-pins the whole task to a newer version,
-if there is a change signal, also when the new version is already in the store.
-`--force` repeats the download even without a cheap signal; re-pinning
-happens after full success of the task, and it repairs damaged pinned versions
-(8.1). Other projects keep their
-pins, old versions are still in the store.
-
-**Recommendation for reproducibility:** choose an explicit variant in the task
-(e.g. `--year`, the appropriate `--resolution` and `--vertical-crs`) when the
-product allows it. Without `--year` you choose the latest flight at the time of
-download from the source - but when the store already has an older flight of that sheet,
-the first `download` pins that local flight (default mode, section 4.3:
-without asking the source; `Info:` mentions a newer one), and only `--upgrade` pins the newer one;
-after a new flight is published, recreating on an empty
-store may return a different checksum and end with an error. Even
-an explicit year does not replace a copy of the store if the source withdraws or
-replaces the file. There is no `project availability`: before `project add`
-use `kartograf elevation availability ...` to learn the available
-complete variants of the area (years, CRSs, resolutions, formats), and provide the
-chosen task flags — the report prints a ready line `W projekcie:
-kartograf project add NAME elevation download ...` without `--root`
-(section 1.7; an archive with `--format`, in the manifest the option `format`).
-`availability` answers the question *which
-variants are available*, and `project download --check` — *whether the
-pinned files are current for the chosen variant*. The `--year`
-choice remains current for a given year even after a
-newer vintage is released.
-
-### 8.3 Moving the project and store
-
-Relative `root` and `options.geometry` paths are saved
-relative to the project directory (not the current read directory). A path
-from the command line (`--root` in `project init`, `--geometry` in `project
-add`) is, however, first READ relative to the current directory, also
-with `--project KATALOG` from another location; only then is it saved
-relative to the project (outside the project tree this is a `../..` chain in the manifest,
-and the store is created where the current directory points): give absolute paths
-or run the command from the project directory. The geometry is
-a `.gpkg` or `.shp`. Paths given as absolute remain absolute.
-Pinned `path` and `version` are always relative to the store.
-
-| Situation | What to do |
-|---|---|
-| You move the project together with the store, keeping their relative position (relative `root`) | Nothing; `kartograf project verify` will confirm the state. |
-| You move only the project, the store stays under the same absolute path | Nothing. |
-| You move only the project, and `root` is relative | Change `root` in `kartograf-project.json`. |
-| You move or copy the store | Copy together with sidecars and hard links (`rsync -aH`), fix `root`, run `kartograf project verify`. |
-| You open a project with an empty store | Create the store directory (or point `root` to an existing one), run `kartograf project download`, then `kartograf project verify`; restoring requires a matching SHA-256. |
-
-On an SMB/cifs share `rsync -aH` may not preserve all hard
-links (section 4); `verify` does not detect redundant copies.
-
-It is worth keeping the area geometry file next to the manifest and giving it as a relative path:
-it moves with the project. Changing its bytes since pinning
-usually blocks restoring missing files; `status`, `verify` and `download`
-do not see it when the files are present (`--check` warns), and an explicit
-`--upgrade`/`--force` may accept the changed area. The other commands
-require an existing store directory (a missing mounted share will not
-cause a download into an empty directory).
-
-### 8.4 Python library
-
-```python
-from pathlib import Path
-from kartograf import (
-    add_project_task, check_project, download_project, init_project,
-    get_project_status, verify_project,
-)
-
-project_dir = Path.home() / "projekty" / "wisla"
-init_project(project_dir, root=Path.home() / "dane" / "kartograf")
-add_project_task(
-    project_dir,
-    name="teren",
-    command="elevation download",
-    options={
-        "product": "nmt",
-        "sheet": "N-34-130-D-d-2-4",
-        "resolution": "1m",
-        "vertical_crs": "EVRF2007",
-        "year": 2022,
-    },
-)
-report = download_project(project_dir)
-print(report.ok, [(task.name, task.outcome) for task in report.tasks])
-print(get_project_status(project_dir).ok, verify_project(project_dir).ok)
-check = check_project(project_dir)  # source probe; no download and no write
-print([(item.task, item.status) for item in check.files])
-download_project(project_dir, tasks=["teren"], update="upgrade", workers=8)
-```
-
-`init_project` and `add_project_task` return `Project`,
-`download_project` returns `ProjectReport` (`tasks`, `notices`, `ok`;
-`workers` = parallel file downloads of each task, `None` = command
-defaults),
-and `check_project`, `get_project_status` and `verify_project` return
-`ProjectCheck` (`files`, `not_downloaded`, `notices`, `ok`).
-A change of the manifest (`init`, `add`, `remove`, the pins of `download`) takes the lock
-`.kartograf-project.lock` (`kartograf.PROJECT_LOCK`, a directory beside the manifest) for its
-read-merge-write and waits 5 s for a busy one; it never takes the lock over. A lock that stays
-is `ProjectLockedError` (`validation_error`, exit 2, `details.reason` `project_locked`,
-`details.path` the lock): another process holds it, or an interrupted change left it; when no
-program works on the project, remove the directory.
-`open_project(project_dir)` reads and validates the manifest; the API also provides
-`remove_project_task`. Project operations by default work without the
-SQLite cache (`cache=False`); `cache=True` creates the cache in the current
-directory, so use it only locally. Format and write contract:
-[ARCHITECTURE.md, section 3.5](ARCHITECTURE.md#35-project-manifest-kartograf-project1).
-
-## 9. Interface for agents
+## 8. Interface for agents
 
 An AI agent (Claude Code, the Archiwista assistant, a script, another server) uses Kartograf
 in three equivalent ways: the CLI with `--json`, the Python library (`to_dict()`,
@@ -3284,16 +3066,16 @@ the same document `kartograf-<kind>/1`: the same keys, values and key order
 (only fields dependent on execution time differ - `checked_at`,
 the version label - and store paths). On each path the agent can:
 (1) **discover** what Kartograf can do and which values are allowed
-(`kartograf commands list` i `commands schema`, 9.4), without reading code and without parsing `--help`;
+(`kartograf commands list` i `commands schema`, 8.4), without reading code and without parsing `--help`;
 (2) **call** a command with explicit parameters and get a machine-readable result
-(`--json`, 9.2); (3) after an error **know what to fix**, without parsing
-text (`kartograf-error/1` with `code`, `hint` and `details.option`, 9.3).
+(`--json`, 8.2); (3) after an error **know what to fix**, without parsing
+text (`kartograf-error/1` with `code`, `hint` and `details.option`, 8.3).
 Contract and rationale: [ADR-046](DECISIONS.md#adr-046-interface-for-ai-agents-json-documents-error-codes-command-catalog-and-mcp-server)
 and the specification `docs/superpowers/specs/2026-10-18-agent-interface-design.md`;
-modules and dependencies: [ARCHITECTURE.md, sections 3.6 and 4.11](ARCHITECTURE.md#36-json-documents-kartograf-1).
-A short index for agents, read outside the repository, is `llms.txt` (9.7).
+modules and dependencies: [ARCHITECTURE.md, sections 3.5 and 4.11](ARCHITECTURE.md#35-json-documents-kartograf-1).
+A short index for agents, read outside the repository, is `llms.txt` (8.7).
 
-### 9.1 JSON documents and commands
+### 8.1 JSON documents and commands
 
 Every command answers with one **result envelope** `kartograf-result/1` (AGI-4.2). The
 document of the command (a row of the table below) is its `result`. The CLI prints the
@@ -3312,7 +3094,7 @@ of the library return it as `CommandResult` (`to_dict()` is the same document).
 
 `status` follows the verdict `ok` of the domain document: `ok` when it is true (or the
 document has no verdict), `partial` when it is false and a unit succeeded, `failed` when
-it is false and no unit did. The exit code of the CLI follows it: 0, 10, 11 (9.3). They
+it is false and no unit did. The exit code of the CLI follows it: 0, 10, 11 (8.3). They
 are outcomes, not errors: the envelope is printed all the same and nothing is written to
 the error line. In MCP only an error is `isError`. The units, by document:
 
@@ -3321,11 +3103,9 @@ the error line. In MCP only an error is `isError`. The units, by document:
 | `-download/1` | a unit with a file | a failed unit (`no_data` with the reason `no_coverage` or `year_out_of_range`, else `source_unavailable`), or a planned position the source changed since the plan (`conflict`, reason `stale_plan`); a failed part of a successful report (`--country auto` with one country down) stays a notice |
 | `-plan/1` | a position, named by its path below the store | a position the source could not be asked about (`source_unavailable`, reason `check_failed`) |
 | `-availability/1` | a country | a country that could not be checked |
-| `-project-report/1` | a task | a failed task, with the `code` and `reason` of `TaskResult` |
-| `-project-check/1` | a task | `status` and `verify`: a task with no pins (`not_found`, reason `not_downloaded`), a missing file (`not_found`, `missing_file`), a corrupt one (`data_error`, `corrupt_file`); a check: only `check_failed` |
 
 A document with no verdict (a sheet, sources, layers, the cache, the settings, the store,
-the catalog, a project that was changed) is `ok` with no items. The documents:
+the catalog) is `ok` with no items. The documents:
 
 | Document (`schema`) | CLI command (MCP tool) | Library function | Status `partial` or `failed` when |
 |---|---|---|---|
@@ -3337,9 +3117,6 @@ the catalog, a project that was changed) is `ok` with no items. The documents:
 | `kartograf-sheets/1` | `sheet find` (MCP: `kartograf_sheet_find`) | `find_sheets` | - |
 | `kartograf-sources/1` | `<group> list-sources` (11 groups; MCP: `kartograf_<group>_list_sources`) | `list_sources` | - |
 | `kartograf-layers/1` | `landcover list-layers`, `soil list-layers` (MCP: `kartograf_landcover_list_layers`, `kartograf_soil_list_layers`) | `list_layers` | - |
-| `kartograf-project-state/1` | `project init`, `project add`, `project remove` | `init_project`, `add_project_task`, `remove_project_task` | - |
-| `kartograf-project-report/1` | `project download` | `download_project` | `ok: false` |
-| `kartograf-project-check/1` | `project status`, `project verify`, `project download --check` (MCP: `kartograf_project_download` with `check: true`) | `get_project_status`, `verify_project`, `check_project` | `ok: false` |
 | `kartograf-cache/1` | `cache stats`, `cache path`, `cache clear` | `get_cache_info`, `get_cache_path`, `clear_cache` | - |
 | `kartograf-config/1` | `config show` | `get_config` | - |
 | `kartograf-command-list/1` | `commands list` (MCP: `kartograf_commands_list`) | `list_commands` | - |
@@ -3349,7 +3126,7 @@ the catalog, a project that was changed) is `ok` with no items. The documents:
 | `kartograf-store-entries/1` | `store entries` (MCP: `kartograf_store_entries`) | `list_store_entries` | - |
 | `kartograf-store-sidecar/1` | `store sidecar` (MCP: `kartograf_store_sidecar`) | `read_store_sidecar` | - |
 | `kartograf-store-init/1` | `store init` (MCP: `kartograf_store_init`) | `init_store` | - |
-| `kartograf-error/1` | each command on error: the last line of stderr (9.3) | `error_report` | - |
+| `kartograf-error/1` | each command on error: the last line of stderr (8.3) | `error_report` | - |
 
 Common rules of the documents:
 
@@ -3361,34 +3138,24 @@ Common rules of the documents:
 - notices (`Info:` and `Warning:` of the text mode) are in the `notices` array as
   `{level, code, message}` (the text key is `message`, as in an error), in the document of the command
   and in the envelope;
-- `ok` is present in the documents `-download/1`, `-plan/1`, `-availability/1`,
-  `-project-report/1` and `-project-check/1`. `ok: false` is a **result** (units in
+- `ok` is present in the documents `-download/1`, `-plan/1` and `-availability/1`.
+  `ok: false` is a **result** (units in
   `failed`, stale positions in `stale`, a `check_failed` position), not an error: the
   status of the envelope is `partial` or `failed` and the CLI exits with 10 or 11. An error
   is `kartograf-error/1`, on the last line of stderr, never an envelope;
-- `ok` in `kartograf-project-check/1` depends on the command: `project status` and
-  `project verify` give `ok: false` when a task is not downloaded
-  (`not_downloaded`) or a file does not have status `ok`; `project download
-  --check` assesses only source freshness (`ok: false` = item
-  `check_failed`), so a project without pins has `ok: true` there and status `ok`, and
-  `not_downloaded` lists all tasks. Completeness and the whole
-  project content are assessed by `status`/`verify` (idiom `project status -q ||
-  project download`);
 - within `/1` changes are only additive (new keys, new enumeration values):
   read by keys and ignore unknown ones; removing a key or changing a type means `/2`;
 - library: each document has `to_dict()` and `to_json(indent=2)`; `to_json()` is
   byte-reproducible with the same clock, `to_json(indent=None)` is the compact form of the
-  MCP server. Files - the sidecar `kartograf-meta/1` and the manifest `kartograf-project/1` -
-  are not result documents. List of keys of each document:
-  [ARCHITECTURE.md 3.6](ARCHITECTURE.md#36-json-documents-kartograf-1).
+  MCP server. The sidecar `kartograf-meta/1` is a file, not a result document. List of keys
+  of each document:
+  [ARCHITECTURE.md 3.5](ARCHITECTURE.md#35-json-documents-kartograf-1).
 
-### 9.2 The `--json` contract
+### 8.2 The `--json` contract
 
-The `--json` flag (no short form) is in every leaf command of the CLI (44 commands),
+The `--json` flag (no short form) is in every leaf command of the CLI (39 commands),
 after the command: `kartograf elevation availability --json ...`; `kartograf --json ...` does not
-exist. In `project add` give it before the task name (`kartograf project add --json
-teren elevation download ...`): after the task name it is a run option and ends with
-a `validation_error` with `details.option` equal to `json`.
+exist.
 
 1. **stdout** is exactly one JSON document, the envelope `kartograf-result/1` (UTF-8
    whatever the locale, indent of 2 spaces, `\n` at the end), and nothing else; an error writes
@@ -3400,14 +3167,14 @@ a `validation_error` with `details.option` equal to `json`.
    library diagnostic warnings (e.g. `Pominieto wersje o niezgodnym sha256`,
    `Pominieto wersje bez czytelnego sidecara` with parallel writes) are not printed
    here, and without `--json` have the prefix `Warning:`; the store state is then described by the result
-   of the command (e.g. `project verify`). The pyproj warning about a missing PROJ grid
+   of the command. The pyproj warning about a missing PROJ grid
    (`Best transformation is not available`) is not printed in any mode:
    transformations are chosen by the pinned operations policy (ARCHITECTURE 2).
 3. `Info:`/`Warning:` notices are in the `notices` field of the document; `-q` is allowed and has no
    effect. `--plan PLIK` works as before, and the plan file is the same document as
    stdout (saved before printing; the line `Info: zapisano plan` is not printed).
    `soil hsg --json --summary` returns statistics in the `summary` field.
-4. **Exit code** (9.3): 0 for the status `ok`, 10 for `partial` and 11 for `failed` (the
+4. **Exit code** (8.3): 0 for the status `ok`, 10 for `partial` and 11 for `failed` (the
    envelope is printed all the same: they are outcomes, ERR §1), the registry exit code of the
    error otherwise (2 for an input error, 5 for a source failure, ...), 130 after Ctrl-C, 143
    after SIGTERM. An error is the compact `kartograf-error/1` document on the **last line of
@@ -3497,7 +3264,7 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
 
 (The document is one compact line on stderr; `allowed` is written on one line here.)
 
-### 9.3 Exit codes and error codes
+### 8.3 Exit codes and error codes
 
 Every error has a `code` of the shared Nogat
 [error registry](https://github.com/Daldek/Nogat/blob/main/standards/ERROR_REGISTRY.md), and
@@ -3534,11 +3301,10 @@ failed units; the result lists them (`items`) and no error document is written.
 | Code | `details.reason` | Exception | Exit | When |
 |---|---|---|---|---|
 | `internal_error` | - | `KartografError` | 1 | package error without a more precise class |
-| `validation_error` | `invalid_input` | `ValidationError` | 2 | wrong value or combination of arguments, a missing required argument, an invalid input file (plan, manifest, geometry); reasons that refine it: exclusive_options (output_dir with root) and store_only_option (an option that needs the store, with output_dir) |
+| `validation_error` | `invalid_input` | `ValidationError` | 2 | wrong value or combination of arguments, a missing required argument, an invalid input file (plan, geometry); reasons that refine it: exclusive_options (output_dir with root) and store_only_option (an option that needs the store, with output_dir) |
 | `validation_error` | `usage` | `UsageError` | 2 | wrong use of a command: unknown command or flag, a missing positional argument, a value outside the allowed choices |
 | `validation_error` | `invalid_sheet_code` | `ParseError` | 2 | the sheet code is not a PL or CZ code or lies outside the nomenclature |
 | `validation_error` | `invalid_config` | `ConfigError` | 2 | the user settings cannot be used: nogat.toml is unreadable, not UTF-8 text, not valid TOML or has a section that is not a table, or a setting has a value that is not valid |
-| `validation_error` | `project_locked` | `ProjectLockedError` | 2 | the lock of a project manifest (.kartograf-project.lock, kartograf.PROJECT_LOCK) stayed past the wait of a change: another process holds it or an interrupted change left it; details.path names the lock directory |
 | `source_unavailable` | - | `DownloadError` | 5 | network, HTTP, timeout or the response of the source |
 | `no_data` | `no_coverage` | `NoCoverageError` | 14 | the source has no data for the sheet (a state of the data, retrying does not help) |
 | `no_data` | `year_out_of_range` | `YearRangeError` | 14 | data exists but not in the requested year range (found before any download) |
@@ -3626,7 +3392,7 @@ can write an error to its log with it. Without `--json` an error is `Error: <mes
 stderr, then the document as the last line, with the same exit code (the CLI prints `Remedium:` below a transform error for every
 command).
 
-### 9.4 Command catalog
+### 8.4 Command catalog
 
 The commands are described by the catalog (`kartograf.catalog`): the CLI parser, the documents
 `kartograf-command-list/1` and `kartograf-commands/1` and the MCP tools are built from the same declarations. Two steps:
@@ -3664,7 +3430,7 @@ the main limitation), `options`, `result` (`schema` and `cardinality`: `single`,
 `unbounded`), `effects` (`read_only`, `writes`: `none`, `add`, `replace`, `delete`;
 `idempotent`, `network`, `destructive`), `check`, `families` (the MCP tool families; `core` is the
 main tasks), `rules`, `examples` (`call` = the full CLI command, `result` = an excerpt of the result,
-`title`), `errors` (codes of the error registry, 9.3) and `i18n.pl` (the Polish `summary`, `description`,
+`title`), `errors` (codes of the error registry, 8.3) and `i18n.pl` (the Polish `summary`, `description`,
 `rules`; the document does not carry the Polish option descriptions, they are in `--help`).
 
 An option (`options[]`) is a parameter with an argument of the library function, or `check` of a command with a
@@ -3677,24 +3443,24 @@ and a one-line `meaning`), `min`, `max`, `examples`, `one_of` (a group of mutual
 a path that the MCP server checks). A value per country (`resolution`, `vertical_crs`) is a string
 or an object with the keys `pl` and `cz`.
 
-The exit codes and error codes are not in the catalog any more: the tables are in 9.3, and the codes of a command in its `errors`.
+The exit codes and error codes are not in the catalog any more: the tables are in 8.3, and the codes of a command in its `errors`.
 The command descriptions are in English (AGI-9.1); the CLI text and `--help` are Polish until the message
 catalogue.
 
-### 9.5 Command layer
+### 8.5 Command layer
 
 The command layer is five functions from `kartograf.__all__` (`command` and `options` are passed
-positionally, the remaining arguments are keyword-only); they are called by the CLI (`project add`) and the MCP
-server, and the Archiwista assistant can use them to build, validate and run tasks without
+positionally, the remaining arguments are keyword-only); they are called by the MCP
+server, and the Archiwista assistant can use them to build, validate and run commands without
 knowing the per-product functions:
 
 | Function | Role |
 |---|---|
-| `parse_command(argv, tasks=False)` | command line of any command (a list of words or a string, also with a leading `kartograf`, as `format_command` writes it) -> `CommandCall(command, options, run)`: `options` is the JSON form of the options of the call (the keys of `commands schema`; as `tasks[].options` for a data command, `bbox` always with `bbox_crs`, a required option the line leaves to the default of its flag, `project_dir` `.`, included), `run` is the remaining flags of the line under the parameter names (`root`, `output_dir`, `upgrade`, `force`, `check`, `plan`, `workers`, `quiet`, `json`, `summary`; there is no `update` key); `project add` has its data command as the options `command` and `options`; a syntax error is a `UsageError`; with `tasks=True` the line must be a data command (`ValidationError(option="command")`) |
+| `parse_command(argv)` | command line of any command (a list of words or a string, also with a leading `kartograf`, as `format_command` writes it) -> `CommandCall(command, options, run)`: `options` is the JSON form of the options of the call (the keys of `commands schema`, `bbox` always with `bbox_crs`, a required option the line leaves to the default of its flag included), `run` is the remaining flags of the line under the parameter names (`root`, `output_dir`, `upgrade`, `force`, `check`, `plan`, `workers`, `quiet`, `json`, `summary`; there is no `update` key); a syntax error is a `UsageError` |
 | `validate_command(command, options, root=None, output_dir=None)` | validation without network and without writing: a data command gets the checks of its function, any other command is checked against its declaration (names, forms, required options, allowed values, bounds, rules among the options): `ValidationError` with `option`/`allowed` |
 | `format_command(command, options, run=None)` | canonical line `kartograf <group> <command> --flag ...` (the inverse of `parse_command`) |
-| `run_command(command, options, root=, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | calls the function of the command (`download_data`, `describe_sheet`, `init_store`, ...) and returns its envelope `CommandResult` (9.1; `result` is the document of the command, `kartograf-download/1` for a download); the mode is `update="upgrade"` or `"force"` (the caller makes it of `run`: `upgrade`/`force` -> `update`, `check` -> `check_command`), `plan` is `check_command(...).result`; an option the command does not have is refused; `project add` takes the options of its task in the JSON form too (`bbox` with `bbox_crs`) and gives `add_project_task` the library arguments, as `kartograf project add` and the MCP tool do |
-| `check_command(command, options, root=, output_dir=, force=, cache=, on_notice=)` | the `check_*` of a command that has a check, without downloading or writing (a data command, `project download`, `store init`): the envelope with `check: true`, `result` is `kartograf-plan/1` (`kartograf-project-check/1` for a project); any other command is `validation_error`, `details.reason` `no_check` |
+| `run_command(command, options, root=, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | calls the function of the command (`download_data`, `describe_sheet`, `init_store`, ...) and returns its envelope `CommandResult` (8.1; `result` is the document of the command, `kartograf-download/1` for a download); the mode is `update="upgrade"` or `"force"` (the caller makes it of `run`: `upgrade`/`force` -> `update`, `check` -> `check_command`), `plan` is `check_command(...).result`; an option the command does not have is refused |
+| `check_command(command, options, root=, output_dir=, force=, cache=, on_notice=)` | the `check_*` of a command that has a check, without downloading or writing (a data command, `store init`): the envelope with `check: true`, `result` is `kartograf-plan/1`; any other command is `validation_error`, `details.reason` `no_check` |
 
 ```python
 from kartograf import (
@@ -3725,14 +3491,14 @@ except ValidationError as exc:
     print(error_report(exc, command="elevation download").hint)
 ```
 
-### 9.6 MCP server
+### 8.6 MCP server
 
 The Model Context Protocol server runs over **stdio** (the only transport in 0.8.0): the
 script `kartograf-mcp` (or `python -m kartograf.mcp_server`) offers one tool per command of
 the catalog, each calling one function of the library (AGI section 5). The name of a tool is
 the `operation_id` of its command (`kartograf_elevation_download`); its description, input
 schema and hints come from the catalog; its answer is the result envelope
-`kartograf-result/1`, the document of `--json` (9.1), and its `outputSchema` says so. The
+`kartograf-result/1`, the document of `--json` (8.1), and its `outputSchema` says so. The
 server is thin: it has no data logic, validation or formatting of its own, and everything it
 says (instructions, descriptions, its own messages) is English (AGI-9.2).
 
@@ -3779,23 +3545,21 @@ failure to start prints `Error: ...` and the `kartograf-error/1` document as the
 
 | Option | Meaning |
 |---|---|
-| `--tools FAMILIES` | tool families, comma separated: `discovery`, `availability`, `data`, `project`, `store` and `core` (default: every tool). `core` is the ten tools of the main tasks (AGI-5.12) for clients that limit the number of tools or have no tool search; an unknown family stops the start (exit code 2) |
-| `--allow-dir DIR` | repeatable; an absolute directory (or with `~`; a relative one stops the start with a usage error, exit code 2: it would depend on the working directory the client chose). When given, every path argument (`root`, `geometry`, `project_dir`, `path`, and the paths among the options of `project add`) must lie, after `Path.resolve()`, inside one of the directories, else the call is `forbidden` (exit code 12) with `details.option`, `details.path`, `details.allowed` and a `hint`. Without it a call may read any absolute path. The store that a project manifest names is not checked, the project directory is |
+| `--tools FAMILIES` | tool families, comma separated: `discovery`, `availability`, `data`, `store` and `core` (default: every tool). `core` is the ten tools of the main tasks (AGI-5.12) for clients that limit the number of tools or have no tool search; an unknown family stops the start (exit code 2) |
+| `--allow-dir DIR` | repeatable; an absolute directory (or with `~`; a relative one stops the start with a usage error, exit code 2: it would depend on the working directory the client chose). When given, every path argument (`root`, `output_dir`, `geometry`, `path`) must lie, after `Path.resolve()`, inside one of the directories, else the call is `forbidden` (exit code 12) with `details.option`, `details.path`, `details.allowed` and a `hint`. Without it a call may read any absolute path |
 | `--allow-writes` | the tools that write do write, inside `--allow-dir` (required with it: without a directory the start fails with a usage error, exit code 2). Without it the server reads and plans (see below) |
-| `--cache-file FILE` | file of the metadata cache; default `<cache_dir>/kartograf/metadata.db`, the same file as the CLI and the library (section 10); it does not depend on the working directory the client chose |
+| `--cache-file FILE` | file of the metadata cache; default `<cache_dir>/kartograf/metadata.db`, the same file as the CLI and the library (section 9); it does not depend on the working directory the client chose |
 | `--no-cache` | no metadata cache (exclusive with `--cache-file`) |
 | `--version` | the version |
 
-**Read only by default (AGI-1.3).** Without `--allow-writes` the 23 tools that only read work
+**Read only by default (AGI-1.3).** Without `--allow-writes` the 21 tools that only read work
 as usual, and each of the 13 tools that write and have a plan (the twelve data commands and
-`project download`) is offered as its **plan-only variant**: its input schema has no `update`,
+`store init`) is offered as its **plan-only variant**: its input schema has no `update`,
 `plan`, `workers` or `summary`, `check` is fixed to `true` (the call may leave it
 out), its hints say `readOnlyHint: true`, and every call is the plan (`check: true` in the
-envelope, the document `kartograf-plan/1`; for `project download` `kartograf-project-check/1`).
+envelope, the document `kartograf-plan/1`).
 An argument of a run, or `check: false`, answers `forbidden` (12) with `details.option`
-and the hint to start the server with `--allow-writes`. The three tools that write and have no
-plan (`project init`, `project add`, `project remove`) are not offered at all; a call of one (a
-client may still have the old list) answers `forbidden` (12). With `--allow-writes` all 39
+and the hint to start the server with `--allow-writes`. With `--allow-writes` all 34
 tools are offered as declared, and `check: true` still plans.
 
 #### MCP server tools
@@ -3836,12 +3600,6 @@ not write does with the tool.
 | `kartograf_maps_list_sources` | `maps list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
 | `kartograf_geodesy_download` | `geodesy download` | `download_collection` | `data` | `kartograf-download/1` | I, OW | plan |
 | `kartograf_geodesy_list_sources` | `geodesy list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
-| `kartograf_project_init` | `project init` | `init_project` | `project` | `kartograf-project-state/1` | I | not offered |
-| `kartograf_project_add` | `project add` | `add_project_task` | `project` | `kartograf-project-state/1` |  | not offered |
-| `kartograf_project_remove` | `project remove` | `remove_project_task` | `project` | `kartograf-project-state/1` | D | not offered |
-| `kartograf_project_download` | `project download` | `download_project` | `project` | `kartograf-project-report/1` | I, OW | plan |
-| `kartograf_project_status` | `project status` | `get_project_status` | `project` | `kartograf-project-check/1` | RO, I | same |
-| `kartograf_project_verify` | `project verify` | `verify_project` | `project` | `kartograf-project-check/1` | RO, I | same |
 | `kartograf_sheet_parse` | `sheet parse` | `describe_sheet` | `discovery` | `kartograf-sheet/1` | RO, I | same |
 | `kartograf_commands_list` | `commands list` | `list_commands` | `discovery`, `core` | `kartograf-command-list/1` | RO, I | same |
 | `kartograf_commands_schema` | `commands schema` | `command_schema` | `discovery`, `core` | `kartograf-commands/1` | RO, I | same |
@@ -3853,8 +3611,7 @@ not write does with the tool.
 <!-- end generated -->
 
 `cache *` and `config show` have no tool (the cache of the server is its own business, and
-`update="force"` refreshes entries; the settings are the business of the host), and neither
-has `open_project` (the state of a project is returned by the project tools). Tool names are
+`update="force"` refreshes entries; the settings are the business of the host). Tool names are
 as stable as error codes. `kartograf_commands_list` and `kartograf_commands_schema` carry
 `_meta["anthropic/alwaysLoad"]`, so Claude Code loads their definitions up front. Every tool
 has an `outputSchema`: the envelope `kartograf-result/1` as one self-contained JSON Schema,
@@ -3897,16 +3654,15 @@ them with the meaning of every allowed value. The same task, run and then planne
 **Result and errors.**
 
 - A result, also with the status `partial` or `failed`: `CallToolResult` with
-  `structured_content` = `to_dict()` of the envelope `kartograf-result/1` (9.1) and
+  `structured_content` = `to_dict()` of the envelope `kartograf-result/1` (8.1) and
   `content` = the same document as compact JSON (`to_json(indent=None)`); `is_error` is
-  false. The outcomes 10 and 11 of the CLI are results here too (also
-  `kartograf_project_status` with a task that is not downloaded): the agent reads `status` and
+  false. The outcomes 10 and 11 of the CLI are results here too: the agent reads `status` and
   `items`. The SDK client checks every such result against the `outputSchema`.
 - An error: `kartograf-error/1` (`structured_content` and `content`, `is_error: true`) with
   `command` = the command of the tool. `OSError` is `io_error`, any other exception outside
   the hierarchy is `internal_error` (the full traceback only in the stderr log of the
-  server). `forbidden` (12) is a path outside `--allow-dir`, an argument of a run (or
-  `check: false`) on a server that does not write, or a tool that is not offered. The
+  server). `forbidden` (12) is a path outside `--allow-dir` or an argument of a run (or
+  `check: false`) on a server that does not write. The
   only protocol error is an unknown tool name (`INVALID_PARAMS`, naming the close tool names).
 - The order of the checks of a call: a write that a plan-only tool refuses (`forbidden`); the
   arguments against the input schema of the tool (the first violation is `validation_error`
@@ -3919,8 +3675,8 @@ them with the meaning of every allowed value. The same task, run and then planne
   `hint`), one that is left out is the default store, which must lie inside `--allow-dir`
   (`forbidden` otherwise), and a `bbox` always comes with `bbox_crs`.
 - Progress: a tool whose library function has `on_progress` (`kartograf_elevation_download`,
-  `kartograf_imagery_download`, `kartograf_landcover_download`, the seven collection download
-  tools and `kartograf_project_download`) sends MCP `progress` notifications when it runs (a
+  `kartograf_imagery_download`, `kartograf_landcover_download` and the seven collection
+  download tools) sends MCP `progress` notifications when it runs (a
   counter of events that grows strictly, no total, the text `<status> <unit>
   (<current>/<total>): <message>`); a plan and the other tools send none.
 - Concurrency: calls may run in parallel, but at most 4 tools that use the network
@@ -3928,10 +3684,10 @@ them with the meaning of every allowed value. The same task, run and then planne
   client cancels does not stop a running download (versions are committed atomically, the
   result is dropped); closing stdio ends the server process.
 - Cost for the context of the agent: `tools/list` is long, because every property has its
-  catalog description and every tool the 3,000-character `outputSchema`: about 212,000
-  characters of compact JSON for the 40 tools of a server that writes (89,000 without the
-  `outputSchema`), 194,000 (80,000) for the 37 tools of a server that does not, and 66,000
-  (35,000) for `--tools core`; the answer of `kartograf_commands_list` is about 11,000
+  catalog description and every tool the 3,000-character `outputSchema`: about 194,000
+  characters of compact JSON for the 34 tools of a server that writes (89,000 without the
+  `outputSchema`), 188,000 (83,000) for the same 34 tools of a server that does not, and 68,000
+  (37,000) for `--tools core`; the answer of `kartograf_commands_list` is about 10,000
   characters, and `structuredContent` repeats `content`. Claude Code defers the definitions
   and loads only the names and the `alwaysLoad` tools; for a client that loads all of them,
   start with `--tools core` or fewer families. The limit of 30,000 characters of ADR-046 (D22)
@@ -3948,14 +3704,14 @@ in the default state (`kartograf.mcp_server.INSTRUCTIONS`); a test compares it:
 <!-- generated: mcp-instructions from kartograf.mcp_server by scripts/generate_docs.py; do not edit -->
 ```text
 Kartograf downloads spatial data of Poland and Czechia (GUGiK, CUZK, Copernicus, ISRIC) into a versioned store (root: one directory per product, versions never overwritten) or, with output_dir, as plain files named as in the store. Order: discover, check, run, read. Discover with kartograf_commands_list (groups, products and commands) and kartograf_commands_schema(command="elevation download") (the options of one command, its allowed values with their meanings, rules, examples and errors). What years, grids and CRSs an area has: kartograf_elevation_availability. Read the store: kartograf_store_overview, kartograf_store_entries, kartograf_store_sidecar; the sidecar of a file has its CRS, source and licence.
-Shared arguments. Target of a write: output_dir (plain files), root (the store) or neither (the default store), never both. Paths (root, output_dir, project_dir, geometry, path) are absolute. Area: sheet (a sheet code, for example N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no default) or geometry (a SHP or GPKG file; layer is its GPKG layer), exactly one; some commands also take teryt, ku or whole_country. country is pl, cz or auto: required with bbox and geometry, implied by a sheet code. Select data explicitly (product, resolution, vertical_crs, ...): nothing is guessed. A value per country is a string or {"pl": ..., "cz": ...}.
+Shared arguments. Target of a write: output_dir (plain files), root (the store) or neither (the default store), never both. Paths (root, output_dir, geometry, path) are absolute. Area: sheet (a sheet code, for example N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] in bbox_crs, which is required: there is no default) or geometry (a SHP or GPKG file; layer is its GPKG layer), exactly one; some commands also take teryt, ku or whole_country. country is pl, cz or auto: required with bbox and geometry, implied by a sheet code. Select data explicitly (product, resolution, vertical_crs, ...): nothing is guessed. A value per country is a string or {"pl": ..., "cz": ...}.
 Updates. update omitted fetches what is missing, update=upgrade fetches newer content when the source signals it (store only), update=force fetches again: a store never overwrites a version, plain files are replaced and an existing one is otherwise a conflict. check=true plans without fetching (with output_dir each target is write, replace or conflict): a store plan (the result of the envelope, kartograf-plan/1) runs later with update=upgrade and plan.
-This server does not write: a command that writes only plans (check is true; update, plan, workers and summary are forbidden), and kartograf_project_init, kartograf_project_add and kartograf_project_remove are unavailable. Start kartograf-mcp with --allow-writes and --allow-dir DIR to download.
+This server does not write: a command that writes only plans (check is true; update, plan, workers and summary are forbidden). Start kartograf-mcp with --allow-writes and --allow-dir DIR to download.
 Results. A result is the envelope kartograf-result/1: status (ok, partial, failed), result (the document of the command), items (one per unit; a failed one has code and reason) and notices. partial and failed are results (isError false): read items. An error (isError true) is kartograf-error/1 with code, message, hint and details; details.option names the argument to fix. forbidden is a path outside --allow-dir or a write on a server that only plans.
 ```
 <!-- end generated -->
 
-### 9.7 Files for agents
+### 8.7 Files for agents
 
 - **`AGENTS.md` and `llms.txt`** in the repository root are the guide for agents (AGI section 8,
   DOC 4 and 5): English and **generated** from the command catalog, the error registry and the
@@ -3986,7 +3742,7 @@ Results. A result is the envelope kartograf-result/1: status (ok, partial, faile
 
 ---
 
-## 10. Settings and directories
+## 9. Settings and directories
 
 Kartograf keeps its settings where every Nogat tool does (Nogat DEV-18, ADR-050): one file,
 `nogat.toml`, and variables with a fixed prefix. A setting comes from the first of:

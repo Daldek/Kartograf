@@ -90,7 +90,6 @@ def _depth(standard_only: bool = False) -> Param:
         if standard_only
         else _values("depth"),
         required=True,
-        task=True,
         section=SELECTION_TITLE,
     )
 
@@ -116,7 +115,6 @@ _DOWNLOAD_PARAMS = (
         metavar=message("catalog.metavar_property"),
         allowed=_values("property"),
         required=True,
-        task=True,
         section=SELECTION_TITLE,
     ),
     _depth(),
@@ -127,7 +125,6 @@ _DOWNLOAD_PARAMS = (
         metavar=message("catalog.metavar_stat"),
         allowed=_values("stat"),
         required=True,
-        task=True,
         section=SELECTION_TITLE,
     ),
     *shared.area(sheet=SHEET_AREA_HELP, accepts=PL_SHEETS),
@@ -170,7 +167,6 @@ COMMANDS = (
             "catalog_soil.soil_download_description", note=shared.PLAIN_NOTE
         ),
         effects=("network", "store_write"),
-        project_task=True,
         check_function="check_soil",
         check_result_schema="kartograf-plan/1",
         constraints=(_AREA_RULE, *shared.target_constraints()),
@@ -211,7 +207,6 @@ COMMANDS = (
         _HSG_PARAMS,
         description=message("catalog_soil.soil_hsg_description"),
         effects=("network", "store_write"),
-        project_task=True,
         check_function="check_hsg",
         check_result_schema="kartograf-plan/1",
         constraints=(_AREA_RULE, *shared.target_constraints()),

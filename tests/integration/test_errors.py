@@ -42,7 +42,6 @@ SPEC_ERROR_TABLE = [
     ("UsageError", "validation_error", "usage", 2),
     ("ParseError", "validation_error", "invalid_sheet_code", 2),
     ("ConfigError", "validation_error", "invalid_config", 2),
-    ("ProjectLockedError", "validation_error", "project_locked", 2),
     ("DownloadError", "source_unavailable", None, 5),
     ("NoCoverageError", "no_data", "no_coverage", 14),
     ("YearRangeError", "no_data", "year_out_of_range", 14),
@@ -423,9 +422,9 @@ def test_usage_error_command_and_hint_sources():
     exc = UsageError("m", command="elevation download")
 
     # the command a caller names is the one that failed; the hint is about the
-    # command whose line was wrong (the parser of a line inside ``project add``)
-    nested = error_report(exc, command="project add")
-    assert nested.command == "project add"
+    # command whose line was wrong
+    nested = error_report(exc, command="sheet find")
+    assert nested.command == "sheet find"
     assert nested.hint is not None
     assert nested.hint.startswith(
         'The options of the command: kartograf commands schema --command "elevation '
@@ -2357,42 +2356,3 @@ def test_store_segment_that_is_a_symlink_names_the_segment(tmp_path):
         kartograf.iter_store(tmp_path, segment="nmt/pl_1992_1m_evrf2007")
 
     assert caught.value.option == "segment"
-
-
-def test_project_task_name_and_command_errors_name_the_option(tmp_path):
-    project = kartograf.init_project(tmp_path / "p", root=tmp_path / "p" / "data")
-
-    with pytest.raises(ValidationError) as bad_name:
-        kartograf.add_project_task(
-            project.directory,
-            name="zla nazwa",
-            command="soil hsg",
-            options={"depth": "0-5cm"},
-        )
-    with pytest.raises(ValidationError) as bad_command:
-        kartograf.add_project_task(
-            project.directory, name="ok", command="project status", options={}
-        )
-    with pytest.raises(ValidationError) as unknown:
-        kartograf.remove_project_task(project.directory, name="brak")
-
-    assert (bad_name.value.option, bad_name.value.allowed) == ("name", None)
-    assert bad_command.value.option == "command"
-    assert "elevation download" in (bad_command.value.allowed or ())
-    assert "project status" not in (bad_command.value.allowed or ())
-    assert (unknown.value.option, unknown.value.allowed) == ("name", None)
-
-
-def test_project_download_update_and_workers_name_the_option(tmp_path):
-    project = kartograf.init_project(tmp_path / "p", root=tmp_path / "p" / "data")
-
-    with pytest.raises(ValidationError) as bad_update:
-        kartograf.download_project(project.directory, update="x")
-    with pytest.raises(ValidationError) as bad_workers:
-        kartograf.download_project(project.directory, workers=0)
-
-    assert (bad_update.value.option, bad_update.value.allowed) == (
-        "update",
-        ("upgrade", "force"),
-    )
-    assert bad_workers.value.option == "workers"

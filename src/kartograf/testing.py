@@ -1,14 +1,13 @@
 """Offline fixtures of the formats Kartograf writes and other projects read.
 
-Projects that read a Kartograf store (``iter_store``, ``read_sidecar``,
-``kartograf-project.json``, the ``kartograf-meta/1`` sidecars) test their
-readers against instances built here instead of hand-written copies of the
-formats. Everything is produced by the REAL writers of the library
-(``fetch_version`` / ``commit_version`` for the versions, ``ensure_link``
-for the standard and ``full_sheet/`` paths, ``emit_sidecar`` for the
-sidecars, ``commit_tasks`` for the project file), so a fixture cannot drift
-from the format: a change of a format changes the fixture, and the consumer's
-contract test sees it when it moves to the new Kartograf version.
+Projects that read a Kartograf store (``iter_store``, ``read_sidecar``, the
+``kartograf-meta/1`` sidecars) test their readers against instances built here
+instead of hand-written copies of the formats. Everything is produced by the REAL
+writers of the library (``fetch_version`` / ``commit_version`` for the versions,
+``ensure_link`` for the standard and ``full_sheet/`` paths, ``emit_sidecar`` for the
+sidecars), so a fixture cannot drift from the format: a change of a format changes
+the fixture, and the consumer's contract test sees it when it moves to the new
+Kartograf version.
 
 Nothing here touches the network and the output is deterministic: every
 timestamp comes from the library clock seam (``kartograf._clock``), driven
@@ -38,7 +37,6 @@ import contextlib
 import hashlib
 import itertools
 import json
-import os
 import tempfile
 import threading
 from collections.abc import Iterator, Mapping, Sequence
@@ -48,7 +46,6 @@ from pathlib import Path
 from typing import Any, Literal, get_args
 
 from kartograf import _clock
-from kartograf._version import build_version
 from kartograf.core.parser_registry import path_parts
 from kartograf.download.campaigns import FULL_SHEET_DIR, CampaignRef
 from kartograf.download.fetch import FileSlot, FileStatus, fetch_version, local_version
@@ -66,16 +63,6 @@ from kartograf.download.versions import (
 from kartograf.exceptions import ValidationError
 from kartograf.marker import prepare_store
 from kartograf.messages import message
-from kartograf.project.manifest import (
-    MANIFEST_NAME,
-    absolute,
-    commit_tasks,
-    create_manifest,
-    pin_problem,
-    task_to_json,
-)
-from kartograf.project.model import PinnedFile, ProjectTask
-from kartograf.project.operations import add_project_task, open_project
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
 from kartograf.sources.sidecar import emit_sidecar
 
@@ -90,7 +77,6 @@ __all__ = [
     "FixtureStore",
     "FixtureVersion",
     "build_fixture_store",
-    "build_project",
     "make_sidecar",
 ]
 
@@ -117,7 +103,6 @@ _INDEX_URL = "https://example.invalid/wfs/nmt_1m"
 _SOURCE_URL = "https://example.invalid/nmt/{id}_1744736_{sheet}.asc"
 _CLOCK_START = datetime(2026, 10, 12, 8, 30, 45, 123456, tzinfo=UTC)
 _CLOCK_STEP = timedelta(minutes=1)
-_PINNED_AT = datetime(2026, 10, 20, 9, 0, 0, tzinfo=UTC)
 # An empty ZIP archive (the end-of-central-directory record only).
 _EMPTY_ZIP = b"PK\x05\x06" + bytes(18)
 
@@ -552,136 +537,6 @@ def build_fixture_store(
         with contextlib.suppress(OSError):
             staging.rmdir()
     return FixtureStore(base, variant, (pl, cz), damaged)
-
-
-def build_project(
-    project_dir: str | Path,
-    store: FixtureStore,
-    *,
-    pin: Literal["newest", "oldest"] = "newest",
-) -> Path:
-    """Write ``kartograf-project.json`` with tasks pinning versions of ``store``.
-
-    The project is written by the real project writer: two ``elevation
-    download`` tasks (``nmt-pl`` for the PL sheet, ``nmt-cz`` for the CZ
-    sheet), each pinning one version of its file by SHA-256, size and label.
-    The store is referenced relative to the project directory when it can be.
-    ``open_project``, ``get_project_status`` and ``verify_project`` accept the
-    result.
-
-    Parameters
-    ----------
-    project_dir : str or Path
-        Directory of the project; it must not contain a manifest yet.
-    store : FixtureStore
-        A store of ``build_fixture_store``.
-    pin : {"newest", "oldest"}, default "newest"
-        Which version of the PL sheet to pin. ``oldest`` pins a version that
-        a newer one (with the standard path on it) has superseded, as a
-        project does after the source published new content.
-
-    Returns
-    -------
-    Path
-        The project directory (``kartograf.open_project`` argument).
-
-    Raises
-    ------
-    ValidationError
-        The project exists already, or ``pin`` is unknown.
-
-    Examples
-    --------
-    >>> import tempfile
-    >>> from pathlib import Path
-    >>> from kartograf import open_project
-    >>> from kartograf.testing import build_fixture_store, build_project
-    >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     store = build_fixture_store(Path(tmp) / "data")
-    ...     project = build_project(Path(tmp) / "projekt", store)
-    ...     print([task.name for task in open_project(project).tasks])
-    ['nmt-pl', 'nmt-cz']
-    """
-    if pin not in ("newest", "oldest"):
-        raise ValidationError(
-            message("testing.unknown_pin", pin=pin),
-            option="pin",
-            allowed=("newest", "oldest"),
-        )
-    directory = absolute(project_dir)
-    tasks = (
-        (
-            "nmt-pl",
-            {
-                "product": "nmt",
-                "sheet": PL_SHEET,
-                "resolution": "1m",
-                "vertical_crs": "EVRF2007",
-            },
-            store.file(PL_SEGMENT),
-            0 if pin == "oldest" else -1,
-        ),
-        (
-            "nmt-cz",
-            {
-                "product": "nmt",
-                "sheet": CZ_SHEET,
-                "resolution": "5m",
-                "vertical_crs": "Bpv",
-            },
-            store.file(CZ_SEGMENT),
-            -1,
-        ),
-    )
-    if (directory / MANIFEST_NAME).exists():
-        raise ValidationError(
-            message("testing.project_exists", path=directory / MANIFEST_NAME)
-        )
-    with _fixed_clock(_PINNED_AT):
-        create_manifest(directory, _relative(store.root, directory))
-        for name, options, file, index in tasks:
-            project = add_project_task(
-                directory, name=name, command="elevation download", options=options
-            )
-            before = task_to_json(next(t for t in project.tasks if t.name == name))
-            version = file.versions[index]
-            pinned = PinnedFile(
-                "output",
-                file.unit,
-                file.path.relative_to(store.root).as_posix(),
-                version.path.relative_to(store.root).as_posix(),
-                version.label,
-                version.sha256,
-                version.size_bytes,
-            )
-            problem = pin_problem(pinned)
-            if problem is not None:
-                raise ValidationError(problem)
-            task = ProjectTask(
-                name,
-                "elevation download",
-                dict(before["options"]),
-                _clock.now().isoformat(timespec="seconds"),
-                build_version(),
-                None,
-                (pinned,),
-            )
-            if commit_tasks(directory, {name: (before, task_to_json(task))}):
-                raise ValidationError(message("testing.task_changed", name=name))
-    open_project(directory)
-    return directory
-
-
-def _relative(store: Path, project: Path) -> str:
-    """Return the store as a manifest path.
-
-    Relative to the project directory, with ``/``; absolute when there is no
-    relative path (another drive).
-    """
-    try:
-        return Path(os.path.relpath(absolute(store), project)).as_posix()
-    except ValueError:
-        return absolute(store).as_posix()
 
 
 def make_sidecar(

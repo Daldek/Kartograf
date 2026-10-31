@@ -5,7 +5,7 @@ The handlers of the data commands (``elevation download``, ``soil hsg``, ...) do
 not know the flags of their command: the declaration in ``kartograf.catalog`` says
 which flags are the options of the command and of what kind, and
 ``library_arguments`` reads them from the namespace the same way ``parse_command``
-reads a line and a project task reads its options - one conversion for all of them.
+reads a line - one conversion for both.
 """
 
 import argparse
@@ -42,7 +42,8 @@ def library_arguments(args: argparse.Namespace) -> dict[str, Any]:
     """
     command = declared_commands()[args._command_id]
     options, _ = parsed_options(command, args)
-    return convert_arguments(command.task_options, options)
+    kinds = {param.name: param.kind for param in command.call_options}
+    return convert_arguments(kinds, options)
 
 
 def target_arguments(args: argparse.Namespace) -> dict[str, Path | None]:

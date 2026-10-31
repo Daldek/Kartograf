@@ -21,8 +21,8 @@ from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from tests.conftest import FakeCorine, FakeSoilGrids
 from tests.integration.test_hsg import RasterSoilGrids
+from tests.support.data_fixtures import landcover_sources
 from tests.support.errors import without_error_document
-from tests.support.project_fixtures import landcover_sources
 
 BBOX_ARG = "770000,509000,772000,511000"
 COORDS = "770000_509000_772000_511000"

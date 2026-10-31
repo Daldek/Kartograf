@@ -86,7 +86,7 @@ class _StderrLines(logging.Handler):
     The prefixes are ``Warning:`` and ``Error:``; without this handler Python's
     fallback prints them as bare messages.
 
-    ``--json`` keeps stderr empty (USAGE 9.2): of all the records only the
+    ``--json`` keeps stderr empty (USAGE 8.2): of all the records only the
     failed attempts of the HTTP transport (before their retry) pass; the other
     records are diagnostics of the library, and what concerns the result is in
     the document (``notices``, the verdict of the command). ``KARTOGRAF_DEBUG``

@@ -23,7 +23,7 @@ from kartograf.catalog.tools import tool_specs
 from kartograf.cli.commands import main
 from kartograf.config import KEYS, SHARED_KEYS
 from tests.support.command_lines import check_command_line
-from tests.support.project_fixtures import pl_sheets
+from tests.support.data_fixtures import pl_sheets
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 README = (ROOT / "README.md").read_text(encoding="utf-8")

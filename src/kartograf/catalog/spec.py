@@ -28,9 +28,8 @@ from typing import Final, Literal, get_args
 
 from kartograf.serialization import SCHEMA_PATTERN
 
-# Value kinds of a parameter: the kinds of the project manifest options plus
-# ``plan`` (an update plan: a file on the CLI, a document in the API) and
-# ``options`` (the options object of a project task).
+# Value kinds of a parameter: the JSON kinds of the options of a call plus ``plan``
+# (an update plan: a file on the CLI, a document in the API).
 Kind = Literal[
     "str",
     "int",
@@ -41,14 +40,11 @@ Kind = Literal[
     "per_country",
     "str_list",
     "plan",
-    "options",
 ]
 Normalize = Literal["lower", "upper", "strip"]
-Nargs = Literal["?", "*", "REMAINDER"]
+Nargs = Literal["?", "*"]
 CommandKind = Literal["data", "query", "manage"]
-Effect = Literal[
-    "network", "store_write", "project_write", "cache_write", "cache_delete"
-]
+Effect = Literal["network", "store_write", "cache_write", "cache_delete"]
 ConstraintType = Literal[
     "one_of", "any_of", "requires", "excludes", "applies_to", "required_when"
 ]
@@ -59,7 +55,7 @@ PathRole = Literal["input", "output", "root"]
 Cardinality = Literal["single", "bounded", "unbounded"]
 # The MCP tool families of ``--tools`` (AGI-5.8); ``core`` is not a family of its own
 # but a mark of ``Command.core`` (AGI-5.12).
-Family = Literal["discovery", "availability", "data", "project", "store"]
+Family = Literal["discovery", "availability", "data", "store"]
 
 KINDS: Final[tuple[str, ...]] = get_args(Kind)
 NORMALIZERS: Final[tuple[str, ...]] = get_args(Normalize)
@@ -75,7 +71,7 @@ FAMILIES: Final[tuple[str, ...]] = get_args(Family)
 # argument; ``--check`` on the command line (DEV-19.10).
 CHECK_OPTION: Final = "check"
 # The write targets of a command (DEV-19.1): a call gives them by name beside its
-# options (``run_command(..., root=)``); they are no key of ``tasks[].options``.
+# options (``run_command(..., root=)``); they are no option of the call.
 TARGET_OPTIONS: Final = ("output_dir", "root")
 # The options of a run: a plan (``check``) has none of them.
 RUN_OPTIONS: Final = ("update", "plan", "workers", "summary")
@@ -144,8 +140,8 @@ class Param:
     Parameters
     ----------
     name : str
-        Unique in the command; the key of a project task option and, when the
-        parameter has an API argument, that argument's name.
+        Unique in the command; when the parameter has an API argument, that
+        argument's name.
     kind : Kind
         Value kind.
     description : str or callable
@@ -164,8 +160,6 @@ class Param:
         A positional CLI argument.
     required : bool
         The library rejects the call without it (needs an API argument).
-    task : bool
-        A key of ``tasks[].options`` of a project task.
     allowed : sequence of str or callable, optional
         Allowed values (a provider reads them from the registry).
     default : object
@@ -186,7 +180,7 @@ class Param:
         Id of the mutually exclusive group of flags the flag belongs to.
     choices : bool
         ``allowed`` are also the ``choices`` of the parser.
-    nargs : {"*", "REMAINDER"}, optional
+    nargs : {"?", "*"}, optional
         Number of values of a positional argument.
     unit : str, optional
         Unit of a physical value (``points/m2``).
@@ -211,7 +205,6 @@ class Param:
     short: str | None = None
     positional: bool = False
     required: bool = False
-    task: bool = False
     allowed: Values | None = None
     default: object = None
     cli_default: object = None
@@ -262,8 +255,6 @@ class Param:
             raise ValueError(
                 f"Param {name}: required needs an API argument (spec 8.3 item 5)"
             )
-        if self.task and self.api_argument is None:
-            raise ValueError(f"Param {name}: a task option needs an API argument")
         if self.path_role is not None and self.path_role not in PATH_ROLES:
             raise ValueError(f"Param {name}: unknown path_role {self.path_role!r}")
         if self.path_role is not None and self.kind != "path":
@@ -343,7 +334,7 @@ class Constraint:
 class Example:
     """An example call.
 
-    ``options`` are the project task options in the JSON form of the manifest (``bbox``
+    ``options`` are the options of the call in their JSON form (``bbox``
     as 4 numbers with ``bbox_crs``, a per-country value as a text or ``{"pl": ..., "cz":
     ...}``), ``run`` the other flags shown in the command line (the store directory is
     added by the catalog). ``title`` says what the call does; ``result`` is the excerpt
@@ -366,13 +357,12 @@ class Command:
     Parameters
     ----------
     id : str
-        ``<group> <verb>`` as typed in the CLI (AGI-2.2): the key of ``COMMANDS`` of
-        the project for a data command.
+        ``<group> <verb>`` as typed in the CLI (AGI-2.2).
     summary : str
         One sentence that starts with a verb, in English, at most 100 characters
         (DOC-1.7).
     kind : {"data", "query", "manage"}
-        Writes to the store, only reads, or changes a project or the cache.
+        Downloads into the store, only reads, or manages the store or the cache.
     function, result_schema : str
         The library function and the schema of its result.
     params : tuple of Param
@@ -382,12 +372,9 @@ class Command:
         its main limit, in English; ``summary``, ``description`` and ``rules`` are
         the description of the MCP tool and fit 600 characters together (DOC-1.7).
     effects : tuple of str
-        Subset of ``network``, ``store_write``, ``project_write``,
-        ``cache_write``, ``cache_delete``.
+        Subset of ``network``, ``store_write``, ``cache_write``, ``cache_delete``.
     idempotent, destructive : bool
         Repeating the call does not change the effect; the call removes data.
-    project_task : bool
-        A data command a project task may run (a key of ``COMMANDS``).
     check_function, check_result_schema : str, optional
         The ``check_*`` twin and its result schema (both or neither).
     constraints, examples : tuple
@@ -397,7 +384,7 @@ class Command:
         not repeat what the options say.
     errors : tuple of str
         The registry codes the command can raise (ERR-1).
-    family : {"discovery", "availability", "data", "project", "store"}, optional
+    family : {"discovery", "availability", "data", "store"}, optional
         The MCP tool family of the command (``--tools``); ``None``: no tool.
     core : bool
         The command is in the ``core`` family (at most ``CORE_MAX`` of them).
@@ -415,7 +402,6 @@ class Command:
     effects: tuple[Effect, ...] = ()
     idempotent: bool = True
     destructive: bool = False
-    project_task: bool = False
     check_function: str | None = None
     check_result_schema: str | None = None
     constraints: tuple[Constraint, ...] = ()
@@ -443,8 +429,6 @@ class Command:
             raise ValueError(
                 f"Command {name}: check_function and check_result_schema go together"
             )
-        if self.project_task and self.kind != "data":
-            raise ValueError(f"Command {name}: a project task is a data command")
         if self.family is not None and self.family not in FAMILIES:
             raise ValueError(f"Command {name}: unknown family {self.family!r}")
         if self.core and self.family is None:
@@ -493,21 +477,12 @@ class Command:
         return self.check_function is not None
 
     @property
-    def task_options(self) -> dict[str, Kind]:
-        """Return the keys of ``tasks[].options`` of a project task with their kinds.
-
-        In the order of the parameters (the order of the keys of a manifest).
-        """
-        return {param.name: param.kind for param in self.params if param.task}
-
-    @property
     def call_options(self) -> tuple[Param, ...]:
         """Return the parameters a call gives as its options (AGI-2.1).
 
         The arguments of the library function that are neither a write target
         (``TARGET_OPTIONS``), nor an option of a run (``RUN_OPTIONS``), nor the constant
-        of the command (``fixed``); in the order of the declaration. Of a project task
-        these are the keys of ``tasks[].options`` (``task_options``).
+        of the command (``fixed``); in the order of the declaration.
         """
         return tuple(
             param

@@ -407,7 +407,6 @@ def _print_pl_footer(found: list[AvailabilityCombination], land_m2: float) -> No
     hints = newest.download_hint
     for hint in hints[:MAX_HINT_LINES]:
         print(message("cli.download_hint_line", lang=language(), hint=hint))
-        print(message("cli.project_hint_line", lang=language(), hint=hint))
     rest = len(hints) - MAX_HINT_LINES
     if rest > 0:
         print(message("cli.remaining_commands_pl", lang=language(), rest=rest))

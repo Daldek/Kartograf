@@ -10,6 +10,38 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Everything below ships in 0.8.0: the release pull request renames this heading to
 `[0.8.0] - <date>` (REL-2.1).
 
+### Projects move to Archiwista (ADR-057)
+
+**Breaking**
+
+- Projects are removed from Kartograf; Archiwista keeps them
+  (`archiwista-project.json`, Nogat plan `docs/plans/2026-10-31-archiwista-projects.md`). Gone
+  without aliases (projects were never released, ECO-020): the CLI group `project` (`init`, `add`,
+  `remove`, `download`, `status`, `verify`), the MCP tools `kartograf_project_*` and the tool family
+  `project`, the package `kartograf.project` and the public names `init_project`, `open_project`,
+  `add_project_task`, `remove_project_task`, `download_project`, `check_project`,
+  `get_project_status`, `verify_project`, `Project`, `ProjectTask`, `PinnedFile`, `ProjectReport`,
+  `TaskResult`, `ProjectCheck`, `FileCheck`, `PROJECT_LOCK` and `ProjectLockedError` (the reason
+  `project_locked`), the notice `project_geometry_changed`, the documents
+  `kartograf-project-state/1`, `kartograf-project-report/1` and `kartograf-project-check/1`, and
+  `kartograf.testing.build_project`. A `kartograf-project.json` is no longer read; it is not
+  migrated. The availability text no longer prints the `In a project: kartograf project add NAME`
+  line.
+- What only projects used goes with them: `parse_command(tasks=)`, the catalog's `Param.task`,
+  `Command.task_options` (use `Command.call_options`) and `Command.project_task` (the commands of
+  kind `data`), the parameter kind `options`, the effect `project_write`,
+  `kartograf.catalog.kinds.options_to_json`, `options_from_json`, `check_options_json` and the
+  `base_dir` of `convert_arguments`, `check=` of `envelope.outcome_of` and `exit_code_of`,
+  `EncodeContext.store`, and `ToolSpec.task_options` (now `ToolSpec.data_options`). A read-only MCP
+  server hides no tool any more.
+
+**Changed**
+
+- The data commands that `validate_command`, `run_command` and `check_command` call through their
+  own checks live in `kartograf.data_commands.DATA_COMMANDS` (formerly
+  `kartograf.project.commands.COMMANDS`); a new data command adds its declaration and one entry
+  there.
+
 ### Nogat standard 2.1 adoption (so far)
 
 **Breaking**

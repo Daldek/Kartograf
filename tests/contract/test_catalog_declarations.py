@@ -16,7 +16,7 @@ from kartograf.catalog import shared
 from kartograf.catalog.build import is_option
 from kartograf.catalog.commands import declared, elevation
 from kartograf.catalog.excerpts import EXCERPTS
-from kartograf.catalog.kinds import check_options_json, options_from_json
+from kartograf.catalog.kinds import convert_arguments
 from kartograf.catalog.meanings import meaning
 from kartograf.catalog.spec import (
     CORE_MAX,
@@ -32,6 +32,7 @@ from kartograf.catalog.spec import (
 from kartograf.core.parser_2000 import SCALE_HIERARCHY_2000
 from kartograf.core.parser_registry import SYSTEMS, detect_system, ztm_sheet_system
 from kartograf.core.sheet_parser import PL_BBOX_CRS, SheetParser
+from kartograf.data_commands import DATA_COMMANDS
 from kartograf.download.availability import (
     AVAILABILITY_COUNTRIES,
     AVAILABILITY_PRODUCTS,
@@ -53,7 +54,6 @@ from kartograf.download.options import (
 from kartograf.download.orto_cutout import ORTO_CUTOUT_CRS
 from kartograf.landcover.manager import LANDCOVER_PRODUCTS
 from kartograf.messages import LANGS, Message, localize
-from kartograf.project.commands import COMMANDS
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
     cutout_resolution_labels,
@@ -167,7 +167,6 @@ def test_required_needs_an_api_argument():
         {"name": "x", "kind": "str", "exclusive": "update", "flag": None},
         {"name": "x", "kind": "str", "accepts": ("pl1992",)},
         {"name": "sheet", "kind": "str", "accepts": ("pl1993",)},
-        {"name": "x", "kind": "str", "task": True, "argument": None},
     ],
 )
 def test_invalid_declaration_of_a_param_is_refused(fields):
@@ -205,7 +204,6 @@ def test_command_derives_group_name_and_check_support():
         {"id": "a b c"},
         {"check_function": "check_data"},
         {"check_result_schema": "kartograf-plan/1"},
-        {"project_task": True, "kind": "query"},
         {"kind": "other"},
         {"effects": ("teleport",)},
         {"result_schema": "download"},
@@ -250,7 +248,7 @@ def test_group_has_a_position_in_the_help_list():
 
 _DECLARED = declared()
 _IDS = [command.id for command in _DECLARED.commands]
-_DATA = [command for command in _DECLARED.commands if command.project_task]
+_DATA = [command for command in _DECLARED.commands if command.kind == "data"]
 _EXAMPLES = [(c, i) for c in _DATA for i in range(len(c.examples))]
 _EXAMPLE_IDS = [f"{c.id}#{i}" for c, i in _EXAMPLES]
 # the registry values a command offers: each must come from a provider
@@ -280,14 +278,6 @@ def test_elevation_and_imagery_commands_are_declared():
     } <= set(_IDS)
 
 
-_PROJECT_COMMANDS = (
-    "project init",
-    "project add",
-    "project remove",
-    "project download",
-    "project status",
-    "project verify",
-)
 _STORE_AND_SHEET_SEARCH = (
     "sheet find",
     "store overview",
@@ -296,9 +286,8 @@ _STORE_AND_SHEET_SEARCH = (
 )
 
 
-def test_project_cache_parse_catalog_sheet_search_and_store_commands_are_declared():
+def test_cache_parse_catalog_sheet_search_and_store_commands_are_declared():
     assert {
-        *_PROJECT_COMMANDS,
         "cache stats",
         "cache path",
         "cache clear",
@@ -314,61 +303,7 @@ def test_project_cache_parse_catalog_sheet_search_and_store_commands_are_declare
         "store sidecar",
         "store init",
     ]
-    assert [g.name for g in _DECLARED.groups if g.name in ("project", "cache")] == [
-        "project",
-        "cache",
-    ]
     assert next(g for g in _DECLARED.groups if g.name == "cache").position == 2
-
-
-@pytest.mark.parametrize("command_id", _PROJECT_COMMANDS)
-def test_project_commands_take_the_project_directory_like_the_cli_did(command_id):
-    params = {p.name: p for p in _COMMAND_BY_ID[command_id].params}
-
-    project_dir = params["project_dir"]
-    assert (project_dir.cli_flag, project_dir.cli_dest) == ("--project", "project")
-    assert (project_dir.cli_default, project_dir.default) == (".", None)
-    assert (project_dir.kind, project_dir.required) == ("path", True)
-    assert project_dir.section is None  # the help of a project command has no sections
-
-
-def test_project_add_takes_a_data_command_of_the_manifest_and_its_options():
-    params = {p.name: p for p in _COMMAND_BY_ID["project add"].params}
-
-    assert resolve(params["command"].allowed) == list(COMMANDS)
-    assert callable(params["command"].allowed)  # read from the declarations, no copy
-    assert (params["command"].cli_flag, params["command"].required) == (None, True)
-    assert (params["options"].kind, params["options"].required) == ("options", True)
-    assert (params["options"].cli_flag, params["options"].task) == (None, False)
-    # the CLI words after the name are the command and its options
-    assert (params["name"].positional, params["name"].required) == (True, True)
-    assert (params["arguments"].nargs, params["arguments"].argument) == (
-        "REMAINDER",
-        None,
-    )
-
-
-def test_project_download_has_the_update_modes_but_no_plan():
-    download = _COMMAND_BY_ID["project download"]
-    params = {p.name: p for p in download.params}
-
-    assert (download.check_function, download.check_result_schema) == (
-        "check_project",
-        "kartograf-project-check/1",
-    )
-    assert download.supports_check and not download.project_task
-    assert "plan" not in params
-    assert {name: params[name].exclusive for name in ("check", "upgrade", "force")} == {
-        "check": "update",
-        "upgrade": "update",
-        "force": "update",
-    }
-    assert (params["update"].cli_flag, resolve(params["update"].allowed)) == (
-        None,
-        ["upgrade", "force"],
-    )
-    assert (params["workers"].default, params["workers"].cli_default) == (None, None)
-    assert (params["tasks"].positional, params["tasks"].nargs) == (True, "*")
 
 
 def test_the_catalog_commands_take_no_options_but_the_command_to_describe():
@@ -430,26 +365,14 @@ def test_sheet_systems_are_those_of_the_parser_registry():
     assert set(SHEET_SYSTEMS) == {system.id for system in SYSTEMS} | {"cz_ztm"}
 
 
-@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
-def test_task_options_come_from_the_catalog(command):
-    """The options of a project task are the task parameters of the declaration of
-    its command, in the order of the declaration (the order of a manifest)."""
-    if not command.project_task:
-        assert command.id not in COMMANDS
-        assert [p.name for p in command.params if p.task] == []
-        return
-    assert list(COMMANDS[command.id].options.items()) == [
-        (p.name, p.kind) for p in command.params if p.task
-    ]
-
-
 @pytest.mark.parametrize(("command", "index"), _EXAMPLES, ids=_EXAMPLE_IDS)
-def test_examples_pass_task_validation(command, index, tmp_path):
-    options = dict(command.examples[index].options)
-    task = COMMANDS[command.id]
+def test_examples_pass_validation(command, index, tmp_path):
+    data_command = DATA_COMMANDS[command.id]
 
-    assert check_options_json(task.options, options) is None
-    task.validate(tmp_path, options_from_json(task.options, options, base_dir=tmp_path))
+    data_command.validate(
+        tmp_path,
+        convert_arguments(data_command.options, command.examples[index].options),
+    )
 
 
 def _countries_of(command: Command) -> set[str]:
@@ -732,7 +655,6 @@ def test_the_options_that_write_are_roots_or_outputs():
         "root",
         "output_dir",
         "geometry",
-        "project_dir",
         "path",
         "inject",
     }
@@ -740,14 +662,12 @@ def test_the_options_that_write_are_roots_or_outputs():
     assert {role for (_, name), role in roles.items() if name == "output_dir"} == {
         "output"
     }
-    assert roles["project init", "project_dir"] == "output"
-    assert roles["project status", "project_dir"] == "input"
 
 
 def test_every_data_command_has_both_targets_and_the_store_commands_say_store_only():
     """DEV-19.1 and DEV-19.18: ``output_dir`` and ``root`` are one optional ``one_of``
-    group of every data command; the ``project`` commands and ``store init`` take
-    only ``root``, and their catalog entry says so."""
+    group of every data command; ``store init`` takes only ``root``, and its catalog
+    entry says so."""
     commands = _DECLARED.commands
     with_output = {c.id for c in commands if _has(c, "output_dir")}
     with_root = {c.id for c in commands if _has(c, "root")}
@@ -755,14 +675,11 @@ def test_every_data_command_has_both_targets_and_the_store_commands_say_store_on
 
     assert with_output <= with_root
     assert with_root - with_output == {
-        "project init",
         "store entries",
         "store init",
         "store overview",
     }
-    assert says_store_only == {"store init"} | {
-        c.id for c in commands if c.id.startswith("project ")
-    }
+    assert says_store_only == {"store init"}
     for command in commands:
         if command.id in with_output:
             target = next(c for c in command.constraints if c.group == "target")
@@ -865,11 +782,12 @@ def test_arguments_match_the_signature_of_the_function(command):
             continue
         function = _library_function(name)
         parameters = inspect.signature(function).parameters
-        # the check twin takes the task options and the store, not the run options
+        # the check twin takes the options of a call and the store, not the run options
+        options = command.call_options
         wanted = {
             argument: param
             for argument, param in arguments.items()
-            if name == command.function or param.task or argument == "root"
+            if name == command.function or param in options or argument == "root"
         }
         for argument, param in wanted.items():
             assert argument in parameters, f"{name} has no argument {argument}"

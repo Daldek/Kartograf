@@ -2,17 +2,16 @@
 The check of a call against the declaration of its command (AGI-2.1).
 
 ``check_call`` reads the options of a call in the JSON form (the keys of an MCP tool
-call; of a project task, ``tasks[].options``) and answers with the arguments of the
-library function of the command, or raises ``ValidationError``. It knows nothing of a
+call) and answers with the arguments of the library function of the command, or raises
+``ValidationError``. It knows nothing of a
 command in particular: the names, the kinds, ``required``, the allowed values, the
 bounds of an integer and the rules among the parameters (``Constraint``) all come from
 the declaration - what ``command_schema`` says of the command and the schema of its MCP
 tool enforces. What a function checks of the *values* (a sheet code, a TERYT, a country)
 is the function's.
 
-The library functions of the data commands that a project task may run check their own
-request first (``kartograf.project.commands``); ``validate_command`` leaves those to
-them.
+The library functions of the data commands check their own request first
+(``kartograf.data_commands``); ``validate_command`` leaves those to them.
 """
 
 from collections.abc import Mapping, Sequence

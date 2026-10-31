@@ -14,7 +14,7 @@ from kartograf.catalog import command_schema, list_commands
 from kartograf.catalog.cliparser import _subparsers, build_parser, parse_command_line
 from kartograf.catalog.commands import declared
 from kartograf.catalog.hints import example_for
-from kartograf.catalog.kinds import check_options_json, options_from_json
+from kartograf.catalog.kinds import convert_arguments
 from kartograf.catalog.spec import (
     Command,
     Constraint,
@@ -23,8 +23,8 @@ from kartograf.catalog.spec import (
     resolve,
 )
 from kartograf.cli._parser import create_parser
+from kartograf.data_commands import DATA_COMMANDS
 from kartograf.exceptions import ValidationError
-from kartograf.project.commands import COMMANDS
 
 # =============================================================================
 # example_for: the example of an error hint (spec 6.3, part (b))
@@ -186,9 +186,9 @@ def test_example_for_positional_and_unknown_arguments():
         example_for("sheet find", "bbox")[1],
     )
     # an argument the only example of a command does not show: its first example
-    assert example_for("project status", "project_dir") == (
-        "--project",
-        "kartograf project status",
+    assert example_for("elevation list-sources", "product") == (
+        "--product",
+        "kartograf elevation list-sources",
     )
 
 
@@ -239,7 +239,6 @@ _GROUPS = (
     "maps",
     "models3d",
     "names",
-    "project",
     "sheet",
     "soil",
     "store",
@@ -273,7 +272,7 @@ def test_real_parser_matches_the_catalog():
     leaves = dict(_leaf_parsers(create_parser()))
     commands = {c.id: c for c in _DECLARED.commands}
 
-    assert len(commands) == 45 and set(leaves) == set(commands)
+    assert len(commands) == 39 and set(leaves) == set(commands)
     for command_id, command in commands.items():
         leaf = leaves[command_id]
         expected_flags = {
@@ -298,10 +297,7 @@ def test_real_parser_matches_the_catalog():
         for param in command.params:
             if param.positional:
                 action = next(a for a in positional if a.dest == param.name)
-                nargs = {"REMAINDER": argparse.REMAINDER}.get(
-                    param.nargs or "", param.nargs
-                )
-                assert action.nargs == nargs, (command_id, param.name)
+                assert action.nargs == param.nargs, (command_id, param.name)
                 continue
             if param.cli_flag is None:
                 continue
@@ -327,18 +323,15 @@ def test_real_parser_matches_the_catalog():
                 assert action.choices is None, where
 
 
-def test_data_commands_are_the_twelve_in_COMMANDS_order():
-    commands = [c for c in _DECLARED.commands if c.project_task]
+def test_data_commands_are_the_twelve_in_DATA_COMMANDS_order():
+    commands = [c for c in _DECLARED.commands if c.kind == "data"]
 
-    assert [c.id for c in commands] == list(COMMANDS)
+    assert [c.id for c in commands] == list(DATA_COMMANDS)
     assert len(commands) == 12
     for command in commands:
         names = {p.name for p in command.params}
-        # the options of a task and the flags of a run
+        # the target and the update mode of a run
         assert {"root", "update"} <= names
-        assert {p.name for p in command.params if p.task} == set(
-            COMMANDS[command.id].options
-        )
         assert command.examples
 
 
@@ -347,7 +340,7 @@ def test_the_list_has_every_group_and_command():
 
     assert [g.name for g in document.groups] == list(_GROUPS)
     assert [c.name for c in document.commands] == [c.id for c in _DECLARED.commands]
-    assert len(document.commands) == 45
+    assert len(document.commands) == 39
     for group in document.groups:
         assert [c.name for c in document.commands if c.name.startswith(group.name)]
     assert {c.name for c in document.commands if "core" in c.families} == {
@@ -486,7 +479,7 @@ def _holds(when: object, options: dict[str, object]) -> bool:
 
 
 class _Call:
-    """The task options of a call derived from an example, with the edits that
+    """The options of a call derived from an example, with the edits that
     keep it consistent: a parameter of an area choice replaces the other areas
     (a ``bbox`` carries its ``bbox_crs``) and brings what it requires."""
 
@@ -586,24 +579,24 @@ def _violations(command: Command, constraint: Constraint):
         yield "outside", base, violation
 
 
-def _among_task_options(command: Command, constraint: Constraint) -> bool:
-    """Say whether a rule is among options of a task.
+def _among_call_options(command: Command, constraint: Constraint) -> bool:
+    """Say whether a rule is among the options of a call.
 
     The target of a write (``output_dir``, ``root``) and what needs the store are
     options of a run, which ``validate`` does not see: the library checks them when it
     writes (``tests/integration/test_plain_output*.py``).
     """
-    tasks = {param.name for param in command.params if param.task}
-    return {constraint.param, *constraint.params} - {None} <= tasks
+    options = {param.name for param in command.call_options}
+    return {constraint.param, *constraint.params} - {None} <= options
 
 
 _CASES = [
     (command, constraint, label, base, violation)
     for command in _DECLARED.commands
-    if command.project_task
+    if command.kind == "data"
     for constraint in command.constraints
     if constraint.type in ("one_of", "requires", "excludes", "applies_to")
-    if _among_task_options(command, constraint)
+    if _among_call_options(command, constraint)
     for label, base, violation in _violations(command, constraint)
 ]
 
@@ -631,12 +624,11 @@ def test_constraint_violations_raise_validation_error_naming_the_option(
     """A call derived from an example that breaks one declared constraint is
     refused by ``validate`` without network, and the error names an option of
     the constraint that the edit touched; the call before the edit passes."""
-    task = COMMANDS[command.id]
+    data_command = DATA_COMMANDS[command.id]
 
     def validate(call: _Call) -> None:
-        assert check_options_json(task.options, call.options) is None, call.options
-        task.validate(
-            tmp_path, options_from_json(task.options, call.options, base_dir=tmp_path)
+        data_command.validate(
+            tmp_path, convert_arguments(data_command.options, call.options)
         )
 
     validate(base)

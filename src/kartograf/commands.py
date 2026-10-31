@@ -2,14 +2,14 @@
 The command layer: a command as data (spec 8.7; KB-2..KB-5 of Archiwista; AGI-2.1).
 
 Every command of the catalog (``elevation download``, ``soil hsg``, ``sheet parse``,
-``store init``, ``project download``, ...; ``kartograf commands list``) is called, read,
-checked and written from its *options*: the JSON form of the arguments of its library
-function (``bbox`` as four numbers with ``bbox_crs``, a path as a text, a per-country
-value as a text or ``{"pl": ..., "cz": ...}``, a list as a list, no ``null`` and no
-``false``) - the form of ``tasks[].options`` of a project and of the arguments of an MCP
-tool. The write targets (``root``, ``output_dir``) and the options of a run (``update``,
-``plan``, ``workers``, ``summary``) are given by name beside the options, as the
-arguments of the function that are not options of a call (``Command.call_options``).
+``store init``, ...; ``kartograf commands list``) is called, read, checked and written
+from its *options*: the JSON form of the arguments of its library function (``bbox`` as
+four numbers with ``bbox_crs``, a path as a text, a per-country value as a text or
+``{"pl": ..., "cz": ...}``, a list as a list, no ``null`` and no ``false``) - the form
+of the arguments of an MCP tool. The write targets (``root``, ``output_dir``) and the
+options of a run (``update``, ``plan``, ``workers``, ``summary``) are given by name
+beside the options, as the arguments of the function that are not options of a call
+(``Command.call_options``).
 
 ``parse_command`` reads a command line with the parser of the command catalog (the
 parser of ``kartograf`` itself), ``validate_command`` checks the options against the
@@ -18,10 +18,8 @@ writes the canonical command line, ``run_command`` calls the library function of
 command and ``check_command`` its ``check_*`` twin, the plan without effects. Nothing
 here knows a command by name: the function, its arguments, the required options, the
 allowed values, the bounds, the rules among the options and the twin come from the
-declaration (``kartograf.catalog``); the data commands that a project task may run
-keep the validation of their own function (``kartograf.project.commands``), and
-``project add``, which carries such a command, takes its line in the words after the
-task name as ``command`` and ``options``.
+declaration (``kartograf.catalog``); the data commands keep the validation of their
+own function (``kartograf.data_commands``).
 
 Examples
 --------
@@ -56,7 +54,8 @@ from kartograf.catalog.cliparser import (
 from kartograf.catalog.commands import declared, declared_commands
 from kartograf.catalog.formatting import format_command_line
 from kartograf.catalog.kinds import convert_arguments
-from kartograf.catalog.spec import Command, Kind, Param
+from kartograf.catalog.spec import Command, Kind
+from kartograf.data_commands import DATA_COMMANDS
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import UpdatePlan
@@ -65,19 +64,13 @@ from kartograf.exceptions import UsageError, ValidationError
 from kartograf.messages import message, reason
 from kartograf.notices import Notice
 from kartograf.output import resolve_target
-from kartograf.project.commands import (
-    data_commands_text,
-    task_arguments,
-    task_command,
-)
-from kartograf.project.model import ProjectCheck
 from kartograf.serialization import Document
 
 # Flags that print and exit: no part of a command that can be called.
 _EXITING_FLAGS = ("-h", "--help", "--version")
 _PROGRAM = "kartograf"
-# The effects that make a command work on a store or a project (never on plain files).
-_STORE_EFFECTS = frozenset({"store_write", "project_write"})
+# The effect that makes a command work on a store (never on plain files).
+_STORE_EFFECT = "store_write"
 
 
 @dataclass(frozen=True)
@@ -91,8 +84,7 @@ class CommandCall:
     options : dict
         The options of the call that the line gave, in the JSON form, in the order of
         the parameters of the command (``Command.call_options``); ``bbox`` always
-        comes with ``bbox_crs``. ``project add`` has its data command here as
-        ``command`` and ``options``.
+        comes with ``bbox_crs``.
     run : dict
         The other flags the line gave, by parameter name (``output_dir``, ``root``,
         ``upgrade``, ``force``, ``check``, ``plan``, ``workers``, ``quiet``,
@@ -151,55 +143,14 @@ def _words(tokens: Sequence[str]) -> str | None:
     return None
 
 
-def _nested(declaration: Command) -> tuple[Param, Param, Param] | None:
-    """Return the parameters of a command that carries a data command, or None.
-
-    ``project add``: the words of its line after the task name (``arguments``, which
-    only the line has) are the data command and its options (``command`` and
-    ``options``, which only the call has).
-    """
-    line = next(
-        (p for p in declaration.params if p.positional and p.nargs == "REMAINDER"), None
-    )
-    name = next((p for p in declaration.params if p.name == "command"), None)
-    options = next((p for p in declaration.params if p.kind == "options"), None)
-    if line is None or line.api_argument is not None or name is None or options is None:
-        return None
-    return line, name, options
-
-
-def _carried(
-    declaration: Command, options: dict[str, object], run: dict[str, object]
-) -> None:
-    """Read the data command in the words of a line into ``options``, in place.
-
-    A command that carries one (``project add``) has the words after its task name in
-    ``run``; they become ``command`` and ``options``. A data command that has a flag of
-    a run is refused: a task keeps the options of its command.
-    """
-    carrying = _nested(declaration)
-    if carrying is None or carrying[0].name not in run:
-        return
-    line, name, task = carrying
-    words = [str(word) for word in cast(Sequence[object], run.pop(line.name))]
-    if words and words[0] == "--":
-        del words[0]
-    call = parse_command(words, tasks=True)
-    for flag in call.run:
-        raise ValidationError(message("commands.task_run_flag", name=flag), option=flag)
-    options[name.name] = call.command
-    options[task.name] = call.options
-
-
 def _call(parsed: argparse.Namespace) -> CommandCall:
     """Return the ``CommandCall`` of the namespace of a parsed line."""
     command = declared_commands()[parsed._command_id]
     options, run = parsed_options(command, parsed, given_only=True)
-    _carried(command, options, run)
     return CommandCall(command.id, options, run)
 
 
-def parse_command(argv: Sequence[str] | str, *, tasks: bool = False) -> CommandCall:
+def parse_command(argv: Sequence[str] | str) -> CommandCall:
     """Read a command line of any command with the parser of ``kartograf``.
 
     The parser is the one of the CLI (the same flags, ``choices`` and messages),
@@ -213,19 +164,13 @@ def parse_command(argv: Sequence[str] | str, *, tasks: bool = False) -> CommandC
         The words of a line, with or without the leading ``kartograf``
         (``["elevation", "download", "--product", "nmt"]``); a text is split like a
         shell line (``shlex.split``).
-    tasks : bool
-        The line is the data command of a project task (``project add``): any other
-        command is refused first, by its name (``ValidationError``,
-        ``option="command"``, ``allowed``: the data commands), before its flags are
-        read.
 
     Returns
     -------
     CommandCall
         The command, its options (JSON form; ``bbox`` with ``bbox_crs``, which is
         ``EPSG:2180`` when the line gives only ``--bbox``) and the other flags of the
-        line. ``project add`` has the data command of its task as the options
-        ``command`` and ``options``.
+        line.
 
     Raises
     ------
@@ -236,9 +181,7 @@ def parse_command(argv: Sequence[str] | str, *, tasks: bool = False) -> CommandC
         (``command`` is the id of the command the line named, when it did).
     ValidationError
         A ``--bbox`` that is not four numbers or a ``--bbox-crs`` without ``--bbox``
-        (``option="bbox_crs"``); the command of a ``project add`` line is not a data
-        command (``option="command"``, ``allowed``: the data commands) or has a flag
-        of a run (``option`` names it).
+        (``option="bbox_crs"``).
     """
     try:
         tokens = shlex.split(argv) if isinstance(argv, str) else list(argv)
@@ -259,20 +202,10 @@ def parse_command(argv: Sequence[str] | str, *, tasks: bool = False) -> CommandC
             message("commands.help_version_not_a_call"),
             command=named,
         )
-    if tasks and named is not None:
-        task_command(named)  # before the parser asks for the flags of the command
     parsed = parse_command_line(_parser(), tokens)
     command = getattr(parsed, "_command_id", None)
     if command is None:
         group = str(getattr(parsed, "command", tokens[0]))
-        if tasks:
-            raise UsageError(
-                message(
-                    "commands.give_group_command",
-                    group=group,
-                    data_commands_text=data_commands_text(),
-                )
-            )
         raise UsageError(
             message(
                 "commands.give_group_commands",
@@ -282,8 +215,6 @@ def parse_command(argv: Sequence[str] | str, *, tasks: bool = False) -> CommandC
                 ),
             )
         )
-    if tasks:
-        task_command(command)
     return _call(parsed)
 
 
@@ -306,7 +237,7 @@ def _targets(
     if (
         output_dir is not None
         and "output_dir" not in names
-        and ("root" in names or _STORE_EFFECTS & set(declaration.effects))
+        and ("root" in names or _STORE_EFFECT in declaration.effects)
     ):
         raise ValidationError(
             message("commands.store_only_command", command=declaration.id),
@@ -322,32 +253,6 @@ def _targets(
     return {name: value for name, value in given.items() if value is not None}
 
 
-def _validate_task(declaration: Command, arguments: Mapping[str, Any]) -> None:
-    """Check the data command a call carries (``project add``) as a call of its own."""
-    carrying = _nested(declaration)
-    if carrying is not None:
-        _, name, task = carrying
-        validate_command(arguments[name.name], arguments[task.name])
-
-
-def _task_arguments(
-    declaration: Command, arguments: Mapping[str, Any]
-) -> Mapping[str, Any]:
-    """Return the arguments of a call with the data command it carries converted.
-
-    ``project add``: the options of its task, in the JSON form, become the library
-    arguments of the command (``bbox`` with ``bbox_crs`` one ``BBox``), which
-    ``add_project_task`` takes, as ``kartograf project add`` gives them. Any other
-    call keeps its arguments.
-    """
-    carrying = _nested(declaration)
-    if carrying is None:
-        return arguments
-    _, name, task = carrying
-    options = task_arguments(arguments[name.name], arguments[task.name])
-    return {**arguments, task.name: options}
-
-
 def validate_command(
     command: str,
     options: Mapping[str, object],
@@ -357,9 +262,9 @@ def validate_command(
 ) -> None:
     """Check a call of a command against its declaration.
 
-    Runs without network and without writing. A data command that a project task may
-    run gets the checks of its library function: what it does before its first
-    request. Every other command is checked against its declaration
+    Runs without network and without writing. A data command gets the checks of its
+    library function: what it does before its first request. Every other command is
+    checked against its declaration
     (``kartograf commands schema``): the names and the form of the options, the
     required ones, the allowed values, the bounds and the rules among the options;
     what its function checks of a value is the function's, at the run.
@@ -369,9 +274,8 @@ def validate_command(
     command : str
         A command of the catalog (``elevation download``) or its ``operation_id``.
     options : Mapping
-        The options in the JSON form (``Command.call_options``; the keys of
-        ``tasks[].options`` for a data command): not the targets and the options of a
-        run, which are given by name.
+        The options in the JSON form (``Command.call_options``): not the targets and
+        the options of a run, which are given by name.
     output_dir, root : str or Path, optional
         Where the command would write, plain files or the store (at most one: both
         are ``validation_error``, ``details.reason`` ``exclusive_options``); the
@@ -386,16 +290,13 @@ def validate_command(
         rule of the command (``option`` names the option; ``allowed`` its values).
     """
     declaration = _declaration(command)
-    if declaration.project_task:
+    if declaration.kind == "data":
         resolve_target(output_dir=output_dir, root=root)
-        entry = task_command(declaration.id)
+        entry = DATA_COMMANDS[declaration.id]
         store = Path(root) if root is not None and output_dir is None else Path(".")
         entry.validate(store, convert_arguments(entry.options, options))
         return
-    arguments = check_call(
-        declaration, options, _targets(declaration, output_dir, root)
-    )
-    _validate_task(declaration, arguments)
+    check_call(declaration, options, _targets(declaration, output_dir, root))
 
 
 def _option_kinds(declaration: Command) -> dict[str, Kind]:
@@ -419,38 +320,6 @@ def _run_kinds(declaration: Command) -> dict[str, Kind]:
     }
 
 
-def _line(
-    declaration: Command, options: dict[str, object], run: dict[str, object]
-) -> None:
-    """Write the data command a call carries as the words of its line, in place.
-
-    The inverse of ``_carried``: ``command`` and ``options`` become the words after the
-    task name (``project add``).
-    """
-    carrying = _nested(declaration)
-    if carrying is None or not {carrying[1].name, carrying[2].name} & set(options):
-        return
-    line, name, task = carrying
-    for missing in (name.name, task.name):
-        if missing not in options:
-            raise ValidationError(
-                message(
-                    "commands.option_required", name=missing, command=declaration.id
-                ),
-                option=missing,
-            )
-    if line.name in run:
-        raise ValidationError(
-            message("commands.option_given_twice", name=line.name), option=line.name
-        )
-    carried = options.pop(name.name)
-    task_command(str(carried))  # a task is a data command
-    text = format_command(
-        str(carried), cast(Mapping[str, object], options.pop(task.name))
-    )
-    run[line.name] = shlex.split(text)[1:]
-
-
 def format_command(
     command: str,
     options: Mapping[str, object],
@@ -466,8 +335,7 @@ def format_command(
     (``root`` as ``--root``): ``root`` and ``plan`` are paths, ``workers``
     a whole number, ``upgrade``, ``force``, ``check``, ``quiet``, ``json``
     and ``summary`` are ``True`` (or left out). ``parse_command`` reads the line
-    back into the same command, options and run. The data command of a ``project
-    add`` (``command`` and ``options``) is written as the words after the task name.
+    back into the same command, options and run.
 
     Raises
     ------
@@ -494,7 +362,6 @@ def format_command(
             message("commands.option_given_twice", name=name),
             option=name,
         )
-    _line(declaration, given_options, given_run)
     convert_arguments(_option_kinds(declaration), given_options)
     convert_arguments(_run_kinds(declaration), given_run)
     return format_command_line(declaration, given_options, given_run)
@@ -555,7 +422,7 @@ def run_command(
     The options are checked first (``validate_command``); the function is then the one
     the declaration names (``download_data``, ``download_collection``,
     ``download_landcover``, ``download_soil`` or ``calculate_hsg`` for a data command,
-    ``describe_sheet``, ``init_store``, ``download_project``, ... for another). The
+    ``describe_sheet``, ``init_store``, ... for another). The
     result is the envelope ``kartograf-result/1`` of the command (``to_dict()`` is the
     document the CLI ``--json`` prints), and ``result`` is what that function returns
     (``kartograf-download/1`` for a download, the document of the command for the
@@ -567,10 +434,7 @@ def run_command(
     command : str
         A command of the catalog (``elevation download``) or its ``operation_id``.
     options : Mapping
-        The options in the JSON form (``validate_command``). ``project add`` has the
-        options of its task in that form too (``bbox`` with ``bbox_crs``), and
-        ``add_project_task`` gets them as library arguments, as ``kartograf project
-        add`` gives them (``kartograf.project.commands.task_arguments``).
+        The options in the JSON form (``validate_command``).
     output_dir : str or Path, optional
         Write plain files, named as in the store, into this directory (no sidecar,
         no version; ``update="force"`` replaces existing files). Excludes ``root``,
@@ -588,8 +452,7 @@ def run_command(
     summary : bool
         ``soil hsg`` only: put the statistics of the HSG raster in the report.
     cache : MetadataCache or bool
-        As in the library functions (given to the function that takes it, ``project
-        download`` too).
+        As in the library functions (given to the function that takes it).
     on_progress, on_notice : callable, optional
         As in the library functions (``soil`` and ``soil hsg`` take no
         ``on_progress``; a function that takes neither is not given it).
@@ -612,8 +475,8 @@ def run_command(
             ),
             option="summary",
         )
-    if declaration.project_task:
-        entry = task_command(declaration.id)
+    if declaration.kind == "data":
+        entry = DATA_COMMANDS[declaration.id]
         arguments = convert_arguments(entry.options, options)
         target = resolve_target(output_dir=output_dir, root=root)
         entry.validate(target.path if target.mode == "store" else Path("."), arguments)
@@ -642,13 +505,9 @@ def run_command(
         if value is not None and value is not False
     }
     arguments = check_call(declaration, options, given)
-    _validate_task(declaration, arguments)
     function = _function(declaration.function)
     hooks = _hooks(function, cache=cache, on_progress=on_progress, on_notice=on_notice)
-    return wrap(
-        declaration.id,
-        function(**_task_arguments(declaration, arguments), **hooks),
-    )
+    return wrap(declaration.id, function(**arguments, **hooks))
 
 
 def check_command(
@@ -660,13 +519,13 @@ def check_command(
     force: bool = False,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
-) -> CommandResult[UpdatePlan | ProjectCheck]:
+) -> CommandResult[UpdatePlan]:
     """Plan a command without effects: the ``check_*`` twin of its function.
 
     Nothing is downloaded or written: the function that the declaration names as the
     check of the command runs with the options (``check_data``, ``check_collection``,
     ``check_landcover``, ``check_soil`` or ``check_hsg`` for a data command,
-    ``check_project`` for ``project download``, ``check_store`` for ``store init``).
+    ``check_store`` for ``store init``).
     With ``output_dir`` the plan of a data command lists the targets of a plain write
     (``write``, ``replace`` with ``force``, ``conflict``); ``force`` does nothing for a
     store.
@@ -695,7 +554,7 @@ def check_command(
     -------
     CommandResult
         The envelope ``kartograf-result/1`` with ``check`` true; ``result`` is the plan
-        (``kartograf-plan/1``; of a project the ``kartograf-project-check/1``), whose
+        (``kartograf-plan/1``), whose
         ``ok`` is false when a position could not be checked (status ``partial`` or
         ``failed``). A plan that lists a ``conflict`` is ``ok``: only the run fails.
 
@@ -713,8 +572,8 @@ def check_command(
             hint=message("commands.no_check_hint"),
             reason="no_check",
         )
-    if declaration.project_task:
-        entry = task_command(declaration.id)
+    if declaration.kind == "data":
+        entry = DATA_COMMANDS[declaration.id]
         arguments = convert_arguments(entry.options, options)
         target = resolve_target(output_dir=output_dir, root=root)
         entry.validate(target.path if target.mode == "store" else Path("."), arguments)

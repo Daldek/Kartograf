@@ -16,10 +16,7 @@ result (ADR-037, ADR-044): ``elevation download`` and ``imagery download`` =
 ``check_hsg`` (``--summary``: ``hsg_statistics``), the collection groups
 (``boundaries``, ``cadastre``, ``models3d``, ``hydro``, ``names``, ``maps``,
 ``geodesy download``) = ``download_collection``/``check_collection``
-(ADR-042), ``project`` = ``init_project``, ``add_project_task``,
-``remove_project_task``, ``download_project``, ``check_project``,
-``get_project_status``, ``verify_project`` (``open_project`` reads a
-project, ADR-040). Every data report (``DataReport``, ``CollectionReport``,
+(ADR-042). Every data report (``DataReport``, ``CollectionReport``,
 ``LandCoverReport``, ``SoilReport``, ``HsgReport``) has ``files`` and
 ``failed`` (``UnitFile``/``UnitFailure``), ``stale``, ``notices`` and ``ok``.
 The store is read without writing to it (ADR-045): ``list_segments``,
@@ -220,7 +217,6 @@ from kartograf.exceptions import (
     MissingDependencyError,
     NoCoverageError,
     ParseError,
-    ProjectLockedError,
     StoreUnavailableError,
     UsageError,
     ValidationError,
@@ -244,24 +240,6 @@ from kartograf.landcover.manager import (
 )
 from kartograf.marker import StoreInit, check_store, init_store, store_state
 from kartograf.notices import Notice
-from kartograf.project import (
-    PROJECT_LOCK,
-    FileCheck,
-    PinnedFile,
-    Project,
-    ProjectCheck,
-    ProjectReport,
-    ProjectTask,
-    TaskResult,
-    add_project_task,
-    check_project,
-    download_project,
-    get_project_status,
-    init_project,
-    open_project,
-    remove_project_task,
-    verify_project,
-)
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.cuzk import (
@@ -431,23 +409,6 @@ __all__ = [
     "HsgReport",
     "hsg_statistics",
     "hsg_from_rasters",
-    # Project manifest (kartograf-project.json, ADR-040)
-    "PROJECT_LOCK",
-    "init_project",
-    "open_project",
-    "add_project_task",
-    "remove_project_task",
-    "download_project",
-    "check_project",
-    "get_project_status",
-    "verify_project",
-    "Project",
-    "ProjectTask",
-    "PinnedFile",
-    "ProjectReport",
-    "TaskResult",
-    "ProjectCheck",
-    "FileCheck",
     # Transport and mosaic (stable since 0.7.1)
     "get_with_retry",
     "make_gugik_session",
@@ -491,7 +452,6 @@ __all__ = [
     "InvalidLayoutError",
     "StoreUnavailableError",
     "ConflictError",
-    "ProjectLockedError",
     "ForbiddenError",
     "MissingDependencyError",
     # Sources, layers and the metadata cache as data (spec 5.4.6-5.4.9)

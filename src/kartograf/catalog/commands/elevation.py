@@ -162,7 +162,6 @@ _DOWNLOAD_PARAMS = (
         short="-r",
         metavar=message("catalog.metavar_resolution"),
         allowed=_resolutions,
-        task=True,
         section=PRODUCT_TITLE,
     ),
     Param(
@@ -171,7 +170,6 @@ _DOWNLOAD_PARAMS = (
         _model_help,
         metavar="MODEL",
         allowed=_models,
-        task=True,
         section=PRODUCT_TITLE,
     ),
     Param(
@@ -180,7 +178,6 @@ _DOWNLOAD_PARAMS = (
         _vertical_crs_help,
         metavar=message("catalog.metavar_crs"),
         allowed=_vertical_systems,
-        task=True,
         section=PRODUCT_TITLE,
     ),
     Param(
@@ -189,7 +186,6 @@ _DOWNLOAD_PARAMS = (
         _format_help,
         metavar="FORMAT",
         allowed=_formats,
-        task=True,
         section=PRODUCT_TITLE,
     ),
     Param(
@@ -198,7 +194,6 @@ _DOWNLOAD_PARAMS = (
         _sheet_system_help,
         allowed=_sheet_systems,
         choices=True,
-        task=True,
         section=message("catalog.section_sheets"),
     ),
     Param(
@@ -207,7 +202,6 @@ _DOWNLOAD_PARAMS = (
         _scale_help,
         metavar=message("catalog.metavar_scale"),
         allowed=lambda: SCALES_2000,
-        task=True,
         section=message("catalog.section_sheets"),
     ),
     Param(
@@ -215,7 +209,6 @@ _DOWNLOAD_PARAMS = (
         "flag",
         message("catalog_elevation.cutout_description"),
         default=False,
-        task=True,
         section=message("catalog.section_cutout"),
     ),
     Param(
@@ -227,7 +220,6 @@ _DOWNLOAD_PARAMS = (
         allowed=lambda: list(CUTOUT_CRS),
         choices=True,
         normalize="upper",
-        task=True,
         section=message("catalog.section_cutout"),
     ),
     Param(
@@ -235,7 +227,6 @@ _DOWNLOAD_PARAMS = (
         "int",
         message("catalog_elevation.year_description"),
         metavar=message("catalog.metavar_year"),
-        task=True,
         section=message("catalog.section_year_flights_tiles"),
     ),
     Param(
@@ -243,7 +234,6 @@ _DOWNLOAD_PARAMS = (
         "int",
         message("catalog_elevation.min_year_description"),
         metavar=message("catalog.metavar_year"),
-        task=True,
         section=message("catalog.section_year_flights_tiles"),
     ),
     Param(
@@ -251,7 +241,6 @@ _DOWNLOAD_PARAMS = (
         "int",
         message("catalog_elevation.max_year_description"),
         metavar=message("catalog.metavar_year"),
-        task=True,
         section=message("catalog.section_year_flights_tiles"),
     ),
     Param(
@@ -259,7 +248,6 @@ _DOWNLOAD_PARAMS = (
         "flag",
         message("catalog_elevation.all_campaigns_description"),
         default=False,
-        task=True,
         section=message("catalog.section_year_flights_tiles"),
     ),
     Param(
@@ -267,7 +255,6 @@ _DOWNLOAD_PARAMS = (
         "flag",
         message("catalog_elevation.full_sheet_description"),
         default=False,
-        task=True,
         section=message("catalog.section_year_flights_tiles"),
     ),
     Param(
@@ -275,7 +262,6 @@ _DOWNLOAD_PARAMS = (
         "int",
         message("catalog_elevation.min_density_description"),
         metavar="N",
-        task=True,
         section=message("catalog.section_year_flights_tiles"),
         unit="points/m2",
     ),
@@ -426,23 +412,14 @@ _DOWNLOAD_EXAMPLES = (
 )
 
 _AVAILABILITY_PARAMS = (
-    replace(
-        shared.product(lambda: AVAILABILITY_PRODUCTS, product_choices),
-        task=False,
+    shared.product(lambda: AVAILABILITY_PRODUCTS, product_choices),
+    shared.country(
+        lambda: list(AVAILABILITY_COUNTRIES), _availability_country_description
     ),
-    replace(
-        shared.country(
-            lambda: list(AVAILABILITY_COUNTRIES), _availability_country_description
-        ),
-        task=False,
-    ),
-    *(
-        replace(param, task=False)
-        for param in shared.area(
-            sheet=message("catalog_elevation.sheet_description_2"),
-            accepts=_ACCEPTS,
-            geometry=message("catalog_elevation.geometry_description_2"),
-        )
+    *shared.area(
+        sheet=message("catalog_elevation.sheet_description_2"),
+        accepts=_ACCEPTS,
+        geometry=message("catalog_elevation.geometry_description_2"),
     ),
     Param(
         "year",
@@ -500,7 +477,6 @@ COMMANDS = (
             "catalog_elevation.elevation_download_description", note=shared.PLAIN_NOTE
         ),
         effects=("network", "store_write"),
-        project_task=True,
         check_function="check_data",
         check_result_schema="kartograf-plan/1",
         constraints=_DOWNLOAD_CONSTRAINTS,

@@ -451,7 +451,7 @@ def _report_plan(args: argparse.Namespace, plan: UpdatePlan) -> int:
     def render() -> int:
         for item in plan.items:
             print(plan_line(item))
-        return exit_code_of(plan, check=True)
+        return exit_code_of(plan)
 
     return _present(args, plan, render)
 

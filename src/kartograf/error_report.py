@@ -77,7 +77,7 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "invalid_input",
         2,
         "wrong value or combination of arguments, a missing required argument, "
-        "an invalid input file (plan, manifest, geometry); reasons that refine it: "
+        "an invalid input file (plan, geometry); reasons that refine it: "
         "exclusive_options (output_dir with root) and store_only_option (an option "
         "that needs the store, with output_dir)",
     ),
@@ -104,16 +104,6 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "the user settings cannot be used: nogat.toml is unreadable, not UTF-8 "
         "text, not valid TOML or has a section that is not a table, or a setting "
         "has a value that is not valid",
-    ),
-    ErrorCodeSpec(
-        "ProjectLockedError",
-        "validation_error",
-        "project_locked",
-        2,
-        "the lock of a project manifest (.kartograf-project.lock, "
-        "kartograf.PROJECT_LOCK) stayed past the wait of a change: another process "
-        "holds it or an interrupted change left it; details.path names the lock "
-        "directory",
     ),
     ErrorCodeSpec(
         "DownloadError",

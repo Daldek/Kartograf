@@ -222,27 +222,6 @@ _FLOWS: Final[tuple[_Flow, ...]] = (
             ),
         ),
     ),
-    _Flow(
-        "A project: tasks with pinned versions",
-        "Run the lines in the directory of the project; `--json` goes before the "
-        "name of the task.",
-        (
-            _Step(
-                "the project and its store.",
-                f"kartograf project init --root {_STORE} --json",
-            ),
-            _Step(
-                "a task: a data command with its options.",
-                "kartograf project add --json area elevation download --product nmt "
-                f"--sheet {_SHEET} --resolution 1m --vertical-crs EVRF2007",
-            ),
-            _Step("fetch and pin the versions.", "kartograf project download --json"),
-            _Step(
-                "is everything there? `status` reads sizes, `verify` the checksums.",
-                "kartograf project status --json",
-            ),
-        ),
-    ),
 )
 # Commands of the compact block: the discovery pair, then the commonest tasks.
 _BLOCK_LINES: Final[tuple[str, ...]] = (
@@ -327,7 +306,7 @@ def _checked_line(line: str) -> str:
         )
     declarations = declared()
     parser = build_parser(declarations.commands, declarations.groups, usage_errors=True)
-    data = {command.id for command in declarations.commands if command.project_task}
+    data = {command.id for command in declarations.commands if command.kind == "data"}
     try:
         parsed = parse_command_line(parser, words[1:])
         if getattr(parsed, "_command_id", None) in data:

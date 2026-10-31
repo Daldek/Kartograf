@@ -201,8 +201,6 @@ def format_command(command: Command) -> str:
                 "cli.fact_effects", lang=language(), effects=", ".join(command.effects)
             )
         )
-    if command.project_task:
-        facts.append(message("cli.fact_project_task", lang=language()))
     facts.append(f"operation_id: {command.operation_id}")
     lines += ["", *_wrap("; ".join(facts), "")]
     for block in (

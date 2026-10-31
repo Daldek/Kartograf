@@ -14,7 +14,6 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from types import MappingProxyType
 
 import pytest
 
@@ -42,17 +41,8 @@ from kartograf.hydrology.hsg import HsgReport
 from kartograf.landcover.manager import LandCoverReport, SoilReport
 from kartograf.marker import StoreInit
 from kartograf.notices import Notice
-from kartograf.project.model import (
-    FileCheck,
-    PinnedFile,
-    Project,
-    ProjectCheck,
-    ProjectReport,
-    ProjectTask,
-    TaskResult,
-)
 from kartograf.providers.pl.gugik_laz import LazTile, SupersededLazTile
-from kartograf.serialization import SCHEMAS, Document, EncodeContext, encode
+from kartograf.serialization import SCHEMAS, Document, encode
 from kartograf.sheet_info import (
     SheetDescendants,
     SheetLevel,
@@ -191,45 +181,6 @@ def _campaign() -> AvailabilityCampaign:
     return AvailabilityCampaign(campaign="83233", complete=True, full_m2=9.0e5)
 
 
-def _pin() -> PinnedFile:
-    return PinnedFile(
-        "output",
-        SHEET,
-        f"{SEGMENT}/N-34/130/D/d/2/4/{SHEET}.asc",
-        f"{SEGMENT}/versions/N-34/130/D/d/2/4/2022-05-10_83233_10be475e/{SHEET}.asc",
-        "2022-05-10_83233",
-        SHA256,
-        41029733,
-    )
-
-
-def _file_check() -> FileCheck:
-    return FileCheck(
-        "teren", SHEET, f"{SEGMENT}/N-34/130/D/d/2/4/{SHEET}.asc", "newer",
-        "2022-05-10_83233", "2025-04-02_99887", "nowsza wersja",
-    )  # fmt: skip
-
-
-def _task() -> ProjectTask:
-    return ProjectTask(
-        name="teren",
-        command="elevation download",
-        options=MappingProxyType({"product": "nmt", "sheet": SHEET}),
-        pinned_at="2026-10-20T08:15:02+00:00",
-        kartograf_version="0.8.0",
-        geometry_sha256=MappingProxyType({"area.shp": SHA256}),
-        files=(_pin(),),
-    )
-
-
-def _task_result() -> TaskResult:
-    return TaskResult("teren", "updated", (_pin(),), (_pin(),), ("blad",))
-
-
-def _project() -> Project:
-    return Project(Path("/home/ola/projekty/wisla"), STORE, (_task(),))
-
-
 # --- documents ------------------------------------------------------------------
 
 
@@ -323,25 +274,6 @@ def _hsg_report() -> Document:
         ok=False,
         summary={"A": {"count": 1}},
         root=STORE,
-    )
-
-
-def _project_report() -> Document:
-    return ProjectReport(
-        project=_project(),
-        tasks=(_task_result(),),
-        notices=(_notice(),),
-        ok=False,
-    )
-
-
-def _project_check() -> Document:
-    return ProjectCheck(
-        project=_project(),
-        files=(_file_check(),),
-        not_downloaded=("gleby",),
-        notices=(_notice(),),
-        ok=False,
     )
 
 
@@ -590,9 +522,6 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
         _soil_report,
         _hsg_report,
     ),
-    "kartograf-project-state/1": (_project,),
-    "kartograf-project-report/1": (_project_report,),
-    "kartograf-project-check/1": (_project_check,),
     "kartograf-sources/1": (_sources,),
     "kartograf-layers/1": (_layers,),
     "kartograf-cache/1": (_cache,),
@@ -665,16 +594,6 @@ CONTRACT: dict[str, list[str]] = {
         "stale",
         "superseded",
         "summary",
-        "notices",
-        "ok",
-    ],
-    "kartograf-project-state/1": ["schema", "directory", "root", "tasks"],
-    "kartograf-project-report/1": ["schema", "project", "tasks", "notices", "ok"],
-    "kartograf-project-check/1": [
-        "schema",
-        "project",
-        "files",
-        "not_downloaded",
         "notices",
         "ok",
     ],
@@ -862,38 +781,6 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
     ),
     "AvailabilityCampaign": (_campaign, ["campaign", "complete", "full_m2"]),
     "BBoxValue": (lambda: BBox(1, 2, 3, 4, "EPSG:2180"), ["bbox", "crs"]),
-    "PinnedFile": (
-        _pin,
-        ["role", "unit", "path", "version", "label", "sha256", "size_bytes"],
-    ),
-    "FileCheck": (
-        _file_check,
-        [
-            "task",
-            "unit",
-            "path",
-            "status",
-            "pinned_label",
-            "available_label",
-            "detail",
-        ],
-    ),
-    "ProjectTask": (
-        _task,
-        [
-            "name",
-            "command",
-            "options",
-            "pinned_at",
-            "kartograf_version",
-            "geometry_sha256",
-            "files",
-        ],
-    ),
-    "TaskResult": (
-        _task_result,
-        ["name", "outcome", "pinned", "unpinned", "errors", "code", "reason"],
-    ),
     "ResultItem": (
         lambda: ResultItem("N-34-130-D", "failed", "no_data", "no_coverage", "text"),
         ["id", "status", "code", "reason", "message"],
@@ -1071,18 +958,10 @@ def test_document_keys_and_their_order(schema, build):
 def test_nested_type_keys_and_their_order(name):
     build, keys = NESTED[name]
 
-    encoded = encode(build(), EncodeContext(store=STORE))
+    encoded = encode(build())
 
     assert isinstance(encoded, dict)
     assert list(encoded) == keys
-
-
-def test_nested_documents_have_no_schema_key():
-    """``project`` of a report is the document of the project without the key
-    ``schema`` (it is only the first key of the top level)."""
-    data = _project_report().to_dict()
-
-    assert list(data["project"]) == ["directory", "root", "tasks"]  # type: ignore[call-overload]
 
 
 def _document_classes() -> list[type[Document]]:
