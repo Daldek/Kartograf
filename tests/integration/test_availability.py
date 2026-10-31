@@ -488,23 +488,6 @@ def test_hint_runs_validation(tmp_path):
         _validated(hint, tmp_path)
 
 
-def test_hint_accepted_by_project_add(tmp_path, monkeypatch):
-    """Every hint pasted after ``kartograf project add NAZWA`` is a project
-    task (manifest spec 4.10): the project validation, without network."""
-    from kartograf import init_project, open_project
-    from kartograf.cli import main
-
-    monkeypatch.chdir(tmp_path)
-    project = tmp_path / "projekt"
-    init_project(project, root=project / "data")
-    hints = _hints()
-    for number, hint in enumerate(hints):
-        add = ["project", "add", "--project", str(project), f"zadanie{number}"]
-        assert main([*add, *shlex.split(hint)]) == 0, hint
-    assert len(open_project(project).tasks) == len(hints)
-    assert list((project / "data").iterdir()) == []
-
-
 @pytest.mark.usefixtures("frozen_clock")
 def test_json_round_trip_and_order():
     report, _ = _krakow()
@@ -1177,23 +1160,6 @@ def test_cz_hints(tmp_path):
     # every command passes the checks of download_data before the network
     for hint in _cz_hints():
         validate_data_request(**_arguments(hint, tmp_path))
-
-
-def test_cz_hints_accepted_by_project_add(tmp_path, monkeypatch):
-    """Every CZ hint pasted after ``kartograf project add NAZWA`` is a
-    project task (validation without network, nothing written)."""
-    from kartograf import init_project, open_project
-    from kartograf.cli import main
-
-    monkeypatch.chdir(tmp_path)
-    project = tmp_path / "projekt"
-    init_project(project, root=project / "data")
-    hints = _cz_hints()
-    for number, hint in enumerate(hints):
-        add = ["project", "add", "--project", str(project), f"cz{number}"]
-        assert main([*add, *shlex.split(hint)]) == 0, hint
-    assert len(open_project(project).tasks) == len(hints)
-    assert list((project / "data").iterdir()) == []
 
 
 def test_cz_cache_and_force(tmp_path):

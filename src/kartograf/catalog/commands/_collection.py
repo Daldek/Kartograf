@@ -169,7 +169,6 @@ def collection_commands(
                 "str",
                 teryt,
                 metavar=message("catalog.metavar_code"),
-                task=True,
                 section=SELECTION_TITLE,
             )
         )
@@ -180,7 +179,6 @@ def collection_commands(
                 "str",
                 ku,
                 metavar=message("catalog.metavar_code"),
-                task=True,
                 section=SELECTION_TITLE,
             )
         )
@@ -197,7 +195,6 @@ def collection_commands(
                 "flag",
                 whole_country,
                 default=False,
-                task=True,
                 section=SELECTION_TITLE,
             )
         )
@@ -255,7 +252,6 @@ def collection_commands(
             "catalog.with_plain_note", text=description, note=shared.PLAIN_NOTE
         ),
         effects=("network", "store_write"),
-        project_task=True,
         check_function="check_collection",
         check_result_schema="kartograf-plan/1",
         constraints=(*declared, *constraints, *shared.target_constraints()),

@@ -14,9 +14,8 @@ every command that has a check, so there is no separate tool for a check.
 The server mode decides what a write tool is (``allow_writes``): with writes it is
 the command as declared; without them a command that has a check is its plan-only
 variant (the options of a run are gone, ``check`` is fixed to true, the
-annotations say read only) and a command that writes without a check
-(``project init``, ``project add``, ``project remove``) is not offered at all
-(``hidden_tools``).
+annotations say read only) and a command that writes without a check is not offered
+at all (``hidden_tools``).
 
 The module imports nothing of the MCP SDK: ``kartograf.mcp_server`` turns a
 ``ToolSpec`` into a protocol ``Tool`` and runs it, and tests read these specs
@@ -123,9 +122,9 @@ class ToolSpec:
     paths : dict
         The path arguments with what each is for (AGI-2.3 ``path_role``): the sandbox
         of ``--allow-dir`` applies to every one.
-    task_options : tuple of str
-        The arguments that are options of a data task (``project_task``); the other
-        arguments of a data tool belong to its run (``root``, ``update``,
+    data_options : tuple of str
+        The arguments that are options of a call of a data command (kind ``data``);
+        the other arguments of a data tool belong to its run (``root``, ``update``,
         ``plan``, ``workers``, ``summary``).
     plan_only : bool
         The command writes and has a check, and the server does not write: every
@@ -149,7 +148,7 @@ class ToolSpec:
     kinds: dict[str, Kind]
     fixed: dict[str, str]
     paths: dict[str, PathRole]
-    task_options: tuple[str, ...]
+    data_options: tuple[str, ...]
     plan_only: bool
     refused: frozenset[str]
     always_load: bool
@@ -248,7 +247,7 @@ def _property(command: Command, param: Param, option: OptionEntry) -> dict[str, 
             }
         case "str_list":
             schema = {"type": "array", "items": _string(values)}
-        case "plan" | "options":
+        case "plan":
             schema = {"type": "object"}
         case _:
             raise ValueError(f"{command.id}: kind {param.kind!r} has no JSON Schema")
@@ -346,10 +345,10 @@ def _tool(command: Command, entry: CommandEntry, *, plan_only: bool) -> ToolSpec
             if param.fixed is not None
         },
         paths=built.paths,
-        task_options=tuple(
+        data_options=tuple(
             str(param.api_argument)
-            for param in command.params
-            if command.project_task and param.task
+            for param in command.call_options
+            if command.kind == "data"
         ),
         plan_only=plan_only,
         refused=built.refused,
@@ -414,9 +413,8 @@ def hidden_tools(
 ) -> dict[str, str]:
     """Return the tools that exist but are not offered: name -> command id.
 
-    These are the commands that write and have no check (``project init``,
-    ``project add``, ``project remove``) on a server that does not write; none with
-    writes. A call of one is ``forbidden``, not an unknown tool.
+    These are the commands that write and have no check on a server that does not
+    write; none with writes. A call of one is ``forbidden``, not an unknown tool.
 
     Raises
     ------
@@ -429,23 +427,4 @@ def hidden_tools(
         name: item.command
         for name, item in hidden.items()
         if wanted is None or wanted & set(item.families)
-    }
-
-
-def task_paths(command: str) -> dict[str, PathRole]:
-    """Return the path options of a data command with what each is for.
-
-    The options of a task nested in ``project add`` follow the sandbox of the server
-    like the arguments of a tool.
-
-    Raises
-    ------
-    KeyError
-        ``command`` is not a command of the catalog.
-    """
-    by_id = {c.id: c for c in declared().commands}
-    return {
-        param.name: param.path_role
-        for param in by_id[command].params
-        if param.task and param.kind == "path" and param.path_role is not None
     }

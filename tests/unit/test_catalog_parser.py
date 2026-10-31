@@ -224,51 +224,19 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
             description="Statystyki",
         ),
         _data(
-            "project add",
+            "store entries",
             Param(
-                "project_dir",
-                "path",
-                "Katalog",
-                flag="--project",
-                dest="project",
-                default=None,
-                cli_default=".",
-                metavar="KATALOG",
-            ),
-            Param(
-                "name",
-                "str",
-                "Nazwa",
-                metavar="NAZWA",
-                positional=True,
-            ),
-            Param(
-                "arguments",
+                "paths",
                 "str_list",
-                "Komenda i opcje",
-                metavar="<grupa> <komenda> [opcje]",
-                positional=True,
-                nargs="REMAINDER",
-            ),
-            kind="manage",
-            function="add_project_task",
-            result_schema="kartograf-project-state/1",
-            description="Dodaj zadanie",
-        ),
-        _data(
-            "project status",
-            Param(
-                "tasks",
-                "str_list",
-                "Zadania",
-                metavar="NAZWA",
+                "Sciezki",
+                metavar="SCIEZKA",
                 positional=True,
                 nargs="*",
             ),
             kind="query",
-            function="get_project_status",
-            result_schema="kartograf-project-check/1",
-            description="Status",
+            function="list_store_entries",
+            result_schema="kartograf-store-entries/1",
+            description="Wpisy",
         ),
         _data(
             "commands list",
@@ -293,9 +261,9 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
             "Dane wysokosciowe",
         ),
         Group(
-            "project",
-            "Projekt",
-            "Manifest projektu",
+            "store",
+            "Magazyn",
+            "Magazyn danych",
         ),
         Group(
             "sheet",
@@ -390,20 +358,12 @@ def test_positional_arguments_and_their_counts():
     parser = _parser()
 
     parse = parser.parse_args(["sheet", "parse", "N-34-130-D", "--hierarchy"])
-    add = parser.parse_args(
-        ["project", "add", "teren", "elevation", "download", "--product", "nmt"]
-    )
-    status = parser.parse_args(["project", "status", "a", "b"])
-    nothing = parser.parse_args(["project", "status"])
+    entries = parser.parse_args(["store", "entries", "a", "b"])
+    nothing = parser.parse_args(["store", "entries"])
     catalog = parser.parse_args(["commands", "list"])
 
     assert (parse.sheet, parse.hierarchy) == ("N-34-130-D", True)
-    assert (add.name, add.arguments, add.project) == (
-        "teren",
-        ["elevation", "download", "--product", "nmt"],
-        ".",
-    )
-    assert (status.tasks, nothing.tasks) == (["a", "b"], [])
+    assert (entries.paths, nothing.paths) == (["a", "b"], [])
     assert catalog.group is None
 
 
@@ -507,7 +467,7 @@ def test_usage_error_mode_reaches_every_command_parser():
     parser = _parser(usage_errors=True)
 
     for words in (
-        ("project", "add"),
+        ("store", "entries"),
         ("cache", "stats"),
         ("elevation", "list-sources"),
     ):
@@ -564,8 +524,8 @@ def test_root_lists_commands_then_groups_by_position():
     # the groups by position and name
     assert list(top.choices) == [
         "elevation",
-        "project",
         "sheet",
+        "store",
         "cache",
         "commands",
     ]
@@ -628,7 +588,7 @@ def test_removed_commands_name_their_replacement():
         ["elevation", "download", "--nope"],
         ["elevation", "download", "--teryt", "12"],
         ["elevation", "download", "extra"],
-        ["project", "status", "--nope=1"],
+        ["store", "entries", "--nope=1"],
     ],
 )
 def test_unknown_argument_text_names_the_commands_that_have_it(argv, capsys):
@@ -647,16 +607,16 @@ def test_unknown_flag_owners_are_listed():
     parser = _parser(usage_errors=True)
 
     with pytest.raises(UsageError) as error:
-        parse_command_line(parser, ["project", "status", "--hierarchy"])
+        parse_command_line(parser, ["store", "entries", "--hierarchy"])
 
     text = error.value.args[0]
     assert text == (
         "unknown option --hierarchy (these have it: sheet parse). "
-        "Options: kartograf project status --help"
+        "Options: kartograf store entries --help"
     )
     assert text.localized("pl") == (
         "nieznana opcja --hierarchy (maja ja: sheet parse). "
-        "Opcje: kartograf project status --help"
+        "Opcje: kartograf store entries --help"
     )
 
 
@@ -692,16 +652,16 @@ _DECLARED = declared()
 _DATA_EXAMPLES = [
     (command, index)
     for command in _DECLARED.commands
-    if command.project_task
+    if command.kind == "data"
     for index in range(len(command.examples))
 ]
 
 
 def _options_of(command: Command, parsed: argparse.Namespace) -> dict:
-    """The task options (JSON form of the manifest) a parsed line gives."""
+    """The options of the call (their JSON form) a parsed line gives."""
     options: dict = {}
-    for param in command.params:
-        value = getattr(parsed, param.cli_dest, None) if param.task else None
+    for param in command.call_options:
+        value = getattr(parsed, param.cli_dest, None)
         if value is None or value is False:
             continue
         if param.kind == "bbox":

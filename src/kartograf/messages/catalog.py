@@ -271,10 +271,6 @@ MESSAGES = {
     "metavar_kind": Text("KIND", "RODZAJ"),
     "metavar_units": Text("UNITS", "JEDNOSTKI"),
     "metavar_epsg_code": Text("EPSG:CODE", "EPSG:KOD"),
-    "metavar_group_command": Text(
-        "<group> <command> [options]",
-        "<grupa> <komenda> [opcje]",
-    ),
     "metavar_depth": Text("DEPTH", "GLEBOKOSC"),
     "metavar_property": Text("PROPERTY", "WLASCIWOSC"),
     "metavar_stat": Text("STAT", "STATYSTYKA"),
@@ -285,15 +281,14 @@ MESSAGES = {
         "Download spatial data from GUGiK (PL), CUZK (CZ), Copernicus and ISRIC. The "
         "data commands are in groups by type of data: a data group has download "
         "(fetch into the store) and list-sources (the sources of the registry, "
-        "offline), some groups also list-layers, availability or hsg. project manages "
-        "the tasks of a project, sheet recognizes sheet codes, commands describes the "
-        "commands, cache is the local metadata cache.",
+        "offline), some groups also list-layers, availability or hsg. sheet "
+        "recognizes sheet codes, commands describes the commands, cache is the local "
+        "metadata cache.",
         "Pobieranie danych przestrzennych z GUGiK (PL), CUZK (CZ), Copernicus i "
         "ISRIC. Komendy danych sa w grupach wg typu danych: grupa danych ma download "
         "(pobranie do magazynu) i list-sources (zrodla z rejestru, bez sieci), czesc "
-        "grup takze list-layers, availability albo hsg. project zarzadza zadaniami "
-        "projektu, sheet rozpoznaje godla arkuszy, commands opisuje komendy, cache - "
-        "lokalny cache metadanych.",
+        "grup takze list-layers, availability albo hsg. sheet rozpoznaje godla "
+        "arkuszy, commands opisuje komendy, cache - lokalny cache metadanych.",
     ),
     "parser_epilog": Text(
         "Examples:\n"

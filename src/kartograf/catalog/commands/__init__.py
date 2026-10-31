@@ -19,9 +19,8 @@ from kartograf.catalog.shared import LANG
 from kartograf.catalog.spec import Command, Group, check_declarations, sorted_groups
 
 # Order of the modules - and so of the commands of the catalog: the data
-# commands of the project manifest in the order of ``COMMANDS`` (elevation
-# first), then the project, the cache and the queries. A module that is not
-# listed follows, by name.
+# commands in the order of ``DATA_COMMANDS`` (elevation first), then the cache and
+# the queries. A module that is not listed follows, by name.
 MODULE_ORDER = (
     "elevation",
     "imagery",
@@ -34,7 +33,6 @@ MODULE_ORDER = (
     "names",
     "maps",
     "geodesy",
-    "project",
     "misc",
     "config",
 )

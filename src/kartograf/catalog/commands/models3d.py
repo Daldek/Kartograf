@@ -29,7 +29,6 @@ def _content(products: Products) -> tuple[Param, ...]:
             lod_help,
             metavar="N",
             allowed=lambda: choice_values(products(), "lod"),
-            task=True,
         ),
         Param(
             "year",
@@ -37,7 +36,6 @@ def _content(products: Products) -> tuple[Param, ...]:
             message("catalog_models3d.year_description"),
             metavar=message("catalog.metavar_year"),
             allowed=lambda: choice_values(products(), "year"),
-            task=True,
         ),
     )
 

@@ -18,7 +18,7 @@ def check_command_line(line: str) -> None:
     declarations = declared()
     parser = build_parser(declarations.commands, declarations.groups, usage_errors=True)
     parsed = parse_command_line(parser, words)
-    data = {c.id for c in declarations.commands if c.project_task}
+    data = {c.id for c in declarations.commands if c.kind == "data"}
     if getattr(parsed, "_command_id", None) in data:
         call = parse_command(words)
         root = call.run.get("root")

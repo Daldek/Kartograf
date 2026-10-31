@@ -9,7 +9,7 @@ flags, a report in the shape of ``CollectionReport`` (``LandCoverReport``,
 ``SoilReport``: ``UnitFile``/``UnitFailure``). A file that fails lands in
 ``failed`` and the other units still run (ADR-044 D6);
 ``validate_landcover_request``/``validate_soil_request`` run every check of
-the download without network (``project add``).
+the download without network (``validate_command``).
 
 ``LandCoverManager`` is the layer below them (outside the public API): it
 downloads BDOT10k, BDOO, CORINE, SoilGrids, ZABAGED, Data50 and Data250 into
@@ -1017,7 +1017,7 @@ class LandCoverManager:
 
         No network and nothing written (a ``geometry`` file is read for its
         envelope): the same exception type and text as ``download`` with the
-        same selection and options (``project add``, ADR-040).
+        same selection and options (``validate_command``).
 
         Raises
         ------
@@ -2319,7 +2319,7 @@ def validate_landcover_request(
 
     These are the checks made before their first request, without network and without
     writing (a ``geometry`` file is read for its envelope): the same exception type and
-    text as the download (``project add``, ADR-040).
+    text as the download (``validate_command``).
 
     Raises
     ------
@@ -2461,8 +2461,8 @@ def validate_soil_request(
 ) -> None:
     """Validate the request of ``download_soil``/``check_soil``.
 
-    These are the checks before the first request, without network (``project add``,
-    ADR-040).
+    These are the checks before the first request, without network
+    (``validate_command``).
 
     Raises
     ------

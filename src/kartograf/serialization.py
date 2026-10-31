@@ -1,7 +1,7 @@
 """
 JSON documents of the library: one encoder for every result type.
 
-Result types of the command-level API (reports, plans, project state, store
+Result types of the command-level API (reports, plans, store
 documents, errors) are frozen dataclasses mixing in :class:`Document`. The
 mixin gives them ``to_dict()`` and ``to_json()`` with the document ``schema``
 (``kartograf-<kind>/<n>``) as the first key. The CLI ``--json`` mode prints
@@ -62,15 +62,11 @@ class EncodeContext:
 
     Attributes
     ----------
-    store : Path, optional
-        Store directory the relative paths of project pins are joined to
-        (``PinnedFile.__json__``, ``FileCheck.__json__``).
     omit : frozenset of (str, str)
         ``(class name, field name)`` pairs left out of the encoded dataclasses
         (``StoreEntries`` leaves out ``("Sidecar", "raw")``).
     """
 
-    store: Path | None = None
     omit: frozenset[tuple[str, str]] = frozenset()
 
 

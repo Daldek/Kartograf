@@ -51,7 +51,7 @@ The following are added in the target state (v1.0.0, section 8):
 | Persona | Needs | Usage |
 |---------|----------|--------|
 | **QGIS user** | GUGiK data for an area from the map or a layer, ready for analysis | QGIS plugin |
-| **Project team / company** | Shared data store, reuse in subsequent projects, record of the data versions used in a project | Web GUI + CLI |
+| **Project team / company** | Shared data store, reuse of downloaded data in subsequent projects | Web GUI + CLI |
 
 ---
 
@@ -129,7 +129,7 @@ area has.
   years, combinations of year × sheet system × resolution × vertical CRS ×
   format (also NMPT and LAZ tiles) with the number of full/incomplete sheets
   and completeness on PRG land (1 m grid), a download command hint
-  (without `--root`, also for `project add`), `--details`,
+  (without `--root`), `--details`,
   `--json` (`kartograf-availability/1`; fields `full_m2`, `sheet_records`
   and `campaign_coverage`, ADR-047); without downloading data, metadata
   cache (`--force`). USAGE 1.7.
@@ -1343,7 +1343,7 @@ fix an error without parsing text.
 #### Requirements
 - `--json` in every CLI command: stdout is one `kartograf-result/1` envelope (`status`, `result`
   with the `kartograf-<kind>/1` document of the command, `items`, `notices`; first key `schema`;
-  20 documents of the library), with no progress bar and no status lines
+  17 documents of the library), with no progress bar and no status lines
   (notices go in `notices`); an error is `kartograf-error/1` (`code`, `title`, `message`, `hint`,
   `details`, `exit_code`, `command`) on the last line of stderr, with nothing on stdout. The
   documents are returned by the library (`to_dict()`/`to_json()`), and the CLI and MCP only print them.
@@ -1351,15 +1351,15 @@ fix an error without parsing text.
   10 (`partial`) and 11 (`failed`) for a batch with failed units, 2 (`validation_error`), 5
   (`source_unavailable`), 14 (`no_data`), the other codes of the registry, 130 (Ctrl-C), 143
   (SIGTERM); `ValidationError` carries `option` and `allowed`, and the hint (`hint`) carries the
-  allowed values and an example command. One code table: `docs/USAGE.md` 9.3.
+  allowed values and an example command. One code table: `docs/USAGE.md` 8.3.
 - Command catalog (`kartograf commands list`, `kartograf commands schema`, `list_commands()`,
   `command_schema()`, `kartograf-command-list/1`, `kartograf-commands/1`):
   groups, products, commands, parameters (flag, API argument, kind, required, allowed
   values), constraints and examples; the single source of truth: the CLI parser,
-  project options and MCP tool schemas are generated from the declarations. Command layer:
+  options of a data command call and MCP tool schemas are generated from the declarations. Command layer:
   `parse_command`, `validate_command`, `format_command`, `run_command`,
   `check_command` (KB-1..KB-5 of the Archiwista).
-- MCP server `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 40 tools 1:1
+- MCP server `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 34 tools 1:1
   with the commands (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope (`outputSchema`),
   `is_error` only for an error, with no default values affecting data (a given `root`
   absolute, one left out the default store inside `--allow-dir`, `bbox` with `bbox_crs`),
@@ -1587,23 +1587,6 @@ from kartograf import (
     hsg_statistics,
     hsg_from_rasters,
 
-    # Project manifest (kartograf-project/1, ADR-040)
-    init_project,
-    open_project,
-    add_project_task,
-    remove_project_task,
-    download_project,
-    check_project,
-    get_project_status,
-    verify_project,
-    Project,
-    ProjectTask,
-    PinnedFile,
-    ProjectReport,
-    TaskResult,
-    ProjectCheck,
-    FileCheck,
-
     # Transport and mosaic (stable since 0.7.1)
     get_with_retry,
     make_gugik_session,
@@ -1793,11 +1776,9 @@ describe the result, not the solution.
       previously downloaded data; every version of a file remains available
       under an immutable path, and the standard path points to the latest
       local version (0.8.0, ADR-036; all products).
-- [x] **Project manifest:** a project records which specific files
-      and versions it used (with checksums); from the CLI one can download data
-      into the project, check its integrity and find out whether the source
-      has newer data. Data already present in the store is not downloaded again
-      (0.8.0, ADR-040).
+- **Project manifest:** moved to Archiwista (supersedes ADR-040). Projects (task lists with
+      pinned versions) are kept by Archiwista (ADR-057); Kartograf keeps the versioned
+      store, from which data already present is not downloaded again.
 - [x] **Complete public GUGiK data:** all products available
       publicly and without login, as far as the services allow
       (inventory in the subproject spec). Done in 0.8.0: plans A-E
@@ -1811,7 +1792,7 @@ describe the result, not the solution.
 - [ ] **QGIS plugin:** downloading from within QGIS through the library's
       public API, without its own download logic.
 - [ ] **Web GUI:** a local data manager — a browser of the store
-      and of project manifests with information about newer data; publication
+      with information about newer data; publication
       after local testing.
 - [x] **English-only identifiers** in the API, CLI and sidecar (ADR-031;
       API/CLI in 0.8.0, erratum 1).

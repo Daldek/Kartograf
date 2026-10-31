@@ -17,13 +17,13 @@ from kartograf.cli._args import library_arguments
 from kartograf.cli._parser import create_parser, parse_command_line
 from kartograf.cli.commands import main
 from kartograf.core.bbox import BBox
+from kartograf.data_commands import DATA_COMMANDS
 from kartograf.download.collections import CollectionReport
 from kartograf.download.data import DataReport, UnitFailure
 from kartograf.download.laz import LazDownloadResult
 from kartograf.download.plan import new_plan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import AUTO_CLIPPED, NO_COVERAGE_SOME, Notice
-from kartograf.project.commands import task_command
 from tests.support.errors import without_error_document
 
 _DOWNLOAD = "kartograf.cli.download_cmd.download_data"
@@ -344,7 +344,7 @@ def _command_lines() -> list[str]:
             len("kartograf ") :
         ]
         for command in declared().commands
-        if command.project_task
+        if command.kind == "data"
         for example in command.examples
     ]
     return [
@@ -363,12 +363,12 @@ def _command_lines() -> list[str]:
 
 @pytest.mark.parametrize("line", _command_lines())
 def test_cli_arguments_are_those_of_a_command_call(line):
-    """The handlers read the flags of a line the way ``parse_command`` (and so a
-    project task or an MCP tool) does: the parser of the CLI has defaults, the one
-    of ``parse_command`` has none, and the library arguments come out the same."""
+    """The handlers read the flags of a line the way ``parse_command`` (and so an
+    MCP tool) does: the parser of the CLI has defaults, the one of ``parse_command``
+    has none, and the library arguments come out the same."""
     argv = shlex.split(line)
     call = parse_command(argv)
-    expected = convert_arguments(task_command(call.command).options, call.options)
+    expected = convert_arguments(DATA_COMMANDS[call.command].options, call.options)
 
     parsed = parse_command_line(create_parser(), argv)
     assert library_arguments(parsed) == expected

@@ -294,38 +294,6 @@ class ConfigError(ValidationError):
         self.value = value
 
 
-class ProjectLockedError(ValidationError):
-    """
-    The lock of a project manifest stayed past the wait of a change (ADR-040).
-
-    A change of ``kartograf-project.json`` takes the lock ``.kartograf-project.lock``
-    (``kartograf.PROJECT_LOCK``, a directory beside the manifest) for its
-    read-merge-write, waits ``LOCK_TIMEOUT_S`` seconds for a busy one and never takes
-    it over. Another process holds it, or a change that was interrupted while it wrote
-    left it; when no program works on the project, removing the directory frees it.
-    A subclass of ``ValidationError``: ``except ValidationError`` catches it too.
-
-    Attributes
-    ----------
-    path : Path
-        The lock directory (``details.path``).
-
-    Examples
-    --------
-    >>> raise ProjectLockedError(
-    ...     "project locked by another process", path=Path("p/.kartograf-project.lock")
-    ... )
-    """
-
-    code = "validation_error"
-    reason = "project_locked"
-    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("path",)
-
-    def __init__(self, message: str, *, path: Path, hint: str | None = None) -> None:
-        super().__init__(message, hint=hint)
-        self.path = path
-
-
 class DownloadError(KartografError):
     """
     Error downloading data from provider.

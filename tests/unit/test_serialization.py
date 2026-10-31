@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
-from types import MappingProxyType
 
 import pytest
 
@@ -25,18 +24,8 @@ from kartograf.download.fetch import VersionedFile
 from kartograf.hydrology.hsg import HsgReport
 from kartograf.landcover.manager import LandCoverReport, SoilReport
 from kartograf.notices import Notice
-from kartograf.project.model import (
-    FileCheck,
-    PinnedFile,
-    Project,
-    ProjectCheck,
-    ProjectReport,
-    ProjectTask,
-    TaskResult,
-)
 from kartograf.providers.pl.gugik_laz import LazTile, SupersededLazTile
 from kartograf.serialization import SCHEMAS, Document, EncodeContext, encode
-from tests.unit.test_validate_request import _shapefile
 
 
 @dataclass(frozen=True)
@@ -60,26 +49,16 @@ class Widget(Document):
 
 
 @dataclass(frozen=True)
-class Pin:
-    """A nested value that needs the store directory (like ``PinnedFile``)."""
-
-    rel: str
-
-    def __json__(self, ctx: EncodeContext) -> dict[str, object]:
-        if ctx.store is None:
-            raise ValueError("a pin is encoded only inside a project document")
-        return {"path": ctx.store / self.rel}
-
-
-@dataclass(frozen=True)
 class Holder(Document):
+    """A document that leaves a field out of its nested values (like
+    ``StoreEntries``)."""
+
     SCHEMA = "kartograf-test-holder/1"
 
-    store_dir: Path
-    pins: tuple[Pin, ...]
+    items: tuple[Item, ...]
 
     def prepare_context(self, ctx: EncodeContext) -> None:
-        ctx.store = self.store_dir
+        ctx.omit = ctx.omit | {("Item", "size")}
 
 
 class Color(Enum):
@@ -273,31 +252,27 @@ def test_schema_is_first_key_and_nested_has_none(isolated_schemas):
     assert child.schema == "kartograf-test-widget/1"
 
 
-def test_json_hook_sees_context_from_prepare_context(tmp_path):
-    holder = Holder(tmp_path / "store", (Pin("a.asc"), Pin("b/c.asc")))
+def test_prepare_context_sets_the_context_of_the_nested_values():
+    holder = Holder((Item("a", 1), Item("b", 2)))
 
     data = holder.to_dict()
 
-    store = (tmp_path / "store").as_posix()
-    assert data["pins"] == [{"path": f"{store}/a.asc"}, {"path": f"{store}/b/c.asc"}]
-    with pytest.raises(ValueError, match="project document"):
-        encode(Pin("a.asc"))
+    assert data["items"] == [{"name": "a"}, {"name": "b"}]
+    assert encode(Item("a", 1)) == {"name": "a", "size": 1}
 
 
-def test_context_set_by_a_nested_document_stays_in_its_subtree(
-    tmp_path, isolated_schemas
-):
+def test_context_set_by_a_nested_document_stays_in_its_subtree(isolated_schemas):
     @dataclass(frozen=True)
     class Outer(Document):
         SCHEMA = "kartograf-test-outer/1"
 
         inner: Holder
-        pin: Pin
+        item: Item
 
-    outer = Outer(Holder(tmp_path, (Pin("a"),)), Pin("b"))
+    data = Outer(Holder((Item("a", 1),)), Item("b", 2)).to_dict()
 
-    with pytest.raises(ValueError, match="project document"):
-        outer.to_dict()  # the sibling pin is outside the nested holder
+    assert data["inner"] == {"items": [{"name": "a"}]}
+    assert data["item"] == {"name": "b", "size": 2}  # the sibling is outside it
 
 
 def test_to_json_format():
@@ -657,235 +632,3 @@ def test_a_file_of_a_report_has_the_status_of_the_document_and_only_the_keys_it_
         "sha256",
         "status",
     ]
-
-
-# --- the project documents (spec 5.4.8) ----------------------------------------
-
-_PIN_PATH = "nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc"
-_PIN_VERSION = (
-    "nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/"
-    "2022-05-10_83233_10be475e/N-34-130-D-d-2-4.asc"
-)
-_STORE = Path("/srv/dane/kartograf")
-_NMT_OPTIONS = {
-    "product": "nmt",
-    "sheet": "N-34-130-D-d-2-4",
-    "resolution": "1m",
-    "vertical_crs": "EVRF2007",
-}
-
-
-def _pin(role="output") -> PinnedFile:
-    return PinnedFile(
-        role,
-        "N-34-130-D-d-2-4",
-        _PIN_PATH,
-        _PIN_VERSION,
-        "2022-05-10_83233",
-        _SPEC_SHA256,
-        41029733,
-    )
-
-
-def _project() -> Project:
-    task = ProjectTask(
-        name="teren",
-        command="elevation download",
-        options=MappingProxyType(_NMT_OPTIONS),
-        pinned_at="2026-10-20T08:15:02+00:00",
-        kartograf_version="0.8.0",
-        geometry_sha256=None,
-        files=(_pin(),),
-    )
-    return Project(Path("/home/ola/projekty/wisla"), _STORE, (task,))
-
-
-_PROJECT_DOCUMENT = {
-    "directory": "/home/ola/projekty/wisla",
-    "root": "/srv/dane/kartograf",
-    "tasks": [
-        {
-            "name": "teren",
-            "command": "elevation download",
-            "options": _NMT_OPTIONS,
-            "pinned_at": "2026-10-20T08:15:02+00:00",
-            "kartograf_version": "0.8.0",
-            "geometry_sha256": None,
-            "files": [
-                {
-                    "role": "output",
-                    "unit": "N-34-130-D-d-2-4",
-                    "path": f"/srv/dane/kartograf/{_PIN_PATH}",
-                    "version": f"/srv/dane/kartograf/{_PIN_VERSION}",
-                    "label": "2022-05-10_83233",
-                    "sha256": _SPEC_SHA256,
-                    "size_bytes": 41029733,
-                }
-            ],
-        }
-    ],
-}
-
-
-def test_project_state_document():
-    """The pins of the manifest are relative to the store; the document has
-    absolute paths (``root`` + the manifest value)."""
-    project = _project()
-
-    data = project.to_dict()
-
-    assert data == {"schema": "kartograf-project-state/1", **_PROJECT_DOCUMENT}
-    assert list(data) == ["schema", "directory", "root", "tasks"]
-    assert list(data["tasks"][0]) == [  # type: ignore[index]
-        "name",
-        "command",
-        "options",
-        "pinned_at",
-        "kartograf_version",
-        "geometry_sha256",
-        "files",
-    ]
-    assert project.schema == "kartograf-project-state/1"
-
-
-def test_project_report_nests_project_without_schema():
-    replaced = _pin("raw")
-    report = ProjectReport(
-        project=_project(),
-        tasks=(
-            TaskResult("teren", "updated", (_pin(),), (replaced,), ()),
-            TaskResult(
-                "gleby",
-                "failed",
-                (),
-                (),
-                ("brak danych: N-34-130-D",),
-                "no_data",
-                "no_coverage",
-            ),
-        ),
-        notices=(Notice("info", "newer_available", "teren: nowsza wersja"),),
-        ok=False,
-    )
-
-    data = report.to_dict()
-
-    assert list(data) == ["schema", "project", "tasks", "notices", "ok"]
-    assert data["schema"] == "kartograf-project-report/1"
-    assert data["project"] == _PROJECT_DOCUMENT  # no ``schema`` key when nested
-    updated, failed = data["tasks"]  # type: ignore[misc]
-    assert list(updated) == [
-        "name",
-        "outcome",
-        "pinned",
-        "unpinned",
-        "errors",
-        "code",
-        "reason",
-    ]
-    assert (updated["code"], updated["reason"]) == (None, None)
-    assert (failed["code"], failed["reason"]) == ("no_data", "no_coverage")
-    # the pins of a result are encoded with the store of the project, too
-    assert updated["pinned"][0]["path"] == f"/srv/dane/kartograf/{_PIN_PATH}"
-    assert updated["unpinned"][0]["role"] == "raw"
-    assert updated["unpinned"][0]["version"] == f"/srv/dane/kartograf/{_PIN_VERSION}"
-    assert failed["errors"] == ["brak danych: N-34-130-D"]
-    assert data["notices"] == [
-        {"level": "info", "code": "newer_available", "message": "teren: nowsza wersja"}
-    ]
-    assert data["ok"] is False
-
-
-def test_project_check_document():
-    """The example of spec 5.4.8: ``FileCheck.path`` is absolute."""
-    check = ProjectCheck(
-        project=_project(),
-        files=(
-            FileCheck(
-                "teren",
-                "N-34-130-D-d-2-4",
-                _PIN_PATH,
-                "ok",
-                "2022-05-10_83233",
-                None,
-                None,
-            ),
-        ),
-        not_downloaded=(),
-        notices=(),
-        ok=True,
-    )
-
-    assert check.to_dict() == {
-        "schema": "kartograf-project-check/1",
-        "project": _PROJECT_DOCUMENT,
-        "files": [
-            {
-                "task": "teren",
-                "unit": "N-34-130-D-d-2-4",
-                "path": f"/srv/dane/kartograf/{_PIN_PATH}",
-                "status": "ok",
-                "pinned_label": "2022-05-10_83233",
-                "available_label": None,
-                "detail": None,
-            }
-        ],
-        "not_downloaded": [],
-        "notices": [],
-        "ok": True,
-    }
-
-
-def test_pinned_file_outside_a_project_document_is_an_error():
-    """A pin holds a path relative to the store: without the store of a
-    project document it has no absolute form, and the encoder does not guess."""
-    file_check = FileCheck("teren", "u", _PIN_PATH, "ok", None, None, None)
-
-    with pytest.raises(ValueError, match="project document"):
-        encode(_pin())
-    with pytest.raises(ValueError, match="project document"):
-        encode(file_check)
-    # the same values inside a document: the store is known
-    assert encode(_pin(), EncodeContext(store=_STORE))["path"].endswith(  # type: ignore[call-overload]
-        _PIN_PATH
-    )
-
-
-def test_task_options_keep_manifest_form(tmp_path, monkeypatch):
-    """``tasks[].options`` is the manifest form: a path relative to the
-    project directory stays relative (not made absolute like the other paths of
-    the document), ``bbox`` is four numbers + ``bbox_crs``."""
-    work = tmp_path / "praca"
-    work.mkdir()
-    monkeypatch.chdir(work)
-    _shapefile(work)
-    kartograf.init_project("../projekt", root="../magazyn")
-    kartograf.add_project_task(
-        "../projekt",
-        name="teren",
-        command="elevation download",
-        options={
-            "product": "nmt",
-            "bbox": BBox(566000, 243000, 569000, 246000, "EPSG:2180"),
-            "country": "pl",
-            "sheet_system": "1992",
-            "resolution": "1m",
-            "vertical_crs": "EVRF2007",
-        },
-    )
-    project = kartograf.add_project_task(
-        "../projekt",
-        name="gleby",
-        command="soil hsg",
-        options={"geometry": Path("area.shp"), "depth": "0-5cm"},
-    )
-
-    data = project.to_dict()
-
-    terrain, soils = data["tasks"]  # type: ignore[misc]
-    assert terrain["options"]["bbox"] == [566000, 243000, 569000, 246000]
-    assert terrain["options"]["bbox_crs"] == "EPSG:2180"
-    assert soils["options"] == {"geometry": "../praca/area.shp", "depth": "0-5cm"}
-    assert data["directory"] == (tmp_path / "projekt").as_posix()
-    assert data["root"] == (tmp_path / "magazyn").as_posix()
-    assert soils["files"] == [] and soils["pinned_at"] is None

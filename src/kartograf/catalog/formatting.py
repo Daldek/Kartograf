@@ -3,8 +3,7 @@ The canonical command line of a catalog command (spec 8.7).
 
 ``format_command_line`` writes ``kartograf <group> <command> <flags>`` from the
 values of a call: the flags (and positional values) in the order of the
-declaration, so the same call gives the same text and a positional list that
-takes the rest of the line (``project add``) stays last.
+declaration, so the same call gives the same text.
 ``example_command_line`` writes the line of a declared example; it is the text
 of the ``epilog`` of the command, of ``ExampleInfo.command_line`` and of the
 hint of an error (the three agree because there is one formatter).
@@ -34,7 +33,7 @@ def format_command_line(
     command : Command
         The declaration.
     options : Mapping
-        The task options in the JSON form of the manifest, by parameter name
+        The options of the call in the JSON form, by parameter name
         (``bbox`` as 4 numbers, a per-country value as a text or ``{"pl": ...,
         "cz": ...}``, a list of codes as a list); ``None`` and ``False`` are
         left out.
@@ -100,7 +99,7 @@ def _words(command: Command, param: Param, value: object, *, short: bool) -> lis
             raise ValueError(f"{param.name}: a flag is true or false, got {value!r}")
         return [param.short if short and param.short else flag]
     if param.positional:
-        values = value if param.nargs in ("*", "REMAINDER") else [value]
+        values = value if param.nargs == "*" else [value]
         if isinstance(values, str) or not isinstance(values, Sequence):
             raise ValueError(f"{param.name}: expected a list of words, got {value!r}")
         return [shlex.quote(_text(param, item)) for item in values]

@@ -2,9 +2,10 @@
 
 **Date:** 2026-10-24
 **Status:** Accepted — amended by ADR-054 (the options `output_dir` and `root`, `check` instead of
-`check_updates`, `store init`); erratum 1: the command layer drives every command (AGI-2.1, decision 6);
-erratum 2: every example is the line `format_command` writes; erratum 3: `project add` gives
-`add_project_task` the library arguments of its task.
+`check_updates`, `store init`); partly superseded by ADR-057 (decision 9: the family `project`, the
+hidden project tools and the paths nested in `project add`; erratum 3); erratum 1: the command layer
+drives every command (AGI-2.1, decision 6); erratum 2: every example is the line `format_command`
+writes; erratum 3: `project add` gives `add_project_task` the library arguments of its task.
 The catalog documents (decisions 1 to 8), the MCP rebuild (decision 9) and the guide for agents
 (decision 10) are implemented.
 

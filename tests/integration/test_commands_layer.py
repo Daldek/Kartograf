@@ -24,12 +24,12 @@ from kartograf import (
 )
 from kartograf.catalog.commands import declared
 from kartograf.catalog.formatting import example_command_line
+from kartograf.data_commands import DATA_COMMANDS
 from kartograf.exceptions import ConflictError, UsageError
-from kartograf.project.commands import COMMANDS
 from kartograf.serialization import encode
 from tests.integration.test_hsg import RasterSoilGrids
 from tests.integration.test_manager_campaigns import REC, FakeCampaignProvider
-from tests.support.project_fixtures import (
+from tests.support.data_fixtures import (
     HSG_SHEET,
     PL_SHEET,
     G,
@@ -121,7 +121,7 @@ def test_parse_command_bbox_always_comes_with_crs():
     assert degrees.options["bbox_crs"] == "EPSG:4326"
     assert negative.options["bbox"] == [-447000, -1114000, -446000, -1113000]
     assert negative.options["bbox_crs"] == "EPSG:5514"
-    # a crs without an area is a mistake, not an option of the task
+    # a crs without an area is a mistake, not an option of the call
     with pytest.raises(ValidationError) as lone:
         parse_command(f"{NMT} --sheet {G} --bbox-crs EPSG:4326")
 
@@ -222,7 +222,6 @@ def test_usage_error_names_the_command_the_line_named(line, command):
         ("elevation availability --bbox 1,2,3,4", "elevation availability"),
         ("elevation list-sources", "elevation list-sources"),
         ("soil list-layers", "soil list-layers"),
-        ("project status", "project status"),
         ("cache stats", "cache stats"),
     ],
 )
@@ -301,7 +300,7 @@ def test_format_command_rejects_options_that_do_not_belong():
             "option plan: expected non-empty path (string), got {'items': []}",
         ),
         # the library argument ``update`` has no flag: the flags are --upgrade
-        # and --force; a task option does not belong among the flags of a run
+        # and --force; an option of the call does not belong among the flags of a run
         ({"update": "upgrade"}, "update", "unknown option 'update'"),
         ({"sheet": G}, "sheet", "unknown option 'sheet'"),
     ],
@@ -312,7 +311,7 @@ def test_format_command_rejects_options_that_do_not_belong():
         "output-dir-number",
         "plan-document",
         "api-only-update",
-        "task-option",
+        "call-option",
     ],
 )
 def test_format_command_run_flags_are_validated_like_options(run, option, text):
@@ -354,13 +353,13 @@ _EXAMPLES = [
         id=f"{command.id}#{index}",
     )
     for command in declared().commands
-    if command.project_task
+    if command.kind == "data"
     for index, example in enumerate(command.examples)
 ]
 
 
 def test_every_data_command_has_catalog_examples():
-    assert {p.values[0] for p in _EXAMPLES} == set(COMMANDS)
+    assert {p.values[0] for p in _EXAMPLES} == set(DATA_COMMANDS)
 
 
 @pytest.mark.parametrize(("command", "example", "example_line"), _EXAMPLES)

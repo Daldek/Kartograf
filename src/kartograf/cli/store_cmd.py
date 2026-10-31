@@ -151,7 +151,7 @@ def cmd_store_init(args: argparse.Namespace) -> int:
             return emit_result(command_id(args), plan, check=True)
         for item in plan.items:
             print(plan_line(item))
-        return exit_code_of(plan, check=True)
+        return exit_code_of(plan)
     marker = init_store(args.root)
     if wants_json(args):
         return emit_result(command_id(args), marker)

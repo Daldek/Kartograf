@@ -336,8 +336,8 @@ def parsed_options(
     Returns
     -------
     tuple of dict
-        ``(options, run)``: the options of the call (``Command.call_options``; of a
-        project task, ``Param.task``) and the other flags (``--root``, ``--workers``,
+        ``(options, run)``: the options of the call (``Command.call_options``) and
+        the other flags (``--root``, ``--workers``,
         ``--quiet``, ...), by parameter name, in the JSON form: ``--bbox`` is four
         numbers with ``bbox_crs`` (the CRS of ``--bbox-crs``, else the default of the
         flag), a per-country value a text or a ``{"pl": ..., "cz": ...}`` mapping, a
@@ -384,8 +384,8 @@ def parsed_options(
             option=crs.name,
             options=(area.name, crs.name),
         )
-    # a line that leaves a required option to the default of its flag (``--project``
-    # of a project command) gives it: the call needs it
+    # a line that leaves a required option to the default of its flag gives it: the
+    # call needs it
     for param in command.call_options:
         if param.required and param.cli_default is not None:
             options.setdefault(param.name, _json_value(param, param.cli_default))
@@ -451,9 +451,7 @@ def _argument_kwargs(param: Param, given_only: bool, lang: Lang) -> dict[str, An
     if param.choices and param.allowed is not None:
         kwargs["choices"] = list(resolve(param.allowed))
     if param.nargs is not None:
-        kwargs["nargs"] = (
-            argparse.REMAINDER if param.nargs == "REMAINDER" else param.nargs
-        )
+        kwargs["nargs"] = param.nargs
     return kwargs
 
 

@@ -138,7 +138,6 @@ _DOWNLOAD_PARAMS = (
         message("catalog_imagery.direction_description"),
         metavar=message("catalog.metavar_directions"),
         allowed=_directions,
-        task=True,
         section=SELECTION_TITLE,
     ),
     Param(
@@ -147,7 +146,6 @@ _DOWNLOAD_PARAMS = (
         _sheet_system_help,
         allowed=_sheet_systems,
         choices=True,
-        task=True,
         section=message("catalog.section_sheets"),
     ),
     Param(
@@ -156,7 +154,6 @@ _DOWNLOAD_PARAMS = (
         _scale_help,
         metavar=message("catalog.metavar_scale"),
         allowed=lambda: SCALES_2000,
-        task=True,
         section=message("catalog.section_sheets"),
     ),
     Param(
@@ -164,7 +161,6 @@ _DOWNLOAD_PARAMS = (
         "flag",
         message("catalog_imagery.cutout_description"),
         default=False,
-        task=True,
         section=message("catalog.section_cutout_pl"),
     ),
     Param(
@@ -174,7 +170,6 @@ _DOWNLOAD_PARAMS = (
         allowed=lambda: [ORTO_CUTOUT_CRS],
         choices=True,
         normalize="upper",
-        task=True,
         section=message("catalog.section_cutout_pl"),
     ),
     Param(
@@ -183,7 +178,6 @@ _DOWNLOAD_PARAMS = (
         _coverage_help,
         metavar=message("catalog.metavar_variant"),
         allowed=_coverages,
-        task=True,
         section=message("catalog.section_cutout_pl"),
     ),
     Param(
@@ -193,7 +187,6 @@ _DOWNLOAD_PARAMS = (
         short="-r",
         metavar=message("catalog.metavar_resolution"),
         allowed=_cutout_resolutions,
-        task=True,
         section=message("catalog.section_cutout_pl"),
     ),
     Param(
@@ -201,7 +194,6 @@ _DOWNLOAD_PARAMS = (
         "int",
         message("catalog_imagery.year_description"),
         metavar=message("catalog.metavar_year"),
-        task=True,
         section=_CAMPAIGNS,
     ),
     Param(
@@ -209,7 +201,6 @@ _DOWNLOAD_PARAMS = (
         "int",
         message("catalog_imagery.min_year_description"),
         metavar=message("catalog.metavar_year"),
-        task=True,
         section=_CAMPAIGNS,
     ),
     Param(
@@ -217,7 +208,6 @@ _DOWNLOAD_PARAMS = (
         "int",
         message("catalog_imagery.max_year_description"),
         metavar=message("catalog.metavar_year"),
-        task=True,
         section=_CAMPAIGNS,
     ),
     Param(
@@ -225,7 +215,6 @@ _DOWNLOAD_PARAMS = (
         "flag",
         message("catalog_imagery.all_campaigns_description"),
         default=False,
-        task=True,
         section=_CAMPAIGNS,
     ),
     Param(
@@ -233,7 +222,6 @@ _DOWNLOAD_PARAMS = (
         "flag",
         message("catalog_imagery.full_sheet_description"),
         default=False,
-        task=True,
         section=_CAMPAIGNS,
     ),
     *shared.target(_output_files, sheets=True),
@@ -362,7 +350,6 @@ COMMANDS = (
             "catalog_imagery.imagery_download_description", note=shared.PLAIN_NOTE
         ),
         effects=("network", "store_write"),
-        project_task=True,
         check_function="check_data",
         check_result_schema="kartograf-plan/1",
         constraints=_DOWNLOAD_CONSTRAINTS,

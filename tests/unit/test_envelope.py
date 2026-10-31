@@ -18,13 +18,12 @@ from kartograf.envelope import (
     outcome_of,
     wrap,
 )
-from kartograf.project.model import FileCheck, ProjectCheck, ProjectReport, TaskResult
 from kartograf.serialization import SCHEMAS, Document, encode
 from tests.contract.test_json_contract import (
     _area,
     _notice,
     _plan_item,
-    _project,
+    _sources,
     _unit_file,
 )
 
@@ -138,7 +137,7 @@ def test_ok_false_without_a_failed_unit_is_an_internal_error_of_the_command():
     assert (status, items) == ("failed", [(COMMAND, "failed", "internal_error", "")])
 
 
-# -- the plan, the availability report and the projects -----------------------------
+# -- the plan and the availability report ---------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -163,9 +162,9 @@ def test_the_units_of_a_plan_are_its_positions(statuses, expected):
         (),
     )
 
-    outcome = outcome_of(plan, check=True)
+    outcome = outcome_of(plan)
 
-    assert (outcome.status, exit_code_of(plan, check=True)) == expected
+    assert (outcome.status, exit_code_of(plan)) == expected
     assert [i.id for i in outcome.items] == [i.store_path for i in plan.items]
     for item in outcome.items:
         if item.status == "failed":
@@ -207,107 +206,13 @@ def test_a_country_that_could_not_be_checked_makes_the_report_partial():
     )
 
 
-def _project_report(*tasks: TaskResult) -> ProjectReport:
-    return ProjectReport(
-        project=_project(),
-        tasks=tasks,
-        notices=(),
-        ok=all(task.outcome != "failed" for task in tasks),
-    )
-
-
-def _task(name: str, outcome: str = "pinned", **kwargs) -> TaskResult:
-    return TaskResult(name, outcome, (), (), (), **kwargs)  # type: ignore[arg-type]
-
-
-def test_the_units_of_a_project_run_are_its_tasks_with_the_code_of_each_failure():
-    report = _project_report(
-        _task("dobre"),
-        TaskResult("zle", "failed", (), (), ("a", "b"), "conflict", "geometry_changed"),
-    )
-
-    assert _summary(report) == (
-        "partial",
-        [
-            ("dobre", "ok", "", ""),
-            ("zle", "failed", "conflict", "geometry_changed"),
-        ],
-    )
-    assert outcome_of(report).items[1].message == "a; b"
-    assert exit_code_of(report) == 10
-
-
-def test_a_project_run_of_failed_tasks_only_is_failed():
-    report = _project_report(TaskResult("zle", "failed", (), (), ("a",), "io_error"))
-
-    assert _summary(report) == ("failed", [("zle", "failed", "io_error", "")])
-
-
-def _check(*files: FileCheck, not_downloaded=(), ok: bool) -> ProjectCheck:
-    return ProjectCheck(
-        project=_project(),
-        files=files,
-        not_downloaded=tuple(not_downloaded),
-        notices=(),
-        ok=ok,
-    )
-
-
-def _file_check(task: str, status: str, detail: str | None = None) -> FileCheck:
-    return FileCheck(task, "N-34", "nmt/a.asc", status, "x", None, detail)  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize(
-    ("status", "code", "reason"),
-    [
-        ("missing", "not_found", "missing_file"),
-        ("corrupt", "data_error", "corrupt_file"),
-    ],
-)
-def test_a_file_that_status_or_verify_rejects_fails_its_task(status, code, reason):
-    report = _check(
-        _file_check("a", "ok"),
-        _file_check("b", "ok"),
-        _file_check("b", status, "text"),
-        ok=False,
-    )
-
-    assert _summary(report) == (
-        "partial",
-        [("a", "ok", "", ""), ("b", "failed", code, reason)],
-    )
-    assert outcome_of(report).items[1].message == "text"
-
-
-def test_a_task_without_pins_fails_status_and_verify_but_not_a_check():
-    status = _check(not_downloaded=["a"], ok=False)
-    plan = _check(not_downloaded=["a"], ok=True)
-
-    assert _summary(status) == (
-        "failed",
-        [("a", "failed", "not_found", "not_downloaded")],
-    )
-    assert _summary(plan, check=True) == ("ok", [("a", "ok", "", "")])
-
-
-def test_a_check_does_not_fail_a_task_for_a_missing_version_only_for_a_failed_check():
-    report = _check(
-        _file_check("a", "missing"), _file_check("b", "check_failed"), ok=False
-    )
-
-    assert _summary(report, check=True) == (
-        "partial",
-        [("a", "ok", "", ""), ("b", "failed", "source_unavailable", "check_failed")],
-    )
-
-
 # -- documents with no verdict -------------------------------------------------------
 
 
 def test_a_document_with_no_verdict_is_ok_with_no_items():
-    assert _summary(_project()) == ("ok", [])
+    assert _summary(_sources()) == ("ok", [])
     assert _summary(None) == ("ok", [])
-    assert outcome_of(_project()).notices == ()
+    assert outcome_of(_sources()).notices == ()
 
 
 def test_a_document_with_a_verdict_and_no_reader_is_a_program_error():
@@ -376,7 +281,7 @@ def test_the_envelope_has_a_fixed_set_of_keys_and_its_result_keeps_its_schema():
 
 
 def test_items_and_notices_are_always_present_and_nothing_is_paged():
-    document = wrap("sheet parse", _project()).to_dict()
+    document = wrap("elevation list-sources", _sources()).to_dict()
 
     assert document["items"] == [] and document["notices"] == []
     assert "page" not in document

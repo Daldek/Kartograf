@@ -428,15 +428,10 @@ kartograf maps list-sources
 kartograf geodesy download --product control --country pl --network vertical --bbox ... --root ./data # control points; --teryt (county package), sheet archives
 kartograf geodesy download --product geoid --country pl --whole-country --root ./data # PL-geoid2021 (CZ: QGZU-2013)
 kartograf geodesy list-sources
-kartograf project init --root ~/dane/kartograf # project manifest with a shared store
-kartograf project add teren elevation download --product nmt --sheet <sheet_code> --resolution 1m --vertical-crs EVRF2007
-kartograf project download                 # pin task versions; --check/--upgrade/--force
-kartograf project status                   # existence and size, without reading data
-kartograf project verify                   # SHA-256 of files and sidecars
 kartograf cache stats|clear|path           # metadata cache (SQLite)
 kartograf commands list --json                   # command catalog (groups, commands, ...); `commands schema --command "<group> <command>"`: options, allowed values, examples (ADR-052)
-kartograf elevation availability --product nmt --sheet <sheet_code> --json # --json in every command: one kartograf-result/1 envelope, error kartograf-error/1 on stderr, exit codes of the Nogat registry (USAGE 9.3)
-kartograf-mcp                              # MCP server (stdio; extra `kartograf[mcp]`): 40 tools 1:1 with commands, read only and plans by default; `--allow-writes --allow-dir DIR` allows writing (USAGE 9.6)
+kartograf elevation availability --product nmt --sheet <sheet_code> --json # --json in every command: one kartograf-result/1 envelope, error kartograf-error/1 on stderr, exit codes of the Nogat registry (USAGE 8.3)
+kartograf-mcp                              # MCP server (stdio; extra `kartograf[mcp]`): 34 tools 1:1 with commands, read only and plans by default; `--allow-writes --allow-dir DIR` allows writing (USAGE 8.6)
 # Full list of options: kartograf <group> <command> --help
 ```
 
@@ -492,18 +487,13 @@ from kartograf import (
     discover_teryts_for_bbox, teryt_for_point,
     # Hydrology
     calculate_hsg, check_hsg, HsgReport, hsg_statistics, hsg_from_rasters,
-    # Project manifest (kartograf-project/1, ADR-040)
-    init_project, open_project, add_project_task, remove_project_task,
-    download_project, check_project, get_project_status, verify_project,
-    Project, ProjectTask, PinnedFile, ProjectReport, TaskResult,
-    ProjectCheck, FileCheck,
     # Transport and mosaic (stable since 0.7.1)
     get_with_retry, make_gugik_session, mosaic_and_crop, check_source_grid,
     # Store reading without writing (Archiwista, ADR-045, ARCHITECTURE 3.3.1)
     list_segments, list_partitions, iter_store, StoreEntry, read_sidecar, Sidecar,
     describe_segment, SegmentInfo, file_footprint, Footprint, link_target,
     pinned_transform, PinnedTransform,
-    # Command catalog, command layer and JSON documents (agent interface, ADR-046, USAGE 9)
+    # Command catalog, command layer and JSON documents (agent interface, ADR-046, USAGE 8)
     list_commands, command_schema, CommandList, CommandCatalog,
     parse_command, validate_command, format_command, run_command, check_command,
     CommandCall, describe_sheet, SheetInfo, find_sheets, SheetList,
@@ -708,8 +698,7 @@ from kartograf import (
   one — no defaults affecting the data
 - --country pl|cz|auto required with --bbox/--geometry, with --teryt only pl;
   models3d PL only
-- --check | --upgrade | --force, --plan, --workers (default 1), -q;
-  project task entries (`kartograf project add <name> boundaries download ...`)
+- --check | --upgrade | --force, --plan, --workers (default 1), -q
 - freshness signal none (GUGiK provides no ETag/Last-Modified, the WFS result
   is a snapshot; exception: mesh — index): --check reports „nie da się
   sprawdzić bez pobrania”, new content is obtained with --force (same content = no
@@ -787,8 +776,8 @@ from kartograf import (
 ### 2.15 Geographic names and topographic maps (GUGiK, CUZK, ADR-043) - IN SCOPE
 
 ```text
-# `names` and `maps` CLI groups (download, list-sources; download_collection,
-# project tasks); segments data/names/ and data/maps/.
+# `names` and `maps` CLI groups (download, list-sources; download_collection);
+# segments data/names/ and data/maps/.
 
 # Names — `names download --product geographic|world`:
 - geographic --country pl (pl.gugik.prng, PRNG RP): area -> GPKG OGC:CRS84
@@ -821,8 +810,7 @@ from kartograf import (
 ### 2.16 Geodetic control networks and quasi-geoids (GUGiK, CUZK, ADR-043) - IN SCOPE
 
 ```text
-# `geodesy` CLI group (download, list-sources; download_collection, project
-# tasks with the network option).
+# `geodesy` CLI group (download, list-sources; download_collection).
 
 # Control networks — `geodesy download --product control --network <network>` (--network required):
 - PL (pl.gugik.control): horizontal|vertical|gravity|magnetic — area
@@ -854,25 +842,26 @@ from kartograf import (
 ### 2.17 Interface for AI agents - IN SCOPE
 
 ```text
-# The same result in three ways (ADR-046; guide: USAGE 9):
-# - CLI: `--json` in every command (44 leaf commands) — stdout is a single `kartograf-result/1`
-#   envelope around a `kartograf-<kind>/1` document (20 documents), an error is `kartograf-error/1`
+# The same result in three ways (ADR-046; guide: USAGE 8):
+# - CLI: `--json` in every command (38 leaf commands) — stdout is a single `kartograf-result/1`
+#   envelope around a `kartograf-<kind>/1` document (17 documents), an error is `kartograf-error/1`
 #   on the last line of stderr with a stable `code`, `hint` and the exit code of the Nogat
 #   registry (0; 10 and 11 for a partial or failed batch; input error = 2);
 # - library: `to_dict()`/`to_json()` of every report, exceptions with a stable `code`,
 #   `exit_code` and `hint` (`ValidationError.option`/`allowed`), `error_report`;
 # - MCP server `kartograf-mcp` (stdio; optional extra `kartograf[mcp]`, `mcp>=2.3.0,<3`):
-#   40 tools 1:1 with the commands (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope
+#   34 tools 1:1 with the commands (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope
 #   with `outputSchema`, `is_error` only for an error, progress via MCP notifications, absolute paths,
 #   `--tools`, `--allow-dir`, `--allow-writes` (without it only plans), no default values
 #   affecting the data.
 # Command catalog: `kartograf commands list|schema [--json]` (`list_commands()`, `command_schema()`) —
 # the single source of truth
-# about commands (CLI parser, project options, MCP tool schemas); command layer
+# about commands (CLI parser, options of a data command call, MCP tool schemas); command layer
 # `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`
 # (KB-1..KB-5 of Archiwista). Files for agents: the generated `AGENTS.md` and `llms.txt`, `kartograf/py.typed`,
 # `scripts/gate.sh`, `python -m kartograf`; rules for agents from other repositories:
-# CLAUDE.md. New command = a declaration in `src/kartograf/catalog/commands/` (ARCHITECTURE 4.11).
+# CLAUDE.md. New command = a declaration in `src/kartograf/catalog/commands/`, for a data command
+# also an entry in `src/kartograf/data_commands.py::DATA_COMMANDS` (ARCHITECTURE 4.11).
 ```
 
 ---
@@ -934,7 +923,7 @@ from kartograf import (
 
 ```
 - Sources do not publish checksums: Kartograf computes SHA-256 when writing
-  a version (sidecar, ADR-036), and `kartograf project verify` checks them; the content
+  a version (sidecar, ADR-036); the content
   of a download is checked only for format (verify_file_format: AAIGrid
   header / TIFF signature, ADR-030; GUGiK archives: ZIP/TTN/Intergraph/DXF,
   ADR-041; collection packages: ZIP directory and required members, ADR-042)
@@ -1120,8 +1109,8 @@ from kartograf import (
 ### 3.3 Roadmap to v1.0.0
 
 Direction approved 2026-10-08. Each subproject has its own spec and plan;
-subprojects 2 and 3 enter 0.8.0 together (user decision 2026-10-15);
-the details are settled by their ADRs, not by this section.
+subproject 3 enters 0.8.0 (user decision 2026-10-15), subproject 2 moved to
+Archiwista (ADR-057); the details are settled by their ADRs, not by this section.
 
 **v1.0.0 goal:**
 
@@ -1132,8 +1121,8 @@ the details are settled by their ADRs, not by this section.
    the task area (cutout, merging, reprojection where they make sense)
    with a provenance sidecar, not just raw sheets and packages.
 3. **Data manager** — a shared team store from which subsequent projects
-   take data instead of downloading it again, with a record of which data versions
-   each project used.
+   take data instead of downloading it again; Kartograf keeps the versioned store
+   and its read API.
 4. **QGIS plugin** and **web GUI** as overlays on the library.
 5. **English-only identifiers** in the API, CLI and sidecar (ADR-031).
 
@@ -1148,25 +1137,22 @@ publication (QGIS plugin repository, public instance of the web GUI).
 - The store never overwrites data silently: each product has immutable
   versions (ADR-036, since 0.8.0); the standard path points to the newest
   local version.
-- The sidecar remains an immutable description of a file's provenance. The link between a
-  project and data is recorded by the project manifest (project → data: specific
-  files, versions and checksums); the information "which projects use this
-  file" is an index built from the manifests, not an entry in the sidecar.
+- The sidecar remains an immutable description of a file's provenance; which
+  projects use a file is not an entry in the sidecar. Projects (task lists with
+  pinned versions) are kept by Archiwista (ADR-057).
 - The store may sit on a network share without byte-range locks, so the
   shared directory cannot be a SQLite database on the share; the source of truth is the
-  sidecars and manifests, the index and metadata cache are local.
-- The project manifest is a new format, so it uses English
-  keys from the start (no ADR-031 migration).
+  sidecars, the index and metadata cache are local.
 
 **Subprojects and order:**
 
 | # | Subproject | Scope | Depends on |
 |---|------------|--------|-----------|
 | 1 | Versioned store | done (0.8.0, ADR-036): immutable versions for all products (previously only PL NMT/NMPT/orthophoto campaigns); plans 1/3 (PL sheets), 2/3 (LAZ, CZ, cutouts) and 3/3 (land cover, HSG), products of plans C-E in the store from the start (live E2E: `docs/research/2026-10-12-store-e2e/raport.md`); CLMS with credentials not verified live | — |
-| 2 | Project manifest | done (0.8.0): file `kartograf-project.json` (`kartograf-project/1`) in the project directory — tasks (data commands of the ADR-039 groups with options) and pinned versions of files from the store with SHA-256 checksums; CLI group `project`: `init`, `add`, `remove`, `download` (also `--check`, `--upgrade`, `--force`), `status`, `verify`; restoring data on a new store only with identical checksums. E2E: `docs/research/2026-10-15-project-e2e/raport.md`. Spec: `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`; plan: `docs/superpowers/plans/2026-10-15-manifest-projektu.md`; ADR-040 | 1; CLI command groups (ADR-039) |
+| 2 | Project manifest | moved to Archiwista (ADR-057, supersedes ADR-040): Archiwista keeps the projects and pins the stored versions of any producer; Kartograf keeps download, check, the versioned store and its read API | 1 |
 | 3 | GUGiK catalogue and ready-to-use data | done (0.8.0, plans A-E, user decision 2026-10-15): GUGiK and ČÚZK products from the catalogue, each versioned and with a sidecar, with a cutout where the service provides one (sections 2.1-2.16). A: `elevation` PL — variant registry, NMT/NMPT grids in all GUGiK resolutions, GUGiK archives as source files, WFS sheet index, availability report (ADR-041); B: `elevation` CZ — DMP OK/1G, TM33 ETRS89 tiles, ČÚZK LAZ, CZ report; C: BDOT10k archive, PRG, EGiB, 3D building models (ADR-042); D: CZ orthophoto, PL orthophoto cutout, ZABAGED, RUIAN, HY-NET (ADR-042 D12-D17); E: GUGiK images, CZ contours, NMT 100 m, names, maps, addresses and special PRG boundaries, RCN, BDOO, Data50/250, geomorphology, CZ cadastral map, 3D mesh, trees, control networks, quasi-geoids (ADR-043). Outside 0.8.0: VKM, archival CUZK orthophoto (section 3.1). Inventory: `docs/research/2026-10-13-katalog-produktow/raport.md`; spec: `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`; plans: `docs/superpowers/plans/2026-10-15-plan-{a,b,c,d,e}-*.md` | 1; CLI command groups (0.8.0) |
 | 4 | QGIS plugin | download from within QGIS for an area from the map or a layer; repository: this one or a separate one, to be decided in the spec | 2, partly 3 |
-| 5 | Web GUI | local data manager: browser for the store and project manifests, information about newer data | 2 |
+| 5 | Web GUI | local data manager: browser for the store, information about newer data | 2 |
 | — | ADR-031 (English identifiers) | API and CLI in English in 0.8.0 without aliases (erratum 1) | done (0.8.0) |
 | — | Publishing the overlays | after testing 4 and 5 locally | 4, 5 |
 
@@ -1194,6 +1180,7 @@ kartograf/
 ├── serialization.py      # Document (to_dict/to_json, schema as first key), encoder, SCHEMAS registry (ADR-046)
 ├── error_report.py       # ErrorReport, error_report, ERROR_CODES/EXIT_CODES (kartograf-error/1)
 ├── commands.py           # command layer: parse_command, validate_command, format_command, run_command, check_command
+├── data_commands.py      # DATA_COMMANDS: the 12 data commands as library calls (call options, validation without network, download, check_*)
 ├── sheet_info.py         # describe_sheet, find_sheets (kartograf-sheet/1, kartograf-sheets/1)
 ├── source_info.py        # list_sources, list_layers (kartograf-sources/1, kartograf-layers/1)
 ├── cache_info.py         # get_cache_info, get_cache_path, clear_cache (kartograf-cache/1)
@@ -1286,11 +1273,6 @@ kartograf/
 │   └── store.py              # HSG segment and land cover unit selection (spec 3.4)
 ├── hydrology/             # Hydrological calculations
 │   └── hsg.py                # calculate_hsg/check_hsg, hsg_statistics; internal HSGCalculator (input versions, reused)
-├── project/               # kartograf-project/1 project manifest (ADR-040)
-│   ├── model.py              # Project, ProjectTask, PinnedFile, ProjectReport, TaskResult, ProjectCheck, FileCheck
-│   ├── commands.py           # COMMANDS: data commands in tasks (options from the catalog, validation without network, download, pins)
-│   ├── manifest.py           # manifest reading, validation and atomic writing
-│   └── operations.py         # API: init_project, open_project, add/remove_project_task, download_project, check_project, get_project_status, verify_project
 ├── auth/                  # Authentication (CLMS)
 │   ├── proxy.py               # Auth Proxy server
 │   └── client.py               # Auth Proxy client
@@ -1307,7 +1289,6 @@ kartograf/
     ├── sources_cmd.py         # `<group> list-sources` -> list_sources
     ├── collection_cmd.py      # `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download` -> download_collection/check_collection
     ├── soil_cmd.py            # `soil download` -> download_soil/check_soil; `soil hsg` -> calculate_hsg/check_hsg
-    ├── project_cmd.py         # `kartograf project` -> project API (ADR-040); `project add` via parse_command
     ├── cache_cmd.py           # `kartograf cache` -> get_cache_info/get_cache_path/clear_cache
     ├── catalog_cmd.py         # `kartograf commands list|schema` -> list_commands, command_schema
     └── commands.py            # Compatibility facade — `main` entry point (errors -> error_report, codes 0/1/2/130/143)

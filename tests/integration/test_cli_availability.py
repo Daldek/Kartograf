@@ -86,7 +86,6 @@ def test_table_sorted_and_footer(capsys):
     assert out.endswith(
         "Najnowsza kompletna kombinacja: 2025 PL-1992 1m EVRF2007 ASC\n"
         f"  Pobranie (dodaj --root KATALOG): kartograf {hint}\n"
-        f"  W projekcie: kartograf project add NAZWA {hint}\n"
     )
 
 

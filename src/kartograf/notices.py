@@ -33,7 +33,6 @@ ALL_NODATA = "all_nodata"
 LAZ_SUPERSEDED = "laz_superseded"
 CORINE_PREVIEW = "corine_preview"
 CACHE_DISABLED = "cache_disabled"
-PROJECT_GEOMETRY_CHANGED = "project_geometry_changed"
 # Collections (ADR-042, ADR-043): units of an area, size of a national file
 # before its transfer, size of a unit file over 100 MiB before its transfer
 # (``HEAD``, K9), ``--country auto`` narrowed to the countries with the product,

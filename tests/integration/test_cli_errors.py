@@ -264,24 +264,6 @@ def test_json_usage_error_without_a_command_has_the_generic_hint(capsys):
     assert document["hint"] == UsageError.DEFAULT_HINT
 
 
-def test_json_usage_error_in_a_task_line_is_about_the_line_not_the_task(
-    capsys, tmp_path
-):
-    argv = ["project", "add", "--json", "--project", str(tmp_path), "teren"]
-    code, out, err = _run(capsys, [*argv, "elevation", "download", "--bogus"])
-
-    document = error_document(err)
-    assert code == 2 and out == ""
-    assert document["code"] == "validation_error"
-    assert document["details"]["reason"] == "usage"
-    assert document["command"] == "project add"
-    assert document["hint"].startswith(
-        "The options of the command: kartograf commands schema "
-        '--command "elevation download".'
-        " Example: "
-    )
-
-
 def test_json_removed_command_is_usage_error(capsys):
     code, out, err = _run(capsys, ["download", "--product", "nmt", "--json"])
 
@@ -471,7 +453,7 @@ def _skipped_version_listing(tmp_path):
 
 
 def test_library_warnings_are_not_on_stderr_in_json_mode(capsys, tmp_path, monkeypatch):
-    """USAGE 9.2: with ``--json`` stderr is the error document alone - a library log
+    """USAGE 8.2: with ``--json`` stderr is the error document alone - a library log
     record (here the skipped version of a store listing) is not printed as a bare
     line."""
     # no handler above the 'kartograf' branch -> logging.lastResort writes to

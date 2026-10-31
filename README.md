@@ -5,7 +5,7 @@ Kartograf downloads spatial data: digital elevation models (DEM, Polish NMT), su
 ## When to use
 
 - Get the data of an area (a sheet code, a bounding box, a vector file, a TERYT county code or a whole country) from the official source, with its CRS, licence and origin recorded next to every file.
-- Keep a reproducible data set: versions are never overwritten, and a project manifest pins them by SHA-256.
+- Keep a reproducible data set: versions are never overwritten, and the sidecar of every version records its SHA-256.
 - Let an AI agent discover and call the same operations through MCP, the CLI or Python, with one result format and stable error codes.
 
 ## When not to use
@@ -13,7 +13,7 @@ Kartograf downloads spatial data: digital elevation models (DEM, Polish NMT), su
 - Hydrological computation (concentration time, SCS-CN, hydrographs, statistics): [Hydrolog](https://github.com/Daldek/Hydrolog). Kartograf only classifies HSG.
 - IMGW-PIB and CHMU measurement series, PMAXTP: [IMGWTools](https://github.com/Daldek/IMGWTools).
 - Watershed delineation and design hydrographs in a web application: [Hydrograf](https://github.com/Daldek/Hydrograf), which takes its elevation and land cover data from Kartograf.
-- Browsing and managing a store in a browser: [Archiwista](https://github.com/Daldek/Archiwista).
+- Browsing and managing a store in a browser: [Archiwista](https://github.com/Daldek/Archiwista). Projects (task lists with pinned versions) are kept by Archiwista (ADR-057).
 - Areas outside Poland and Czechia: use the provider of that country. The only global source is SoilGrids.
 
 ## Install
@@ -92,7 +92,7 @@ The plan is `"check": true` with `result.schema` `kartograf-plan/1` and one item
 
 `result.files[].path` is the file below the store, listed with its `size_bytes` and `sha256`. An area, a country or another product is another option set: `kartograf commands schema --command "elevation download"`.
 
-Where the files go: `--root DIR` writes the versioned store (`versions/`, sidecars); `-o DIR` / `--output-dir DIR` writes plain files named as in the store, with no sidecar and no hard links (it works on FAT, exFAT and SMB; `--force` replaces existing files, and without it an existing file is a conflict before the first byte; PL sheets take the newest FULL flight). A command with neither option writes the default store (`KARTOGRAF_ROOT`, `[kartograf] root`, `<data_dir>/kartograf`). `--upgrade`, `--plan`, `--all-campaigns` and the `project` commands work only with a store. Details: [USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md) 1.12.
+Where the files go: `--root DIR` writes the versioned store (`versions/`, sidecars); `-o DIR` / `--output-dir DIR` writes plain files named as in the store, with no sidecar and no hard links (it works on FAT, exFAT and SMB; `--force` replaces existing files, and without it an existing file is a conflict before the first byte; PL sheets take the newest FULL flight). A command with neither option writes the default store (`KARTOGRAF_ROOT`, `[kartograf] root`, `<data_dir>/kartograf`). `--upgrade`, `--plan` and `--all-campaigns` work only with a store. Details: [USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md) 1.12.
 
 ```bash
 # plain files in ./dem, named as in the store; a rerun is a conflict, --force replaces them
@@ -155,7 +155,6 @@ The CLI group is `kartograf <group> download` and `product` selects the data; `k
 | Geographic names (PRNG, Geonames, world) | `names` | `download_collection` | GUGiK, CUZK |
 | Topographic maps (BDOT10k visualisations, ZTM) | `maps` | `download_collection` | GUGiK, CUZK |
 | Geodetic control networks, quasi-geoid models | `geodesy` | `download_collection` | GUGiK, CUZK |
-| Pinned versions: manifest, status, verification | `project` (`init`, `add`, `download`, `status`, `verify`) | `init_project`, `download_project`, `verify_project` | the sources of its tasks |
 | Sheet codes: parse one, find the sheets of an area | `sheet parse`, `sheet find` | `describe_sheet`, `find_sheets` | none (offline) |
 | Read a store without writing | `store overview`, `store entries`, `store sidecar` | `describe_store`, `list_store_entries`, `read_store_sidecar` | none (offline) |
 
@@ -170,7 +169,7 @@ The full list is `kartograf commands list --json`. Python names are keyword-only
 
 ## MCP server
 
-`kartograf-mcp` serves 40 tools named `kartograf_<group>_<verb>` over stdio. Each client below starts it as in the Install section:
+`kartograf-mcp` serves 34 tools named `kartograf_<group>_<verb>` over stdio. Each client below starts it as in the Install section:
 
 ```bash
 claude mcp add kartograf -- uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git" kartograf-mcp
@@ -205,7 +204,7 @@ VS Code reads `.vscode/mcp.json`, whose key is `servers`:
 
 | Option | Meaning |
 |---|---|
-| `--tools FAMILIES` | `discovery`, `availability`, `data`, `project`, `store`; `core` is the ten tools of the main tasks |
+| `--tools FAMILIES` | `discovery`, `availability`, `data`, `store`; `core` is the ten tools of the main tasks |
 | `--allow-dir DIR` | absolute directory (repeatable) that every path argument and the store must lie in; another path is `forbidden` |
 | `--allow-writes` | data tools write (needs `--allow-dir`); without it they only plan (`check`) |
 

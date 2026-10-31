@@ -43,7 +43,7 @@ LAZ_SUPERSEDED         info     (download_laz_area) skipped LAZ tiles
 CACHE_DISABLED         warning  (open_cache) metadata cache unusable
 =====================  =======  ==============================================
 
-The codes of every command (collections, land cover, project) with their
+The codes of every command (collections, land cover) with their
 level and condition: ``docs/USAGE.md`` section 2.
 
 Every former ``Error:`` is a ``ValidationError`` (input, raised before any
@@ -782,7 +782,7 @@ def validate_data_request(
     """Check a request completely before its first network access.
 
     Every check ``download_data``/``check_data`` make before their first
-    request, without network and without writing (``project add``, ADR-040).
+    request, without network and without writing (``validate_command``).
 
     The same dispatch as ``download_data`` with every track stopping right
     before its source, so an invalid choice raises exactly what the download

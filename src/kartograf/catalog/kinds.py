@@ -7,17 +7,13 @@ the library arguments.
 is a text for every country or ``pl=..,cz=..`` pairs, ``--layers`` and
 ``--direction`` are comma-separated codes. The parsers raise the library's
 ``ValidationError`` with the messages of the CLI (Polish), so a command line and
-a project task read a value the same way.
+a call of the API read a value the same way.
 
 Options exist in two forms: library arguments (``BBox``, ``Path``, per-country
-mappings, sequences) and the JSON form (``tasks[].options`` of a project,
-``CommandCall.options``, the arguments of an MCP tool). ``options_to_json`` /
-``options_from_json`` convert between them for a project task,
-``check_options_json`` validates the JSON form read from a manifest and
-``convert_arguments`` is the one conversion of the JSON form to library
-arguments (``options_from_json`` is its project form). ``kinds`` is the mapping
-of an option name to its kind (``TaskCommand.options``, or the ``kind`` of the
-parameters of a catalog command).
+mappings, sequences) and the JSON form (``CommandCall.options``, the arguments of an
+MCP tool). ``convert_arguments`` is the one conversion of the JSON form to library
+arguments; its ``kinds`` is the mapping of an option name to the ``kind`` of the
+parameter of a catalog command.
 """
 
 import math
@@ -125,13 +121,7 @@ _KIND_TEXT: dict[Kind, str] = {
     "per_country": message("kinds.string_object"),
     "str_list": message("kinds.list_strings"),
     "plan": message("kinds.document_kartograf_plan_1"),
-    "options": message("kinds.options_object_task"),
 }
-
-
-def _argument_names(kinds: Mapping[str, Kind]) -> list[str]:
-    """Library argument names (``bbox_crs`` is part of ``bbox``)."""
-    return [name for name, kind in kinds.items() if kind != "bbox_crs"]
 
 
 def _is_number(value: object) -> bool:
@@ -166,81 +156,6 @@ def _json_value(kind: Kind, value: object) -> object | None:
     return None
 
 
-def options_to_json(
-    kinds: Mapping[str, Kind],
-    options: Mapping[str, object],
-    *,
-    command: str | None = None,
-) -> dict[str, Any]:
-    """Library arguments -> ``tasks[].options`` (spec 3.3).
-
-    ``None`` and ``False`` are omitted (only chosen values are recorded);
-    keys follow the order of ``kinds``; a ``BBox`` becomes ``bbox`` (4 numbers)
-    and ``bbox_crs``, a path a string with ``/``.
-
-    Parameters
-    ----------
-    kinds : Mapping
-        Option name -> kind of the command (``TaskCommand.options``).
-    options : Mapping
-        Library arguments.
-    command : str, optional
-        Name of the command, for the messages.
-
-    Raises
-    ------
-    ValidationError
-        An option of another command or not a library argument (e.g.
-        ``root``, ``update``, ``timeout``), or a value of a wrong type.
-    """
-    given = {
-        name: value
-        for name, value in options.items()
-        if value is not None and value is not False
-    }
-    names = _argument_names(kinds)
-    for name in given:
-        if name not in names:
-            owner = message("kinds.of_the_command", command=command) if command else ""
-            raise ValidationError(
-                message(
-                    "kinds.option_does_not_belong_task",
-                    name=name,
-                    owner=owner,
-                    names=", ".join(names),
-                ),
-                option=name,
-            )
-    data: dict[str, Any] = {}
-    for name in names:
-        if name not in given:
-            continue
-        value = given[name]
-        kind = kinds[name]
-        if kind == "bbox":
-            if not isinstance(value, BBox):
-                raise ValidationError(
-                    message("kinds.option_bbox_expected_bbox", value=value),
-                    option="bbox",
-                )
-            data["bbox"] = [value.min_x, value.min_y, value.max_x, value.max_y]
-            data["bbox_crs"] = value.crs
-            continue
-        converted = _json_value(kind, value)
-        if converted is None:
-            raise ValidationError(
-                message(
-                    "kinds.option_expected_got",
-                    name=name,
-                    kind_text=_KIND_TEXT[kind],
-                    value=value,
-                ),
-                option=name,
-            )
-        data[name] = converted
-    return data
-
-
 def _valid_json(kind: Kind, value: object, data: Mapping[str, object]) -> bool:
     """Convert ``value``, the JSON form of ``kind``, to the library argument.
 
@@ -259,65 +174,27 @@ def _valid_json(kind: Kind, value: object, data: Mapping[str, object]) -> bool:
         return isinstance(value, str) and bool(value)
     if kind == "plan":
         return isinstance(value, Mapping | UpdatePlan)
-    if kind == "options":
-        return isinstance(value, Mapping)
     return value is not False and _json_value(kind, value) is not None
 
 
-def check_options_json(
-    kinds: Mapping[str, Kind], data: object, *, command: str | None = None
-) -> str | None:
-    """Error text of ``tasks[].options`` read from a manifest (``None`` = valid).
-
-    Keys of ``kinds`` only, values of their kind; ``null`` and ``false`` are not
-    written by Kartograf (an omitted key means "not chosen"); ``bbox`` and
-    ``bbox_crs`` come together.
-    """
-    if not isinstance(data, dict):
-        return message("kinds.options_object_expected")
-    for name, value in data.items():
-        kind = kinds.get(name)
-        if kind is None:
-            owner = message("kinds.the_command", command=command) if command else ""
-            return message(
-                "kinds.options_option_does_not_belong",
-                name=name,
-                owner=owner or message("kinds.the_command_unnamed"),
-                kinds=", ".join(kinds),
-            )
-        if not _valid_json(kind, value, data):
-            return message(
-                "kinds.options_expected", name=name, kind_text=_KIND_TEXT[kind]
-            )
-    return None
-
-
 def convert_arguments(
-    kinds: Mapping[str, Kind],
-    data: Mapping[str, object],
-    *,
-    base_dir: Path | None = None,
+    kinds: Mapping[str, Kind], data: Mapping[str, object]
 ) -> dict[str, Any]:
     """Return the JSON form of options or tool arguments -> library arguments.
 
-    The one conversion of the JSON form (``tasks[].options``, ``CommandCall``,
-    MCP tool arguments): ``bbox`` with ``bbox_crs`` becomes one ``BBox``, a
-    ``path`` a ``Path``, a ``str_list`` a tuple, a per-country value a text or a
-    ``{"pl": ..., "cz": ...}`` dict, a ``flag`` ``True``, a ``plan`` an
-    ``UpdatePlan``, ``options`` a dict. ``None`` and a ``false`` flag count as
-    not given (are left out). The keys keep the order of ``data``
+    The one conversion of the JSON form (``CommandCall``, MCP tool arguments):
+    ``bbox`` with ``bbox_crs`` becomes one ``BBox``, a ``path`` a ``Path``, a
+    ``str_list`` a tuple, a per-country value a text or a ``{"pl": ..., "cz": ...}``
+    dict, a ``flag`` ``True``, a ``plan`` an ``UpdatePlan``. ``None`` and a ``false``
+    flag count as not given (are left out). The keys keep the order of ``data``
     (``bbox_crs`` is part of ``bbox``).
 
     Parameters
     ----------
     kinds : Mapping
-        Option name -> kind (``TaskCommand.options``, or the parameters of a
-        catalog command).
+        Option name -> kind (the parameters of a catalog command).
     data : Mapping
         The JSON form.
-    base_dir : Path, optional
-        A relative ``path`` is resolved against it; without it a relative path
-        stays relative.
 
     Raises
     ------
@@ -372,18 +249,13 @@ def convert_arguments(
         elif kind == "bbox_crs":
             continue
         elif kind == "path":
-            path = Path(str(value))
-            if base_dir is not None and not path.is_absolute():
-                path = Path(os.path.abspath(base_dir / path))
-            arguments[name] = path
+            arguments[name] = Path(str(value))
         elif kind == "str_list":
             arguments[name] = tuple(cast(Sequence[str], value))
         elif kind == "per_country" and isinstance(value, Mapping):
             arguments[name] = dict(value)
         elif kind == "plan":
             arguments[name] = _plan(name, value)
-        elif kind == "options":
-            arguments[name] = dict(cast(Mapping[str, Any], value))
         else:
             arguments[name] = value
     return arguments
@@ -400,14 +272,3 @@ def _plan(name: str, value: object) -> UpdatePlan:
         return UpdatePlan.from_dict(value)
     except ValidationError as error:
         raise ValidationError(reason(error), option=name) from error
-
-
-def options_from_json(
-    kinds: Mapping[str, Kind], data: Mapping[str, Any], *, base_dir: Path
-) -> dict[str, Any]:
-    """Convert ``tasks[].options`` to library arguments.
-
-    A relative path is resolved against ``base_dir`` (the project directory).
-    ``convert_arguments`` with a base directory.
-    """
-    return convert_arguments(kinds, data, base_dir=base_dir)

@@ -264,7 +264,7 @@ class AvailabilityCombination:
     full sheets (``sheets_full``: a full record; ``sheets_partial``: only
     partial records). ``uncovered_m2``: land outside every sheet of the
     combination. ``download_hint``: commands to paste after ``kartograf ``
-    or ``kartograf project add NAME `` (without ``--root``).
+    (without ``--root``).
     ``sheets_missing`` and ``size_bytes`` are CZ fields (PL: empty/``None``).
 
     ``full_m2`` (KD-2): land in the frames of the full records, measured as

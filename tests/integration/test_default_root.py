@@ -2,7 +2,6 @@
 
 import json
 
-from kartograf import init_project, open_project
 from kartograf.cli import main
 from kartograf.download.manager import DownloadManager
 from kartograf.landcover.manager import LandCoverManager
@@ -10,7 +9,7 @@ from kartograf.testing import build_fixture_store
 from tests.integration.test_hsg import RasterSoilGrids
 from tests.integration.test_manager_campaigns import G, c14_fake
 from tests.integration.test_mcp_server import call, error_of, needs_mcp
-from tests.support.project_fixtures import HSG_SHEET, landcover_sources
+from tests.support.data_fixtures import HSG_SHEET, landcover_sources
 
 
 def run(capsys, *argv):
@@ -49,20 +48,6 @@ def test_the_store_commands_read_the_default_store_without_a_root(
 
     assert (code, err) == (0, "")
     assert json.loads(out)["result"]["root"] == str(store)
-
-
-def test_project_init_without_a_root_writes_the_default_root_as_an_absolute_path(
-    monkeypatch, tmp_path
-):
-    store = tmp_path / "default-store"
-    monkeypatch.setenv("KARTOGRAF_ROOT", str(store))
-
-    project = init_project(tmp_path / "project")
-
-    assert project.root == store
-    manifest = json.loads((tmp_path / "project" / "kartograf-project.json").read_text())
-    assert manifest["root"] == str(store)
-    assert open_project(tmp_path / "project").root == store
 
 
 @needs_mcp

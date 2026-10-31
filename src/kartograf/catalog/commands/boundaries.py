@@ -36,7 +36,6 @@ def _content(products: Products) -> tuple[Param, ...]:
             level_help,
             metavar=message("catalog.metavar_level"),
             allowed=lambda: choice_values(products(), "level"),
-            task=True,
         ),
         Param(
             "format",
@@ -44,7 +43,6 @@ def _content(products: Products) -> tuple[Param, ...]:
             format_help,
             metavar="FORMAT",
             allowed=lambda: choice_values(products(), "format"),
-            task=True,
         ),
     )
 

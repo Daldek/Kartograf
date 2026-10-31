@@ -29,7 +29,6 @@ def _content(products: Products) -> tuple[Param, ...]:
             network_help,
             metavar=message("catalog.metavar_network"),
             allowed=lambda: choice_values(products(), "network"),
-            task=True,
         ),
     )
 

@@ -54,14 +54,12 @@ PRODUCT = Param(
     "str",
     message("catalog.product_description"),
     required=True,
-    task=True,
     section=SELECTION_TITLE,
 )
 COUNTRY = Param(
     "country",
     "str",
     message("catalog.country_description"),
-    task=True,
     normalize="lower",
     section=SELECTION_TITLE,
 )
@@ -73,7 +71,6 @@ SHEET = Param(
     # argparse does not strip whitespace; a sheet code with padding would
     # reach the system registry and the file name (parser review 2026-10-07, K5)
     normalize="strip",
-    task=True,
     section=SELECTION_TITLE,
 )
 BBOX = Param(
@@ -82,7 +79,6 @@ BBOX = Param(
     BBOX_HELP,
     metavar="BBOX",
     examples=([565000, 242000, 566000, 243000],),
-    task=True,
     section=SELECTION_TITLE,
 )
 BBOX_CRS = Param(
@@ -93,7 +89,6 @@ BBOX_CRS = Param(
     choices=True,
     normalize="upper",
     cli_default="EPSG:2180",
-    task=True,
     section=SELECTION_TITLE,
 )
 GEOMETRY = Param(
@@ -102,7 +97,6 @@ GEOMETRY = Param(
     GEOMETRY_HELP,
     path_role="input",
     metavar=message("catalog.metavar_file"),
-    task=True,
     section=SELECTION_TITLE,
 )
 LAYER = Param(
@@ -110,7 +104,6 @@ LAYER = Param(
     "str",
     LAYER_HELP,
     metavar=message("catalog.metavar_name"),
-    task=True,
     section=SELECTION_TITLE,
 )
 OUTPUT_DIR = Param(

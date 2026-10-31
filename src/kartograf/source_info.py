@@ -41,7 +41,7 @@ from kartograf.sources.descriptor import SignalKind, SourceDescriptor, UnitPacka
 from kartograf.sources.registry import get_source, sources_for
 
 # The groups with ``list-sources`` / ``list-layers`` (the command groups of the
-# data types; ``project`` and ``cache`` list nothing).
+# data types; ``cache`` lists nothing).
 SOURCE_GROUPS: tuple[str, ...] = (
     "elevation",
     "imagery",

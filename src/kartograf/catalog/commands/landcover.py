@@ -100,7 +100,6 @@ _DOWNLOAD_PARAMS = (
         "str",
         message("catalog_landcover.teryt_description"),
         metavar=message("catalog.metavar_code"),
-        task=True,
         section=SELECTION_TITLE,
     ),
     *shared.area(
@@ -112,7 +111,6 @@ _DOWNLOAD_PARAMS = (
         "flag",
         message("catalog_landcover.whole_country_description"),
         default=False,
-        task=True,
         section=SELECTION_TITLE,
     ),
     Param(
@@ -120,7 +118,6 @@ _DOWNLOAD_PARAMS = (
         "int",
         _year_help,
         metavar=message("catalog.metavar_year"),
-        task=True,
         section=PRODUCT_TITLE,
     ),
     Param(
@@ -131,7 +128,6 @@ _DOWNLOAD_PARAMS = (
         allowed=_formats,
         choices=True,
         normalize="upper",
-        task=True,
         section=PRODUCT_TITLE,
     ),
     Param(
@@ -139,7 +135,6 @@ _DOWNLOAD_PARAMS = (
         "str_list",
         message("catalog_landcover.layers_description"),
         metavar=message("catalog.metavar_codes"),
-        task=True,
         section=PRODUCT_TITLE,
     ),
     Param(
@@ -147,7 +142,6 @@ _DOWNLOAD_PARAMS = (
         "flag",
         message("catalog_landcover.keep_raw_description"),
         default=False,
-        task=True,
         section=PRODUCT_TITLE,
     ),
     Param(
@@ -157,7 +151,6 @@ _DOWNLOAD_PARAMS = (
         allowed=_national_file_crs,
         choices=True,
         normalize="upper",
-        task=True,
         section=PRODUCT_TITLE,
     ),
     *shared.target(lambda: store_files(["landcover"])),
@@ -218,7 +211,6 @@ COMMANDS = (
             "catalog_landcover.landcover_download_description", note=shared.PLAIN_NOTE
         ),
         effects=("network", "store_write"),
-        project_task=True,
         check_function="check_landcover",
         check_result_schema="kartograf-plan/1",
         constraints=_DOWNLOAD_CONSTRAINTS,
@@ -267,11 +259,7 @@ COMMANDS = (
                 description=message("catalog_landcover.group_description"),
                 fixed="landcover",
             ),
-            replace(
-                _PRODUCT,
-                task=False,
-                section=None,
-            ),
+            replace(_PRODUCT, section=None),
             shared.JSON,
         ),
         description=message("catalog_landcover.landcover_list_layers_description"),

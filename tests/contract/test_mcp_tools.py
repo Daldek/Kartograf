@@ -27,19 +27,17 @@ from kartograf.catalog.tools import (
     check_families,
     hidden_tools,
     parse_families,
-    task_paths,
     tool_specs,
 )
+from kartograf.data_commands import DATA_COMMANDS
 from kartograf.exceptions import ValidationError
-from kartograf.project.commands import COMMANDS
 
 REPO = Path(__file__).resolve().parent.parent.parent
 CATALOG = {command.id: command for command in declared().commands}
 ENTRIES = {entry.name: entry for entry in command_entries()}
 TOOL_COMMANDS = [command for command in CATALOG.values() if command.family]
-DATA_COMMANDS = [command for command in CATALOG.values() if command.project_task]
+DATA = [command for command in CATALOG.values() if command.kind == "data"]
 CHECKED = [command for command in TOOL_COMMANDS if command.supports_check]
-WRITING = {"project init", "project add", "project remove"}  # no check: not offered
 CORE = {
     "commands list",
     "commands schema",
@@ -55,10 +53,6 @@ CORE = {
 WRITES = {spec.name: spec for spec in tool_specs(allow_writes=True)}
 PLANS = {spec.name: spec for spec in tool_specs(allow_writes=False)}
 POLISH_LETTERS = re.compile("[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]")
-
-
-def _name(command: str) -> str:
-    return CATALOG[command].operation_id
 
 
 def _descriptions(schema):
@@ -87,7 +81,7 @@ def _text(spec) -> str:
 def test_every_command_with_a_family_is_one_tool_in_the_order_of_the_catalog():
     expected = [command.operation_id for command in TOOL_COMMANDS]
 
-    assert len(expected) == 40
+    assert len(expected) == 34
     assert list(WRITES) == expected
     # the commands of the cache and the settings are no tools
     assert {c.id for c in CATALOG.values() if not c.family} == {
@@ -123,7 +117,6 @@ def test_the_families_are_those_of_the_catalog_with_core_apart():
         "discovery",
         "availability",
         "data",
-        "project",
         "store",
         "core",
     )
@@ -131,7 +124,6 @@ def test_the_families_are_those_of_the_catalog_with_core_apart():
         "discovery": 17,
         "availability": 1,
         "data": 12,
-        "project": 6,
         "store": 4,
         "core": 10,
     }
@@ -179,33 +171,24 @@ def test_an_unknown_or_empty_family_is_a_validation_error(names):
 # -- the mode of the server -----------------------------------------------------------
 
 
-def test_a_server_without_writes_offers_plans_and_hides_the_writes_without_a_check():
-    assert len(PLANS) == 37
-    assert hidden_tools(allow_writes=False) == {
-        _name(command): command for command in sorted(WRITING)
-    }
+def test_a_server_without_writes_offers_every_tool_and_hides_none():
+    assert len(PLANS) == 34
+    assert set(PLANS) == set(WRITES)
+    assert hidden_tools(allow_writes=False) == {}
     assert hidden_tools(allow_writes=True) == {}
-    assert not WRITING & {s.command for s in PLANS.values()}
-    assert set(WRITES) - set(PLANS) == {_name(command) for command in WRITING}
-    # a family limits what is hidden too
-    assert hidden_tools(("core",), allow_writes=False) == {}
-    assert set(hidden_tools(("project",), allow_writes=False)) == {
-        _name(command) for command in WRITING if command.startswith("project")
-    }
-    assert hidden_tools(("store",), allow_writes=False) == {}  # store init is a plan
 
 
 def test_the_commands_that_write_and_have_a_check_are_plans_without_writes():
     plans = {name for name, spec in PLANS.items() if spec.plan_only}
 
     assert plans == {command.operation_id for command in CHECKED}
-    assert len(plans) == 14  # the twelve data commands, project download, store init
+    assert len(plans) == 13  # the twelve data commands and store init
     assert not any(spec.plan_only for spec in WRITES.values())
     for command in CHECKED:
         full, plan = WRITES[command.operation_id], PLANS[command.operation_id]
         options = set(full.input_schema["properties"])
         assert plan.refused == options & set(RUN_OPTIONS)
-        # a data command and project download have options of a run; store init none
+        # a data command has options of a run; store init none
         assert bool(plan.refused) == (command.id != "store init")
         assert set(plan.input_schema["properties"]) == options - plan.refused
         assert plan.input_schema["properties"]["check"]["const"] is True
@@ -228,14 +211,11 @@ def test_the_run_options_are_update_plan_workers_and_summary():
         seen |= set(PLANS[command.operation_id].refused)
 
     assert seen == set(RUN_OPTIONS)
-    assert PLANS["kartograf_project_download"].refused == {"update", "workers"}
+    assert PLANS["kartograf_store_init"].refused == set()
     assert PLANS["kartograf_soil_hsg"].refused == {"update", "plan", "summary"}
     # a plan keeps the store and the task: what the check reads
     assert {"root", "product"} <= set(
         PLANS["kartograf_elevation_download"].input_schema["properties"]
-    )
-    assert {"project_dir", "tasks"} <= set(
-        PLANS["kartograf_project_download"].input_schema["properties"]
     )
 
 
@@ -245,7 +225,6 @@ def test_check_is_an_option_of_the_commands_with_a_check_only():
 
         assert ("check" in properties) == command.supports_check, command.id
     assert "kartograf_check" not in WRITES
-    assert "kartograf_project_check" not in WRITES
 
 
 # -- input schemas --------------------------------------------------------------------
@@ -377,49 +356,32 @@ def test_the_list_and_layer_tools_take_their_group_from_the_command():
     ) == {"product"}
 
 
-def test_project_add_takes_a_command_and_its_options():
-    schema = WRITES["kartograf_project_add"].input_schema
-    properties = schema["properties"]
-
-    assert properties["command"]["enum"] == [c.id for c in DATA_COMMANDS]
-    assert properties["options"]["type"] == "object"
-    assert {"project_dir", "name", "command", "options"} <= set(schema["required"])
-    assert "arguments" not in properties  # the words of a CLI line
-
-
-def test_every_argument_has_a_kind_and_the_data_tools_know_their_task_options():
+def test_every_argument_has_a_kind_and_the_data_tools_know_their_data_options():
     for spec in WRITES.values():
         properties = set(spec.input_schema["properties"]) - {"check"}
 
         assert set(spec.kinds) == properties, spec.name
         assert set(spec.paths) <= set(spec.kinds)
         assert all(spec.kinds[name] == "path" for name in spec.paths)
-    for command in DATA_COMMANDS:
+    for command in DATA:
         spec = WRITES[command.operation_id]
 
-        assert set(spec.task_options) == set(COMMANDS[command.id].options)
+        assert set(spec.data_options) == set(DATA_COMMANDS[command.id].options)
         assert "root" in spec.input_schema["properties"]
         assert "root" not in spec.input_schema["required"]  # the default store
         assert not {"quiet", "json", "upgrade", "force"} & set(spec.kinds)
     assert all(
-        not s.task_options
+        not s.data_options
         for s in WRITES.values()
-        if s.command not in {c.id for c in DATA_COMMANDS}
+        if s.command not in {c.id for c in DATA}
     )
 
 
-def test_every_path_has_a_role_and_nested_task_paths_are_known():
+def test_every_path_has_a_role():
     roles = {role for spec in WRITES.values() for role in spec.paths.values()}
 
     assert roles == {"input", "output", "root"}
     assert WRITES["kartograf_store_overview"].paths == {"root": "root"}
-    assert WRITES["kartograf_project_init"].paths == {
-        "project_dir": "output",
-        "root": "root",
-    }
-    assert task_paths("elevation download") == {"geometry": "input"}
-    with pytest.raises(KeyError):
-        task_paths("nope nope")
 
 
 # -- descriptions, titles and annotations ----------------------------------------------
@@ -463,24 +425,22 @@ def test_the_annotations_follow_the_effects_of_the_command(command):
 
 
 def test_the_annotations_of_the_tools_that_matter():
-    for command in DATA_COMMANDS:
+    for command in DATA:
         hints = WRITES[command.operation_id].annotations
 
         # a protocol default of "destructive" is wrong for a store that never
         # overwrites: the write tools say so
         assert (hints.read_only_hint, hints.destructive_hint) == (False, False)
         assert (hints.idempotent_hint, hints.open_world_hint) == (True, True)
-    assert WRITES["kartograf_project_remove"].annotations.destructive_hint is True
-    assert WRITES["kartograf_project_add"].annotations.idempotent_hint is False
     assert WRITES["kartograf_elevation_availability"].annotations.read_only_hint is True
     assert (
         WRITES["kartograf_elevation_availability"].annotations.open_world_hint is True
     )
     assert WRITES["kartograf_sheet_parse"].annotations.open_world_hint is False
     # the mode: a plan reads, whatever the command can do
-    plan = PLANS["kartograf_project_download"].annotations
+    plan = PLANS["kartograf_elevation_download"].annotations
     assert (plan.read_only_hint, plan.destructive_hint) == (True, False)
-    assert WRITES["kartograf_project_download"].annotations.read_only_hint is False
+    assert WRITES["kartograf_elevation_download"].annotations.read_only_hint is False
 
 
 def test_only_the_two_catalog_tools_are_loaded_up_front():
@@ -534,7 +494,7 @@ def test_tools_module_needs_neither_mcp_nor_jsonschema():
         "import sys\n"
         "sys.modules['mcp'] = None\n"
         "import kartograf.catalog.tools as tools\n"
-        "assert len(tools.tool_specs(allow_writes=True)) == 40\n"
+        "assert len(tools.tool_specs(allow_writes=True)) == 34\n"
         "assert 'jsonschema' not in sys.modules\n"
     )
 

@@ -98,7 +98,7 @@ case of a foreign country's grid); (4) every result passes `isfinite`.
 Building the group suppresses only the pyproj warning `Best transformation is not
 available` (no PROJ grid, e.g. CUZK on a clean installation): the policy chooses
 by itself from the available operations, and a raw `UserWarning` would break the contract
-of empty stderr in `--json` (USAGE 9.2).
+of empty stderr in `--json` (USAGE 8.2).
 The chosen operation is **pinned** (`PinnedTransform`) and, when reprojecting
 a raster, FORCED on GDAL through `COORDINATE_OPERATION` — without that GDAL
 chooses the operation itself, outside the policy. The axis trap is real here, not
@@ -138,16 +138,15 @@ at least one module-level import (also under `if TYPE_CHECKING:`).
 
 ```
 kartograf ──> core, download, providers, landcover, hydrology, cache,
-        sources, transport, notices, project, store, store_geometry,
+        sources, transport, notices, store, store_geometry,
         transform, catalog, commands, error_report, sheet_info,
         source_info, cache_info, store_documents    # re-export of the public API
 __main__ ──> cli
-cli ──> catalog, commands, error_report, sheet_info, source_info,
-        cache_info, download, landcover, hydrology, notices, project,
-        sources, interrupt, kartograf
+cli ──> catalog, error_report, sheet_info, source_info, cache_info,
+        download, landcover, hydrology, notices, sources, interrupt
 mcp_server ──> catalog, commands, error_report, download, cache, kartograf
         # SDK `mcp`, `anyio`, `jsonschema`: lazily only, in create_server
-commands ──> catalog, project, download, cache, notices
+commands ──> catalog, data_commands, download, cache, notices
 catalog ──> sources, download, landcover, hydrology, providers, core,
         error_report, _version, kartograf (l)
 error_report ──> transform, interrupt, catalog (l)
@@ -155,8 +154,7 @@ sheet_info ──> catalog, core
 source_info ──> download, landcover, providers, sources
 cache_info ──> cache, notices
 store_documents ──> download, store
-project ──> download, landcover, hydrology, sources, cache, catalog,
-        notices, _version, kartograf (_clock)
+data_commands ──> catalog, download, landcover, hydrology, cache, notices
 download ──> providers, sources, transform, core, cache, notices,
         _version, kartograf (_clock), transport, interrupt
 landcover ──> providers, download, core, cache, sources, notices, transport,
@@ -180,7 +178,7 @@ core ──> (nothing except exceptions and serialization)
 exceptions ──> serialization (encoder for `details()`; edges TO it
         omitted above — it is imported by kartograf, cli, core, sources,
         transform, transport, providers, download, landcover, hydrology,
-        cache, project, store, store_geometry, error_report, catalog)
+        cache, store, store_geometry, error_report, catalog)
 serialization ──> (leaf, nothing internal; edges TO it omitted, as
         for exceptions — it is imported by the result types: Document, EncodeContext)
 ```
@@ -251,15 +249,14 @@ Notes that are easy to overlook:
   (`download_collection`/`check_collection`), `landcover.manager`
   and `hydrology`; `sheet`, `list-sources`, `list-layers`, `cache`, `store` and `commands`
   go through `sheet_info`, `source_info`, `cache_info`, `store_documents` and `catalog.build` (`list_commands`,
-  `command_schema`),
-  and `project add` through `commands.parse_command`. It prints the result: the `--json` mode
+  `command_schema`). It prints the result: the `--json` mode
   (`cli/_json.py`) is the `kartograf-result/1` envelope around `Document.to_json()`, the text mode renders the same
   documents (tables, status lines, a progress bar from
   `download.manager.DownloadProgress`), and `main` turns exceptions into
   `error_report` and the exit codes of the registry (ADR-049, ADR-051). From `download` it also takes
   `download.plan`/`fetch` (plan file, `UpdateMode`, `VersionedFile`) and
   `download.options` (`output_required`, `require_product`), from `sources.variants`
-  the variant tables, from `notices` the messages, from `project.commands` `task_command`.
+  the variant tables, from `notices` the messages.
   It does not import `providers`, `transport`, `transform`, `core` or the sheet
   selection (`tests/contract/test_cli_translation.py::test_cli_imports_no_data_logic`
   allows only `catalog` and `serialization` beyond that).
@@ -280,13 +277,12 @@ Notes that are easy to overlook:
   `providers.cuzk.sheets.SheetIndex` and `providers.cuzk.raster.bbox_to_crs`
   (CZ sheets, plan B) and `transport.http` (`SessionPerThread`,
   `head_signal`); it does not import `DownloadManager` or the store.
-- `project` (`model`, `commands`, `manifest`, `operations`) maps data commands
-  to the `download`/`landcover`/`hydrology` library functions; it does not implement
-  per-product logic. The names and kinds of data command options (`TaskCommand.options`)
-  come from the catalog (`Command.task_options`; JSON <-> arguments conversion:
-  `catalog.kinds`), hence the edge `project ──> catalog`. `cli/project_cmd.py` only
-  translates arguments and prints the results of the project API (ADR-037, ADR-040).
-- `serialization` (section 3.6) is a leaf like `exceptions`: result types inherit
+- `data_commands` (`DATA_COMMANDS`) maps each of the 12 data commands to the
+  `download`/`landcover`/`hydrology` library functions (validation without network,
+  download, `check_*`); it does not implement per-product logic. The names and kinds of the
+  options of a call (`DataCommand.options`) come from the catalog (`Command.call_options`),
+  hence the edge `data_commands ──> catalog`.
+- `serialization` (section 3.5) is a leaf like `exceptions`: result types inherit
   from the `Document` mixin, and `exceptions` uses the encoder in `KartografError.details()`;
   `core.bbox` imports only `EncodeContext` (the `BBox.__json__` hook).
 - `catalog` (section 4.11) describes the commands: declarations in `catalog/commands/*` read the
@@ -296,8 +292,8 @@ Notes that are easy to overlook:
   `catalog.hints` in `error_report` (a command example in the error hint). The library,
   including `catalog`, does not import `cli` or `mcp` (a test in a clean process).
 - `commands` (KB-2..KB-5) joins `catalog` (declarations, `convert_arguments`,
-  `parsed_options`), `project.commands` (validation and execution of a data task:
-  `task_command`) and `download` (`UpdateMode`, `UpdatePlan`, `DownloadProgress`).
+  `parsed_options`), `data_commands` (validation and execution of a data command:
+  `DATA_COMMANDS`) and `download` (`UpdateMode`, `UpdatePlan`, `DownloadProgress`).
 - `sheet_info`, `source_info`, `cache_info` and `store_documents` are reports with logic
   moved from the CLI (Z1): `describe_sheet`/`find_sheets` (`core`, `catalog`:
   `SheetInfo.commands` with `Param.accepts`), `list_sources`/`list_layers`
@@ -406,17 +402,17 @@ kartograf/
 │                        # CacheError; InvalidSidecarError(.path) — unreadable sidecar (read_sidecar);
 │                        # ForbiddenError(.option, .path, .allowed) and MissingDependencyError(.extra) -
 │                        # only the MCP server (a path outside --allow-dir; no extra `mcp`);
-│                        # error codes and exit codes: USAGE 9.3
+│                        # error codes and exit codes: USAGE 8.3
 ├── error_report.py      # ErrorReport (kartograf-error/1), error_report(exc, command=):
 │                        # exception as data (io_error, cancelled, terminated, internal_error
-│                        # are built here), ERROR_CODES/EXIT_CODES - the only source of the USAGE 9.3 tables and the catalog
+│                        # are built here), ERROR_CODES/EXIT_CODES - the only source of the USAGE 8.3 tables and the catalog
 ├── interrupt.py         # Interruption: run_parallel (pool with queue cancellation and a stop flag for
 │                        # running units), check_stop, Stopped/Terminated, sigterm_interrupts
 ├── marker.py            # The store marker kartograf-store.json (ADR-054): prepare_store, lenient_store,
 │                        # store_refusal (the error a write is refused with), store_state (the same
 │                        # judgement read only: marked/layout/new/foreign, for consumers), init_store
 │                        # (`store init`), store_around/store_below (stores of any tool by marker name)
-├── output.py            # Plain output (ADR-054, 3.7): Target/resolve_target, plan_plain, refuse, Staging
+├── output.py            # Plain output (ADR-054, 3.6): Target/resolve_target, plan_plain, refuse, Staging
 │                        # (.kartograf-incoming/<host>_<pid>_<token>/), FileResult, digest_of; guard_store,
 │                        # directory_refusal (the target is refused before any request), writing, writes
 ├── core/                # Base logic, no network IO
@@ -540,6 +536,8 @@ kartograf/
 │                        # read_store_sidecar -> StoreSidecar (reading the store as documents, ADR-045)
 ├── commands.py          # command layer (KB-2..KB-5): parse_command, validate_command,
 │                        # format_command, run_command, check_command, CommandCall
+├── data_commands.py     # DATA_COMMANDS: the 12 data commands as library calls (call options,
+│                        # validation without network, download and check_*; no per-product logic)
 ├── mcp_server.py        # MCP server (stdio; extra `mcp`, script kartograf-mcp): create_server,
 │                        # main, build_instructions, INSTRUCTIONS; the only module touching the SDK
 ├── guide.py             # guide for agents from the catalog (AGI 8): agent_guide -> AgentGuide
@@ -552,13 +550,13 @@ kartograf/
 │   ├── build.py         # list_commands(), command_schema(command), is_option, effects; entries built once
 │   ├── shared.py        # shared command parameters (area, output, update modes, --json...)
 │   ├── kinds.py         # value kinds: flag text parsers, convert_arguments (JSON options ->
-│   │                    # library arguments), options_from_json/options_to_json
+│   │                    # library arguments)
 │   ├── cliparser.py     # argparse parser from declarations: build_parser, parse_command_line, parsed_options
 │   ├── formatting.py    # canonical command line (format_command_line)
 │   ├── hints.py         # example_for, usage_hint (example in the error hint)
-│   ├── tools.py         # MCP tools as data: tool_specs, hidden_tools, task_paths, parse_families, FAMILIES
+│   ├── tools.py         # MCP tools as data: tool_specs, hidden_tools, parse_families, FAMILIES
 │   └── commands/        # declarations, one module = one group (elevation, imagery, landcover, soil, boundaries,
-│                        # cadastre, models3d, hydro, names, maps, geodesy, project, misc: parse, catalog,
+│                        # cadastre, models3d, hydro, names, maps, geodesy, misc: parse, catalog,
 │                        # cache and API-only commands); _collection.py = shape of the collection groups
 ├── store.py             # Read-only store access (ADR-045, 3.3.1): list_segments,
 │                        # list_partitions, iter_store -> StoreEntry (units, partition,
@@ -642,16 +640,6 @@ kartograf/
 │                        # hsg_statistics; internal HSGCalculator from the versions
 │                        # clay/sand/silt (D33, reused), USDA classification -> HSG,
 │                        # hsg_from_rasters
-├── project/             # Project manifest (ADR-040):
-│   ├── model.py         # Project, ProjectTask, PinnedFile, ProjectReport,
-│   │                    # ProjectCheck and task and file results
-│   ├── commands.py      # COMMANDS: JSON options (TaskCommand.options from the catalog), validation without network,
-│   │                    # download (TaskDownload: plan, summary), check_* and pins per data command
-│   │                    # (no per-product logic)
-│   ├── manifest.py      # kartograf-project/1: validation, mkdir lock, atomic
-│   │                    # write and merging of changes per task
-│   └── operations.py    # Public API: init, add, remove, download,
-│                        # check, status, verify and open_project
 ├── auth/                # proxy.py (subprocess isolating CLMS credentials), client.py
 │                        # (AuthProxyClient — singleton, starts the proxy itself)
 └── cli/                 # Only flag translation and result printing (Z1, Z8; ADR-037, ADR-046):
@@ -665,7 +653,6 @@ kartograf/
                          # landcover_cmd.py, soil_cmd.py (SoilGrids + HSG), layers_cmd.py (list-layers),
                          # sources_cmd.py (list-sources), parse_cmd.py (describe_sheet),
                          # cache_cmd.py (cache_info), catalog_cmd.py (list_commands, command_schema),
-                         # project_cmd.py (project API; project add via parse_command),
                          # commands.py (main entry point: exceptions -> error_report, the exit codes of the registry)
 ```
 
@@ -1784,43 +1771,7 @@ Kartograf deliberately leaves separated (section 1). The dictionary is shared
 by reference between the sidecars of the task and **must not be mutated** after
 creation.
 
-### 3.5 Project manifest `kartograf-project/1`
-
-`kartograf project init --root KATALOG` creates in the project directory
-`kartograf-project.json` (UTF-8, JSON with 2-space indentation). The manifest
-holds `schema: "kartograf-project/1"`, `root` (one versioned
-store) and `tasks` in the order of addition. A task has a unique `name`,
-`command` (e.g. `elevation download`), data-selection `options`, `pinned_at`,
-`kartograf_version` and `files`; for a pinned geometry also
-`geometry_sha256`. `pinned_at` and `kartograf_version` are `null`, and `files`
-empty before the first download. Each file entry gives `role` (`output`,
-`raw`, `input`), `unit`, the standard path `path`, the path of the immutable
-version `version`, `label`, the full `sha256` and `size_bytes`. The manifest selects
-data versions; the `kartograf-meta/1` sidecar invariably describes the provenance
-of the file. The update report `kartograf-plan/1` is not part of the manifest.
-
-A relative `root` and a relative `options.geometry` are written and
-resolved relative to the project directory, while absolute ones remain
-absolute. `path` and `version` are always relative to the store, with the
-separator `/`; `version` points to a file under `versions/`, never
-`.incoming/`. Moving the project directory together with the store preserves
-the bindings if their relative position stays the same.
-
-`src/kartograf/project/manifest.py` strictly checks the structure and types on
-every read (including command names and options, sums and paths; the UTF-8 BOM of an
-editor is allowed, writing is always without BOM). It writes
-a temporary file next to the manifest, synchronises it (`fsync`) and replaces it
-atomically (`os.replace`); it also synchronises the directory when the file system
-allows it. A short directory lock `.kartograf-project.lock`
-(`mkdir`) covers only read-merge-write, not the download. With
-concurrent operations, changes to different tasks are merged, a change to the same
-task reports a conflict without overwriting other people's pins. The write
-happens after each completed task; there is no SQLite or byte-range locks
-on the share. Details of the format and modes:
-[`USAGE.md`, section 8](USAGE.md#8-project) and the spec
-`docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`.
-
-### 3.6 JSON documents `kartograf-*/1`
+### 3.5 JSON documents `kartograf-*/1`
 
 A command result is a document: `@dataclass(frozen=True)` with the `Document` mixin
 (`src/kartograf/serialization.py`), which provides `to_dict()` and `to_json()`. `schema`
@@ -1829,17 +1780,16 @@ the first key, followed by the `JSON_KEYS` keys in a fixed order (by default the
 fields; a key without a field and without a property takes `JSON_FILL`). `to_json()` =
 `json.dumps(to_dict(), ensure_ascii=False, indent=2, allow_nan=False)` and `\n` at the
 end (`indent=None`: the compact form of the MCP server, without a newline). The CLI `--json` prints
-`to_json()` in the envelope `kartograf-result/1` (`cli/_json.py::emit_result`, USAGE 9.1), the MCP server returns `to_dict()` and
+`to_json()` in the envelope `kartograf-result/1` (`cli/_json.py::emit_result`, USAGE 8.1), the MCP server returns `to_dict()` and
 `to_json(indent=None)`; no other module converts results to JSON (Z8).
 
 The encoder (`encode`, checked in this order): `Enum` -> value; finite `float`
 (`NaN`/`Infinity` is `ValueError`); a type with the hook `__json__(ctx)` (`BBox` ->
-`{"bbox": [...], "crs"}`, project entries); `Path` -> `Path.absolute().as_posix()` (without
+`{"bbox": [...], "crs"}`); `Path` -> `Path.absolute().as_posix()` (without
 touching the file system); `Decimal` -> string; `datetime` -> ISO 8601 UTC to seconds;
 dataclass -> object with fields in declaration order (`metadata={"json": False}` and `ctx.omit`
 pairs skipped); `Mapping` -> object; `tuple`/`list` -> array; `set` -> sorted
-array; any other type is `TypeError` (never `str(obj)`). `EncodeContext` carries `store`
-(the store directory to which the version paths of project pins are relative) and `omit` (pairs
+array; any other type is `TypeError` (never `str(obj)`). `EncodeContext` carries `omit` (pairs
 `(class, field)`: `StoreEntries` omits `Sidecar.raw`). The `SCHEMAS` registry
 (`__init_subclass__`) collects classes per schema; a test checks the name pattern
 (`^kartograf-[a-z][a-z0-9-]*/[1-9][0-9]*$`), the same set and order of keys of the classes of one
@@ -1855,9 +1805,6 @@ schema, and that every `result_schema` of the catalog is in the registry.
 | `kartograf-sheets/1` | `SheetList` | `sheet_info` | `request, sheets, count` |
 | `kartograf-sources/1` | `SourceList` | `source_info` | `group, products, sources` |
 | `kartograf-layers/1` | `LayerList` | `source_info` | `group, product, source, layers, classes, years, properties, depths, statistics` |
-| `kartograf-project-state/1` | `Project` | `project.model` | `directory, root, tasks` |
-| `kartograf-project-report/1` | `ProjectReport` | `project.model` | `project, tasks, notices, ok` |
-| `kartograf-project-check/1` | `ProjectCheck` | `project.model` | `project, files, not_downloaded, notices, ok` |
 | `kartograf-cache/1` | `CacheInfo` | `cache_info` | `action, path, exists, size_bytes, entries, cleared, removed_unreadable` |
 | `kartograf-config/1` | `Config` | `config` | `tool, version, config_file, keys, credentials, store` |
 | `kartograf-command-list/1` | `CommandList` | `catalog.model` | `tool, version, groups, commands` |
@@ -1870,7 +1817,7 @@ schema, and that every `result_schema` of the catalog is in the registry.
 | `kartograf-error/1` | `ErrorReport` | `error_report` | `code, title, message, hint, details, exit_code, command` |
 
 Document rules (source: `docs/superpowers/specs/2026-10-18-agent-interface-design.md`,
-section 5; usage: USAGE 9.1):
+section 5; usage: USAGE 8.1):
 
 - one schema `kartograf-download/1` for five result types of the data commands with a fixed
   set of keys (`raw`, `inputs`, `superseded`, `summary` empty when the class does not have them:
@@ -1878,14 +1825,11 @@ section 5; usage: USAGE 9.1):
 - `AvailabilityReport` and `UpdatePlan` have no `schema` field (the constant `SCHEMA`
   and the property `schema`): they are not built with `schema=`, and an unknown schema is rejected by
   `UpdatePlan.from_dict`; plans written by 0.8.0-dev still load;
-- paths in documents are absolute (exceptions: `request.geometry` of the availability report
-  and `tasks[].options` of the project in manifest form); `Project`, `ProjectReport` and
-  `ProjectCheck` set `ctx.store`, so the pin paths (`PinnedFile`, `FileCheck`)
-  are absolute;
+- paths in documents are absolute (exception: `request.geometry` of the availability report);
 - the key is always present (no value `null`, no elements `[]`), lists are not
   silently truncated (`kartograf-store-entries/1` carries `limit` and `truncated`);
-- `ok` is present in result documents (`-download/1`, `-plan/1`, `-availability/1`,
-  `-project-report/1`, `-project-check/1`): `envelope.py` reads them (`_READERS`, by type) and
+- `ok` is present in result documents (`-download/1`, `-plan/1`, `-availability/1`):
+  `envelope.py` reads them (`_READERS`, by type) and
   gives the envelope status `ok`, `partial` or `failed` (CLI exit code 0, 10, 11);
   `ok: false` is a result, not an error (an error is `kartograf-error/1`, the last line of stderr);
 - within `/1` only additive changes (new keys, new enum values); removing a
@@ -1893,11 +1837,10 @@ section 5; usage: USAGE 9.1):
   an entry in the table above and a row in `tests/contract/test_json_contract.py` (exact list of keys in
   order; a key change is a test error).
 
-File schemas - the sidecar `kartograf-meta/1` (3.2) and the manifest `kartograf-project/1` (3.5) -
-are not result documents and do not enter `SCHEMAS`; the project document is
-`kartograf-project-state/1`.
+The sidecar file schema `kartograf-meta/1` (3.2) is not a result document and does not enter
+`SCHEMAS`.
 
-### 3.7 Write targets and plain output (ADR-054)
+### 3.6 Write targets and plain output (ADR-054)
 
 A command that writes data writes in one of two modes (DEV §19, ECO-051). **Store mode**
 (`root`, `--root`, or the default root when a call names neither: 3.3, DEV-19.2) is the versioned
@@ -1930,16 +1873,15 @@ makes the choice (`Target(mode, path)`); the default root comes from `kartograf.
   `output_in_store`, `details.paths` the directory: no list of targets, so no index request).
   `writing(..., guard=True)` calls them for every function that opens a write, `wrapping`
   (`writes`) for the public methods of `DownloadManager`, `LandCoverManager` and
-  `HSGCalculator` (each has `_store_root`), and `download_project` for the store of a project; a
-  new track needs nothing. `download_data` and `download_collection` judge the request first, so
+  `HSGCalculator` (each has `_store_root`); a new track needs nothing. `download_data` and
+  `download_collection` judge the request first, so
   an invalid request is a `validation_error` whatever its root (`guard=False`, then the refusal).
   A check passes `guard=False` and plans the refusal itself (`download.plan.refusal_plan`, the
   decorator `plans` for the check methods of the three classes): a root that is a `conflict`
   is one position of the track `store` (`action` `conflict`, `reason` `nested_store` or
   `not_empty`, `path` the root, `status` `unverifiable`) and the plan is `ok`, so `--check`
   exits 0 and makes no request; a root without its marker fails the plan with
-  `store_unavailable`, as it fails the run (ADR-054 decision 8). `check_project` lists a
-  `conflict` `FileCheck` of every selected task.
+  `store_unavailable`, as it fails the run (ADR-054 decision 8).
 - `Staging(directory, force=)` is the context manager of one run: it creates
   `<directory>/.kartograf-incoming/<host>_<pid>_<token>/` (and the directory, when it is missing),
   removes leftovers older than 24 hours, and lets SIGTERM interrupt like Ctrl-C
@@ -1975,19 +1917,19 @@ with path role `output` and short flag `-o`, `root` with path role `root`) and
 `target_constraints(campaigns=)` the optional `one_of` group `target` and the rule that
 `--upgrade`, `--plan` (and `--all-campaigns` of the sheet commands) exclude `output_dir`; every
 data command uses both, `update_params(plain=True)` lets `--force` leave the exclusive group so
-that `--check --force` parses (`--check` and `--upgrade` still exclude each other; the project
-commands keep the three-way group). The parser does not exclude `output_dir` and `root`: the
-library does (`resolve_target`), so the CLI, `run_command`, `check_command` and the MCP tools
+that `--check --force` parses (`--check` and `--upgrade` still exclude each other). The parser
+does not exclude `output_dir` and `root`: the library does (`resolve_target`), so the CLI,
+`run_command`, `check_command` and the MCP tools
 answer with one document. The CLI handlers pass `output_dir` and `root` to the library
 function as they are (`cli/_args.py` `target_arguments`) and print what the report says it
 wrote (`cli/download_cmd.py` `_written_to`: the output directory of a plain report, the store
 root of a store report). `run_command` and `check_command` take `output_dir`, `root` and (the
-check) `force`; the project task functions carry both, and a project task has no `output_dir`
-(`store_only_option`). The MCP server confines `output_dir` like every path option and checks
+check) `force`; a command that writes only a store refuses `output_dir` (`store_only_option`).
+The MCP server confines `output_dir` like every path option and checks
 the default root only for a call that names neither target (`_Toolbox._check_default_root`,
 `forbidden` with `details.reason` `outside_allowed_dirs`); the refusals of a server that does
-not write carry `writes_disabled`. `project *` and `store init` are store-only and say so in
-their catalog entry (rule `Store only: ...`). Interrupts are held by tests that run the real
+not write carry `writes_disabled`. `store init` is store-only and says so in
+its catalog entry (rule `Store only: ...`). Interrupts are held by tests that run the real
 command in a process of its own (`tests/integration/test_cli_interrupt.py`,
 `tests/support/interrupt_driver.py`): SIGINT gives exit 130 and SIGTERM 143, the staging
 directory is removed and an existing target survives `--force` whole.
@@ -2020,7 +1962,7 @@ with CZ orthophoto in 4.4, PL and CZ LAZ 4.7), builds
 `DataReport(files, failed, stale, superseded, notices, ok)`: `files` =
 `UnitFile(unit, country, file: VersionedFile)` (`unit` = sheet code, LAZ file
 name or cutout grid coordinates `<coords>`, like the area units
-of a collection; project line `task: unit (file)`), `failed` =
+of a collection), `failed` =
 `UnitFailure(unit, country, error, kind)`, `ok` = exit code rule
 (partial success of `auto` = `True`). Data notices are `Notice`
 (`src/kartograf/notices.py`; the list of codes is in the docstring of `download/data.py`)
@@ -3402,8 +3344,8 @@ with the complete CZ combinations (at most `MAX_HINT_LINES`
 = 5 commands per combination and the count of the remaining ones), `--json` = exactly
 `AvailabilityReport.to_json()` (messages only in the `notices` field, without
 duplication on stderr). `ok=False` (a part of `auto` not checked)
-= the report is printed and the exit code is 10 or 11. The report is not a project data command
-(`project_task` of the catalog = `false`; `project add` rejects it). Live examples and printouts:
+= the report is printed and the exit code is 10 or 11. The report is not a data command
+(kind `query` in the catalog, no entry in `DATA_COMMANDS`). Live examples and printouts:
 USAGE 1.7.
 
 **Validation before the network** (texts as in `download_data`): a single choice of
@@ -3483,7 +3425,7 @@ or a CZ sheet code = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    `AvailabilityArea(country, crs, bounds, area_m2, land_m2)`;
    `checked_at` from `kartograf._clock`; `ok` = `False` only when parts of the
    task could not be checked (plan B, `auto`) — in PL always `True`.
-   `to_json()` from the `Document` mixin (section 3.6): 2-space indentation, trailing `\n`.
+   `to_json()` from the `Document` mixin (section 3.5): 2-space indentation, trailing `\n`.
 8. **Records to download and campaigns (KD-1, ADR-047):** `sheet_records` =
    `AvailabilityRecord(sheet, campaign, acquisition_date, published, full_sheet,
    url)` records that the `download_hint` of the combination downloads, by sheet,
@@ -3563,8 +3505,7 @@ or a CZ sheet code = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    (the first error), like a single-country task.
 
 **Download hint** (`_download_hint`): a tuple of commands to paste after
-`kartograf ` or after `kartograf project add NAME ` — without `--root`
-(the store comes from the user's `--root` or from the project, ADR-040).
+`kartograf ` — without `--root` (the store comes from the user's `--root`).
 The area as in the task (`--country pl --bbox ... [--bbox-crs]` or
 `--geometry FILE [--layer]` + `--sheet-system`; `--sheet` — the sheet code alone,
 when the combination is in its system (PL-2000: the sheet code and its descendants),
@@ -3592,8 +3533,7 @@ one command per sheet with a file (`elevation download --product nmpt
 native for the files of the system); LAZ — one command for the task area
 (`--country cz`, `--bbox`/`--geometry`, `--model`, `--vertical-crs`),
 for a sheet code one command per sheet. Every hint passes the validation of
-`download_data` and `project add` without a network (`test_cz_hints`,
-`test_cz_hints_accepted_by_project_add`).
+`download_data` without a network (`test_cz_hints`).
 
 **Cache:** table `index_area_cache` in `MetadataCache`
 (`get_index_area`/`set_index_area`, JSON payload, TTL like records —
@@ -3634,13 +3574,13 @@ as `check_availability(...).to_json()` with the same cache.
 boundaries|cadastre|models3d|hydro|names|maps|geodesy download` =
 `download_collection(...)`/`check_collection(...)`
 (`download/collections.py`); the CLI only translates flags
-(`cli/collection_cmd.py`: `library_arguments` from the catalog gives the function arguments,
-the same for project items), and the shared shape of the groups is in
+(`cli/collection_cmd.py`: `library_arguments` from the catalog gives the function arguments),
+and the shared shape of the groups is in
 `catalog/commands/_collection.py` (`--help` texts from the library:
 `collection_product_choices`, `collection_level_choices`,
 `collection_variant_choices`). `validate_collection_request` checks the whole
 selection WITHOUT a network and is the only place of the rules (both functions
-and project items call it): bbox coordinates, exactly one selection (`teryt`,
+and `validate_command` through `DATA_COMMANDS` call it): bbox coordinates, exactly one selection (`teryt`,
 `ku`, `sheet`, `bbox`, `geometry`, `whole_country`), product from the registry,
 country (`pl`/`cz`/`auto` required with an area; `whole_country` only
 `pl`/`cz`; with `sheet` from the sheet code), channel for the kind of selection, variant
@@ -3943,18 +3883,18 @@ Kartograf does not apply the models to other data (ADR-043, item 7 of plan E).
 ### 4.11 Interface for agents: command catalog, documents and MCP server (ADR-046)
 
 **Principle.** The same task run through the CLI with `--json`, through the library (`to_dict()`) and
-through the MCP server gives the same document (3.6); an error has a stable `code`, `exit_code` and `hint`
+through the MCP server gives the same document (3.5); an error has a stable `code`, `exit_code` and `hint`
 (`kartograf-error/1`). The CLI and MCP are thin: they translate and print (Z1, Z8), while the commands,
-parameters and allowed values are described by a single catalog (Z9). Usage: USAGE, section 9;
+parameters and allowed values are described by a single catalog (Z9). Usage: USAGE, section 8;
 rationale: ADR-046.
 
 **Command catalog (`src/kartograf/catalog/`).** The declarations (`catalog/spec.py`: `Command`, `Param`,
 `Constraint`, `Example`, `Group`) live in `catalog/commands/<module>.py`, one module per
 CLI group (`MODULE_ORDER`: elevation, imagery, landcover, soil, boundaries, cadastre,
-models3d, hydro, names, maps, geodesy, project, misc); `declared()` finds the modules by
+models3d, hydro, names, maps, geodesy, misc); `declared()` finds the modules by
 name, so a new group is one new file. `Param` carries the name, kind (`str`, `int`,
-`flag`, `bbox`, `bbox_crs`, `path`, `per_country`, `str_list`, `plan`, `options`), the CLI flag,
-the API argument name (`argument`), whether it is required, `task` (a project task option), `allowed`
+`flag`, `bbox`, `bbox_crs`, `path`, `per_country`, `str_list`, `plan`), the CLI flag,
+the API argument name (`argument`), whether it is required, `allowed`
 (a provider reading the source registry when the catalog is built, not at import), the description and fields
 for the parser only (`dest`, `metavar`...). The declarations produce:
 
@@ -3964,21 +3904,20 @@ for the parser only (`dest`, `metavar`...). The declarations produce:
   (an option = `is_option`, enums from `meanings.py`, examples from `excerpts.py`); the page budget of
   20,000 characters (DOC-1.7) and conformance with `schemas/nogat/commands-1.schema.json` are guarded by
   `tests/contract/test_commands_schema.py`. The exit code and error tables:
-  `error_report.EXIT_CODES`, `ERROR_CODES` (USAGE 9.3); the 12 data commands: `project_task`
-  in the declarations (`project.commands.COMMANDS`, KB-1);
+  `error_report.EXIT_CODES`, `ERROR_CODES` (USAGE 8.3); the 12 data commands: kind `data`
+  in the declarations (`data_commands.DATA_COMMANDS`, KB-1);
 - the CLI parser (`catalog/cliparser.py::build_parser`; `cli/_parser.py::create_parser` is a
   facade): `--help`, `choices`, flag exclusion and examples (`epilog` from the catalog
   examples); the `cli/groups/*` modules do not exist;
-- project data command options (`project/commands.py::COMMANDS`: `TaskCommand.options` =
-  `Command.task_options`) and the JSON <-> library arguments conversion
-  (`catalog/kinds.py::convert_arguments`), shared by `project add`, `parse_command` and the MCP
-  server; the options of a `project add` call reach `add_project_task` through
-  `project/commands.py::task_arguments` in the CLI, `run_command` and the MCP tool alike;
+- the options of a data command call (`data_commands.py::DATA_COMMANDS`: `DataCommand.options` =
+  `Command.call_options`) and the JSON <-> library arguments conversion
+  (`catalog/kinds.py::convert_arguments`), shared by `parse_command`, `run_command` and the MCP
+  server;
 - MCP tool specifications (`catalog/tools.py`) and error hints
   (`catalog/hints.py::example_for`: a command example in `hint`).
 
 Consistency is enforced by contract tests (`tests/unit/test_catalog*.py` and `tests/contract/test_catalog_declarations.py`): parser flags == catalog in
-both directions, `COMMANDS[...].options` == `task` parameters, `function`/`check_function` in
+both directions, `DATA_COMMANDS` == the commands of kind `data`, `function`/`check_function` in
 `kartograf.__all__` with matching signatures, `allowed` == registry, examples through
 `validate_command` and the round trip `parse_command(format_command(...))`, constraints tested by
 a violation derived from the example. The library does not import `kartograf.cli` (a test in a
@@ -3989,12 +3928,13 @@ clean process).
 `validate_command` (task conversion and validation without network and writes), `format_command`
 (`catalog/formatting.py`), `run_command`/`check_command` (conversion, validation, then the command
 function: `download_data`, `download_collection`, ... or `check_*`). `options` is the JSON form of
-project task options (ADR-040), `run` - the remaining flags of the line under the parameter
+the options of the call, `run` - the remaining flags of the line under the parameter
 names (`root`, `upgrade`, `force`, `check`, `plan`, `workers`,
 `quiet`, `json`, `summary`; there is no `update` key: `run_command` takes the mode as
 `update="upgrade"|"force"`, and `check` is `check_command`, so the mapping is done by the
 caller). The functions without network (`parse_command`, `validate_command`,
-`format_command`) have a test with a transport stub rejecting every request.
+`format_command`) have a test with a transport stub rejecting every request. Projects (task lists
+with pinned versions) are kept by Archiwista (ADR-057).
 
 **Errors.** Every `KartografError` class has its own `code` in `__dict__` (snake_case, unique;
 `tests/integration/test_errors.py`), `exit_code`, `DETAIL_FIELDS` and an optional `hint`; the library validators
@@ -4010,7 +3950,7 @@ is a `UsageError`, with `command` when the line named a known command) and turns
 (level WARNING and above) `main` turns into `Warning:`/`Error:` lines on stderr
 (`_StderrLines`; without a handler Python prints them without a prefix); with `--json` only
 `kartograf.transport.http` records (retries) pass through, and with `KARTOGRAF_DEBUG` all of them. The tables of exit codes
-and errors are in USAGE 9.3 (`tests/contract/test_docs_tables.py` ensures they are equal to the catalog).
+and errors are in USAGE 8.3 (`tests/contract/test_docs_tables.py` ensures they are equal to the catalog).
 
 **Interruption and thread pools (`src/kartograf/interrupt.py`).** Ctrl-C is a `KeyboardInterrupt` only in the
 main thread, so `--workers >= 2` (units in a `ThreadPoolExecutor`) waited for the whole queue
@@ -4033,14 +3973,14 @@ SIGTERM: `sigterm_interrupts()` (CLI `main`) raises `Terminated` in the main thr
 `terminated`/143. Outside `main` (library, MCP server) the signal is not intercepted.
 
 **MCP server (`src/kartograf/mcp_server.py`, `catalog/tools.py`, `_output_schema.py`).** One tool per
-command of the catalog that has a family (39), named by the `operation_id` (`kartograf_<group>_<command>`, AGI-5.2).
+command of the catalog that has a family (34), named by the `operation_id` (`kartograf_<group>_<command>`, AGI-5.2).
 `catalog/tools.py` builds them from the declarations and `command_entries()` (descriptions, `enum` values, bounds,
 examples, `dependentRequired` `bbox` -> `bbox_crs`, JSON Schema 2020-12 with
 `additionalProperties: false`; `anyOf` for a value per country) and from the mode of the server:
 `tool_specs(allow_writes=)` gives, with writes, the commands as declared, and without writes the commands that have a
-plan (the 12 data commands and `project download`) in a plan-only variant (without the run options `update`, `plan`,
-`workers`, `summary`; `check` fixed to `true`; `readOnlyHint: true`), while the commands that write without a
-plan (`project init|add|remove`) vanish from the list (`hidden_tools`: a call is `forbidden`).
+plan (the 12 data commands) in a plan-only variant (without the run options `update`, `plan`,
+`workers`, `summary`; `check` fixed to `true`; `readOnlyHint: true`); a command that wrote without a
+plan would vanish from the list (`hidden_tools`: a call is `forbidden`), and no declared command does.
 `_output_schema.py` is the `outputSchema` of all tools: the schema `result-1` from `schemas/nogat/`
 made self-contained (`scripts/generate_output_schema.py`, a contract test: the module == the generator and the
 same verdicts as the Nogat schema). Without `mcp` (the module does not import the SDK).
@@ -4050,28 +3990,27 @@ same verdicts as the Nogat schema). Without `mcp` (the module does not import th
 is_error=<error>)`, errors as `kartograf-error/1` (`forbidden` for a path outside `--allow-dir`, for a
 hidden tool and for a run option in the plan-only variant; `missing_dependency` without the SDK),
 the order of the checks: refusal of a write, the input schema (`jsonschema`), the absolute paths rule
-(`--allow-dir`, also paths nested in the options of `project add`), the run options next to `check`,
+(`--allow-dir`), the run options next to `check`,
 `validate_command`; progress through `report_progress`, at most 4 concurrent network calls (those with
 `openWorldHint`) and a server cache in the user cache directory. The `mcp` SDK is an optional dependency
 (extra `mcp`), and only `mcp_server.py` touches it, lazily. The server instructions (in English, up to 4096
 characters) are built by `build_instructions` from the tool names of the catalog and the state of the server. Context
-budget: `tools/list` is about 207,000 characters (87,000 without `outputSchema`; `--tools core` 64,000 and 34,000), because
+budget: `tools/list` is about 187,000 characters (83,000 without `outputSchema`; `--tools core` 66,000 and 35,000), because
 every property carries the description from the catalog and every tool an `outputSchema`; the budget of 30,000 characters
 of ADR-046 (D22) no longer holds (ADR-052, decision 9); `list_commands()` and a result page <= 20,000 characters (DOC-1.7);
 tests enforce this (`tests/contract/test_mcp_tools.py`, the AGI-5.13 gate test in
-`tests/integration/test_mcp_server.py`). Usage and client configuration: USAGE 9.6.
+`tests/integration/test_mcp_server.py`). Usage and client configuration: USAGE 8.6.
 
 **New command through the catalog.** Six steps:
 
 1. **Declaration** in `catalog/commands/<group>.py`: `COMMANDS` (`Command`: `id`, `summary`,
    `kind`, `function` and `check_function` from `kartograf.__all__`, `result_schema`, `family`
-   and `core` (the MCP family), `effects`, `project_task`, `params`, `constraints`, `examples`)
+   and `core` (the MCP family), `effects`, `params`, `constraints`, `examples`)
    and `GROUPS`. Modules are found by name (`declared()`); a collection group uses
    `collection_commands` and `collection_group` (`catalog/commands/_collection.py`). A `Param`
    has `name`, `kind`, `flag`, `argument` (the name of the function argument), `required`,
-   `task=True` for the options that choose data (they go into the project manifest), `allowed`
-   as a provider from the registry (not a copy of the list) and its description. The CLI
-   parser, the `COMMANDS` of projects, the MCP schemas and `kartograf commands list` are built
+   `allowed` as a provider from the registry (not a copy of the list) and its description. The
+   CLI parser, the options of `DATA_COMMANDS`, the MCP schemas and `kartograf commands list` are built
    from it.
 2. **Library function** at command level in `kartograf.__all__`: keyword-only arguments, a
    result `Document` with its own schema (the rules of `serialization.py`), a `check_*`
@@ -4081,19 +4020,17 @@ tests enforce this (`tests/contract/test_mcp_tools.py`, the AGI-5.13 gate test i
    `COLLECTION_GROUPS`): `library_arguments(args)` turns the flags into arguments, the handler
    calls the function and prints the result (`--json`: `to_json()`; text: the rendering of
    the document).
-4. **Project:** a data command needs an entry in `project/commands.py::COMMANDS`: validation
-   without network shared with the download, the calls of the download and of `check_*`, and
-   an adapter from the whole result to the pins (`VersionedFile`, with the input and raw files
-   where there are any). The task options are the `task=True` params. A new product of an
-   existing command needs no new entry.
+4. **Data command:** a command of kind `data` needs an entry in
+   `data_commands.py::DATA_COMMANDS`: validation without network shared with the download, and
+   the calls of the download and of `check_*`. Its options are the `call_options` of the
+   declaration. A new product of an existing command needs no new entry.
 5. **MCP:** the tool arises from the declaration (`catalog/tools.py`): the description from
    `summary`, `description` and `rules` (at most 600 characters), the schema from the
    descriptions, values, bounds and examples of the options, the annotations from `effects`;
    nothing else is written, and a contract test guards the description.
 6. **Tests:** the catalog contract tests (`tests/contract/test_catalog_declarations.py`:
    parser flags equal the catalog, the signature of the function, examples through
-   `validate_command`, constraints), a project task test (pin the result, check against the
-   pins, restore with the same SHA-256), a CLI = API scenario in `tests/contract/test_parity*.py`,
+   `validate_command`, constraints), a CLI = API scenario in `tests/contract/test_parity*.py`,
    the row of the document in `tests/contract/test_json_contract.py` and `--json` in
    `tests/contract/test_cli_json.py`.
 
@@ -4165,13 +4102,11 @@ for an NMT/NMPT cutout is a separate decision — today only the 1 m variants; t
 WCS channels of an orthophoto cutout are `WcsCutoutParams` entries (section 3.1, 4.3).
 
 A new **command that writes data** (including `download` of a new group) is a declaration
-in `src/kartograf/catalog/commands/<group>.py` (parameters `task=True` = manifest task
-options; the CLI parser, project options and MCP schemas are built from it, section 4.11)
-and an entry in `src/kartograf/project/commands.py::COMMANDS`: validation shared with the download
-without network access, the download function and `check_*`, a result adapter to the full set of
-pinned `VersionedFile`s. Add a project task test for this command
-(pinning, checking and restoring); a new product of an existing command does not
-require a new entry in the table (ADR-040, manifest spec section 5).
+in `src/kartograf/catalog/commands/<group>.py` (kind `data`; the CLI parser, the options of a call
+and the MCP schemas are built from it, section 4.11) and an entry in
+`src/kartograf/data_commands.py::DATA_COMMANDS`: validation shared with the download without
+network access, the download function and `check_*`; a new product of an existing command does
+not require a new entry.
 
 **A new land cover or soil provider.** A class in `providers/` (a national one in the
 subpackage of its country, `providers/pl/`) derived from `LandCoverProvider`
@@ -4203,7 +4138,7 @@ service response (swapped axes give an empty result without an error), add the c
 to the inventory of registry test signals, record fixtures from real
 responses. CLI: a new group = a module `catalog/commands/<group>.py` with `collection_commands`
 and `collection_group` (`catalog/commands/_collection.py`), the group name in `COLLECTION_GROUPS`
-(`cli/_handlers.py`) and a project entry (the paragraph above); a new
+(`cli/_handlers.py`) and a `DATA_COMMANDS` entry (the paragraph above); a new
 product of an existing group = only a new `--product` choice from the registry. A new
 protocol (e.g. OGC API Features) extends `FeatureBBoxParams.protocol`
 together with the first product.
@@ -4227,7 +4162,7 @@ channel and the variant select the values of the options in `choice` (ADR-043 D5
 `tests/unit/test_sources_registry.py` (`CHANNEL_SIGNALS`). (5) Small fixtures from real
 answers under `tests/fixtures/` (`feature_bbox/` with `*.headers.json`). (6) A group needs
 its `catalog/commands` module, its name in `COLLECTION_GROUPS` and an entry of
-`project/commands.py::COMMANDS`.
+`data_commands.py::DATA_COMMANDS`.
 
 ---
 

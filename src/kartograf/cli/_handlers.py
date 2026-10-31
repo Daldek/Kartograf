@@ -25,14 +25,6 @@ from kartograf.cli.download_cmd import cmd_download
 from kartograf.cli.landcover_cmd import cmd_landcover_download
 from kartograf.cli.layers_cmd import cmd_list_layers
 from kartograf.cli.parse_cmd import cmd_find_sheets, cmd_parse
-from kartograf.cli.project_cmd import (
-    cmd_project_add,
-    cmd_project_download,
-    cmd_project_init,
-    cmd_project_remove,
-    cmd_project_status,
-    cmd_project_verify,
-)
 from kartograf.cli.soil_cmd import cmd_soil_download, cmd_soil_hsg
 from kartograf.cli.sources_cmd import cmd_list_sources
 from kartograf.cli.store_cmd import (
@@ -79,12 +71,6 @@ HANDLERS: dict[str, Handler] = {
         f"{group} download": partial(cmd_collection_download, group=group)
         for group in COLLECTION_GROUPS
     },
-    "project init": cmd_project_init,
-    "project add": cmd_project_add,
-    "project remove": cmd_project_remove,
-    "project download": cmd_project_download,
-    "project status": cmd_project_status,
-    "project verify": cmd_project_verify,
     "store init": cmd_store_init,
     "store overview": cmd_store_overview,
     "store entries": cmd_store_entries,

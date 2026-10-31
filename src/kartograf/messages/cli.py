@@ -110,10 +110,6 @@ MESSAGES = {
         "  Download (add --root DIR): kartograf {hint}",
         "  Pobranie (dodaj --root KATALOG): kartograf {hint}",
     ),
-    "project_hint_line": Text(
-        "  In a project: kartograf project add NAME {hint}",
-        "  W projekcie: kartograf project add NAZWA {hint}",
-    ),
     "remaining_commands_pl": Text(
         "  ... remaining commands: {rest} (all: --details or --json)",
         "  ... pozostale polecenia: {rest} (wszystkie: --details albo --json)",
@@ -125,10 +121,8 @@ MESSAGES = {
         "pliku: --details)",
     ),
     "complete_cz_combinations": Text(
-        "Complete CZ combinations (download: add --root DIR; in a project: "
-        "kartograf project add NAME instead of kartograf):",
-        "Kompletne kombinacje CZ (pobranie: dodaj --root KATALOG; w projekcie: "
-        "kartograf project add NAZWA zamiast kartograf):",
+        "Complete CZ combinations (download: add --root DIR):",
+        "Kompletne kombinacje CZ (pobranie: dodaj --root KATALOG):",
     ),
     "remaining_commands_cz": Text(
         "    ... remaining commands: {rest} (all: --details or --json)",
@@ -203,7 +197,6 @@ MESSAGES = {
         "sprawdzenie: {check_function} -> {check_result_schema}",
     ),
     "fact_effects": Text("effects: {effects}", "skutki: {effects}"),
-    "fact_project_task": Text("project data command", "komenda danych projektu"),
     "inject_needs_block": Text(
         "--inject puts the block into a file: it needs the format agents-md-block",
         "--inject wstawia blok do pliku: wymaga --format agents-md-block",
@@ -492,113 +485,6 @@ MESSAGES = {
     "sheets_list_header": Text(
         "Sheets {system} {scale} ({count}):",
         "Arkusze {system} {scale} ({count}):",
-    ),
-    # ``cli.project_cmd``.
-    "project_created": Text("Created project: {path}", "Utworzono projekt: {path}"),
-    "project_store": Text("Store: {root}", "Magazyn: {root}"),
-    "project_add_task_hint": Text(
-        "Add a task: {project_command}",
-        "Dodaj zadanie: {project_command}",
-    ),
-    "project_add_usage": Text(
-        "NAME <group> <command> ...",
-        "NAZWA <grupa> <komenda> ...",
-    ),
-    "run_option_upgrade": Text(
-        "{flag} is not part of a task; to upgrade the project use: {project_command}",
-        "{flag} nie jest czescia zadania; aktualizacja projektu: {project_command}",
-    ),
-    "run_option_workers": Text(
-        "--workers is not part of a task (a run option); for parallel downloads use: "
-        "{project_command}",
-        "--workers nie jest czescia zadania (opcja uruchomienia); rownolegle "
-        "pobieranie: {project_command}",
-    ),
-    "run_option_quiet": Text(
-        "-q/--quiet is not part of a task (it silences the data command text, and add "
-        "downloads nothing); remove -q",
-        "-q/--quiet nie jest czescia zadania (wycisza tekst komendy danych, a add "
-        "niczego nie pobiera); usun -q",
-    ),
-    "run_option_summary": Text(
-        "--summary is not part of a task (it only prints HSG statistics after "
-        "computing); remove --summary",
-        "--summary nie jest czescia zadania (tylko wypisuje statystyki HSG po "
-        "obliczeniu); usun --summary",
-    ),
-    "run_option_json": Text(
-        "--json is not part of a task (it is the result mode of the project add "
-        "command); give it before the task name: {project_command}",
-        "--json nie jest czescia zadania (to tryb wyniku komendy project add); podaj "
-        "go przed nazwa zadania: {project_command}",
-    ),
-    "run_option_root": Text(
-        "the task downloads to the project store ({store}), but --root points to "
-        "{resolved_path}; remove --root",
-        "zadanie pobiera do magazynu projektu ({store}), a --root wskazuje "
-        "{resolved_path}; usun --root",
-    ),
-    "project_option_position": Text(
-        "give --project before the task name (before NAME)",
-        "--project podaj przed nazwa zadania (przed NAZWA)",
-    ),
-    "project_task_added": Text(
-        "Added task {name} ({command}); download: {project_command}",
-        "Dodano zadanie {name} ({command}); pobierz: {project_command}",
-    ),
-    "project_task_removed": Text(
-        "Removed task {name}; files were left in the store",
-        "Usunieto zadanie {name}; pliki zostaly w magazynie",
-    ),
-    "status_unknown": Text("unknown", "nieznana"),
-    "status_newer": Text(
-        "newer: {available_label}",
-        "nowsza: {available_label}",
-    ),
-    "file_count": Text(
-        "{count} {count:plural(file|files)}",
-        "{count} {count:plural(plik|pliki|plikow)}",
-    ),
-    "status_pinned": Text(" (pinned {pinned_label})", " (przypieta {pinned_label})"),
-    "status_added": Text("new file in the task result", "nowy plik w wyniku zadania"),
-    "status_removed": Text("outside the task result", "poza wynikiem zadania"),
-    "status_unverifiable": Text(
-        "cannot be checked without downloading (--force)",
-        "nie da sie sprawdzic bez pobrania (--force)",
-    ),
-    "status_missing": Text(
-        "pinned file missing from the store",
-        "brak przypietego pliku w magazynie",
-    ),
-    "status_check_failed": Text("check error", "blad sprawdzenia"),
-    "status_conflict": Text(
-        "the store root cannot be written (nothing was checked)",
-        "do korzenia magazynu nie mozna zapisac (nic nie sprawdzono)",
-    ),
-    "status_corrupt": Text("corrupt pinned file", "uszkodzony przypiety plik"),
-    "project_directory": Text("Project: {directory}", "Projekt: {directory}"),
-    "task_pinned_line": Text(
-        "{name}  {command}  {file_count}  pinned {pinned_at}",
-        "{name}  {command}  {file_count}  przypiete {pinned_at}",
-    ),
-    "task_not_downloaded": Text(
-        "{name}: not downloaded (download: {hint})",
-        "{name}: nie pobrane (pobierz: {hint})",
-    ),
-    "outcome_pinned": Text("pinned", "przypieto"),
-    "outcome_restored": Text("restored", "odtworzono"),
-    "outcome_updated": Text("updated", "zaktualizowano"),
-    "outcome_failed": Text("error", "blad"),
-    "unit_file_pinned": Text(
-        "{name}: {unit_file}: pinned {label}",
-        "{name}: {unit_file}: przypieto {label}",
-    ),
-    "download_summary": Text(
-        "Project: pinned {counts_pinned}, restored {counts_restored}, updated "
-        "{counts_updated}, unchanged {counts_unchanged}, errors {counts_failed}",
-        "Projekt: przypiete {counts_pinned}, odtworzone {counts_restored}, "
-        "zaktualizowane {counts_updated}, bez zmian {counts_unchanged}, bledy "
-        "{counts_failed}",
     ),
     # ``cli.soil_cmd``.
     "hsg_legend_first": Text(

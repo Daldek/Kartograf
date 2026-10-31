@@ -21,10 +21,6 @@ MESSAGES = {
         "--help i --version nie sa czescia komendy, ktora mozna wywolac; opis "
         'komendy: kartograf commands schema --command "<grupa> <komenda>"',
     ),
-    "give_group_command": Text(
-        "{group}: give a command of the group (data commands: {data_commands_text})",
-        "{group}: podaj komende grupy (komendy danych: {data_commands_text})",
-    ),
     "give_group_commands": Text(
         "{group}: give a command of the group ({group_commands})",
         "{group}: podaj komende grupy ({group_commands})",
@@ -76,11 +72,5 @@ MESSAGES = {
         "(kartograf commands list: check)",
         "Uruchom ja: bez skutkow planuje sie tylko komende z opcja check "
         "(kartograf commands list: check)",
-    ),
-    "task_run_flag": Text(
-        "option {name!r} of the line is a flag of a run and no option of a task: a "
-        "task keeps only the options of its data command",
-        "opcja {name!r} zapisu jest flaga uruchomienia, nie opcja zadania: zadanie "
-        "ma tylko opcje swojej komendy danych",
     ),
 }
