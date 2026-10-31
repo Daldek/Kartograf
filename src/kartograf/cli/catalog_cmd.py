@@ -44,6 +44,25 @@ def _wrap(text: str, indent: str, first: str | None = None) -> list[str]:
     )
 
 
+def _fact_lines(facts: list[str]) -> list[str]:
+    """Join the facts with ``; `` into lines of ``_WIDTH``, never breaking a fact.
+
+    A fact (``operation_id: kartograf_elevation_download``) stays on one line, so a
+    reader finds it whole; only a fact longer than a line is wrapped on its own.
+    """
+    lines: list[str] = []
+    for fact in facts:
+        joined = f"{lines[-1]}; {fact}" if lines else fact
+        if lines and len(joined) <= _WIDTH:
+            lines[-1] = joined
+        elif lines:
+            lines[-1] += ";"
+            lines += _wrap(fact, "")
+        else:
+            lines += _wrap(fact, "")
+    return lines
+
+
 def _command_lines(commands: list[Command], indent: str) -> list[str]:
     """One line per command: id, kind, summary."""
     id_width = max(len(c.id) for c in commands)
@@ -202,7 +221,7 @@ def format_command(command: Command) -> str:
             )
         )
     facts.append(f"operation_id: {command.operation_id}")
-    lines += ["", *_wrap("; ".join(facts), "")]
+    lines += ["", *_fact_lines(facts)]
     for block in (
         _param_lines(command, "  "),
         _constraint_lines(command),
