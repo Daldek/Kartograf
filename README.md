@@ -156,7 +156,7 @@ The CLI group is `kartograf <group> download` and `product` selects the data; `k
 | Topographic maps (BDOT10k visualisations, ZTM) | `maps` | `download_collection` | GUGiK, CUZK |
 | Geodetic control networks, quasi-geoid models | `geodesy` | `download_collection` | GUGiK, CUZK |
 | Sheet codes: parse one, find the sheets of an area | `sheet parse`, `sheet find` | `describe_sheet`, `find_sheets` | none (offline) |
-| Read a store without writing | `store overview`, `store entries`, `store sidecar` | `describe_store`, `list_store_entries`, `read_store_sidecar` | none (offline) |
+| Read a store without writing | `store overview`, `store entries`, `store sidecar` | `describe_store`, `list_store_entries`, `read_store_sidecar`; `command_for_file` (the command that selects a stored file again) | none (offline) |
 
 The full list is `kartograf commands list --json`. Python names are keyword-only functions of the top-level package (`kartograf.__all__`).
 

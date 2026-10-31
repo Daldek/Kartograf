@@ -35,12 +35,29 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   `EncodeContext.store`, and `ToolSpec.task_options` (now `ToolSpec.data_options`). A read-only MCP
   server hides no tool any more.
 
+**Added**
+
+- `kartograf.command_for_file(sidecar)` (KB-6 of Archiwista, ADR-057): the store-mode
+  `CommandCall` that selects a stored file again, rebuilt read-only from its `Sidecar`, with the
+  options that choose a version pinned (a PL sheet or LAZ tile: its data year and
+  `all_campaigns`; height system, resolution, format, CUZK model, view direction). Files of one
+  sheet, cutouts, LAZ and land cover, soil and collection files of one TERYT, KU, sheet or the
+  whole country are rebuilt; files chosen by an area (also CZ), NMT 100 m voivodeship files,
+  `soil hsg`, PL WCS cutouts reprojected to EPSG:5514/3045 and sidecars without a needed field
+  raise the new `CommandNotRebuildableError` (`unsupported`, `details.reason`
+  `command_not_rebuildable`, `details.family`, `details.field`); a field of a wrong form is
+  `InvalidSidecarError` (`data_error`), whose `path` is now optional and which reports
+  `details.field`.
+- `kartograf.testing.make_sidecar(vertical_crs=)`: the height system of the sidecar.
+
 **Changed**
 
 - The data commands that `validate_command`, `run_command` and `check_command` call through their
   own checks live in `kartograf.data_commands.DATA_COMMANDS` (formerly
   `kartograf.project.commands.COMMANDS`); a new data command adds its declaration and one entry
   there.
+- `kartograf commands schema` keeps every fact (`operation_id: <id>`, `effects: ...`) whole on
+  one line; the wrap of the text split `operation_id:` from the id once the project fact was gone.
 
 ### Nogat standard 2.1 adoption (so far)
 

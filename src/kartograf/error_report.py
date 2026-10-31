@@ -147,7 +147,8 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "data_error",
         "invalid_sidecar",
         7,
-        "the kartograf-meta/1 sidecar is missing, unreadable or of another schema",
+        "the kartograf-meta/1 sidecar is missing, unreadable or of another schema, "
+        "or a field command_for_file reads has a value of a wrong form",
     ),
     ErrorCodeSpec(
         "InvalidLayoutError",
@@ -197,6 +198,15 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "transform_unavailable",
         15,
         "no safe operation for the pair of coordinate systems",
+    ),
+    ErrorCodeSpec(
+        "CommandNotRebuildableError",
+        "unsupported",
+        "command_not_rebuildable",
+        15,
+        "command_for_file: no command selects the stored file again (details.family; "
+        "details.field names a missing sidecar field): a land cover, soil or "
+        "collection file chosen by an area, soil hsg, a reprojected PL cutout",
     ),
     ErrorCodeSpec(
         "OSError",

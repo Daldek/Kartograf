@@ -493,6 +493,7 @@ from kartograf import (
     list_segments, list_partitions, iter_store, StoreEntry, read_sidecar, Sidecar,
     describe_segment, SegmentInfo, file_footprint, Footprint, link_target,
     pinned_transform, PinnedTransform,
+    command_for_file,  # the command of a stored file (KB-6, ADR-057)
     # Command catalog, command layer and JSON documents (agent interface, ADR-046, USAGE 8)
     list_commands, command_schema, CommandList, CommandCatalog,
     parse_command, validate_command, format_command, run_command, check_command,
@@ -504,7 +505,7 @@ from kartograf import (
     # Exceptions
     KartografError, ParseError, ValidationError, DownloadError, NoCoverageError,
     YearRangeError, CacheError, InvalidSidecarError, UsageError, ForbiddenError,
-    MissingDependencyError,
+    MissingDependencyError, CommandNotRebuildableError,
     # Version
     __version__,
 )
@@ -858,7 +859,8 @@ from kartograf import (
 # the single source of truth
 # about commands (CLI parser, options of a data command call, MCP tool schemas); command layer
 # `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`
-# (KB-1..KB-5 of Archiwista). Files for agents: the generated `AGENTS.md` and `llms.txt`, `kartograf/py.typed`,
+# (KB-1..KB-5 of Archiwista) and `command_for_file`, the command that selects a stored file again
+# (KB-6, ADR-057). Files for agents: the generated `AGENTS.md` and `llms.txt`, `kartograf/py.typed`,
 # `scripts/gate.sh`, `python -m kartograf`; rules for agents from other repositories:
 # CLAUDE.md. New command = a declaration in `src/kartograf/catalog/commands/`, for a data command
 # also an entry in `src/kartograf/data_commands.py::DATA_COMMANDS` (ARCHITECTURE 4.11).
@@ -907,7 +909,11 @@ from kartograf import (
 - HTTP transport of the MCP server (stdio only)
 - Cancelling downloads (KC) and a uniform `on_progress` for all functions (KC-2); MCP
   tools without progress: `kartograf_soil_download`, `kartograf_soil_hsg` and plans (`check`)
-- Download size estimate (KH), `command_for_file` (KB-6), `find_admin_units` (KB-7)
+- Download size estimate (KH), `find_admin_units` (KB-7)
+- The command of a stored file that `command_for_file` (KB-6, ADR-057) refuses: land
+  cover, soil and collection files chosen by an area (the units behind the area are not
+  in the sidecar), `soil hsg` (its SoilGrids inputs are not recorded as a command) and
+  a PL WCS cutout reprojected to EPSG:5514/3045 (its grid does not give back the area)
 
 # Later — other countries:
 - Germany (DE) — federation of 17 federal state models (BKG/basemap.de)
@@ -1181,6 +1187,7 @@ kartograf/
 ├── error_report.py       # ErrorReport, error_report, ERROR_CODES/EXIT_CODES (kartograf-error/1)
 ├── commands.py           # command layer: parse_command, validate_command, format_command, run_command, check_command
 ├── data_commands.py      # DATA_COMMANDS: the 12 data commands as library calls (call options, validation without network, download, check_*)
+├── stored_command.py     # command_for_file: the command that selects a stored file again (KB-6, ADR-057)
 ├── sheet_info.py         # describe_sheet, find_sheets (kartograf-sheet/1, kartograf-sheets/1)
 ├── source_info.py        # list_sources, list_layers (kartograf-sources/1, kartograf-layers/1)
 ├── cache_info.py         # get_cache_info, get_cache_path, clear_cache (kartograf-cache/1)

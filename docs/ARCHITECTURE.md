@@ -140,7 +140,8 @@ at least one module-level import (also under `if TYPE_CHECKING:`).
 kartograf ──> core, download, providers, landcover, hydrology, cache,
         sources, transport, notices, store, store_geometry,
         transform, catalog, commands, error_report, sheet_info,
-        source_info, cache_info, store_documents    # re-export of the public API
+        source_info, cache_info, store_documents,
+        stored_command                               # re-export of the public API
 __main__ ──> cli
 cli ──> catalog, error_report, sheet_info, source_info, cache_info,
         download, landcover, hydrology, notices, sources, interrupt
@@ -155,6 +156,7 @@ source_info ──> download, landcover, providers, sources
 cache_info ──> cache, notices
 store_documents ──> download, store
 data_commands ──> catalog, download, landcover, hydrology, cache, notices
+stored_command ──> catalog, commands, download, sources, store
 download ──> providers, sources, transform, core, cache, notices,
         _version, kartograf (_clock), transport, interrupt
 landcover ──> providers, download, core, cache, sources, notices, transport,
@@ -399,7 +401,10 @@ kartograf/
 │                        # ParseError (code 2); DownloadError(.sheet, .status_code)
 │                        # -> NoCoverageError(DownloadError; .hints) — the source has no data for
 │                        # the sheet, .hints = hints (e.g. --scale 1:2000), YearRangeError;
-│                        # CacheError; InvalidSidecarError(.path) — unreadable sidecar (read_sidecar);
+│                        # CacheError; InvalidSidecarError(.path, .field) — unreadable sidecar
+│                        # (read_sidecar) or a field of a wrong form (command_for_file);
+│                        # CommandNotRebuildableError(.family, .field) — no command selects a
+│                        # stored file again (command_for_file, code unsupported);
 │                        # ForbiddenError(.option, .path, .allowed) and MissingDependencyError(.extra) -
 │                        # only the MCP server (a path outside --allow-dir; no extra `mcp`);
 │                        # error codes and exit codes: USAGE 8.3
@@ -538,6 +543,8 @@ kartograf/
 │                        # format_command, run_command, check_command, CommandCall
 ├── data_commands.py     # DATA_COMMANDS: the 12 data commands as library calls (call options,
 │                        # validation without network, download and check_*; no per-product logic)
+├── stored_command.py    # command_for_file -> CommandCall: the command that selects a stored file
+│                        # again, from its sidecar (KB-6, ADR-057); refusals by family
 ├── mcp_server.py        # MCP server (stdio; extra `mcp`, script kartograf-mcp): create_server,
 │                        # main, build_instructions, INSTRUCTIONS; the only module touching the SDK
 ├── guide.py             # guide for agents from the catalog (AGI 8): agent_guide -> AgentGuide
