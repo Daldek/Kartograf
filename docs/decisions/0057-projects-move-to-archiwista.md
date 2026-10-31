@@ -72,4 +72,54 @@ in every mode; the rule stays for a future command of that kind. `docs/superpowe
 
 ## KB-6: command of a stored file
 
-The decision is recorded by the follow-up change that adds `command_for_file`.
+**Context:** Archiwista pins stored versions itself; to check a pin for updates and to restore it
+it needs the command that selects the file again (request KB-6 of its SPEC 12.2:
+`command_for_file(sidecar) -> CommandCall`, "from `request`, `dataset`, variant and year"). The
+sidecar records the task of each file (`request`), its source (`dataset`, its variant by the
+height system and resolution) and its version facts (`extra`), but not always what a command
+would need.
+
+**Options:**
+- A) Rebuild the call where the sidecar gives it and refuse with a code elsewhere (chosen).
+- B) Rebuild every file, falling back to `extra.parent_request` (the area of the task) or to the
+  newest version where a fact is missing: a guess, and a restore or an update check of the wrong
+  version.
+- C) Record the call itself in every new sidecar: older sidecars still need A, and the schema
+  `kartograf-meta/1` would carry a second, redundant copy of the request.
+
+**Decision:** A. `kartograf.command_for_file(sidecar)` (`stored_command.py`) takes the `Sidecar` of
+`read_sidecar` (one input type: the typed view already maps old keys) and returns the store-mode
+`CommandCall` of the data command (`run` empty; the caller gives `root`), in the shape
+`parse_command` returns: `format_command` writes it, `parse_command` reads it back, and
+`validate_command`, `run_command` and `check_command` take it. Read-only, no network.
+
+1. **Pinned versions.** Every option that chooses a version is set where the command has one:
+   the product, resolution, height system (`vertical_crs` from the sidecar's EPSG code through
+   the variant registry, ADR-041), archive or contours format and CUZK model from `dataset`; a PL
+   sheet campaign gets `year` = `extra.source.acquisition_year` (the year the index filter
+   reads) and a PL LAZ tile `year` = `extra.year`, both with `all_campaigns`, because the year
+   alone selects only the newest flight of that year (the fixture store has two flights of 2025
+   on one sheet); an oblique sheet gets its `direction`. A BDOT10k GPKG of a powiat gets
+   `keep_raw`: the raw package and the GPKG share one request, so the call selects the file
+   whichever of the two it is.
+2. **Families** (`details.family`). Rebuilt: `sheet` (elevation and imagery files of one sheet,
+   PL and CZ, archives, contours, CZ orthophoto), `cutout` (PL WCS cutouts in EPSG:2180, PL
+   orthophoto cutouts, CZ cutouts: `request.bbox` is the grid in the result CRS, which gives the
+   same grid again), `laz` (PL: the area of its request; CZ: its sheet), `unit` (land cover, soil
+   and collection files of one TERYT, KU, sheet or the whole country: the request is the options).
+   Refused (`CommandNotRebuildableError`, `unsupported`, `details.reason`
+   `command_not_rebuildable`, a hint to pin the file as it is): `area` - land cover, soil and
+   collection files chosen by a box (also CZ) or an index tile of an area (the units behind the
+   area are not in the sidecar), and NMT 100 m voivodeship files (the command has no voivodeship
+   option); `hsg` - `soil hsg` (its SoilGrids inputs are not recorded as a command, decision D5 of
+   the plan); `cutout` - a PL WCS cutout reprojected to EPSG:5514/3045 (its grid is the envelope of
+   the requested area, so rerunning it grows the grid); `unknown` - an unregistered dataset or a
+   request without a selection; any family whose sidecar lacks a field the call needs
+   (`details.field`, e.g. `extra.source.acquisition_year`). A field of a wrong form is
+   `InvalidSidecarError` (`data_error`, `details.field`; its `path` is optional now, the
+   `Sidecar` carries none). The reason is registered in `error_report.ERROR_CODES` (USAGE 8.3).
+
+**Consequences:** Archiwista marks a pin whose call is refused as not checkable and not
+restorable with the reason (plan decision D5 a); a later sidecar field that records the inputs of
+derived data lifts `hsg` per family. `kartograf.testing.make_sidecar` takes `vertical_crs` so a
+consumer can build the sidecars of these families offline.

@@ -23,7 +23,9 @@ The store is read without writing to it (ADR-045): ``list_segments``,
 ``list_partitions``, ``iter_store``, ``read_sidecar``, ``describe_segment``,
 ``file_footprint``, ``link_target`` and ``pinned_transform``; ``store_state`` says what
 a directory is to a write into the store (``marked``, ``layout``, ``new``,
-``foreign``), the judgement of the writer, for a consumer that reads a store.
+``foreign``), the judgement of the writer, for a consumer that reads a store;
+``command_for_file`` gives the command that selects a stored file again, from its
+sidecar (KB-6, ADR-057).
 
 Every result is a JSON document (ADR-046): ``to_dict()``/``to_json()`` of a
 report give the same ``kartograf-<kind>/1`` document as the CLI ``--json``
@@ -207,6 +209,7 @@ from kartograf.envelope import CommandResult, ResultItem
 from kartograf.error_report import ErrorReport, error_report
 from kartograf.exceptions import (
     CacheError,
+    CommandNotRebuildableError,
     ConfigError,
     ConflictError,
     DownloadError,
@@ -287,6 +290,7 @@ from kartograf.store_documents import (
     read_store_sidecar,
 )
 from kartograf.store_geometry import Footprint, file_footprint, pinned_transform
+from kartograf.stored_command import command_for_file
 from kartograf.transform.crs import PinnedTransform
 from kartograf.transport.http import get_with_retry, make_gugik_session
 from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
@@ -454,6 +458,7 @@ __all__ = [
     "ConflictError",
     "ForbiddenError",
     "MissingDependencyError",
+    "CommandNotRebuildableError",
     # Sources, layers and the metadata cache as data (spec 5.4.6-5.4.9)
     "list_sources",
     "SourceList",
@@ -486,6 +491,7 @@ __all__ = [
     "format_command",
     "run_command",
     "check_command",
+    "command_for_file",
     "CommandResult",
     "ResultItem",
     # Errors as data (`kartograf-error/1`, spec 6)

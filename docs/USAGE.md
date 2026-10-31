@@ -3310,13 +3310,14 @@ failed units; the result lists them (`items`) and no error document is written.
 | `no_data` | `year_out_of_range` | `YearRangeError` | 14 | data exists but not in the requested year range (found before any download) |
 | `store_unavailable` | `cache` | `CacheError` | 8 | the metadata cache is unavailable, locked or unreadable |
 | `store_unavailable` | - | `StoreUnavailableError` | 8 | the store root has the layout of a store but no kartograf-store.json (reason no_marker: kartograf store init verifies the layout and writes it) |
-| `data_error` | `invalid_sidecar` | `InvalidSidecarError` | 7 | the kartograf-meta/1 sidecar is missing, unreadable or of another schema |
+| `data_error` | `invalid_sidecar` | `InvalidSidecarError` | 7 | the kartograf-meta/1 sidecar is missing, unreadable or of another schema, or a field command_for_file reads has a value of a wrong form |
 | `data_error` | `invalid_layout` | `InvalidLayoutError` | 7 | a root without a marker is not the layout of a Kartograf store, or the marker is not a kartograf-store/1 document (details.problems lists what is wrong) |
 | `conflict` | - | `ConflictError` | 4 | the target forbids the write (reasons: output_exists, duplicate_output_name, output_in_store, nested_store, not_empty): an output file that exists, two targets of one name, a plain directory in a store, a store in another store or a store root that is not empty |
 | `missing_dependency` | - | `MissingDependencyError` | 6 | an optional extra is not installed (kartograf[mcp] for the MCP server); the hint names the install command (uv add "kartograf[mcp]") |
 | `forbidden` | - | `ForbiddenError` | 12 | the MCP server refuses the call: a path outside its allowed directories (--allow-dir), or a write on a server that does not write (--allow-writes) |
 | `calculation_error` | `transform_failed` | `TransformError` | 13 | coordinate transformation failed (for example an infinite result) |
 | `unsupported` | `transform_unavailable` | `TransformUnavailableError` | 15 | no safe operation for the pair of coordinate systems |
+| `unsupported` | `command_not_rebuildable` | `CommandNotRebuildableError` | 15 | command_for_file: no command selects the stored file again (details.family; details.field names a missing sidecar field): a land cover, soil or collection file chosen by an area, soil hsg, a reprojected PL cutout |
 | `io_error` | - | `OSError` | 9 | directory or file unavailable: missing, permissions, no space, disconnected share |
 | `cancelled` | - | `KeyboardInterrupt` | 130 | cancelled by the user (Ctrl-C); versions are committed atomically, so units unfinished at the interrupt (also those queued with --workers > 1) do not exist and no half-written file is left |
 | `terminated` | - | `Terminated` | 143 | terminated by SIGTERM (timeout, docker stop, kill): cleanup as after Ctrl-C |
@@ -3449,7 +3450,7 @@ catalogue.
 
 ### 8.5 Command layer
 
-The command layer is five functions from `kartograf.__all__` (`command` and `options` are passed
+The command layer is six functions from `kartograf.__all__` (`command` and `options` are passed
 positionally, the remaining arguments are keyword-only); they are called by the MCP
 server, and the Archiwista assistant can use them to build, validate and run commands without
 knowing the per-product functions:
@@ -3461,6 +3462,7 @@ knowing the per-product functions:
 | `format_command(command, options, run=None)` | canonical line `kartograf <group> <command> --flag ...` (the inverse of `parse_command`) |
 | `run_command(command, options, root=, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | calls the function of the command (`download_data`, `describe_sheet`, `init_store`, ...) and returns its envelope `CommandResult` (8.1; `result` is the document of the command, `kartograf-download/1` for a download); the mode is `update="upgrade"` or `"force"` (the caller makes it of `run`: `upgrade`/`force` -> `update`, `check` -> `check_command`), `plan` is `check_command(...).result`; an option the command does not have is refused |
 | `check_command(command, options, root=, output_dir=, force=, cache=, on_notice=)` | the `check_*` of a command that has a check, without downloading or writing (a data command, `store init`): the envelope with `check: true`, `result` is `kartograf-plan/1`; any other command is `validation_error`, `details.reason` `no_check` |
+| `command_for_file(sidecar)` | the command that selects a stored file again (KB-6, ADR-057), read-only and without network: the `Sidecar` of `read_sidecar` -> the store-mode `CommandCall` (`run` empty: give `root` to `run_command`/`check_command`), rebuilt from `dataset`, `request` and `extra`, with the options that choose a version pinned (a PL sheet or LAZ tile: its data year and `all_campaigns`; the height system, resolution, format, CUZK model, view direction). Families (`details.family`): `sheet`, `cutout`, `laz`, `unit` (TERYT, KU, sheet, whole country) are rebuilt; `area` (a land cover, soil or collection file chosen by a box or an area tile, also CZ; a NMT 100 m voivodeship file), `hsg` (`soil hsg`), a PL WCS cutout reprojected to EPSG:5514/3045, an unknown dataset or a sidecar without a needed field (`details.field`) are `unsupported` with `details.reason` `command_not_rebuildable` (`CommandNotRebuildableError`); a field of a wrong form is `data_error` (`InvalidSidecarError`, `details.field`) |
 
 ```python
 from kartograf import (
@@ -3489,6 +3491,15 @@ try:
 except ValidationError as exc:
     print(exc.option, exc.allowed)                 # vertical_crs ('EVRF2007', 'KRON86')
     print(error_report(exc, command="elevation download").hint)
+
+# the command of a stored file (Archiwista: check a pin for updates, restore it)
+from kartograf import command_for_file, read_sidecar
+
+call = command_for_file(read_sidecar("/dane/kartograf/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc"))
+print(format_command(call.command, call.options))
+# kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m
+#   --vertical-crs EVRF2007 --year 2025 --all-campaigns
+plan = check_command(call.command, call.options, root="/dane/kartograf")  # network
 ```
 
 ### 8.6 MCP server

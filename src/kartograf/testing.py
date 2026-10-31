@@ -548,6 +548,7 @@ def make_sidecar(
     label: str = "2025-01-30",
     label_source: LabelSource = "edition",
     extra: Mapping[str, Any] | None = None,
+    vertical_crs: str | None = None,
 ) -> dict[str, Any]:
     """Build a valid ``kartograf-meta/1`` document with the real emitter.
 
@@ -573,6 +574,10 @@ def make_sidecar(
         ``extra.version`` of the sidecar.
     extra : mapping, optional
         Added to ``extra`` next to ``version``.
+    vertical_crs : str, optional
+        The height system the writer records (``EVRF2007``, ``KRON86``, ``Bpv``:
+        its EPSG code in the sidecar); default ``EVRF2007`` for
+        ``pl.gugik.nmt_1m``, none for any other dataset.
 
     Returns
     -------
@@ -605,7 +610,13 @@ def make_sidecar(
                 dataset,
                 path,
                 request=sheet_request,
-                vertical_crs="EVRF2007" if dataset == _PL_DATASET else None,
+                vertical_crs=(
+                    vertical_crs
+                    if vertical_crs is not None
+                    else "EVRF2007"
+                    if dataset == _PL_DATASET
+                    else None
+                ),
                 extra=None if extra is None else dict(extra),
                 digest=(digest, len(body)),
                 version=VersionRef(label, label_source).to_extra(),

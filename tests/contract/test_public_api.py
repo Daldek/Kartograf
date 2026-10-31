@@ -69,6 +69,7 @@ _COMMAND_FUNCTIONS = {
     "format_command": ["command", "options"],
     "run_command": ["command", "options"],
     "check_command": ["command", "options"],
+    "command_for_file": ["sidecar"],
 }
 
 

@@ -423,25 +423,72 @@ class CacheError(KartografError):
 class InvalidSidecarError(KartografError):
     """A ``kartograf-meta/1`` sidecar that cannot be read (``read_sidecar``, ADR-045).
 
-    Missing, not a JSON object, or another schema.
+    Missing, not a JSON object, or another schema; or, for ``command_for_file``, a
+    field the command of the file is read from has a value of a wrong form.
 
     ``iter_store`` never raises it: the store scan reports such a file as an
     entry with ``problem`` ``missing_sidecar``/``invalid_sidecar``.
 
     Attributes
     ----------
-    path : Path
-        The sidecar path (``<file>.meta.json``).
+    path : Path or None
+        The sidecar path (``<file>.meta.json``); ``None`` for a sidecar given as
+        read (``command_for_file`` takes a ``Sidecar``, not its path).
+    field : str or None
+        The field of a wrong form (``request.bbox``), when one is.
     """
 
     code = "data_error"
     reason = "invalid_sidecar"
-    DETAIL_FIELDS = ("path",)
+    DETAIL_FIELDS = ("path", "field")
     DEFAULT_HINT = message("errors.sidecar_default_hint")
 
-    def __init__(self, message: str, *, path: Path, hint: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        path: Path | None = None,
+        field: str | None = None,
+        hint: str | None = None,
+    ) -> None:
         super().__init__(message, hint=hint)
         self.path = path
+        self.field = field
+
+
+class CommandNotRebuildableError(KartografError):
+    """No command of the catalog selects a stored file again (``command_for_file``).
+
+    The sidecar of the file does not record what a command would need to choose
+    the same file (KB-6 of Archiwista, ADR-057): the file stays usable, its
+    "check for updates" and "restore" are not.
+
+    Attributes
+    ----------
+    family : str
+        What the file is: ``sheet``, ``cutout``, ``laz``, ``unit``, ``area``,
+        ``hsg`` or ``unknown`` (ADR-057, "KB-6").
+    field : str or None
+        The sidecar field the command needs and the sidecar lacks, when one is
+        (``extra.source.acquisition_year``).
+    """
+
+    code = "unsupported"
+    reason = "command_not_rebuildable"
+    DETAIL_FIELDS = ("family", "field")
+    DEFAULT_HINT = message("errors.command_not_rebuildable_hint")
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        family: str,
+        field: str | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.family = family
+        self.field = field
 
 
 class ForbiddenError(KartografError):

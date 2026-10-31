@@ -69,6 +69,7 @@ core/              sheet parsers (PL-1992, PL-2000, CZ), bbox, geometry
 landcover/         BDOT10k, CORINE and SoilGrids orchestration
 hydrology/         hsg.py: hydrologic soil groups from SoilGrids
 store.py           read API of the store (iter_store, read_sidecar, ...); store_*.py documents
+stored_command.py  command_for_file: the command that selects a stored file again (KB-6)
 cache/  auth/      metadata cache (SQLite WAL); CLMS Auth Proxy
 mcp_server.py      MCP server on the catalog (extra mcp); guide.py generates AGENTS.md, llms.txt
 exceptions.py  error_report.py  envelope.py  notices.py  serialization.py  config.py

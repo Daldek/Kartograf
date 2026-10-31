@@ -62,4 +62,10 @@ MESSAGES = {
         "Podaj sciezke pliku danych magazynu albo jego sidecara "
         "<plik>.meta.json (kartograf-meta/1)",
     ),
+    "command_not_rebuildable_hint": Text(
+        "Pin the file as it is: without its command it cannot be checked for updates "
+        "or restored (ADR-057, KB-6)",
+        "Przypnij plik taki, jaki jest: bez jego komendy nie da sie sprawdzic "
+        "aktualizacji ani go odtworzyc (ADR-057, KB-6)",
+    ),
 }

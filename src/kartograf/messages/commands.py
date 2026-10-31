@@ -73,4 +73,56 @@ MESSAGES = {
         "Uruchom ja: bez skutkow planuje sie tylko komende z opcja check "
         "(kartograf commands list: check)",
     ),
+    # ``command_for_file`` (KB-6, ADR-057).
+    "file_sidecar_type": Text(
+        "command_for_file takes the Sidecar that read_sidecar returns, not {kind}",
+        "command_for_file przyjmuje Sidecar zwracany przez read_sidecar, nie {kind}",
+    ),
+    "file_field_malformed": Text(
+        "{dataset}: the sidecar field {field} has a value of a wrong form: {value}",
+        "{dataset}: pole sidecara {field} ma wartosc zlej postaci: {value}",
+    ),
+    "file_field_malformed_hint": Text(
+        "A writer of Kartograf never writes this value: download the file again "
+        "into the store",
+        "Zaden zapis Kartografa nie tworzy takiej wartosci: pobierz plik ponownie "
+        "do magazynu",
+    ),
+    "file_unknown_dataset": Text(
+        "the sidecar names no registered dataset ({dataset}): no command of this "
+        "Kartograf downloads it",
+        "sidecar nie wskazuje zarejestrowanego zbioru ({dataset}): zadna komenda tej "
+        "wersji Kartografa go nie pobiera",
+    ),
+    "file_missing_field": Text(
+        "{dataset}: the sidecar has no {field}, which the command of the file needs",
+        "{dataset}: sidecar nie ma pola {field}, ktorego potrzebuje komenda pliku",
+    ),
+    "file_hsg": Text(
+        "{dataset}: soil hsg is derived from SoilGrids inputs that its sidecar does "
+        "not record as a command (decision D5 of ADR-057)",
+        "{dataset}: soil hsg powstaje z wejsc SoilGrids, ktorych sidecar nie zapisuje "
+        "jako komendy (decyzja D5 ADR-057)",
+    ),
+    "file_area": Text(
+        "{dataset}: the file was chosen by an area (a box, a geometry or an index tile "
+        "of an area) and its sidecar records no selection the command can repeat",
+        "{dataset}: plik wybrano obszarem (prostokat, geometria albo kafel skorowidza "
+        "obszaru), a jego sidecar nie zapisuje wyboru, ktory komenda moze powtorzyc",
+    ),
+    "file_reprojected_cutout": Text(
+        "{dataset}: the cutout was reprojected to {crs}; its recorded grid does not "
+        "give back the area it was requested for",
+        "{dataset}: wycinek przeliczono do {crs}; zapisana siatka nie odtwarza "
+        "obszaru, o ktory go poproszono",
+    ),
+    "file_no_selection": Text(
+        "{dataset}: the request ({keys}) names no selection of the command {command}",
+        "{dataset}: zadanie ({keys}) nie wskazuje wyboru komendy {command}",
+    ),
+    "file_not_an_option": Text(
+        "{dataset}: the request field {field} is not an option of the command "
+        "{command}",
+        "{dataset}: pole zadania {field} nie jest opcja komendy {command}",
+    ),
 }
