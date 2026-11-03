@@ -62,7 +62,7 @@ GetCapabilities).
   LAZ, `--min-year` pomijany z `Warning:`) — usunac albo przepisac na
   nowa intencje, nie przypinac na nowo starego brzmienia.
 - Numery linii w zadaniach = stan `feat/year-range` z 2026-10-10
-  (`8028147`); po wczesniejszych zadaniach przesuwaja sie — szukaj po
+  (`d695eb8`); po wczesniejszych zadaniach przesuwaja sie — szukaj po
   symbolu.
 - Dane pobierane na zywo (Task 8): poza repo i poza `/tmp`, jawne
   `--output`, katalog wskazuje uzytkownik; CLI z korzenia repo.

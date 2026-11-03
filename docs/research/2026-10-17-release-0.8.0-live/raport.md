@@ -11,7 +11,7 @@ Offline = `unshare -rn` (bez sieci, magazyn dostepny).
 
 | Test | Kod | Zakres | Znaleziska | Stan po poprawkach |
 |---|---|---|---|---|
-| 1. Pelny, 2026-10-16 | `develop` `8160839` (`0.8.0-dev+8160839`) | 18 polecen z 13 grup + `availability`, manifest z odtworzeniem, orto ukosna | P1: 0, P2: 2, P3: 19 | P2 naprawione; P3: 12 naprawionych, 2 decyzje (USAGE 7), 3 czesciowo, 2 otwarte (sekcja 4) |
+| 1. Pelny, 2026-10-16 | `develop` `623feb4` (`0.8.0-dev+8160839`) | 18 polecen z 13 grup + `availability`, manifest z odtworzeniem, orto ukosna | P1: 0, P2: 2, P3: 19 | P2 naprawione; P3: 12 naprawionych, 2 decyzje (USAGE 7), 3 czesciowo, 2 otwarte (sekcja 4) |
 | 2. Krotki, 2026-10-17 | `develop` `6f67436` (`0.8.0-dev+6f67436`) | 10 polecen z 8 grup, manifest, 6 funkcji API, regula 10 ARCHITECTURE 3.3 | P1: 0, P2: 0, P3: 9 | wszystkie naprawione |
 | 3. Weryfikacja poprawek, 2026-10-17 | `release/0.8.0` | 9 polecen (sekcja 3) | - | zgodne z oczekiwaniem |
 
@@ -20,7 +20,7 @@ Gdzie naprawiono: galezie `fix/live-0.8.0` (FixLive), `fix/live2-0.8.0`
 (`3aa15d7`) i `release/0.8.0` (`349b353`); opis zmian i "Co zrobic":
 `docs/CHANGELOG.md` [0.8.0].
 
-## 1. Test pelny (2026-10-16, `develop` `8160839`)
+## 1. Test pelny (2026-10-16, `develop` `623feb4`)
 
 GDAL 3.10.3, rasterio 1.5.0, pyproj 3.7.2 (PROJ 9.5.1); start z cache
 metadanych repo (94 rekordy). Kazde polecenie: `kartograf <...> -o

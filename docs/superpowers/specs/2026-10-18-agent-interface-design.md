@@ -2061,7 +2061,7 @@ juz zgodna z nimi):
 ### 16.3 Koszt kontekstu agenta (D22; pomiar 2026-10-18)
 
 Pomiar na prawdziwej sesji stdio (`initialize`, `tools/list`, `tools/call`; dlugosc w
-znakach, JSON zwarty), przed = `a1a847ae`, po = `86168139`:
+znakach, JSON zwarty), przed = `a1a847ae`, po = `a87c9a5d`:
 
 | Wielkosc | przed | po |
 |---|---|---|
