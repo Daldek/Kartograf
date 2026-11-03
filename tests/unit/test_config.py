@@ -25,7 +25,10 @@ def write_config(tmp_path: Path, monkeypatch, text: str) -> Path:
 
 def source_of(key: str) -> tuple[str, str, str | None]:
     setting = get_config().keys[key]
-    return str(setting.value), setting.source, setting.name
+    value = setting.value
+    # as_posix: a POSIX-style expectation holds on Windows too (str gives "\\x")
+    text = value.as_posix() if isinstance(value, Path) else str(value)
+    return text, setting.source, setting.name
 
 
 def test_a_shared_key_comes_from_the_first_layer_of_dev_18_1(tmp_path, monkeypatch):
@@ -99,7 +102,10 @@ def test_the_public_store_root_names_the_root_its_source_and_the_marker(
         user_environment / "data" / "kartograf", "default", None, False
     )
 
-    write_config(tmp_path, monkeypatch, '[kartograf]\nroot = "' + str(tmp_path) + '"\n')
+    # as_posix: a Windows path in a TOML basic string would be read as escapes
+    write_config(
+        tmp_path, monkeypatch, '[kartograf]\nroot = "' + tmp_path.as_posix() + '"\n'
+    )
     (tmp_path / "kartograf-store.json").write_text("{}", encoding="utf-8")
     assert kartograf.store_root() == kartograf.StoreRoot(
         tmp_path, "file", "[kartograf]", True
