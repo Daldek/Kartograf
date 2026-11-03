@@ -89,7 +89,7 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   not apply, as for SHP); a file without features is refused as an empty GPKG layer. Archiwista
   passes its area as a WGS84 GeoJSON file.
 
-### Nogat standard 2.1 adoption (so far)
+### Nogat standard 2.1 adoption
 
 **Breaking**
 
