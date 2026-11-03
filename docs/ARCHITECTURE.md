@@ -77,6 +77,24 @@ other error is a `DownloadError` and no version. A version sidecar never
 changes (`extra.parent_requests` removed in 0.8.0; `parent_request`
 describes the task that created the version).
 
+**Two write targets (ADR-054, section 3.6).** Every command that writes data writes either
+the versioned store or plain files. The store (`root`, `--root`; a call that names neither
+target writes the default root: `KARTOGRAF_ROOT`, `[kartograf] root` of `nogat.toml`,
+`<data_dir>/kartograf`) holds the versions, sidecars and hard links described above and in
+3.3. Plain mode (`output_dir`, `-o`, `--output-dir`) writes the same files under the same
+names, flat in one directory, and nothing else: no sidecar, no version, no standard path and
+no hard link, so it works on FAT, exFAT and SMB. The sidecar rule above is a rule of the
+store; a plain file is described only by the report (`files[]`: `path`, `size_bytes`,
+`sha256`, `status` `written` or `replaced`). The two targets exclude each other
+(`validation_error`, `exclusive_options`). No write overwrites by surprise: an output
+directory that is, or lies in, a store of any tool is `conflict` (`output_in_store`, the hint
+names `--root`) before any request, and a target list with a name two files share, or with
+an existing file without `--force`, is `conflict` before the first byte; `--force`
+(`update="force"`) replaces existing files atomically and deletes nothing else. `--output`
+(one file) is not declared: no command writes exactly one file (ADR-054 decision 1). The
+flows are written once, for the store, and a plain write runs them on a root of its own
+(section 4).
+
 **Transformation policy (ADR-024).** Transformations that shift the CONTENT
 of a raster or leave the Czech CRSs (EPSG:5514/3045) go through
 `src/kartograf/transform/crs.py` — except for the WGS84 envelope used for country recognition
@@ -1101,6 +1119,15 @@ and `extra.full_sheet` (`czy_ark_wypelniony`), when known.
 
 ### 3.3 Canonical `data/` layout
 
+This is the layout of the store: the directory of `root` (`--root`, or the default root;
+section 3.6), marked by `kartograf-store.json` (3.3.1). A plain write (`output_dir`, `-o`,
+`--output-dir`) keeps only the file names of this tree: `N-34-130-D-d-2-4.asc`,
+`<coords>.tif`, `1261.gpkg` or `CTES96.laz` lie flat in the output directory, with no product
+directory, segment, hierarchy, `bbox/`, `teryt/`, `versions/` or `full_sheet/` and no
+`.meta.json`, so the rules below are rules of the store. The output directory may hold a store
+below it (`<data_dir>` is a valid output although the default store lies in it), but it may
+not be, or lie in, a store (`conflict`, `output_in_store`).
+
 ```
 data/
 ├── nmt/
@@ -1993,6 +2020,33 @@ channel parameters of the descriptor (section 4.10); ZABAGED (`landcover
 download --product zabaged`) goes through the same engines with the public
 `download_landcover` and the internal `LandCoverManager` (section 4.8).
 
+**Write target in the flows (ADR-054, section 3.6).** The flows below are written for the
+store, and plain mode runs them unchanged. Every public function of a flow (`download_data`,
+`download_collection`, `download_landcover`, `download_soil`, `calculate_hsg`, the track
+functions such as `download_pl_cutout` or `download_cz_laz`, and their `check_*` twins) takes
+`root` and `output_dir` and opens `kartograf.output.writing(...)`: a store root reaches the
+tracks as it is, after `guard_store`; an output directory that is, or lies in, a store is
+refused before any request (`directory_refusal`), and any other one becomes a `Staging` whose
+`handle` (a path inside `<dir>/.kartograf-incoming/<host>_<pid>_<token>/` that no file ever
+reaches) the tracks take as their root. `DownloadManager`, `LandCoverManager` and
+`HSGCalculator` made with `output_dir` do the same for each public method (`wrapping`). A slot
+built on the handle is recognised by `plain_of`, and the store steps of `download/fetch.py`
+answer for it: `use_local` finds no local version, `new_staging` names a private path of the
+staging directory, `store_file` is `store_plain_file` (`Staging.commit`: one chunked read for
+the size and SHA-256, then `os.replace`; no sidecar, version, link or edition lookup), and
+`inspect_version` gives a position that `plain_items` judges (`write`, `replace`,
+`conflict`), with no request for a freshness signal. Before its first byte each track calls
+`preflight(root, names)` with the file names of all its targets; `download_data` first runs
+the check of the same request and judges the targets of every track and country as one list
+(`_preflight`). `writing` refuses the store-only options (`store_only_option`: `--upgrade`,
+`--plan`, `--all-campaigns`), and `download_data` turns `--full-sheet` into the `info` notice
+`full_sheet_redundant`. What a store reads from a version sidecar, a plain run measures on the
+file it has just downloaded (the mask counts of a PL cutout, `all_nodata` of a CZ raster or of
+the HSG). The report has `mode` `plain`, `root` `null` and `output_dir` (`report_target`), and
+messages name a file below the output directory (`unit_of`). The differences per flow: 4.1
+(the newest FULL flight), 4.4 (the CZ orthophoto ZIP), 4.5, 4.7, 4.8 (BDOT10k `keep_raw`, HSG)
+and 4.10.
+
 ### 4.1 PL sheet code (NMT/NMPT/orthophoto)
 
 `SheetParser` validates the sheet code and normalises it to the canonical form:
@@ -2124,6 +2178,13 @@ Meaning of the flag: YES = full coverage within the borders of Poland (measureme
 nodata beyond the border in border sheets is normal), NO does not say
 anything about the scale of the gap (0.9-98.9 %). Cutout: section 4.3 (`partial_sheets`),
 the mosaic still from standard paths.
+In plain mode the rule is the opposite (ADR-054 decision 5): a file without a sidecar cannot
+say it is partial, so `check_year_range(plain=True)` selects ONE flight per sheet, the newest
+one with `full_sheet is True` within the year range (the bounds are optional then). A sheet
+whose flights in the range are all partial is not written: `skipped[]` of the report lists it
+(`{id, reason, message}`, reason `skipped_incomplete`, the hint names `--root`) and one
+`warning` `skipped_incomplete` names the first ten; when every sheet is skipped the command
+fails with `no_data` (`skipped_incomplete`, exit 11 as a result, 14 as an error of the plan).
 
 **Second link and `--full-sheet` (ADR-033).** After the standard link,
 `_fetch_campaigns` links `full_sheet/` to the newest
@@ -2142,6 +2203,8 @@ with the flag: `request.full_sheet: true`. With `all` the flag has no effect; wi
 `--cutout` and LAZ `Error:` before the network. With a year range
 a full link from outside the task: `full_link_outside_range` and the shared
 `Info:` with U15.
+A plain write has no `full_sheet/`: `--full-sheet` with `output_dir` is the `info` notice
+`full_sheet_redundant` and has no effect, as the plain flight is full already.
 
 **Campaigns and data year (ADR-030, ADR-032).** NMT/NMPT/orthophoto accept
 `--year Y` (shorthand for `--min-year Y --max-year Y`), `--min-year L` and
@@ -2249,7 +2312,7 @@ all modes; `update="check"` is a `ValidationError` (checking
 is done by `manager.check_sheets(sheets)`). Providers without campaigns: without `force`
 the newest local version (no cheap signal).
 `DownloadManager.check_sheets(sheets)` (CLI `--check [--plan PLIK]`)
-downloads nothing and returns `UpdatePlan` (`kartograf-plan/1`: `store`,
+downloads nothing and returns `UpdatePlan` (`kartograf-plan/1`: `mode`, `root`, `output_dir`,
 `checked_at`, `kartograf_version`, items with segment, hierarchy, name,
 local version and record signal; statuses `current`/`newer`/`missing`/
 `unverifiable`/`check_failed`). `manager.download_sheets(sheets,
@@ -2261,6 +2324,10 @@ signal = item `result.stale` (error, no download). The plan types are in
 `cz_laz`/`pl_cutout`/`cz_cutout`, `unit` = task unit; `UpdatePlan.merge`,
 `select_planned`, `new_plan`); the remaining tracks get `plan=` in their
 `run_*`.
+With `output_dir` (3.6) there is no local version: every selected flight is downloaded, an
+existing file is `conflict` (`output_exists`) unless `update="force"` replaces it, `upgrade`
+and `plan` are `store_only_option`, and a position of `check_sheets` has `action` (`write`,
+`replace`, `conflict`), `path` and `reason` instead of a comparison with a local version.
 
 **Data states in checking (0.8.0, E2E P2-3).** `check_sheets(sheets,
 on_no_coverage=)` reproduces the download result, not only the items: a sheet without
@@ -2731,6 +2798,10 @@ CUZK orthophotos are paid): year and campaign flags, `--full-sheet`,
 with `--country cz` = error, `--cutout` with CZ = error. JGW does not carry a CRS -
 the CRS of each file is given by its sidecar (JPEG: `extra.world_files`,
 section 3.2). The sheet pixel follows from JGW (samples 2026-10-16: 0.125 m).
+A plain write (`output_dir`) stages the ZIP in one private directory of its staging directory
+and moves the members into the output directory as `<sheet_code><suffix>` (`CTES96.jpg`,
+`CTES96.jgw`, `CTES96.TM33N.jgw`, `CTES96.TM34N.jgw`); without a sidecar the CRS of each world
+file is told only by its name.
 
 **CZ contours (plan E1, since 0.8.0).** `elevation download --product
 contours --format SHP|DGN` -> track `download/cz_contours.py` (dispatch
@@ -2790,6 +2861,9 @@ A local version (default mode and `upgrade`) returns `file.status ==
 "local"` with the `all_nodata` flag from the version sidecar, without network; `force`
 downloads again (the same content = `unchanged`). A failed download does not
 leave a version or an empty tree and passes the exception on.
+In plain mode (`output_dir`) there is no local version, so every run downloads, and
+`all_nodata` is measured on the downloaded raster, as no sidecar holds it; the CZ sheet track
+(4.4) does the same.
 
 Result: hard link `data/<nmt|nmpt>/cz_<model>_<vcrs>/bbox/<coords>.tif`
 (e.g. `nmt/cz_dmr5g_bpv`, `nmpt/cz_dmp1g_bpv`) to the version
@@ -3021,6 +3095,9 @@ and `min_density`, when given — E16).
 `nominal_density` and the `--min-density` filter are the NOMINAL value from the GUGiK WFS
 (`char_przestrz`); the actual density of a tile is sometimes several times higher
 (E2E 2026-10-06: ~119 pts/m2 at a nominal 15).
+With `output_dir` the result is `<dir>/<original_name>.laz` and nothing beside it: the facts
+of the sidecar above are not kept, and `--all-campaigns` is a store option
+(`store_only_option`).
 
 **LAZ CZ (plan B, `download/cz_laz.py`).** `download_cz_laz(*, model,
 vertical_crs, root, sheet=None, bbox=None, update=None, plan=None,
@@ -3059,10 +3136,12 @@ path `cz_laz` (`unit` = sheet code). Sidecar: `dataset` `cz.cuzk.<model>_laz`,
 ### 4.8 Land cover and soils (BDOT10k, BDOO, CORINE, ZABAGED, Data50, Data250, SoilGrids)
 
 **Version store (ADR-036 D29-D33, ADR-044 D5-D6).** The public functions
-`download_landcover(product=..., root=..., ...)` and
-`download_soil(root=..., ...)` write exclusively to the store
+`download_landcover(product=..., root=..., output_dir=..., ...)` and
+`download_soil(root=..., output_dir=..., ...)` write to the store
 `root` (= `--root`; without `output_path`, D32), in the segments of rule 8
-of section 3.3. They return `LandCoverReport`/`SoilReport` with `UnitFile` in `files`,
+of section 3.3, or, with `output_dir` (`-o`, `--output-dir`), plain files under the same
+names (3.6; the file policy and the table below are those of the store). They return
+`LandCoverReport`/`SoilReport` with `UnitFile` in `files`,
 unit failures in `failed`, `stale`, `notices` and `ok`; with `keep_raw`
 the original BDOT10k archives are in `LandCoverReport.raw`. Internally they use
 `LandCoverManager`. Errors in selections and options are `ValidationError` before the
@@ -3239,6 +3318,9 @@ previous versions and links remain. `extra.parent_request`
 (the task area) alongside `source` and `http`. Repeatability: a GPKG merged
 from the same package has the same sha256 (live 2026-10-12: `--force` = `bez
 zmian`).
+In plain mode `keep_raw` writes the GPKG and the untouched package side by side as
+`<teryt>.gpkg` and `<teryt>.zip` (`raw[]` lists the ZIP); nothing records which package a
+GPKG came from (no `extra.source_files`).
 
 **Archive of BDOT10k annual editions (ADR-042 D10-D11, since 0.8.0).**
 `download_landcover(product="bdot10k", root=..., year=R,
@@ -3295,6 +3377,11 @@ input is `current`; an input `check_failed` = `check_failed`; otherwise
 `missing`; never `newer`). Limitation: an HSG with identical content from other
 inputs is an existing version with the first inputs in `source_files` — such
 inputs compute the HSG on every run (versions are immutable).
+With `output_dir` (`HSGCalculator._calculate_plain`) the clay, sand and silt inputs are
+fetched into private directories of the staging directory (`Staging.scratch`) and removed with
+it: only the HSG raster reaches the output directory, `inputs[]` is empty, nothing is reused
+(every run computes), and `check_hsg` has the one HSG position. A plain raster has no sidecar
+with a `request`, so `hsg_statistics` (`--summary`) counts the whole raster.
 
 `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`
 (since 0.7.1, A8) computes HSG from ready rasters (g/kg, SoilGrids) without downloading
@@ -3675,6 +3762,11 @@ in 0.2-90 s, approx. 3.5 s per GB of 3D tree packages).
 `LandCoverManager` uses the same `package_job`/`run_job`/
 `inspect_job` for the BDOT10k archive and `landcover_request`/`run_request`/
 `plan_request` for ZABAGED (lane `landcover`, section 4.8).
+A plain write (`output_dir`) keeps none of the store policy: a unit is one file
+`<unit><ext>` in the output directory (`1261.gpkg`, `0208.zip`, `<coords>.gpkg`,
+`pl_miejscowosci.zip`), every run downloads it (no signal, label or related slot), and
+`download_collection` checks the names of all units of the request (`preflight`) before the
+first transfer.
 
 **Area limit (ADR-043 erratum 3).** An area task (`bbox`, `sheet`,
 `geometry`) that would download more than `VOLUME_FILES` = 100 files or
