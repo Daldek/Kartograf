@@ -214,7 +214,8 @@ def test_true_orto_sheets_and_size_notice(tmp_path, images):
     assert report.ok
     assert sorted(f.unit for f in report.files) == _quarters()
     assert all(
-        "/true-orto/pl_1992/N-34/50/A/c/3/2/" in str(f.file.path) for f in report.files
+        "/true-orto/pl_1992/N-34/50/A/c/3/2/" in f.file.path.as_posix()
+        for f in report.files
     )
     assert gets_at_notice == [0, 1, 2, 3]  # each notice before its own GET
     size = [n.message for n in report.notices if n.code == DOWNLOAD_SIZE][0]

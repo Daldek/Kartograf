@@ -93,7 +93,7 @@ def test_store_init_marks_the_store_and_says_so(capsys, tmp_path):
         False,
         "kartograf",
     )
-    assert result["root"] == str(root)
+    assert result["root"] == root.absolute().as_posix()
 
 
 def test_store_init_reports_what_is_wrong_with_the_root(capsys, tmp_path):

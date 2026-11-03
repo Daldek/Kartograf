@@ -48,7 +48,7 @@ def test_bdot10k_sheet_formats_have_independent_versions(tmp_path, monkeypatch):
         files[fmt] = report.files[0].file
         assert files[fmt].label == "2026-05-27"
         assert files[fmt].path.stem == "M-34-64-D-d-1"
-        assert f"maps/pl_bdot10k_10000_{fmt.lower()}" in str(files[fmt].path)
+        assert f"maps/pl_bdot10k_10000_{fmt.lower()}" in files[fmt].path.as_posix()
         plan = check_collection(**choices, format=fmt)
         assert plan.items[0].status == "current"
         assert plan.items[0].available_label == "2026-05-27"
