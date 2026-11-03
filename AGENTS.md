@@ -11,7 +11,7 @@ Use it to get the data of an area (a sheet code, a bbox, a geometry file, a TERY
 Not for:
 
 - hydrological computation (curve numbers, hydrographs, flow statistics): use Hydrolog; Kartograf only classifies HSG;
-- IMGW and CHMU measurement series: use IMGWTools;
+- IMGW and CHMU measurement series: use Obserwator;
 - watershed delineation and analysis: use Hydrograf, which takes its elevation and land cover data from Kartograf.
 
 ## Install

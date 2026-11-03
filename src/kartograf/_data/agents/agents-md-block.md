@@ -1,7 +1,7 @@
 <!-- BEGIN kartograf -->
 ## Kartograf
 
-Kartograf downloads official spatial data of Poland and Czechia (elevation models and LAZ, orthophotos, land cover, soils and HSG, boundaries, cadastre) into a versioned store with metadata. Not for hydrological computation (use Hydrolog) or IMGW and CHMU series (use IMGWTools).
+Kartograf downloads official spatial data of Poland and Czechia (elevation models and LAZ, orthophotos, land cover, soils and HSG, boundaries, cadastre) into a versioned store with metadata. Not for hydrological computation (use Hydrolog) or IMGW and CHMU series (use Obserwator).
 
 Rule: discover, check, run, read.
 

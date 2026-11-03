@@ -1852,7 +1852,7 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
   standard path, no `full_sheet/` and no hard link, so a plain write works on FAT, exFAT and SMB.
   `landcover download --keep-raw` writes `<teryt>.gpkg` and the original `<teryt>.zip`.
 - *Before the first request* the directory is looked at: one that is, or lies in, a store of
-  Kartograf or IMGWTools is `conflict` (`output_in_store`, `details.paths` the directory, the hint
+  Kartograf or Obserwator is `conflict` (`output_in_store`, `details.paths` the directory, the hint
   names `--root`), and nothing is asked of the source.
 - *Before the first byte* the whole list of targets is checked, and a failure writes nothing:
   a name two files share is `conflict` (`duplicate_output_name`), a subdirectory that a unit
@@ -1897,7 +1897,7 @@ every data command, and not a failed unit of each sheet or file: a
 root that has the layout of a store and no `kartograf-store.json` is `store_unavailable`
 (`no_marker`, exit 8, the hint is `kartograf store init --root DIR`), a root that holds other
 files is `conflict` (`not_empty`, exit 4), and a root that lies in, holds or has below it a
-store of Kartograf or IMGWTools is `conflict` (`nested_store`, exit 4). `--check` lists a root
+store of Kartograf or Obserwator is `conflict` (`nested_store`, exit 4). `--check` lists a root
 that is a `conflict` as the one position of the track `store` (`action` `conflict`, `reason`,
 the root as `path`): the plan is `ok`, exits 0 and asks nothing; the plan of a root without its
 marker fails as the run does (exit 8). An `output_dir` that is, or lies in, a store is refused
@@ -3835,7 +3835,7 @@ or `file`; `name` is the variable or the table.) `config_file.ignored` lists the
 **The default root without the size.** `kartograf.store_root()` returns `StoreRoot(root, source,
 name, marker_exists)`: the root of the default store by the same order, the layer that gave it and
 whether `kartograf-store.json` is a file in it. It lists and measures nothing, so a caller that only
-needs the place (a wizard, a consumer) uses it instead of `get_config()`; IMGWTools has the same
+needs the place (a wizard, a consumer) uses it instead of `get_config()`; Obserwator has the same
 function.
 
 **A file or a value that cannot be used.** An unreadable file, a file that is not UTF-8 text,

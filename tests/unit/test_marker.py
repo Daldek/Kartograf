@@ -238,7 +238,7 @@ def test_the_refusal_of_a_root_is_returned_as_the_error_a_write_is_refused_with(
 # -- a store never nests -------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["kartograf-store.json", "imgw-store.json"])
+@pytest.mark.parametrize("name", ["kartograf-store.json", "obserwator-store.json"])
 def test_a_root_inside_a_store_of_any_tool_is_refused(tmp_path, name):
     (tmp_path / name).write_text("{}")
 
@@ -250,7 +250,7 @@ def test_a_root_inside_a_store_of_any_tool_is_refused(tmp_path, name):
 
 
 def test_a_root_that_holds_the_marker_of_another_tool_is_refused(tmp_path):
-    (tmp_path / "imgw-store.json").write_text("{}")
+    (tmp_path / "obserwator-store.json").write_text("{}")
 
     for check in (prepare_store, lenient_store, init_store):
         with pytest.raises(ConflictError) as caught:
@@ -261,9 +261,9 @@ def test_a_root_that_holds_the_marker_of_another_tool_is_refused(tmp_path):
 def test_a_store_below_the_root_is_refused_but_the_product_trees_are_not_entered(
     tmp_path,
 ):
-    below = tmp_path / "work" / "imgw"
+    below = tmp_path / "work" / "obserwator"
     below.mkdir(parents=True)
-    (below / "imgw-store.json").write_text("{}")
+    (below / "obserwator-store.json").write_text("{}")
     with pytest.raises(ConflictError) as caught:
         prepare_store(tmp_path)
     assert caught.value.reason == "nested_store"
@@ -272,7 +272,7 @@ def test_a_store_below_the_root_is_refused_but_the_product_trees_are_not_entered
     prepare_store(store)
     hidden = store / "nmt" / "x"
     hidden.mkdir(parents=True)
-    (hidden / "imgw-store.json").write_text("{}")  # inside a managed product tree
+    (hidden / "obserwator-store.json").write_text("{}")  # inside a managed product tree
     prepare_store(store)  # not looked into
 
 
@@ -349,13 +349,13 @@ def test_the_state_of_a_root_is_what_a_write_makes_of_it_and_writes_nothing(
 
 
 def test_the_state_of_a_root_raises_what_every_write_is_refused_with(tmp_path):
-    (tmp_path / "imgw").mkdir()
-    (tmp_path / "imgw" / "imgw-store.json").write_text("{}")
+    (tmp_path / "obserwator").mkdir()
+    (tmp_path / "obserwator" / "obserwator-store.json").write_text("{}")
     prepare_store(tmp_path / "ours")
     (tmp_path / "bad").mkdir()
     (tmp_path / "bad" / MARKER).write_text(json.dumps({"schema": "kartograf-store/2"}))
 
-    for name in ("imgw", "ours/nmt/inner", "."):  # holds, lies in, has below
+    for name in ("obserwator", "ours/nmt/inner", "."):  # holds, lies in, has below
         with pytest.raises(ConflictError) as nested:
             store_state(tmp_path / name)
         assert nested.value.reason == "nested_store"
@@ -426,7 +426,7 @@ def test_init_marks_a_verified_layout_and_touches_no_file(tmp_path):
 
 
 def test_init_lists_every_problem_of_a_layout_that_is_not_a_store(tmp_path):
-    seed_layout(tmp_path, schema="imgw-meta/1")
+    seed_layout(tmp_path, schema="obserwator-meta/1")
     (tmp_path / "notes.txt").write_text("mine")
 
     with pytest.raises(InvalidLayoutError) as caught:

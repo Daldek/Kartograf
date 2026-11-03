@@ -7,6 +7,7 @@ Profile: `tool` (DEV §1). What it is for: `README.md`; scope: `docs/SCOPE.md`. 
 ## Critical rules
 
 - **FROZEN until `v0.8.0` (author, 2026-11-03).** No change on any branch except a fix of a critical defect or of a break of the API, and the release steps of `docs/PROGRESS.md` Next 1; every lesser defect is noted for 0.8.1, not fixed. Ask the author before any commit.
+  - Admitted by the author's decision of 2026-11-03 (an API break of a producer): the IMGWTools -> Obserwator rename, i.e. `marker.STORE_MARKERS` names `obserwator-store.json` instead of `imgw-store.json`, and the docs that name the tool.
 - Python only from the project environment: `uv sync --locked --all-extras`, then `uv run ...` or `.venv/bin/python` (DEV-6.2, DEV-6.3).
 - `scripts/gate.sh` (ruff format, ruff check, mypy, offline tests with coverage, commit checks; also works from a worktree) is green before every commit (DEV-7.6). Tests are offline (`-m "not live"`, no network: `tests/conftest.py` fails a test that opens a socket); `live` tests only on purpose (DEV-10.1 to DEV-10.3).
 - Downloaded data goes outside the repository and outside `/tmp`, always with an explicit `--root`. The metadata cache is in the user cache directory (`<cache_dir>/kartograf/metadata.db`), never in the current directory; `kartograf config show` reports every setting. If the data directory is unavailable, stop and ask. Tests write only in `tmp_path`.
@@ -43,7 +44,7 @@ Settings and variables (`KARTOGRAF_*`, `NOGAT_*`, `NOGAT_CONFIG`, `CLMS_CREDENTI
 
 ## Rules for agents of other repositories
 
-For agents of Hydrograf, Archiwista, Retman, IMGWTools and others that edit Kartograf:
+For agents of Hydrograf, Archiwista, Retman, Obserwator and others that edit Kartograf:
 
 - change it only on a branch from `develop` (`feat/<topic>`, `fix/<topic>`), never on `develop` or `main`; no merge into them, no push to them, no tag;
 - no release entry (a new `## [x.y.z] - date` heading in `docs/CHANGELOG.md`, a new `__version__`, a tag) without the author's approval; describe the change under `## [Unreleased]` and in the commit;
@@ -111,7 +112,7 @@ Layers and dependencies: `docs/ARCHITECTURE.md` 2. Tests: `tests/unit`, `tests/i
 
 ## Cross-project context
 
-The place of Kartograf in the ecosystem, its dependencies and consumers: https://github.com/Daldek/Nogat/blob/main/ecosystem.yaml (entry `Kartograf`). Hydrograf uses its library, Archiwista reads its store, Retman reads its catalog, Hydraulik calls its CLI, Hydrolog reads its files, and IMGWTools shares the store design without importing it.
+The place of Kartograf in the ecosystem, its dependencies and consumers: https://github.com/Daldek/Nogat/blob/main/ecosystem.yaml (entry `Kartograf`). Hydrograf uses its library, Archiwista reads its store, Retman reads its catalog, Hydraulik calls its CLI, Hydrolog reads its files, and Obserwator shares the store design without importing it.
 
 ## Deviations
 

@@ -181,7 +181,7 @@ def effects(command: Command) -> EffectsEntry:
     The command is read only when it writes neither the store nor the
     cache; ``writes`` is ``delete`` for a command that removes data and ``add`` for
     every other that writes (a store never overwrites a version; a plain write
-    replaces a file only with ``update`` force, as IMGWTools declares its downloads).
+    replaces a file only with ``update`` force, as Obserwator declares its downloads).
     """
     read_only = not _WRITING & set(command.effects)
     writes = "delete" if command.destructive else "add"
