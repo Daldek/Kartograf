@@ -487,7 +487,7 @@ class FileStorage:
 
         Uses a temporary file and atomic rename to prevent partial files.
 
-        Writes to the STANDARD path: ``temp.rename(target)`` replaces the
+        Writes to the STANDARD path: ``temp.replace(target)`` replaces the
         campaign link (ADR-030) with a regular file; without a sidecar
         carrying ``extra.link`` it is an "unknown" file for the campaign
         flow, which the next ``newest`` replaces with a link.
@@ -529,8 +529,9 @@ class FileStorage:
                     for chunk in iter(lambda: content.read(8192), b""):
                         f.write(chunk)
 
-            # Atomic rename
-            temp_path.rename(target_path)
+            # Atomic rename; replace() overwrites an existing target on
+            # Windows too, where rename() raises FileExistsError.
+            temp_path.replace(target_path)
             return target_path
 
         except Exception:
