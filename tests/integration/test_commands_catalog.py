@@ -73,8 +73,9 @@ def _environment(base: Path) -> dict[str, list[str]]:
 
 
 def _named(text: str, base: Path) -> object:
-    """The document of a text with the directory of its run named."""
-    return json.loads(text.replace(str(base), "<base>"))
+    """The document of a text with the directory of its run named (documents write
+    paths as ``Path.as_posix()``)."""
+    return json.loads(text.replace(base.as_posix(), "<base>"))
 
 
 def _base(command: Command) -> dict[str, object]:

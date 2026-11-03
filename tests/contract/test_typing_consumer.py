@@ -238,8 +238,13 @@ _BAD_CONSUMER = textwrap.dedent(
 )
 
 
+# ``<file>:<line>: error:``; the file may hold a colon (``C:\...`` on Windows).
+_ERROR = re.compile(r"(?P<file>.+?):(?P<line>\d+): error:")
+
+
 def _error_file(line: str) -> str:
-    return Path(line.split(":", 1)[0]).name
+    match = _ERROR.match(line)
+    return Path(match["file"]).name if match else ""
 
 
 def test_consumer_strict_mypy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -270,10 +275,9 @@ def test_consumer_strict_mypy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         clean_errors
     )
     bad_lines = {
-        int(m.group(1))
+        int(m["line"])
         for line in errors
-        if _error_file(line) == bad.name
-        and (m := re.match(r"[^:]*:(\d+): error", line))
+        if _error_file(line) == bad.name and (m := _ERROR.match(line))
     }
     expected = {
         number

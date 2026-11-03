@@ -113,7 +113,7 @@ def test_the_plan_lists_each_target_with_its_action_and_probes_nothing(tmp_path)
     assert (before.mode, before.root, before.output_dir) == (
         "plain",
         None,
-        str(out.resolve()),
+        out.resolve().as_posix(),
     )
     (planned,) = before.items
     assert (planned.action, planned.status, planned.path, planned.reason) == (
@@ -235,7 +235,8 @@ def test_the_data_command_reports_a_plain_write_and_checks_the_whole_request_fir
     document = report.to_dict()
     assert document["mode"] == "plain" and document["root"] is None
     (entry,) = document["files"]
-    assert entry["status"] == "written" and entry["path"] == str(out / "CTES96.laz")
+    path = (out / "CTES96.laz").as_posix()
+    assert entry["status"] == "written" and entry["path"] == path
     assert "label" not in entry and "version_path" not in entry
     assert listing(out) == ["CTES96.laz"]
 

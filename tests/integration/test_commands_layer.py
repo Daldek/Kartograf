@@ -378,8 +378,9 @@ def test_format_parse_round_trip_for_every_catalog_example(
 
 
 def _normal(document, store: Path) -> str:
-    """The document as text, with the store directory named."""
-    return json.dumps(document.to_dict()).replace(str(store), "<store>")
+    """The document as text, with the store directory named (documents write paths
+    as ``Path.as_posix()``)."""
+    return json.dumps(document.to_dict()).replace(store.as_posix(), "<store>")
 
 
 @pytest.mark.usefixtures("frozen_clock")
