@@ -212,7 +212,7 @@ def test_every_command_line_is_read_by_the_parser(home):
 
     assert len(lines) >= 3
     for line in lines:
-        check_command_line(line.replace("~/", f"{home}{os.sep}"))
+        check_command_line(line.replace("~/", f"{home.as_posix()}/"))
 
 
 @pytest.mark.usefixtures("frozen_clock")

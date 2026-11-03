@@ -171,14 +171,14 @@ def test_the_json_of_a_plain_run_lists_files_and_says_where_it_wrote(capsys, tmp
     assert (report["mode"], report["root"], report["output_dir"]) == (
         "plain",
         None,
-        str(out),
+        out.as_posix(),
     )
     (entry,) = report["files"]
     body = (out / f"{G}.asc").read_bytes()
     assert entry == {
         "unit": G,
         "country": "PL",
-        "path": str(out / f"{G}.asc"),
+        "path": (out / f"{G}.asc").as_posix(),
         "size_bytes": len(body),
         "sha256": hashlib.sha256(body).hexdigest(),
         "status": "written",

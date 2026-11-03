@@ -23,7 +23,7 @@ from kartograf.error_report import ERROR_CODES, EXIT_CODES
 from kartograf.exceptions import ValidationError
 from kartograf.guide import BLOCK_BEGIN, BLOCK_END, GUIDE_FORMATS, inject_block
 from kartograf.serialization import SCHEMAS
-from tests.support.command_lines import check_command_line
+from tests.support.command_lines import check_command_line, is_absolute_root
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 AGENTS = ROOT / "AGENTS.md"
@@ -253,7 +253,7 @@ def test_the_lines_of_the_flows_and_the_block_are_json_and_absolute():
         words = shlex.split(line)
         assert "--json" in words, line
         if "--root" in words:
-            assert Path(words[words.index("--root") + 1]).is_absolute(), line
+            assert is_absolute_root(words[words.index("--root") + 1]), line
         check_command_line(line)
 
 

@@ -106,10 +106,11 @@ def call(tool, arguments=None, *, progress=None, server=None, **server_kwargs):
 
 
 def normal(data, *stores: Path) -> str:
-    """A document as text, with the store directories named."""
+    """A document as text, with the store directories named (as documents give
+    paths: ``Path.as_posix()``)."""
     text = json.dumps(data)
     for store in stores:
-        text = text.replace(str(store), "<store>")
+        text = text.replace(store.as_posix(), "<store>")
     return text
 
 
@@ -536,8 +537,8 @@ def test_data_tool_result_equals_the_envelope_of_the_library_document(tmp_path):
     assert normal(envelope, tmp_path / "mcp") == normal(
         direct.to_dict(), tmp_path / "lib"
     )
-    assert result.content[0].text.replace(str(tmp_path / "mcp"), "<store>") == (
-        direct.to_json(indent=None).replace(str(tmp_path / "lib"), "<store>")
+    assert result.content[0].text.replace((tmp_path / "mcp").as_posix(), "<store>") == (
+        direct.to_json(indent=None).replace((tmp_path / "lib").as_posix(), "<store>")
     )
     (item,) = document["files"]
     assert Path(item["path"]).is_file()  # the version is in the store
@@ -605,8 +606,8 @@ def test_check_equals_check_command(mode, tmp_path):
     assert normal(envelope, tmp_path / "mcp") == normal(
         direct.to_dict(), tmp_path / "lib"
     )
-    assert result.content[0].text.replace(str(tmp_path / "mcp"), "<store>") == (
-        direct.to_json(indent=None).replace(str(tmp_path / "lib"), "<store>")
+    assert result.content[0].text.replace((tmp_path / "mcp").as_posix(), "<store>") == (
+        direct.to_json(indent=None).replace((tmp_path / "lib").as_posix(), "<store>")
     )
 
 
@@ -950,7 +951,7 @@ def test_oserror_is_io_error(tmp_path):
     )
 
     assert report["exit_code"] == 9 and report["command"] == "store overview"
-    assert report["details"] == {"errno": "ENOENT", "path": str(missing)}
+    assert report["details"] == {"errno": "ENOENT", "path": missing.as_posix()}
 
 
 @needs_mcp
@@ -1056,10 +1057,10 @@ def test_a_writing_server_writes_plain_files_and_plans_the_replacement(tmp_path)
     assert (report["mode"], report["root"], report["output_dir"]) == (
         "plain",
         None,
-        str(out),
+        out.as_posix(),
     )
     (entry,) = report["files"]
-    assert entry["status"] == "written" and entry["path"].startswith(str(out))
+    assert entry["status"] == "written" and entry["path"].startswith(out.as_posix())
     assert [p.suffix for p in out.iterdir()] == [".tif"]  # the raster and nothing else
     # a server that does not write plans the call as it stands: the file is a conflict;
     # with update=force (a server that writes) the plan says replace
@@ -1183,9 +1184,9 @@ def test_allow_dir_rejects_paths_outside_after_resolve(tmp_path):
         )
         assert report["exit_code"] == 12
         assert report["details"]["option"] == "root"
-        assert report["details"]["path"] == str(outside.resolve())
-        assert report["details"]["allowed"] == [str(allowed.resolve())]
-        assert str(allowed) in report["hint"]
+        assert report["details"]["path"] == outside.resolve().as_posix()
+        assert report["details"]["allowed"] == [allowed.resolve().as_posix()]
+        assert allowed.as_posix() in report["hint"]
     # the same rule for a plan, which has the paths of a run
     planned = call(
         "kartograf_elevation_download",

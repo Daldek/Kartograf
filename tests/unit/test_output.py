@@ -447,7 +447,7 @@ def test_a_plan_of_the_handle_is_the_plan_of_the_directory_with_one_action_each(
     assert (plan.mode, plan.root, plan.output_dir) == (
         "plain",
         None,
-        str(tmp_path.resolve()),
+        tmp_path.resolve().as_posix(),
     )
     assert [(i.name, i.action, i.reason, i.status) for i in plan.items] == [
         ("new.laz", "write", None, "missing"),
