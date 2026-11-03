@@ -283,7 +283,7 @@ def test_a_run_into_a_refused_store_root_is_the_error_of_the_command_before_a_re
         expected.exit_code,
         expected.reason,
     )
-    assert error.details()["path"] == str(root.resolve())
+    assert error.details()["path"] == root.resolve().as_posix()
     assert asked == []
     assert tree(tmp_path) == before  # not a byte, not the marker
 
