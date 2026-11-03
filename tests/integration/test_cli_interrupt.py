@@ -9,7 +9,6 @@ a file that already exists.
 """
 
 import json
-import os
 import signal
 import subprocess
 import sys
@@ -21,6 +20,7 @@ import pytest
 
 from kartograf.output import STAGING
 from tests.integration.test_manager_campaigns import G
+from tests.support.offline_process import offline_env
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="POSIX signals: SIGINT and SIGTERM"
@@ -45,22 +45,7 @@ class Command:
     def __init__(self, tmp_path: Path, *arguments: object) -> None:
         self.ready, self.release = tmp_path / "ready", tmp_path / "release"
         self.stdout, self.stderr = tmp_path / "stdout", tmp_path / "stderr"
-        (tmp_path / "nogat.toml").write_text("", encoding="utf-8")
-        dead = "http://127.0.0.1:9"
-        env = {
-            key: value
-            for key, value in os.environ.items()
-            if not key.startswith(("KARTOGRAF_", "NOGAT_"))
-        }
-        env |= {
-            "KARTOGRAF_DATA_DIR": str(tmp_path / "data"),
-            "KARTOGRAF_CACHE_DIR": str(tmp_path / "cache"),
-            "NOGAT_CONFIG": str(tmp_path / "nogat.toml"),
-            "HTTP_PROXY": dead,
-            "HTTPS_PROXY": dead,
-            "ALL_PROXY": dead,
-            "NO_PROXY": "",
-        }
+        env = offline_env(tmp_path)
         with self.stdout.open("wb") as out, self.stderr.open("wb") as err:
             self.process = subprocess.Popen(
                 [
