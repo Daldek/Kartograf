@@ -9,7 +9,7 @@ writes; erratum 3: `project add` gives `add_project_task` the library arguments 
 The catalog documents (decisions 1 to 8), the MCP rebuild (decision 9) and the guide for agents
 (decision 10) are implemented.
 
-**Context:** The Nogat standard 2.1 asks every tool for a command catalog as the document
+**Context:** The Nogat standard 1.0 asks every tool for a command catalog as the document
 `<tool>-commands/1` (AGI-2.4), for `list_commands()` and `command_schema(command)` in the
 public API (AGI-2.1), for MCP tools named by the `operation_id` `<tool>_<group>_<verb>`
 (AGI-5.2) and for English texts with the Polish ones next to them (AGI-9.1). Until now

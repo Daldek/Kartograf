@@ -5,7 +5,7 @@
 for what the availability report has just learned); amends ADR-036 (a refreshing cache reads the
 answers younger than its `refresh_ttl_seconds`) and ADR-041 (the index answers of the report serve the
 sheet download, the archive sheets and the LAZ tiles)
-**Standard:** Nogat 2.1: DEV-10.1 (offline tests), AGI-1.3 (a plan without effects)
+**Standard:** Nogat 1.0: DEV-10.1 (offline tests), AGI-1.3 (a plan without effects)
 
 **Context:** Archiwista plans a download right after `check_availability` of the same area, with the
 same `MetadataCache`: "Sprawdź u źródła", then "Pobierz…" of a row runs `check_command` of each line of

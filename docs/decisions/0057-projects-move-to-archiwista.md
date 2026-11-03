@@ -6,7 +6,7 @@ D1 to D7 on 2026-10-31); supersedes ADR-040; partly supersedes ADR-051 (decision
 `exit_code_of`; decision 3: the units of `download_project` and of the project checks) and ADR-052
 (decision 9: the family `project`, the hidden project tools and the paths nested in `project add`;
 erratum 3)
-**Standard:** Nogat 2.1: HUB-5.2, DEV-17.4, DEV-19.18, REL-5.3, REL-5.4, ECO-020; plan
+**Standard:** Nogat 1.0: HUB-5.2, DEV-17.4, DEV-19.18, REL-5.3, REL-5.4, ECO-020; plan
 [`docs/plans/2026-10-31-archiwista-projects.md`](https://github.com/Daldek/Nogat/blob/main/docs/plans/2026-10-31-archiwista-projects.md)
 of Nogat (step 2)
 

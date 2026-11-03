@@ -3,7 +3,7 @@
 **Date:** 2026-10-25
 **Status:** Accepted (the author set the rule on 2026-10-25: a PL-2000 zone is the area of its powiats);
 amends ADR-017
-**Standard:** Nogat 2.1: DEV-6.4 (the new runtime dependency), DEV-10.1 (offline tests)
+**Standard:** Nogat 1.0: DEV-6.4 (the new runtime dependency), DEV-10.1 (offline tests)
 
 **Context:** Archiwista's map showed two whole PL-2000 sheet grids over one view across a zone
 boundary ("Siatka godeł", `GET /map/sheets` -> `find_sheets_for_bbox(..., "2000")`).

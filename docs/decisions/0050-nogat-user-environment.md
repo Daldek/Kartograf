@@ -3,7 +3,7 @@
 **Date:** 2026-10-24
 **Status:** Accepted — amended by ADR-054 (the default root is the target of a command without a target option)
 
-**Context:** The Nogat standard 2.1 gives every tool one user environment (DEV-18, ECO-028): a
+**Context:** The Nogat standard 1.0 gives every tool one user environment (DEV-18, ECO-028): a
 shared `nogat.toml`, the variables `<TOOL>_<KEY>` and `NOGAT_<KEY>`, a data and a cache
 directory per user, credentials from the environment only, and `<tool> config show --json`.
 Kartograf kept its metadata cache in the current directory (`<cwd>/.kartograf_cache.db`), the

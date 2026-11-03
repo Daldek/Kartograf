@@ -3,7 +3,7 @@
 **Date:** 2026-10-24
 **Status:** Accepted
 
-**Context:** The Nogat standard 2.1 gives every tool the same error codes, exit codes and
+**Context:** The Nogat standard 1.0 gives every tool the same error codes, exit codes and
 error document, so that an agent or a script handles the errors of all tools alike (ERR §2,
 ERR §4, AGI-4.3). Kartograf had its own codes (`invalid_input`, `no_coverage`, ...), the exit
 codes 0/1/2/130/143 and a `kartograf-error/1` document with an `exception` field. The

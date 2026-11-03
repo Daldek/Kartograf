@@ -133,7 +133,7 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
   not apply, as for SHP); a file without features is refused as an empty GPKG layer. Archiwista
   passes its area as a WGS84 GeoJSON file.
 
-### Nogat standard 2.1 adoption
+### Nogat standard 1.0 adoption
 
 **Breaking**
 
@@ -371,6 +371,10 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
 
 **Changed**
 
+- The Nogat standard is cited as 1.0, the number of its first publication on Nogat's `main`
+  (Nogat ECO-056; the draft called it 2.1): the copy `schemas/nogat/error_registry.json` comes
+  from Nogat `4bb6659`, so `kartograf._errors.STANDARD_VERSION` is `"1.0"`; ADR-048 to ADR-058,
+  `CLAUDE.md` and `docs/PROGRESS.md` name 1.0.
 - `pyproject.toml` has the discovery metadata of AGI-10.1: `[project.urls]` with `Homepage`,
   `Source` (was `Repository`), `Documentation`, `Changelog` and `Issues`, and the classifier
   `Topic :: Scientific/Engineering :: Hydrology`; `twine check` passes on the built distribution.

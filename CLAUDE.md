@@ -2,10 +2,11 @@
 
 Kartograf downloads official spatial data of Poland (GUGiK) and Czechia (CUZK), with Copernicus CORINE and ISRIC SoilGrids (NMT/NMPT, orthophoto, LAZ, BDOT10k, SoilGrids, HSG and more), and saves every file as a version in a store with a metadata sidecar. One command catalog drives the CLI `kartograf`, the Python library and the MCP server `kartograf-mcp`.
 
-Profile: `tool` (DEV §1). What it is for: `README.md`; scope: `docs/SCOPE.md`. Requirements are cited by ID (DEV, DOC, AGI, ERR, REL) from the [Nogat standard 2.1](https://github.com/Daldek/Nogat/tree/main/standards); this repository holds no copy of it (DEV-1.3).
+Profile: `tool` (DEV §1). What it is for: `README.md`; scope: `docs/SCOPE.md`. Requirements are cited by ID (DEV, DOC, AGI, ERR, REL) from the [Nogat standard 1.0](https://github.com/Daldek/Nogat/tree/main/standards); this repository holds no copy of it (DEV-1.3).
 
 ## Critical rules
 
+- **FROZEN until `v0.8.0` (author, 2026-11-03).** No change on any branch except a fix of a critical defect or of a break of the API, and the release steps of `docs/PROGRESS.md` Next 1; every lesser defect is noted for 0.8.1, not fixed. Ask the author before any commit.
 - Python only from the project environment: `uv sync --locked --all-extras`, then `uv run ...` or `.venv/bin/python` (DEV-6.2, DEV-6.3).
 - `scripts/gate.sh` (ruff format, ruff check, mypy, offline tests with coverage, commit checks; also works from a worktree) is green before every commit (DEV-7.6). Tests are offline (`-m "not live"`, no network: `tests/conftest.py` fails a test that opens a socket); `live` tests only on purpose (DEV-10.1 to DEV-10.3).
 - Downloaded data goes outside the repository and outside `/tmp`, always with an explicit `--root`. The metadata cache is in the user cache directory (`<cache_dir>/kartograf/metadata.db`), never in the current directory; `kartograf config show` reports every setting. If the data directory is unavailable, stop and ask. Tests write only in `tmp_path`.

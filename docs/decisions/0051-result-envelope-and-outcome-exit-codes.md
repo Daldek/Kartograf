@@ -5,7 +5,7 @@
 superseded by ADR-057 (decision 1: `check` of `exit_code_of`; decision 3: the units of
 `download_project` and of the project checks)
 
-**Context:** The Nogat standard 2.1 gives every tool one answer shape (AGI-4.2): the
+**Context:** The Nogat standard 1.0 gives every tool one answer shape (AGI-4.2): the
 envelope `<tool>-result/1` with `status` (`ok`, `partial`, `failed`), the domain document
 as `result`, the outcome of every unit in `items` and the `notices`. A batch that finished
 with failed units is an outcome with its own exit codes, 10 and 11 (ERR §1), and an error

@@ -6,7 +6,7 @@ Kartograf); supersedes ADR-048 of the branch `claude/vigilant-faraday-finqvd` (d
 its decisions D12 and D13 are adopted, see decision 15); amends ADR-028, ADR-032, ADR-033, ADR-036, ADR-040,
 ADR-045, ADR-050, ADR-051 and ADR-052; erratum 1: the command layer takes every command; erratum 2:
 `store_state(root)`, and a marker that cannot be read is an `io_error`
-**Standard:** Nogat 2.1: DEV-19.1 to DEV-19.20, DEV-18.2, AGI-3.4, AGI-5.8, ERR-1, ECO-051; plan
+**Standard:** Nogat 1.0: DEV-19.1 to DEV-19.20, DEV-18.2, AGI-3.4, AGI-5.8, ERR-1, ECO-051; plan
 `docs/plans/2026-10-24-data-output.md` of Nogat (item 2)
 
 **Context:** Since 0.8.0 every command that writes data writes the versioned store (ADR-036), and `-o` /

@@ -3,7 +3,7 @@
 **Date:** 2026-10-31
 **Status:** Accepted (request of the author through Archiwista); amends ADR-015 (feature geometry
 read and compared, not only envelopes; GeoJSON read by GDAL)
-**Standard:** Nogat 2.1: DEV-10.1 (offline tests)
+**Standard:** Nogat 1.0: DEV-10.1 (offline tests)
 
 **Context:** The author reported through Archiwista that downloading for a polygon behaves as if
 it were a rectangle. Measured by an Archiwista agent on a diagonal 11 km strip near Kraków
