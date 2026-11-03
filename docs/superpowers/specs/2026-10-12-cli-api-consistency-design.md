@@ -3,7 +3,7 @@
 **Data:** 2026-10-12
 **Status:** ZAAKCEPTOWANY przez uzytkownika 2026-10-12 (z decyzjami S1-S6
 wg propozycji w sekcji 7; kryterium sekcji 1 poprawione o pola czasowe)
-**Galaz:** `chore/cli-api-consistency` (z `develop` `d5215e8`)
+**Galaz:** `chore/cli-api-consistency` (z `develop` `7026ac1`)
 **Wersja docelowa:** 0.8.0 (zmiany lamiace API i CLI w tym samym wydaniu
 co magazyn wersjonowany)
 **Dokumenty zrodlowe:**

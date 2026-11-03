@@ -41,7 +41,7 @@ Dalej "spec N" = sekcja N tego dokumentu.
 `Przyjeta`, tekst jest w `docs/DECISIONS.md`; T8 dopisuje errate z wynikami
 E2E).
 
-**Kod wyjsciowy:** `feat/agent-interface` (kod `8c65f4e` = merge poprawek
+**Kod wyjsciowy:** `feat/agent-interface` (kod `b721c22` = merge poprawek
 przegladu API odczytu magazynu; spec i plan jako commity `docs`). Stan
 zmierzony 2026-10-18: 5339 testow offline zielonych w 123 s (Python 3.13.5,
 pytest 9.0.2, ruff 0.15.0, mypy 2.3.0), `ruff check`, `ruff format --check` i
@@ -76,7 +76,7 @@ pytest 9.0.2, ruff 0.15.0, mypy 2.3.0), `ruff check`, `ruff format --check` i
    `jsonschema`, `mcp`, `mcp-types`, `pydantic`, `starlette`, `uvicorn`), zero
    aktualizacji istniejacych (O7). `jsonschema` i `pydantic` nie sa dzis w
    `.venv`: testy `tools.py` uzywajace `jsonschema` maja `importorskip`.
-4. **Spojnosc z poprawkami przegladu API odczytu magazynu (merge `8c65f4e`):**
+4. **Spojnosc z poprawkami przegladu API odczytu magazynu (merge `b721c22`):**
    `Sidecar.unit` (plik krajowy z motywem = nazwa pliku slotu, np.
    `pl_miejscowosci`, przyjmowana przez `iter_store(units=...)`),
    `InvalidSidecarError` takze dla braku sidecara, `Sidecar.schema` zawsze
@@ -442,7 +442,7 @@ przyklady, `supports_check`); `create_parser()` jako fasada.
    `CallToolResult(content=[TextContent(text=to_json(indent=None))],
    structured_content=to_dict(), is_error=<kod wyjscia != 0>)`.
 
-## Fakty o obecnym kodzie (zweryfikowane 2026-10-18 na `8c65f4e`)
+## Fakty o obecnym kodzie (zweryfikowane 2026-10-18 na `b721c22`)
 
 - Parser CLI: `kartograf/cli/_parser.py` (354 linie): `_HelpFormatter` :20, `_Parser`
   :35, `_LazyVersionAction` :48, `_REMOVED_COMMANDS` :74, `removed_command_error` :94,
@@ -1727,7 +1727,7 @@ Odpowiadaja kryteriom akceptacji specu (sekcja 14):
 ## Dodatek A: skrypt zrzutu odniesienia (poza repo)
 
 Uruchamiany z korzenia worktree interpreterem `PY`: `$PY baseline_dump.py <katalog-wynikowy> [--drop-json]`.
-Sprawdzony 2026-10-18 na kodzie `8c65f4e`: wydruk `leaf commands: 36; parsers: 50; text runs: 33`,
+Sprawdzony 2026-10-18 na kodzie `b721c22`: wydruk `leaf commands: 36; parsers: 50; text runs: 33`,
 dwa uruchomienia daja identyczne katalogi, `COLUMNS` nie wplywa na wynik, siec zablokowana w skrypcie.
 `--drop-json` (po przelaczeniu parsera, T5 Step 4) usuwa `--json` z kazdej komendy-liscia oprocz
 `elevation availability` (ktora miala te flage wczesniej), zeby zrzut "po" dalo sie porownac ze zrzutem

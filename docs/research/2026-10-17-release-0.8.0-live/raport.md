@@ -12,12 +12,12 @@ Offline = `unshare -rn` (bez sieci, magazyn dostepny).
 | Test | Kod | Zakres | Znaleziska | Stan po poprawkach |
 |---|---|---|---|---|
 | 1. Pelny, 2026-10-16 | `develop` `8160839` (`0.8.0-dev+8160839`) | 18 polecen z 13 grup + `availability`, manifest z odtworzeniem, orto ukosna | P1: 0, P2: 2, P3: 19 | P2 naprawione; P3: 12 naprawionych, 2 decyzje (USAGE 7), 3 czesciowo, 2 otwarte (sekcja 4) |
-| 2. Krotki, 2026-10-17 | `develop` `4e68fda` (`0.8.0-dev+4e68fda`) | 10 polecen z 8 grup, manifest, 6 funkcji API, regula 10 ARCHITECTURE 3.3 | P1: 0, P2: 0, P3: 9 | wszystkie naprawione |
+| 2. Krotki, 2026-10-17 | `develop` `6f67436` (`0.8.0-dev+6f67436`) | 10 polecen z 8 grup, manifest, 6 funkcji API, regula 10 ARCHITECTURE 3.3 | P1: 0, P2: 0, P3: 9 | wszystkie naprawione |
 | 3. Weryfikacja poprawek, 2026-10-17 | `release/0.8.0` | 9 polecen (sekcja 3) | - | zgodne z oczekiwaniem |
 
 Gdzie naprawiono: galezie `fix/live-0.8.0` (FixLive), `fix/live2-0.8.0`
 (FixLive2), `fix/ux-0.8.0`, `fix/docs-0.8.0`, `fix/smoke2-0.8.0`
-(`15e0441`) i `release/0.8.0` (`e1516f7`); opis zmian i "Co zrobic":
+(`3aa15d7`) i `release/0.8.0` (`349b353`); opis zmian i "Co zrobic":
 `docs/CHANGELOG.md` [0.8.0].
 
 ## 1. Test pelny (2026-10-16, `develop` `8160839`)
@@ -78,29 +78,29 @@ produktow pod `--output`.
 
 | Pozycja | Stan | Gdzie |
 |---|---|---|
-| P2-1 LAZ `--sheet`: kafle z obwiedni ramy w EPSG:2180 i z kontaktow milimetrowych (13 kafli, 1,83 GB zamiast 4) | naprawione: kafle z ramy godla, kafel musi siegac w obszar glebiej niz 1 m; na zywo 4 kafle, `availability` 4,93 km2 | FixLive `b045c4f` |
-| P2-2 `--check-updates` arkuszy PL odpowiadal z cache (TTL 7 dni), offline `aktualne` | naprawione: sprawdzenie zawsze pyta zrodlo, cache odswiezany; offline `nie udalo sie sprawdzic`, kod 1 | FixLive `5e01458` |
-| P3-1 angielskie slowa (`resolution:`, `product:`, `to 1:2000`, `Pobieranie kafle LAZ`, opisy HSG) | naprawione: `rozdzielczosc:`, `produkt:`, `w skali`, `Pobieranie wycinka CZ`, `Pobieranie kafli LAZ`, opisy HSG po polsku | `fix/ux-0.8.0`, `15e0441`, `e1516f7` |
-| P3-2 ponowienia bez prefiksu z surowym wyjatkiem; `ponow pobranie` w `--check-updates` | naprawione: `Warning: ... proba 1/3 nieudana (<przyczyna>)`; linia sprawdzenia konczy sie `wynik bylby niepelny` | FixLive `37d0f0e`, `e1516f7` |
+| P2-1 LAZ `--sheet`: kafle z obwiedni ramy w EPSG:2180 i z kontaktow milimetrowych (13 kafli, 1,83 GB zamiast 4) | naprawione: kafle z ramy godla, kafel musi siegac w obszar glebiej niz 1 m; na zywo 4 kafle, `availability` 4,93 km2 | FixLive `1318234` |
+| P2-2 `--check-updates` arkuszy PL odpowiadal z cache (TTL 7 dni), offline `aktualne` | naprawione: sprawdzenie zawsze pyta zrodlo, cache odswiezany; offline `nie udalo sie sprawdzic`, kod 1 | FixLive `0d293b9` |
+| P3-1 angielskie slowa (`resolution:`, `product:`, `to 1:2000`, `Pobieranie kafle LAZ`, opisy HSG) | naprawione: `rozdzielczosc:`, `produkt:`, `w skali`, `Pobieranie wycinka CZ`, `Pobieranie kafli LAZ`, opisy HSG po polsku | `fix/ux-0.8.0`, `3aa15d7`, `349b353` |
+| P3-2 ponowienia bez prefiksu z surowym wyjatkiem; `ponow pobranie` w `--check-updates` | naprawione: `Warning: ... proba 1/3 nieudana (<przyczyna>)`; linia sprawdzenia konczy sie `wynik bylby niepelny` | FixLive `f3a56b1`, `349b353` |
 | P3-3 pasek postepu bez TTY w logach, ikony bez legendy | otwarte | sekcja 4 |
 | P3-4 nazwy API i reprezentacja Pythona w komunikatach | czesciowo: wybory jako flagi (`--teryt <4 cyfry> ..., --bbox/--sheet/--geometry`), `soil hsg -o plik.tif` = `--output to katalog magazynu`; zostaje `Dostepne kody: ['02', ...]` | `fix/ux-0.8.0`; sekcja 4 |
-| P3-5 brak komendy = kod 0 | naprawione: pomoc na stderr, kod 2 | FixLive `37d0f0e` |
-| P3-6 Ctrl-C = traceback | naprawione: `Error: przerwano (Ctrl-C)`, kod 130 (pusty katalog produktu zostaje) | FixLive `37d0f0e` |
+| P3-5 brak komendy = kod 0 | naprawione: pomoc na stderr, kod 2 | FixLive `f3a56b1` |
+| P3-6 Ctrl-C = traceback | naprawione: `Error: przerwano (Ctrl-C)`, kod 130 (pusty katalog produktu zostaje) | FixLive `f3a56b1` |
 | P3-7 argparse: skroty flag, ujemny `--bbox` po spacji, `invalid choice` po angielsku | czesciowo: bez skrotow, `--bbox -447000,...` dziala; zostaje `invalid choice` | `fix/ux-0.8.0`; sekcja 4 |
-| P3-8 ponowne uruchomienie offline | czesciowo: tryb domyslny bez zapytan o sygnal (mapy, arkusze i orto CZ, SoilGrids; errata 3 ADR-036), mesh z rekordow indeksu w cache, podsumowanie LAZ dopiero po sukcesie; zostaje LAZ PL `--bbox` i zadania projektu z PRG/skorowidzem (wybor plikow pyta zrodlo, projekt bez cache metadanych) | FixLive2 `d342210`, `15e0441`; sekcja 4 |
-| P3-9 rozny podmiot linii statusu | naprawione: sciezka pod `--output` w pobraniu i `--check-updates`, w projekcie `jednostka (plik)` | FixLive2 `d342210`, `15e0441` |
-| P3-10 wycinek PL w calosci poza ladem: 6 zapytan WCS i plik nodata | naprawione: `Error:` przed WCS (maska PRG), bez wersji | FixLive2 `d342210` |
-| P3-11 statystyki HSG bez braku danych; SoilGrids oddaje 0, nie -32768 | naprawione: linia `Brak danych`, procenty z powierzchni z danymi, obszar zadania; zera SoilGrids - decyzja: plik bez zmian, opis w USAGE 7 | FixLive2, `15e0441` |
-| P3-12 wolne uslugi bez informacji | naprawione: `Info:` z szacowanym czasem przed seria WCS i przed zapytaniem PRNG; limit obszaru (drzewa 3D) bez osobnej zmiany | FixLive2 `d342210` |
+| P3-8 ponowne uruchomienie offline | czesciowo: tryb domyslny bez zapytan o sygnal (mapy, arkusze i orto CZ, SoilGrids; errata 3 ADR-036), mesh z rekordow indeksu w cache, podsumowanie LAZ dopiero po sukcesie; zostaje LAZ PL `--bbox` i zadania projektu z PRG/skorowidzem (wybor plikow pyta zrodlo, projekt bez cache metadanych) | FixLive2 `203a9d9`, `3aa15d7`; sekcja 4 |
+| P3-9 rozny podmiot linii statusu | naprawione: sciezka pod `--output` w pobraniu i `--check-updates`, w projekcie `jednostka (plik)` | FixLive2 `203a9d9`, `3aa15d7` |
+| P3-10 wycinek PL w calosci poza ladem: 6 zapytan WCS i plik nodata | naprawione: `Error:` przed WCS (maska PRG), bez wersji | FixLive2 `203a9d9` |
+| P3-11 statystyki HSG bez braku danych; SoilGrids oddaje 0, nie -32768 | naprawione: linia `Brak danych`, procenty z powierzchni z danymi, obszar zadania; zera SoilGrids - decyzja: plik bez zmian, opis w USAGE 7 | FixLive2, `3aa15d7` |
+| P3-12 wolne uslugi bez informacji | naprawione: `Info:` z szacowanym czasem przed seria WCS i przed zapytaniem PRNG; limit obszaru (drzewa 3D) bez osobnej zmiany | FixLive2 `203a9d9` |
 | P3-13 SMB/cifs: pelny odczyt pliku dla kazdego dowiazania | decyzja: tylko USAGE 7 (bez skrotu w kodzie) | FixLive2 |
-| P3-14 podpowiedzi projektu gubia `--project` | naprawione: `kartograf project add --project <KATALOG> NAZWA ...` | `69ae191` (`fix/ux-0.8.0`) |
-| P3-15 odtworzenie innego dnia zmienia `version`/`label` | naprawione: zgodna SHA-256 = przypieta wersja, manifest bez zmian | FixLive2 `b68b882` |
+| P3-14 podpowiedzi projektu gubia `--project` | naprawione: `kartograf project add --project <KATALOG> NAZWA ...` | `f6e1eb2` (`fix/ux-0.8.0`) |
+| P3-15 odtworzenie innego dnia zmienia `version`/`label` | naprawione: zgodna SHA-256 = przypieta wersja, manifest bez zmian | FixLive2 `bc30e04` |
 | P3-16 USAGE 8 bez `geodesy download` | naprawione | `fix/docs-0.8.0` |
-| P3-17 orto ukosna Krakow 2021 bez kodu EPSG | decyzja: USAGE 7 (VRT z `-a_srs EPSG:2178`), bez zmiany pliku | FixLive `7f2402d` |
-| P3-18 `--check-updates --plan` do nieistniejacego katalogu - blad po sprawdzeniu zrodla | naprawione: katalog planu sprawdzany przed siecia | FixLive `37d0f0e` |
+| P3-17 orto ukosna Krakow 2021 bez kodu EPSG | decyzja: USAGE 7 (VRT z `-a_srs EPSG:2178`), bez zmiany pliku | FixLive `906e6ea` |
+| P3-18 `--check-updates --plan` do nieistniejacego katalogu - blad po sprawdzeniu zrodla | naprawione: katalog planu sprawdzany przed siecia | FixLive `f3a56b1` |
 | P3-19 podpowiedz wariantu `ten arkusz` przy wielu arkuszach | otwarte | sekcja 4 |
 
-## 2. Test krotki po zmianach API i nazw (2026-10-17, `develop` `4e68fda`)
+## 2. Test krotki po zmianach API i nazw (2026-10-17, `develop` `6f67436`)
 
 Nowy magazyn: `<katalog-danych>/data` (scenariusz),
 `<katalog-danych>/magazyn-projekt` (manifest), `<katalog-danych>/api-data`
@@ -136,15 +136,15 @@ zgodne z regula 10 ARCHITECTURE 3.3.
 
 | Pozycja | Stan | Gdzie |
 |---|---|---|
-| P3-1 mesh `--bbox` offline kod 1 mimo lokalnego kafla | naprawione: rekordy indeksu obszaru w cache metadanych (TTL 7 dni); na zywo offline kod 0 (sekcja 3) | `15e0441` |
-| P3-2 status projektu: sciezka jako jednostka wycinka | naprawione: `UnitFile.unit` wycinka = wspolrzedne | `15e0441` |
-| P3-3 sidecar `product` land cover/HSG != `--product` | naprawione: `bdot10k`, `zabaged`, ..., HSG `hsg` | `15e0441` |
-| P3-4 podsumowanie HSG dla calego rastra (420,91 ha przy bbox 400 ha) | naprawione: statystyki obszaru zadania, linia `Obszar zadania` (sekcja 3) | `15e0441` |
-| P3-5 opisy grup HSG po angielsku | naprawione | `15e0441` |
-| P3-6 `update="check"` wskazuje `check_sheets()` | naprawione: funkcja `check_*` toru | `15e0441` |
-| P3-7 `download_image_cutout(bbox, ...)` pozycyjny, `coverage` wymagany | naprawione: argumenty nazwane, `coverage=None`; decyzja koordynatora: argumenty tylko nazwane we WSZYSTKICH funkcjach pobrania i sprawdzenia z `__all__` (errata 1 ADR-044) | `15e0441`, `e1516f7` |
-| P3-8 true orto poza miastami: czarny plik jako wersja, `Warning` dopiero po 19 s | naprawione: `NoCoverageError` przed zapisem wersji; decyzja koordynatora: tak samo ortofotomapa `high`/`standard` w calosci 0,0,0 (errata 6 ADR-042). Listy miast nie ma - usluga nie publikuje zasiegu wycinka | `15e0441`, `e1516f7` |
-| P3-9 pozostalosci testu 1: `(resolution: 1m)`, `ponow pobranie` w `--check-updates`, `RuntimeWarning` przy `python -m` | naprawione | `e1516f7`, `15e0441` |
+| P3-1 mesh `--bbox` offline kod 1 mimo lokalnego kafla | naprawione: rekordy indeksu obszaru w cache metadanych (TTL 7 dni); na zywo offline kod 0 (sekcja 3) | `3aa15d7` |
+| P3-2 status projektu: sciezka jako jednostka wycinka | naprawione: `UnitFile.unit` wycinka = wspolrzedne | `3aa15d7` |
+| P3-3 sidecar `product` land cover/HSG != `--product` | naprawione: `bdot10k`, `zabaged`, ..., HSG `hsg` | `3aa15d7` |
+| P3-4 podsumowanie HSG dla calego rastra (420,91 ha przy bbox 400 ha) | naprawione: statystyki obszaru zadania, linia `Obszar zadania` (sekcja 3) | `3aa15d7` |
+| P3-5 opisy grup HSG po angielsku | naprawione | `3aa15d7` |
+| P3-6 `update="check"` wskazuje `check_sheets()` | naprawione: funkcja `check_*` toru | `3aa15d7` |
+| P3-7 `download_image_cutout(bbox, ...)` pozycyjny, `coverage` wymagany | naprawione: argumenty nazwane, `coverage=None`; decyzja koordynatora: argumenty tylko nazwane we WSZYSTKICH funkcjach pobrania i sprawdzenia z `__all__` (errata 1 ADR-044) | `3aa15d7`, `349b353` |
+| P3-8 true orto poza miastami: czarny plik jako wersja, `Warning` dopiero po 19 s | naprawione: `NoCoverageError` przed zapisem wersji; decyzja koordynatora: tak samo ortofotomapa `high`/`standard` w calosci 0,0,0 (errata 6 ADR-042). Listy miast nie ma - usluga nie publikuje zasiegu wycinka | `3aa15d7`, `349b353` |
+| P3-9 pozostalosci testu 1: `(resolution: 1m)`, `ponow pobranie` w `--check-updates`, `RuntimeWarning` przy `python -m` | naprawione | `349b353`, `3aa15d7` |
 
 ## 3. Weryfikacja poprawek na zywo (2026-10-17, `release/0.8.0`)
 

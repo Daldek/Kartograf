@@ -1,4 +1,4 @@
-# Raport E2E - plaster B: imagery, maps, geodesy (Kartograf 0.8.0, develop e019126a)
+# Raport E2E - plaster B: imagery, maps, geodesy (Kartograf 0.8.0, develop e610ebe6)
 
 ## Zakres
 

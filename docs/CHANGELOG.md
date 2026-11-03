@@ -4876,8 +4876,8 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 [0.6.0]: https://github.com/Daldek/Kartograf/compare/v0.5.0...4cec5d87b9aad1ffdb59693ec7163c7c97540983
 [0.5.0]: https://github.com/Daldek/Kartograf/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Daldek/Kartograf/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/Daldek/Kartograf/compare/402d8091dc02dfacb77619950fc06504bea6d7ec...v0.4.0
-[0.3.2]: https://github.com/Daldek/Kartograf/compare/v0.3.1...402d8091dc02dfacb77619950fc06504bea6d7ec
+[0.4.0]: https://github.com/Daldek/Kartograf/compare/b31c801bceaaa218eb43466cba624709a2100376...v0.4.0
+[0.3.2]: https://github.com/Daldek/Kartograf/compare/v0.3.1...b31c801bceaaa218eb43466cba624709a2100376
 [0.3.1]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.2.0

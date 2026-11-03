@@ -1,6 +1,6 @@
 # E2E 0.8.0 przed tagiem - wycinek E: `project`, odczyt magazynu (API dla Archiwisty), `parse`, `catalog`, `cache`, warstwa komend, tryby aktualizacji
 
-Data: 2026-10-19. Agent `E2eProjectStore`. Kod: `develop @ e019126a` (wheel z `git archive HEAD`, `kartograf 0.8.0`). Repozytorium nie bylo edytowane.
+Data: 2026-10-19. Agent `E2eProjectStore`. Kod: `develop @ e610ebe6` (wheel z `git archive HEAD`, `kartograf 0.8.0`). Repozytorium nie bylo edytowane.
 
 ## Werdykt
 
@@ -33,7 +33,7 @@ Poza zakresem (inne wycinki): dostepnosc, szczegoly torow NMT/NMPT/orto/LAZ/CZ/g
 
 ## Srodowisko
 
-- Wheel `kartograf-0.8.0` (z `git archive HEAD`, `e019126a`) z extra `[mcp]` w czystym venv Pythona 3.13; wyłącznie `venv/bin/kartograf` i `venv/bin/python` (nie `.venv` repo, nie `python -m` z repo). Zaleznosci: pyproj 3.8.0, rasterio 1.5.2, pyogrio 0.13.0, numpy 2.5.4, requests 2.34.2, mcp 2.3.0.
+- Wheel `kartograf-0.8.0` (z `git archive HEAD`, `e610ebe6`) z extra `[mcp]` w czystym venv Pythona 3.13; wyłącznie `venv/bin/kartograf` i `venv/bin/python` (nie `.venv` repo, nie `python -m` z repo). Zaleznosci: pyproj 3.8.0, rasterio 1.5.2, pyogrio 0.13.0, numpy 2.5.4, requests 2.34.2, mcp 2.3.0.
 - cwd kazdego wywolania: `<cwd-E>` (swiezy `.kartograf_cache.db` lokalnie; operacje `project` jej nie tworza - sprawdzone). Debian 13, jadro 6.12.94.
 - `<katalog-danych>` = udzial SMB (cifs vers=3.1.1, `cache=strict`, `actimeo=1`, **bez `serverino`**: hardlinki dzialaja po stronie serwera, ale numery i-wezlow sa niestabilne - `samefile` falszywe, a `st_nlink` klienta bywa chwilowo 1). Kontrole na lokalnym ext4 (syntetyczne magazyny w `<cwd-E>/synth`, jeden magazyn kontrolny usuniety).
 - Uslugi na zywo: GUGiK (skorowidz WFS/WMS, `opendata.geoportal.gov.pl`, WCS), PRG WFS, CUZK (`openzu`, feed ATOM, ImageServer), ISRIC WCS, CLMS WMS (podglad). Bez `CLMS_CREDENTIALS` (decyzja uzytkownika).

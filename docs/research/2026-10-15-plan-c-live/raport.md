@@ -1,9 +1,9 @@
 # Plan C na zywo (Task 8): archiwum BDOT10k, modele 3D, PRG, EGiB
 
 Data: 2026-10-15, 22:53-23:15 CEST. Galaz `feat/plan-c-collections`.
-Pobrania (sekcje 1-7) na kodzie `fffe71a` (sidecary: `kartograf_version`
-`0.8.0-dev+fffe71a`); sprawdzenie poprawki podpowiedzi (sekcja 8), projekt
-i API (sekcja 9) na `92b0005` (poprawka z testem regresji). CLI: ta sama
+Pobrania (sekcje 1-7) na kodzie `e031d53` (sidecary: `kartograf_version`
+`0.8.0-dev+e031d53`); sprawdzenie poprawki podpowiedzi (sekcja 8), projekt
+i API (sekcja 9) na `3fa4f55` (poprawka z testem regresji). CLI: ta sama
 `kartograf.cli.commands.main(argv)` uruchamiana z korzenia worktree przez
 opakowanie `requests.Session.send`, ktore wypisuje metode, URL, status,
 `Content-Length` i czas kazdego zapytania ("HTTP" nizej; caly ruch HTTP

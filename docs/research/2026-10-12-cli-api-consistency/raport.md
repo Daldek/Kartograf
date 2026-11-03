@@ -1,7 +1,7 @@
 # Spojnosc CLI, biblioteki i API (2026-10-12)
 
 **Pozycja backlogu:** "Do 0.8.0" -> "Spojnosc CLI, biblioteki i API".
-**Kod:** galaz `chore/cli-api-consistency` od `develop` `d5215e8` (0.8.0-dev),
+**Kod:** galaz `chore/cli-api-consistency` od `develop` `7026ac1` (0.8.0-dev),
 bez zmian kodu. **Metoda:** `kartograf <komenda> --help` kazdej komendy,
 `inspect.signature` wszystkich wywolywalnych z `__all__`, lektura torow CLI
 (`cli/download_cmd.py`, `landcover_cmd.py`, `soilgrids_cmd.py`,

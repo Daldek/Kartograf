@@ -1,6 +1,6 @@
 # Test na zywo przed wydaniem 0.7.2 (2026-10-11)
 
-`develop` (HEAD `108c4f2`, `kartograf 0.7.2-dev+108c4f2`), bez zmian
+`develop` (HEAD `b5eb8c5`, `kartograf 0.7.2-dev+b5eb8c5`), bez zmian
 w kodzie. CLI uruchamiane z korzenia repo (cache metadanych lokalnie), dane
 w `<katalog-danych>/kartograf/e2e/2026-10-11-test-przed-0.7.2/` z jawnym
 `--output`, osobny katalog na scenariusz. Skrypty jednorazowe poza repo.

@@ -1,7 +1,7 @@
 # fix-collections (slice D: kolekcje) - raport
 
-Worktree `<worktree>`, galaz `fix/e2e-collections` (od develop @ bef87501).
-Commity: `a6188d00` feat(notices) names_text; `3d6ec0aa` fix(bledy) przyklad hintu wg produktu; `8a3b70c8` fix(kolekcje) reszta (+ dokumentacja).
+Worktree `<worktree>`, galaz `fix/e2e-collections` (od develop @ 4050b978).
+Commity: `23c50516` feat(notices) names_text; `b439b4ef` fix(bledy) przyklad hintu wg produktu; `8002ad73` fix(kolekcje) reszta (+ dokumentacja).
 Dane live: `<katalog-danych>/fix-collections/{before,after,before-admin,after-admin,mesh-limit,trees-limit,ku-before,ku-after}`.
 
 ## Wynik per znalezisko
@@ -9,7 +9,7 @@ Dane live: `<katalog-danych>/fix-collections/{before,after,before-admin,after-ad
 ### D P2-1 (cadastre map auto, obszar tylko PL, aborts) - FIXED
 - Przyczyna: `_jobs` budowal jednostki wszystkich czesci w jednej petli; `NoCoverageError` z `_ku_jobs` (RUIAN bez KU w czesci CZ prostokatnej obwiedni) przerywal cale zadanie przed pobraniem czesci PL. Ten sam wzorzec: `discover_teryts_for_bbox` (powiaty PRG), `_area_voivodeships`, `_tile_jobs`, `_sheet_jobs` (GFI BDOT10k, indeks arkuszy CUZK).
 - Zmiana (`download/collections.py`): `_jobs` rozbite na `_part_jobs` (jedna czesc kraju) + `_jobs`, ktory zwraca `(jobs, failures)`. Przy `auto` w PL i CZ (>= 2 czesci) `NoCoverageError` (brak jednostek) i `DownloadError` (zapytanie o jednostki zawiodlo) danej czesci to `UnitFailure(<kraj>, <kraj>, tekst, kind)` - drugi kraj dziala dalej; jeden kraj (jawny `--country`, `auto` zawezone) rzuca jak dotad; brak jednostek we WSZYSTKICH krajach = jeden `NoCoverageError`/`DownloadError` z tekstami obu (`_no_units`). `run_request` dokleja te bledy na poczatek `failed`; `plan_request` robi z nich `Warning` `check_failed`.
-- Testy: `tests/test_collections_auto.py` (6; 5 nie przechodzi na bef87501): obszar PL-only pobiera PL gdy CZ bez KU; `check_collection` tego samego; obszar CZ-only z bledem PL w trakcie pobierania; oba kraje bez danych = `ok False` bez `auto_partial_success`; jawny `cz` bez KU = `NoCoverageError` jak dotad; BDOT10k+ZTM bez arkuszy w obu krajach = jeden `NoCoverageError` z obu tekstami.
+- Testy: `tests/test_collections_auto.py` (6; 5 nie przechodzi na 4050b978): obszar PL-only pobiera PL gdy CZ bez KU; `check_collection` tego samego; obszar CZ-only z bledem PL w trakcie pobierania; oba kraje bez danych = `ok False` bez `auto_partial_success`; jawny `cz` bez KU = `NoCoverageError` jak dotad; BDOT10k+ZTM bez arkuszy w obu krajach = jeden `NoCoverageError` z obu tekstami.
 - Live PRZED (develop): `cadastre download --product map --country auto --format SHP --bbox 18.640,49.745,18.650,49.750 --bbox-crs EPSG:4326` -> `Error: map: obszar nie przecina zadnego katastralniho uzemi (RUIAN)`, kod 1 (1,0 s). PO: kod 0 (5,0 s), `Warning: czesc CZ zadania zakonczyla sie bledem (patrz Error) - pobrano PL; kod 0 ...`, plik `cadastre/pl_egib/bbox/474071.459_208684.2788_474794.2857_209243.4144.gpkg: nowa wersja ...`, `Error: CZ: map: obszar nie przecina ... (RUIAN)`. `--check-updates` PO: kod 0, `Warning: CZ: map: ...` + `Warning: czesc CZ zadania nie mogla zostac sprawdzona - sprawdzono PL; kod 0`, pozycja PL `nie da sie sprawdzic bez pobrania`. `--json` PO: `ok: true`, `failed: [{unit: CZ, country: CZ, kind: no_coverage}]`, `notices: [warning auto_partial_success]`.
 
 ### D P3-1 (czesciowy sukces auto w kolekcjach = kod 1) - FIXED (regula SCOPE 3.2 / ARCHITECTURE 4.6 jak w `download_data`)
@@ -25,7 +25,7 @@ Dane live: `<katalog-danych>/fix-collections/{before,after,before-admin,after-ad
 - `_resolve`: komunikat i `allowed` z krajow deskryptorow produktu (`--whole-country wymaga --country cz (plik krajowy)` dla `network`, `pl albo cz` dla `admin`); `catalog/commands/_collection.py`: ograniczenie `--whole-country` z krajow produktow grupy (hydro: `--country cz`). Test: `tests/test_ux_messages.py::test_whole_country_names_only_the_countries_of_the_product`.
 
 ### D P3-5 (`Info:` 80-95 s dla `names --product world`) - FIXED
-- `sources/registry.py::_prng_source`: `response_note` tylko dla `geographic` (pomiar dotyczyl NazwaGeograficznaRP). Test: asercja w `tests/test_names.py::test_world_bbox_outside_poland_and_national_file` (pada na bef87501). USAGE 1.10 uzupelnione.
+- `sources/registry.py::_prng_source`: `response_note` tylko dla `geographic` (pomiar dotyczyl NazwaGeograficznaRP). Test: asercja w `tests/test_names.py::test_world_bbox_outside_poland_and_national_file` (pada na 4050b978). USAGE 1.10 uzupelnione.
 
 ### D P3-6 (nieistniejacy TERYT) - FIXED
 - `_resolve`: blad formatu bez zmian; poprawny format z nieistniejacym wojewodztwem: `--teryt 9999: nie ma wojewodztwa o kodzie 99 (dwie pierwsze cyfry kodu powiatu); dostepne: 02 (dolnoslaskie), ... 32 (zachodniopomorskie)`, `option="teryt"`. Testy: `test_ux_messages` (99, 9999, 33 + format 126), wiersz `test_errors.py` zaktualizowany.
@@ -33,11 +33,11 @@ Dane live: `<katalog-danych>/fix-collections/{before,after,before-admin,after-ad
 ### D P3-7 / C P3-02 / A P3-17 (hint `Przyklad:` bierze pierwszy przyklad) - FIXED ogolnie
 - `catalog/hints.py::example_for(command, option, given=None)`: przy `given["product"]` tylko przyklady tego produktu (gdy przyklady komendy rozrozniaja produkty; produkt bez przykladu = brak przykladu, nie obcy), potem pokazujacy opcje, potem kraj (rowny > bez kraju > inny), potem rodzaj wyboru obszaru (teryt/ku/sheet/bbox/geometry/whole_country). Bez `given` zachowanie bez zmian. Plumbing: `error_report(exc, command=, given=)` -> `_library_hint` -> `_option_hint`/`_options_hint`; CLI `main`/`_fail` przekazuje `vars(parsed_args)`; MCP `call_tool` przekazuje `arguments`.
 - Nowe przyklady katalogu (zeby produkt mial dopasowany przyklad): `boundaries` `admin --country auto --level pl=gmina,cz=obec` na granicy, `special`, `geomorphology`; `models3d` `trees`; `names` `world`.
-- Testy: `test_catalog.py` (2), `test_cli_errors.py` (CLI --json), `test_mcp_server.py` (ten sam wywolanie przez MCP) - wszystkie padaja na bef87501.
+- Testy: `test_catalog.py` (2), `test_cli_errors.py` (CLI --json), `test_mcp_server.py` (ten sam wywolanie przez MCP) - wszystkie padaja na 4050b978.
 - Live PO: `models3d download --product trees --country pl --bbox 560000,240000,575000,250000 --json` -> `hint: "Opcje: --sheet, --bbox, --geometry. Przyklad: kartograf models3d download --product trees --teryt 1261 -o ./data"` (PRZED: przyklad `buildings`).
 
 ### D P3-10 (powtorzenie offline mapy CZ po obszarze) - FIXED
-- `providers/cuzk/ruian.py::cadastral_areas_for_bbox(..., cache=None)`: odpowiedz (takze pusta) w `MetadataCache.index_area_cache` (klucz `ruian-ku|<warstwa>|<crs>|<mm>`), TTL 7 dni, `--force`/`--upgrade`/`--check-updates` (cache w trybie odswiezania) pytaja usluge i nadpisuja; `_ku_jobs` przekazuje `metadata`. Testy: `tests/test_cuzk_units.py` (trafienie bez sesji, pusta odpowiedz, odswiezanie; padaja na bef87501).
+- `providers/cuzk/ruian.py::cadastral_areas_for_bbox(..., cache=None)`: odpowiedz (takze pusta) w `MetadataCache.index_area_cache` (klucz `ruian-ku|<warstwa>|<crs>|<mm>`), TTL 7 dni, `--force`/`--upgrade`/`--check-updates` (cache w trybie odswiezania) pytaja usluge i nadpisuja; `_ku_jobs` przekazuje `metadata`. Testy: `tests/test_cuzk_units.py` (trafienie bez sesji, pusta odpowiedz, odswiezanie; padaja na 4050b978).
 - Live (`cadastre ... --country cz --format SHP --bbox=-452000,-1112000,-450000,-1110500 --bbox-crs EPSG:5514`, powtorzenie pod `unshare -rn`): PRZED kod 1 `Error: Zapytanie https://ags.cuzk.gov.cz/.../RUIAN/MapServer/7/query: pobranie nieudane po 3 probach`; PO kod 0, 3 x `lokalna wersja 2026-10-19 (bez sprawdzania; --check-updates)`.
 
 ### D P3-11 (45 vs 44) - FIXED
@@ -45,7 +45,7 @@ Dane live: `<katalog-danych>/fix-collections/{before,after,before-admin,after-ad
 
 ### Dokumentacja (e2e-D "Uwagi do dokumentacji")
 1. USAGE 1.9: domyslnie bez `HEAD` (RUIAN plik krajowy, mapa katastralna CZ) - poprawione, spojne z 4.3; rozmiar RUIAN SHP 251 MB.
-2. USAGE 1.8 "2 plikow": juz poprawione w bef87501 (`2 pliki`) - bez zmian.
+2. USAGE 1.8 "2 plikow": juz poprawione w 4050b978 (`2 pliki`) - bez zmian.
 3. Rozmiary plikow krajowych: tylko RUIAN SHP (251 MB); adresy SHP bez zmian (pomiar z daty).
 4. ARCHITECTURE 3.2: klucze `request` `ku`, `tile`, `sheet`; katalog `names`: opis `--horizontal-crs` dla obszaru (rowny natywnemu przyjmowany).
 5. `llms.txt`: wszystkie narzedzia MCP grup danych wymienione (148 linii < 150, `tests/test_llms_txt.py` zielony).
@@ -70,4 +70,4 @@ ADR-023 pkt 4-5 / ADR-042: regula czesciowego sukcesu `--country auto` (kod 0 + 
 - Nie zrobione / poza slice: P3-12 (szacunek czasu EGiB), P2-2 (Ctrl-C, FixCancel), P3-2/8/9.
 
 ## Brama
-`scripts/gate.sh` z korzenia worktree (po commitach `3d6ec0aa`, `8a3b70c8`): ruff check - OK; ruff format --check - OK; mypy (306 plikow) - OK; pytest offline - 7204 passed, 18 deselected, 0 failed (184,9 s). Pierwsze uruchomienie wykrylo blad mypy (`UnitFailure.kind` jako `str`) - poprawione (`FailureKind`) przed ostatnim przebiegiem.
+`scripts/gate.sh` z korzenia worktree (po commitach `b439b4ef`, `8002ad73`): ruff check - OK; ruff format --check - OK; mypy (306 plikow) - OK; pytest offline - 7204 passed, 18 deselected, 0 failed (184,9 s). Pierwsze uruchomienie wykrylo blad mypy (`UnitFailure.kind` jako `str`) - poprawione (`FailureKind`) przed ostatnim przebiegiem.

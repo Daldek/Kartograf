@@ -48,7 +48,7 @@ Pomiary: `docs/research/2026-10-11-wcs-cutouts/raport.md`,
 - Kazde zadanie zmieniajace zachowanie dopisuje wpis do
   `docs/CHANGELOG.md`, sekcja `## [0.7.2] - Unreleased`
   (`### Dodane` / `### Zmienione` z "Co zrobic" / `### Naprawione`).
-- Numery linii = stan `develop` `f670d8b`; po wczesniejszych zadaniach
+- Numery linii = stan `develop` `8ea15e2`; po wczesniejszych zadaniach
   przesuwaja sie — szukaj po symbolu.
 - Testy offline na SUROWYCH odpowiedziach z Task 1 (nie na recznie
   skladanych imitacjach tam, gdzie liczy sie format serwera); asercje na
@@ -104,7 +104,7 @@ Pomiary: `docs/research/2026-10-11-wcs-cutouts/raport.md`,
 ### Task 0: Galaz
 
 - [ ] `git switch develop && git switch -c feat/wcs-cutouts` (spec i raport
-  scommitowane na `develop`: `f670d8b`; plan commitowany na `develop`
+  scommitowane na `develop`: `8ea15e2`; plan commitowany na `develop`
   przed galezia commitem `docs(plan): wycinki PL z WCS (a)`).
 
 ### Task 1: Fixtury z surowych odpowiedzi (na zywo, jednorazowo)

@@ -1,9 +1,9 @@
-# fix-links: raport (branch `fix/e2e-links`, od develop @ bef87501)
+# fix-links: raport (branch `fix/e2e-links`, od develop @ 4050b978)
 
 Commity (Conventional Commits, bez Co-Authored-By):
 
-- `bbf270e9` fix(links): potwierdzenie dowiazania trescia bez liczby dowiazan (cifs bez serverino)
-- `a60d128a` docs(links): potwierdzanie dowiazan na udziale SMB bez serverino
+- `b89303a2` fix(links): potwierdzenie dowiazania trescia bez liczby dowiazan (cifs bez serverino)
+- `174a2737` docs(links): potwierdzanie dowiazan na udziale SMB bez serverino
 
 Brama: `scripts/gate.sh` z korzenia worktree = **GATE OK (193 s)**: ruff check, ruff format --check,
 mypy (`kartograf/ tests/`), pytest offline: **7170 passed, 18 deselected**.
@@ -85,7 +85,7 @@ Sprawdzone, ze nowe/zmienione testy PADAJA na kodzie develop (pristine `git arch
 ## Dowody na zywo (udzial cifs bez serverino; dane pod `<katalog-danych>/fix-links/...`)
 
 Dane: `N-33-58-A-c-1-3` 0,5 m EVRF2007 `--full-sheet` (std -> 2025 sha `84458fd0`, `full_sheet/` -> 2022 sha `78b8e279`).
-Kod "przed" = develop bef87501 (domyslny import venv / `git archive` w /tmp), "po" = worktree.
+Kod "przed" = develop 4050b978 (domyslny import venv / `git archive` w /tmp), "po" = worktree.
 
 1. **e2e-A, przed**: uruchomienie 1 (`... --full-sheet -o <katalog-danych>/repro-A2`), `sha256sum` sciezek
    (dowolny odczyt), uruchomienie 2 z `--max-year 2022`: rc 0, wydruk tylko

@@ -1,6 +1,6 @@
 # R2 - slice MCP: agent Claude Code (haiku) przez kartograf-mcp - raport
 
-Data: 2026-10-19. Instalacja: wheel 0.8.0 z `git archive cf39177a` (venv `kartograf-e2e-0.8.0-r2/venv`, mcp 2.3.0, 29 narzedzi).
+Data: 2026-10-19. Instalacja: wheel 0.8.0 z `git archive 2828808f` (venv `kartograf-e2e-0.8.0-r2/venv`, mcp 2.3.0, 29 narzedzi).
 Serwer: `kartograf-mcp --allow-dir <katalog-danych> --cache-file <cwd>/metadata.db` (swiezy cache). Dane: `<katalog-danych>/R2/mcp/{magazyn,magazyn-projekt,projekt}`.
 Agent: `claude -p --model haiku --mcp-config mcp.json --strict-mcp-config --tools "" --allowedTools mcp__kartograf --permission-mode dontAsk --no-session-persistence --output-format stream-json --verbose`, 6 zadan, kazde osobne wywolanie (kolejno, ten sam magazyn).
 Skrypty/logi: `kartograf-e2e-0.8.0-r2/cwd-mcp/` (`run.sh`, `tasks.txt`, `out-t*.jsonl`, `final-t*.txt`, `summ2.py`, `parity.py`).

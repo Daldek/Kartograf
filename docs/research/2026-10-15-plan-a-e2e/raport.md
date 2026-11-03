@@ -1,7 +1,7 @@
 # E2E planu A na zywo (2026-10-15): warianty NMT/NMPT, archiwa, `elevation availability`
 
 Galaz `feat/plan-a-elevation-pl` po rebase na `develop` z manifestem projektu
-(`212edd3`). CLI z korzenia worktree (`python -m kartograf.cli.commands`),
+(`2004f73`). CLI z korzenia worktree (`python -m kartograf.cli.commands`),
 cache metadanych w korzeniu worktree, dane wylacznie w `<katalog-danych>`
 (jawne `-o`). Plan: `docs/superpowers/plans/2026-10-15-plan-a-elevation-pl.md`
 (Task 9), decyzje: ADR-041 z uzupelnieniem.
@@ -23,7 +23,7 @@ cache metadanych w korzeniu worktree, dane wylacznie w `<katalog-danych>`
 | E2E-5 raport | `elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000` i Pomorze `339000,744800,343000,747000` (`--force`) | Krakow: 2025, 2024, 2023, 2022, 2019 PL-1992 1m kompletne (6/0), 2023 i 2021 PL-2000 1m (15/0), 2019 5m (6/0) - jak pkt 9 planu; rocznik 2018 = kombinacje archiwow XYZ/TBD (decyzja 13), niekompletne. Pomorze (lad 86,38 ha): NMT 2025 0.5m 0/4 "nie: 4 niepelne", 2022 1m 3/0 "brak arkuszy dla 0,88 ha" (8 782 m2), NMPT 2025 0.5m 0/4 - jak pkt 9; najnowsza kompletna kombinacja Pomorza to archiwum TBD 25m KRON86 2010. Czas z siecia 5,3-7,4 s na raport (16 km2 / 8,8 km2), z cache 0,6-1,5 s. `--json` = `check_availability(...).to_json()` bajtowo (zamrozony zegar, ten sam cache) dla NMT, NMPT i LAZ obu obszarow; podproces CLI = API poza `checked_at` |
 | E2E-6 raport = pobranie | podpowiedz najnowszej kompletnej kombinacji Krakowa (`--sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --year 2025`) + `-o` | pobrane godla = `sheets_full` kombinacji (M-34-64-D-d-1-2, -1-4, -2-1, -2-3, -3-2, -4-1), wersje `2025-04-28_83137_*`, rok = rok kombinacji; 53 s |
 | E2E-7 LAZ | `--product laz` Pomorze; zapytania nagrane przez opakowanie `requests.Session.request` | 2025 PL-1992 10 TAK / 11 NIE, niekompletna; zapytania: 2 x WFS LIDAR EVRF2007, 2 x WFS LIDAR KRON86, 3 x WFS PRG, 0 x opendata; po raportach `git status` czysty (raport nie ma `--output`, zapisuje tylko cache) |
-| E2E-8 wycinek 1m | `--cutout --horizontal-crs EPSG:2180 --bbox 566000,243000,566500,243500` NMT i NMPT EVRF2007, kod `develop` (`212edd3`) i planu A | pliki bajtowo rowne: NMT `790df2d528619523...`, NMPT `e01648fbef06157f...`; sidecary rowne poza `downloaded_at` |
+| E2E-8 wycinek 1m | `--cutout --horizontal-crs EPSG:2180 --bbox 566000,243000,566500,243500` NMT i NMPT EVRF2007, kod `develop` (`2004f73`) i planu A | pliki bajtowo rowne: NMT `790df2d528619523...`, NMPT `e01648fbef06157f...`; sidecary rowne poza `downloaded_at` |
 | Archiwum (decyzja 13) | podpowiedz Pomorza: `--format TBD --resolution 25m --vertical-crs KRON86 --year 2010` | 3 arkusze ze skorowidza (`N-33-58-A-c-1..3`), `nmt/pl_1992_tbd_25m_kron86/.../<godlo>.zip`, ZIP kompletne (`testzip` bez bledow, pliki `NMT-*.ASC` jak u zrodla), sidecar `dataset pl.gugik.nmt_tbd_25m`, `full_sheet/`; ponownie: 3 x lokalna wersja; `--check-updates`: 3 x aktualne |
 
 ## Nowy fakt GUGiK i poprawka (ADR-041 R6)

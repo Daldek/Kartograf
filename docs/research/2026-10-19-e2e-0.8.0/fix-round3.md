@@ -1,11 +1,11 @@
 # Round 3 fixes (E2E 0.8.0) - branch integrate/e2e-fixes
 
-Worktree `<worktree>`, base 114c03b3, 6 commits:
-8270e78e (store, N-P2-1), ed6179ff (geometry, N-P3-4), 1515ea4c (year hint, N-P3-3), 7ec8990e (catalog, N-P3-2),
-17184bed (ocd edition + volume wording, N-P3-7/6), 42ec581b (docs; DECISIONS.md CRLF checked: 4388/4388 lines).
+Worktree `<worktree>`, base 4bff80e3, 6 commits:
+2aa02d62 (store, N-P2-1), b81e65fa (geometry, N-P3-4), a2a34cd2 (year hint, N-P3-3), c4065f13 (catalog, N-P3-2),
+dd3a7f16 (ocd edition + volume wording, N-P3-7/6), 631e36df (docs; DECISIONS.md CRLF checked: 4388/4388 lines).
 Gate (`scripts/gate.sh`, once, before the commits): ruff check, ruff format --check, mypy, pytest offline: **GATE OK**,
 7419 passed, 18 deselected. Live data only in `<katalog-danych>/R3/` (explicit `--output`), ~350 MB, no repo path written.
-"Before" = `git archive 114c03b3` copy in scratch; "after" = worktree (`python -m kartograf` with cwd = worktree).
+"Before" = `git archive 4bff80e3` copy in scratch; "after" = worktree (`python -m kartograf` with cwd = worktree).
 
 ## 1. N-P2-1 file_footprint / OGC:CRS84 (P2) - DONE
 - Cause: PROJ 9.8.1 gives the OGC:CRS84 -> EPSG:4326 axis swap accuracy -1 ("unknown"), the policy rejects it, `_same_crs`

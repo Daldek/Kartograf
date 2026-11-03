@@ -37,7 +37,7 @@ pomiary M1-M3 wykonane 2026-10-11
 
 ## 1. Kontekst i fakty
 
-### 1.1 Dzis (kod `develop` `82a9eff`)
+### 1.1 Dzis (kod `develop` `41a069c`)
 
 | Element | Dzis | Gdzie |
 |---|---|---|

@@ -4,7 +4,7 @@ Data: 2026-10-19. Agent: E2eLandcover. Raport po polsku (ASCII). Sciezka magazyn
 
 ## 1. Zakres
 
-Czysta instalacja wheel 0.8.0 (z `git archive HEAD` = develop e019126a, z extra `[mcp]`), komendy grup `landcover` i `soil`
+Czysta instalacja wheel 0.8.0 (z `git archive HEAD` = develop e610ebe6, z extra `[mcp]`), komendy grup `landcover` i `soil`
 (`download`, `hsg`, `list-sources`, `list-layers`), zywe uslugi: GUGiK (opendata BDOT10k/BDOO, PRG WFS), CUZK (ArcGIS REST ZABAGED/DATA50/DATA250,
 feedy ATOM, plik krajowy Data250), EEA Discomap i DLR (WMS CORINE), Copernicus CLMS (tylko publiczny katalog), ISRIC (WCS SoilGrids).
 Przypadki typowe (pierwsze pobranie, powtorzenie lokalne, `--check-updates`, `--upgrade`, `--force`, `--json`, `--plan`, `--help`),

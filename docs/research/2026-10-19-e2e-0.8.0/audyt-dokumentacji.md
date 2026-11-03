@@ -1,6 +1,6 @@
 # Audyt dokumentacji Kartografa przed tagiem v0.8.0 (bez README.md)
 
-Galaz `docs/audit-0.8.0` (worktree `<worktree>`, od develop e019126a).
+Galaz `docs/audit-0.8.0` (worktree `<worktree>`, od develop e610ebe6).
 Zakres: CLAUDE.md, llms.txt, docs/*.md (USAGE, ARCHITECTURE, SCOPE, PRD, DEVELOPMENT_STANDARDS,
 DECISIONS, CHANGELOG [0.8.0], PROGRESS - tylko poczatek). Zrodlo prawdy: kod worktree
 (`kartograf/catalog/commands/`, `__all__`, `catalog --params --json`, wyjatki, notices, SCHEMAS).
@@ -10,7 +10,7 @@ Bez zmian w kodzie i testach. Bez sieci (tylko `--help`, `catalog`, `parse`, wal
 Pierwsze wywolanie `edit` poszlo sciezka wzgledna i trafilo w GLOWNY checkout
 (`<repo>`: CLAUDE.md i USAGE.md, 3 hunki). Wykryte od razu,
 cofniete odwrotnym zastosowaniem dokladnie tego diffu (`git apply -R`); stan glownego checkoutu:
-`git status` czysty, HEAD e019126a (sprawdzone kilkakrotnie po powrocie). Wszystkie pozniejsze
+`git status` czysty, HEAD e610ebe6 (sprawdzone kilkakrotnie po powrocie). Wszystkie pozniejsze
 edycje: sciezki bezwzgledne w worktree.
 
 ## Co sprawdzono (metody) i wynik
@@ -57,7 +57,7 @@ ARCHITECTURE 4.1-4.11 (tylko kontrole automatyczne: identyfikatory, komunikaty, 
 0.8.0 wiersze ok. 330-440 i 850-1600 (tylko automatycznie); specyfikacje/plany w docs/superpowers (statusy
 nie badane).
 
-## Poprawki (commit 23430e70: 8 plikow, +53/-37)
+## Poprawki (commit b89e2b66: 8 plikow, +53/-37)
 
 | Plik | Co | Dlaczego |
 |---|---|---|
@@ -112,5 +112,5 @@ nie badane).
 - P1: brak.
 
 ## Commity
-- 23430e70 `docs: audyt dokumentacji przed v0.8.0 - spojnosc z kodem` (autor Daldek <git@debever.pl>, bez
+- b89e2b66 `docs: audyt dokumentacji przed v0.8.0 - spojnosc z kodem` (autor Daldek <git@debever.pl>, bez
   stopki Co-Authored-By; galaz `docs/audit-0.8.0`; bez merge i push).

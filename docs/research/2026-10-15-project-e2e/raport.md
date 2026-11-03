@@ -1,7 +1,7 @@
 # E2E manifestu projektu na zywo (plan manifestu, Task 10)
 
-Data: 2026-10-15. Galaz `feat/project-manifest`, commit `6fb962a` (czyste
-drzewo; `kartograf --version` = `kartograf 0.8.0-dev+6fb962a`). CLI: entry
+Data: 2026-10-15. Galaz `feat/project-manifest`, commit `b676b4f` (czyste
+drzewo; `kartograf --version` = `kartograf 0.8.0-dev+b676b4f`). CLI: entry
 point `.venv/bin/kartograf` z `PYTHONPATH=<korzen worktree>` (import kodu
 worktree sprawdzony wersja), uruchamiany z korzenia worktree (STANDARDS 6.4);
 projekty i magazyny wylacznie w `<katalog-danych>` (udzial SMB 3.1.1, cifs
@@ -16,9 +16,9 @@ ktore wypisuje metode, status, `Content-Length` i URL kazdego zapytania
 (caly ruch HTTP Kartografa idzie przez `requests`: `transport/http.py`,
 `download_to`, `session.get`/`head`).
 
-Przebieg wstepny na `4bd9fff` + niezacommitowanych zmianach Task 7-8 (pozniej
-`4fc080b`, `4a586cf`) dal te same wyniki; raport opisuje przebieg koncowy na
-`6fb962a`, a z przebiegu wstepnego podaje tylko roznice (rsync, sekcja 4).
+Przebieg wstepny na `405d3fd` + niezacommitowanych zmianach Task 7-8 (pozniej
+`a85e565`, `78993f8`) dal te same wyniki; raport opisuje przebieg koncowy na
+`b676b4f`, a z przebiegu wstepnego podaje tylko roznice (rsync, sekcja 4).
 
 ## Wynik
 
@@ -128,7 +128,7 @@ Zadanie `teren` w pliku (sciezki przypiec wzgledne do magazynu):
     "vertical_crs": "EVRF2007"
   },
   "pinned_at": "2026-10-15T19:29:38+00:00",
-  "kartograf_version": "0.8.0-dev+6fb962a",
+  "kartograf_version": "0.8.0-dev+b676b4f",
   "files": [
     {
       "role": "output",
@@ -343,8 +343,8 @@ Projekt: przypiete 0, odtworzone 5, zaktualizowane 0, bez zmian 0, bledy 0
   manifest C bez zmian (bajt w bajt): sciezki wersji i etykiety takie same,
   bo odtworzenie bylo tego samego dnia. `verify` 8 x `ok`, kod 0; ponowne
   `download -q` kod 0 (bez zmian).
-- W przebiegu wstepnym magazyn A pobral kod `4bd9fff` + zmiany, a odtworzyl
-  kod `6fb962a`: te same sumy wszystkich 8 przypiec; sidecary roznily sie
+- W przebiegu wstepnym magazyn A pobral kod `405d3fd` + zmiany, a odtworzyl
+  kod `b676b4f`: te same sumy wszystkich 8 przypiec; sidecary roznily sie
   tylko `downloaded_at` i `kartograf_version`.
 
 ## 6. Smoke offline prawdziwego CLI
@@ -357,8 +357,8 @@ prawdziwe `kartograf.cli.commands.main` i prawdziwy magazyn; zrodlo arkuszy PL
 `kartograf.download.data._create_provider_and_storage`); kazde
 `socket.connect` poza petla zwrotna konczylo sie wyjatkiem (zadne nie
 wystapilo). Arkusz `N-34-139-C-a-3-1`, loty `83233` (2025-04-27) i `84183`
-(2025-10-21). Przebieg na `6fb962a`, 3,6 s. Pierwszy przebieg (przed
-commitem `4a586cf`) wykazal dwie usterki wydruku, poprawione przed commitem:
+(2025-10-21). Przebieg na `b676b4f`, 3,6 s. Pierwszy przebieg (przed
+commitem `78993f8`) wykazal dwie usterki wydruku, poprawione przed commitem:
 `1 plikow` w naglowkach i liniach `download` oraz `(0 plikow)` przy
 `bez zmian`/`blad`.
 

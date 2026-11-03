@@ -5,10 +5,10 @@
 decyzje szczegolowe D1-D21 (sekcja 4) i rozstrzygniecia O1-O9 (sekcja 16); wdrozenie wg
 planu `docs/superpowers/plans/2026-10-18-agent-interface.md` (zadania T0-T9, sekcja 13)
 **Galaz:** `feat/agent-interface` (z `feat/archiwista-store-api`; zawiera poprawki
-przegladu API odczytu magazynu, merge `8c65f4e`)
+przegladu API odczytu magazynu, merge `b721c22`)
 **Wersja docelowa:** 0.8.0 (wydanie jeszcze nietagowane: zmiany lamiace API
 i CLI dozwolone, wszystko w jednym wydaniu; sekcja 11)
-**Warunek wstepny:** API odczytu magazynu (ADR-045, po przegladzie z merge `8c65f4e`),
+**Warunek wstepny:** API odczytu magazynu (ADR-045, po przegladzie z merge `b721c22`),
 grupy komend CLI (ADR-039, ADR-044), manifest projektu (ADR-040), raport dostepnosci
 (ADR-041) i `Notice` (ADR-037) sa juz w 0.8.0-dev na galezi bazowej
 **Dokumenty zrodlowe:**
@@ -95,7 +95,7 @@ Kryterium (kontroluja je testy z sekcji 12, kryteria numerowane w sekcji 14):
   `remedy`); bez `code` i `hint`; informacje dla wywolujacego maja tylko czesc
   klas (`DownloadError.sheet`/`status_code`, `NoCoverageError.hints`,
   `YearRangeError.sheets`/`hints`, `InvalidSidecarError.path`).
-- Odczyt magazynu (ADR-045, stan po przegladzie `8c65f4e`): `list_segments`,
+- Odczyt magazynu (ADR-045, stan po przegladzie `b721c22`): `list_segments`,
   `iter_store`, `read_sidecar`, `describe_segment`, `file_footprint`, `link_target` i
   typy `Sidecar`, `StoreEntry`, `SegmentInfo` (`Sidecar` i `StoreEntry` niehashowalne:
   pola `dict`). Brak albo niedostepny `output_dir` to `OSError` (nie pusty magazyn);
@@ -2032,10 +2032,10 @@ z nimi zgodna (kolumna "Skutek").
 | O8 | Cache serwera MCP | jak w 9.2: domyslnie plik w katalogu cache uzytkownika, `--allow-dir` opcjonalne | 9.2 |
 | O9 | Status ADR-046 | `Przyjeta` | ADR-046 |
 
-### 16.1 Uzgodnienia ze zmianami na galezi bazowej (przeglad API odczytu magazynu, merge `8c65f4e`)
+### 16.1 Uzgodnienia ze zmianami na galezi bazowej (przeglad API odczytu magazynu, merge `b721c22`)
 
 Sprawdzenie specyfikacji wzgledem kodu galezi po poprawkach przegladu (ADR-045; commity
-`f33f037`, `a189f25`):
+`4739b3b`, `f91014b`):
 
 | Zmiana w kodzie i dokumentacji galezi bazowej | Poprawka w specyfikacji |
 |---|---|
@@ -2061,7 +2061,7 @@ juz zgodna z nimi):
 ### 16.3 Koszt kontekstu agenta (D22; pomiar 2026-10-18)
 
 Pomiar na prawdziwej sesji stdio (`initialize`, `tools/list`, `tools/call`; dlugosc w
-znakach, JSON zwarty), przed = `0bb7702e`, po = `86168139`:
+znakach, JSON zwarty), przed = `a1a847ae`, po = `86168139`:
 
 | Wielkosc | przed | po |
 |---|---|---|

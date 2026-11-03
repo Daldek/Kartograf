@@ -41,4 +41,4 @@ ADR errata: none needed (ADR-046 stderr contract unchanged; implementation now m
 `sources/sidecar.py::pl_sheet_horizontal_crs` logged at WARNING the same fact that `download_data` reports as the `SHEET_CRS_MISMATCH` notice (Z3: the library does not log what a notice carries). Before: a bare duplicate line (also in `--json`); with the new handler it would be a doubled `Warning:` (caught by `tests/test_cli.py::TestSheetCrsMismatchWarning`). Now `logger.debug`; the mismatch stays visible as the notice and in the sidecar (`horizontal_crs`, `extra.source.declared_crs`). Tests in `tests/test_sidecar.py` no longer pin the log (kept the CRS assertions). Side effect: direct `DownloadManager` users no longer get the log warning (sidecar still describes it).
 
 ## Gate / commits
-`scripts/gate.sh` GATE OK (7166 passed, 18 deselected). Commit on fix/e2e-stderr: 882db221 `fix(cli): stderr zgodny z kontraktem --json (...)`.
+`scripts/gate.sh` GATE OK (7166 passed, 18 deselected). Commit on fix/e2e-stderr: dbeb9eea `fix(cli): stderr zgodny z kontraktem --json (...)`.

@@ -38,7 +38,7 @@ WMS a WFS, czasy zapytan, nazwy plikow) oraz
 wydania posredniego). **ADR:** ADR-041 (numer przydzielony przez
 koordynatora; tekst dopisywany w Task 2 i uzupelniany w Task 8).
 
-**Kod wyjsciowy:** `develop` `bcdf37d` (grupy CLI ADR-039 scalone w `dd5641b`;
+**Kod wyjsciowy:** `develop` `2e2a419` (grupy CLI ADR-039 scalone w `2cf825f`;
 spec, plan i ADR-040 manifestu projektu scalone, KOD manifestu moze jeszcze
 nie byc na `develop` - kroki warunkowe w Task 7). Przed startem:
 `git log --oneline -5 develop` i sprawdzenie numerow linii z sekcji "Fakty"
@@ -414,7 +414,7 @@ opisz roznice koordynatorowi).
 | `tests/test_sources_registry.py`, `tests/test_gugik_provider.py`, `tests/test_gugik_nmpt.py`, `tests/test_storage.py`, `tests/test_download_manager.py`, `tests/test_cli.py`, `tests/test_gugik_laz.py`, `tests/test_real_gugik_responses.py`, `tests/test_parity.py`, `tests/test_cli_translation.py`, `tests/test_input_errors.py` | przepisanie testow usuwanego zachowania (lista w zadaniach) |
 | `docs/DECISIONS.md` (CRLF), `docs/CHANGELOG.md`, `docs/ARCHITECTURE.md`, `docs/USAGE.md`, `docs/SCOPE.md`, `docs/PRD.md` | Task 8 |
 
-## Fakty o obecnym kodzie (zweryfikowane 2026-10-15 na `bcdf37d`)
+## Fakty o obecnym kodzie (zweryfikowane 2026-10-15 na `2e2a419`)
 
 - Grupa CLI: `kartograf/cli/groups/elevation.py:27` `PRODUCTS`, `:30-37`
   `_source_choice`, `:40-247` `register` (podkomendy `download`, `list-sources`;

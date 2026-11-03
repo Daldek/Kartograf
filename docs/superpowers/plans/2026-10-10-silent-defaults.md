@@ -50,7 +50,7 @@ Pomiar: `docs/research/2026-10-10-wcs-limits/raport.md`.
   `git diff --stat`: kilkadziesiat linii, nie caly plik).
 - Kazde zadanie zmieniajace zachowanie dopisuje wpis do
   `docs/CHANGELOG.md`, sekcja `## [0.7.2] - Unreleased`.
-- Numery linii = stan `develop` `4fa4e9c`; po wczesniejszych zadaniach
+- Numery linii = stan `develop` `508d10f`; po wczesniejszych zadaniach
   przesuwaja sie — szukaj po symbolu.
 - Asercje na fakty (wartosci pikseli, wspolrzedne `SUBSET`, nazwy warstw,
   obecnosc `EVRF2007`/`Bpv`/`--layer` w stderr), nie na cale brzmienie
@@ -307,7 +307,7 @@ def fetch_chunks(chunks: Sequence[Chunk], bbox: BBox, output_path: Path,
     walidacja odpowiedzi).
   - `gugik_nmpt.py`: `WCS_GRID = None` z komentarzem (GTiff NMPT = RGB
     uint8, naprawa w (a); raport pkt 6). `download_bbox` dziedziczony
-    z `GugikProvider` (NMPT go nie nadpisuje — stan `4fa4e9c`), wiec
+    z `GugikProvider` (NMPT go nie nadpisuje — stan `508d10f`), wiec
     `WCS_GRID = None` wystarcza, by NMPT szedl jednym zapytaniem.
   - `gugik_orto.py`: `download_bbox` wola `_download_wcs` (siatka
     domyslna `None`).

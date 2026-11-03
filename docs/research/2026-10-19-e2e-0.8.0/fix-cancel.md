@@ -1,6 +1,6 @@
-# fix-cancel: Ctrl-C z `--workers >= 2` i SIGTERM (branch `fix/e2e-cancel`, od develop @ bef87501)
+# fix-cancel: Ctrl-C z `--workers >= 2` i SIGTERM (branch `fix/e2e-cancel`, od develop @ 4050b978)
 
-Commity: `12dbf840` (fix: kod, testy, USAGE 9.3, llms.txt), `88127f4e` (docs: ARCHITECTURE, SCOPE, PRD, STANDARDS, README, CLAUDE.md).
+Commity: `24802e5d` (fix: kod, testy, USAGE 9.3, llms.txt), `909cbe7c` (docs: ARCHITECTURE, SCOPE, PRD, STANDARDS, README, CLAUDE.md).
 Brama: `scripts/gate.sh` zielona (ruff, ruff format, mypy, pytest offline: 7180 passed, 18 deselected, 213 s), uruchomiona raz na koncu z korzenia worktree (po poprawce kolejnosci importow w testach).
 
 ## Statusy

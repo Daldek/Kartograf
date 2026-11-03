@@ -1,16 +1,16 @@
 # Raport: fix-pl-sheets (E2E 0.8.0, plasterek A/B/C: arkusze PL, opcje, availability, bbox)
 
-Branch `fix/e2e-pl-sheets` (od develop @ bef87501), worktree `<worktree>`.
+Branch `fix/e2e-pl-sheets` (od develop @ 4050b978), worktree `<worktree>`.
 Brama: `scripts/gate.sh` ZIELONA (`GATE OK (201 s)`: ruff check, ruff format --check, mypy, pytest offline `7185 passed, 18 deselected`).
 
 Commity (Conventional Commits, bez Co-Authored-By, autor Daldek):
 
 | Hash | Opis |
 |---|---|
-| `7a30718f` | fix(download): sprawdzenie arkuszy bez danych i rodzaje porazek jak w pobraniu (manager.py, data.py + testy) |
-| `b0898002` | fix(bbox): walidacja zakresu EPSG:4326 i bboxa o zerowej powierzchni przed siecia (options.py, countries.py, arguments.py, download_cmd.py + testy) |
-| `729ca686` | fix(availability): obwiednia kraju, obszar bez ladu i --min-density w bledzie LAZ |
-| `3aaafed2` | docs: przyklady USAGE 1.1 sprawdzone na zywo, stany danych w sprawdzeniu, kinds, availability |
+| `a5b39c9f` | fix(download): sprawdzenie arkuszy bez danych i rodzaje porazek jak w pobraniu (manager.py, data.py + testy) |
+| `3b9c54c5` | fix(bbox): walidacja zakresu EPSG:4326 i bboxa o zerowej powierzchni przed siecia (options.py, countries.py, arguments.py, download_cmd.py + testy) |
+| `970f2dae` | fix(availability): obwiednia kraju, obszar bez ladu i --min-density w bledzie LAZ |
+| `317802e2` | docs: przyklady USAGE 1.1 sprawdzone na zywo, stany danych w sprawdzeniu, kinds, availability |
 
 Dane live: `<katalog-danych>/fix-pl-sheets/` (`<katalog-danych>`; tylko tryb `--check-updates` i walidacje, zero pobran danych). Zadnych plikow poza tym katalogiem i `cwd` (worktree).
 

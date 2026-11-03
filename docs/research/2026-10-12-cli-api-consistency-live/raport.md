@@ -1,7 +1,7 @@
 # Weryfikacja na zywo: spojnosc CLI i API (2026-10-12)
 
 Plan: `docs/superpowers/plans/2026-10-12-cli-api-consistency.md`, Task 17.
-Galaz `chore/cli-api-consistency` (stan po `c44c026`). Dane w
+Galaz `chore/cli-api-consistency` (stan po `e24c0fc`). Dane w
 `<katalog-danych>/cli-api-2026-10-12/<scenariusz>/{cli,api}` (sciezka od
 uzytkownika, poza repo; STANDARDS 6.4). Uruchomienie z korzenia repo
 (wspolny cache metadanych `.kartograf_cache.db`).
@@ -41,7 +41,7 @@ transportu) - bez wplywu na wynik.
 - Scenariusz 10, pierwsza proba: plik planu w katalogu, ktory nie istnial
   -> `Error: FileNotFoundError: ...` z podpowiedzia `KARTOGRAF_DEBUG`
   (nieobsluzony `OSError` przy zapisie planu w CLI; blad CLI, nie roznica
-  CLI/API). Poprawka `c44c026` (`fix(cli): blad zapisu pliku --plan jako
+  CLI/API). Poprawka `e24c0fc` (`fix(cli): blad zapisu pliku --plan jako
   jedna linia Error:`, test regresji
   `tests/test_cli_update_modes.py::test_plan_file_in_missing_directory_is_one_error_line`).
   Na zywo po poprawce: `Error: nie udalo sie zapisac planu <...>/brak/plan.json:
@@ -52,4 +52,4 @@ transportu) - bez wplywu na wynik.
 Rozbieznosci wykryte wczesniej offline (testy zgodnosci, Task 13 i 15):
 bbox sidecara z liczb calkowitych vs zmiennoprzecinkowych
 (`core.bbox.bbox_coords`) i kolejnosc wyniku arkuszy rownoleglych
-(`93eee02`) - na zywo nie wystapily.
+(`47e1e65`) - na zywo nie wystapily.

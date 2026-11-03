@@ -1,19 +1,19 @@
 # fix-store-project - wycinek E (`project`, odczyt magazynu, `cache`, tryby aktualizacji)
 
-Worktree `<worktree>`, galaz `fix/e2e-store-project` (z `develop @ bef87501`).
+Worktree `<worktree>`, galaz `fix/e2e-store-project` (z `develop @ 4050b978`).
 Brama `scripts/gate.sh` ZIELONA: ruff check, ruff format --check, mypy, pytest offline - **7184 passed, 18 deselected** (`GATE OK`, 176 s).
-Pierwszy przebieg bramy mial 1 porazke (`tests/test_cli_errors.py::test_oserror_is_io_error_in_json_mode` uzywal `--plan KATALOG` jako sposobu na `OSError`, czyli dokladnie bledu P3-8) - test przestawiony na wymuszony `IsADirectoryError` przy zapisie (commit `e1e88928`), drugi przebieg zielony.
+Pierwszy przebieg bramy mial 1 porazke (`tests/test_cli_errors.py::test_oserror_is_io_error_in_json_mode` uzywal `--plan KATALOG` jako sposobu na `OSError`, czyli dokladnie bledu P3-8) - test przestawiony na wymuszony `IsADirectoryError` przy zapisie (commit `76647c24`), drugi przebieg zielony.
 
 ## Commity (bez Co-Authored-By)
 
 | Commit | Zakres |
 |---|---|
-| `60dd6256` | fix(store): jednostka i obrys kafla LAZ z kafla (P2-2) + numer arkusza ZTM |
-| `f69f8759` | fix(project): `--force` naprawia uszkodzona wersje (P3-1); BOM i plik w `--project` (P3-15) |
-| `047b81aa` | fix(cli): `project add -q` (P3-4), `--plan KATALOG` (P3-8), `--upgrade --plan` bez pozycji (P3-25), hint `project init` (P3-12) |
-| `970d6e0b` | fix(cache): komunikaty cache bez dostepu / `cache clear` bez pliku (P3-13, C P3-18) |
-| `45e86f3d` | docs: USAGE 4.3/8.1/8.2/8.3/9.1/9.5/2, ARCHITECTURE 3.3.1/3.5/4.7/4.11 |
-| `e1e88928` | test(cli): przestawienie testu `io_error` po P3-8 |
+| `dc04050c` | fix(store): jednostka i obrys kafla LAZ z kafla (P2-2) + numer arkusza ZTM |
+| `7d2d0df8` | fix(project): `--force` naprawia uszkodzona wersje (P3-1); BOM i plik w `--project` (P3-15) |
+| `4f3b0485` | fix(cli): `project add -q` (P3-4), `--plan KATALOG` (P3-8), `--upgrade --plan` bez pozycji (P3-25), hint `project init` (P3-12) |
+| `2ad81f10` | fix(cache): komunikaty cache bez dostepu / `cache clear` bez pliku (P3-13, C P3-18) |
+| `91e1984c` | docs: USAGE 4.3/8.1/8.2/8.3/9.1/9.5/2, ARCHITECTURE 3.3.1/3.5/4.7/4.11 |
+| `76647c24` | test(cli): przestawienie testu `io_error` po P3-8 |
 
 ## E P2-2 - kafel LAZ: `Sidecar.unit` i `file_footprint` z kafla - NAPRAWIONE
 
@@ -31,7 +31,7 @@ Pierwszy przebieg bramy mial 1 porazke (`tests/test_cli_errors.py::test_oserror_
 **Testy regresyjne (padaja na starym kodzie, przechodza po):** `tests/test_laz_download.py::TestTilesInTheStoreApi` (kafle zapisane PRAWDZIWYM `_run_laz_download`, odczyt `iter_store`/`file_footprint`, PL-1992 i PL-2000, naglowek LAS = obrys, unit = godlo, petla `units`), `tests/test_store_geometry.py::test_laz_tile_*` (naglowek zamiast obszaru, klucz `godlo_kafla`, brak naglowka = brak obrysu), `tests/test_store_api.py::test_unit_of_a_laz_tile_*` i `::test_unit_of_a_ztm_sheet_*`.
 
 **Na zywo (kafel 83134_1728146_M-34-64-D-d-1-4-4-1.laz, 59 MB, GUGiK):**
-- PRZED (magazyn E2E E, kod `bef87501`): `unit = 566000_243000_566100_243100`; `iter_store(units=[unit]) -> []`; `file_footprint`: source `request`, 100,0 x 100,0 m.
+- PRZED (magazyn E2E E, kod `4050b978`): `unit = 566000_243000_566100_243100`; `iter_store(units=[unit]) -> []`; `file_footprint`: source `request`, 100,0 x 100,0 m.
 - PO, ten sam magazyn: `unit = M-34-64-D-d-1-4-4-1`; `iter_store(units=[unit]) -> ['link','version']`; source `header`, EPSG:2180 (565977.27, 242585.65, 566542.61, 243171.5) = 565,3 x 585,9 m (= naglowek LAS z raportu E2E).
 - PO, swiezo pobrany kod PO zmianach (`elevation download --product laz --bbox 566000,243000,566100,243100 ... -o <katalog-danych>/laz-store`, rc 0): identyczny wynik jak wyzej. Skrypty i logi: `~/scratch/fix-store-project/` (`laz_before.txt`, `live_out.txt`, `audit_before.txt`, `audit_after.txt`).
 

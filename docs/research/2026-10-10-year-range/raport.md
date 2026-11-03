@@ -5,7 +5,7 @@
 > przyjeciu modelu A (spec sekcja 0) `--year 2025` daje 4 pliki (jeden lot
 > na arkusz, sprawdzone na zywo), a 10 plikow = `--year 2025 --campaigns all`.
 
-Galaz `feat/year-range` (Task 1-7 = `b41197a..7e40c18`). Dane w
+Galaz `feat/year-range` (Task 1-7 = `d3c9ce7..7b6002c`). Dane w
 `<katalog-danych>/kartograf/2026-10-10-year-range/` (jawne `--output`,
 logi `logs/<id>.out|err`). CLI z korzenia repo, `.venv/bin/kartograf`.
 
@@ -38,7 +38,7 @@ Nagrane przez prawdziwe providery (zapytania jak w kodzie), bez edycji:
 - `tests/fixtures/gugik_laz/real_2026_10_06/w2_*` pochodza z rundy C13
   dla okna `637400,487000,637450,487050` (50 x 50 m), a
   `tests/test_real_gugik_responses.py` i `tests/test_laz_campaigns.py`
-  (od `e3d266d`, 2026-10-06) odtwarzaly je dla `W2_BBOX`
+  (od `d0964ca`, 2026-10-06) odtwarzaly je dla `W2_BBOX`
   `637200,486900,637500,487100` (300 x 200 m).
 - Dla `W2_BBOX` usluga zwraca w 2022 dwa kafle (`7.173.21.06.1` i
   `.06.2`). Sam `.06.2` pokrywa ok. 53 % obszaru, oba razem caly — wedlug

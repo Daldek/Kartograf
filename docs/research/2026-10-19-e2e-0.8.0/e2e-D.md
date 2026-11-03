@@ -1,6 +1,6 @@
 # E2E Kartograf 0.8.0 - wycinek D: boundaries, cadastre, models3d, hydro, names (+ list-sources)
 
-Data: 2026-10-19. Wheel `kartograf-0.8.0` z `git archive HEAD` (develop @ e019126a), czysty venv Python 3.13.5 z extra `[mcp]`. Dane pod `<katalog-danych>` (udzial SMB), cache metadanych lokalny (`.kartograf_cache.db` w katalogu roboczym).
+Data: 2026-10-19. Wheel `kartograf-0.8.0` z `git archive HEAD` (develop @ e610ebe6), czysty venv Python 3.13.5 z extra `[mcp]`. Dane pod `<katalog-danych>` (udzial SMB), cache metadanych lokalny (`.kartograf_cache.db` w katalogu roboczym).
 
 ## Zakres
 

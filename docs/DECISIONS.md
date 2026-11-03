@@ -4277,7 +4277,7 @@ in 37 leaf commands, availability, download, MCP server over stdio, Claude Code)
   landed on the branch). Agreement of the three paths (CLI `--json`, library `to_dict()`, MCP tool)
   confirmed apart from `checked_at`, the status label and the store path. Gate: 7070 passed,
   18 deselected; ruff and format clean, mypy without errors.
-- One error, fixed (`a7ba1336`): `kartograf-mcp` ended with a traceback when the cache directory
+- One error, fixed (`c70f0b54`): `kartograf-mcp` ended with a traceback when the cache directory
   could not be created (read-only `HOME`, `--cache-file` under a regular file),
   while the CLI and the library warn and work without cache. `_open_cache` catches `OSError`,
   logs one warning and the server runs without cache; regression test in `tests/test_mcp_server.py`.

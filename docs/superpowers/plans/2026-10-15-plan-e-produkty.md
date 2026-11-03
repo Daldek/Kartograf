@@ -34,9 +34,9 @@ arkuszowe i krajowe na silnikach C/D" (`docs/DECISIONS.md`). Tekst powstal
 w Task E0 (D1-D10); wyniki E2E i ostateczne nazwy symboli E1-E5 dochodza
 w Task EZ jako errata.
 
-**Kod wyjsciowy:** `develop` `1b8e358`. Sa na nim grupy CLI (ADR-039),
+**Kod wyjsciowy:** `develop` `d371ae5`. Sa na nim grupy CLI (ADR-039),
 spec i plan manifestu (ADR-040) oraz plany A i B. Plany C i D (ADR-042)
-sa w commicie `7e3f31e` na galezi `docs/plans-cd`:
+sa w commicie `82cc3f4` na galezi `docs/plans-cd`:
 `docs/superpowers/plans/2026-10-15-plan-c-silniki-i-dane-pl.md`, sekcja
 "Kontrakt silnikow i orkiestratora", oraz `...-plan-d-dane-cz.md`, Task 2
 i 5. Plan E korzysta z tych symboli:
@@ -404,7 +404,7 @@ D (atom.py, horizontal_crs, wycinek orto) --+         +--> E2 names, maps       
      wojewodztw z `--bbox` obejmujacym kraj).
    - Formatu VKM (P2).
 
-## Fakty o obecnym kodzie (zweryfikowane 2026-10-15 na `1b8e358`)
+## Fakty o obecnym kodzie (zweryfikowane 2026-10-15 na `d371ae5`)
 
 - Grupy CLI: `kartograf/cli/groups/__init__.py:23` `register_groups`,
   `:30` `add_group`, `:41` `add_list_sources` (kolumna WYBOR z `choice`).
@@ -658,7 +658,7 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
 **Stan (2026-10-16, galaz `feat/plan-e1`):** kroki 1-4 wykonane (fixtury
 w `tests/fixtures/pl/{nmt_100m,intensity,orto_true,orto_oblique}/`
 i `tests/fixtures/cz/contours/` z README; godla 8-czlonowe; NMT 100 m,
-commit `85b53af`; obrazy - krok 4, ponizej). Kroki 5-9 wykonane 2026-10-16
+commit `5ee602a`; obrazy - krok 4, ponizej). Kroki 5-9 wykonane 2026-10-16
 (warstwice CZ, CLI, parity, manifest, E2E, dokumenty). Krok 4 w kodzie:
 `SheetIndexParams` (descriptor) w kanale `WMS_SHEET_INDEX` orto,
 intensywnosci, true orto i orto ukosnej; `GugikImageProvider` (jeden kod;

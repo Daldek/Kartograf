@@ -1,6 +1,6 @@
 # Test na zywo zmian lamiacych 0.8.0 (2026-10-12)
 
-**Kod:** migawka `develop` `3f150ce` (`git archive`), `PYTHONPATH=<migawka>`,
+**Kod:** migawka `develop` `255c5fe` (`git archive`), `PYTHONPATH=<migawka>`,
 CLI z korzenia migawki. **Dane:** `<katalog-danych>/kartograf/e2e/2026-10-12-test-0.8.0/data`
 (SMB/CIFS). Skrypty: `scripts/cli.sh`, `scripts/lib.py` obok danych.
 

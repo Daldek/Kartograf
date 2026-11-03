@@ -1,7 +1,7 @@
-# fix-landcover-soil - raport (galaz `fix/e2e-landcover-soil`, od develop @ bef87501)
+# fix-landcover-soil - raport (galaz `fix/e2e-landcover-soil`, od develop @ 4050b978)
 
 Brama: `scripts/gate.sh` **zielona** (ruff check, ruff format --check, mypy, pytest offline: 7186 passed, 18 deselected; po ostatniej zmianie testow).
-Commity: `1acf3585` (cherry-pick `names_text` z `fix/e2e-collections` a6188d00, patrz uwagi), `66474b6f` (kod + testy), `fe0c7de9` (docs + llms.txt).
+Commity: `b5d5387d` (cherry-pick `names_text` z `fix/e2e-collections` 23c50516, patrz uwagi), `69c8640a` (kod + testy), `02aa2097` (docs + llms.txt).
 Dane zywe: `<katalog-danych>/fix-landcover-soil/{before,after}` (SMB, < 10 MB).
 
 Incydent procesowy: pierwsza edycja `kartograf/providers/soilgrids.py` poszla sciezka WZGLEDNA i trafila w glowny checkout; cofnieta w ciagu sekund
@@ -55,6 +55,6 @@ Nie edytowane (wg zasad): CHANGELOG, PROGRESS, DECISIONS.
 3. Okno < piksel jest rozszerzane (nie bledem); `cfvo` wylaczone z `all_nodata`.
 
 ## Uwagi do integracji
-- `1acf3585` to cherry-pick `a6188d00` (FixCollections, `notices.names_text`) - identyczna tresc, merge bez konfliktu; uzywam jej w `unit_list` BDOT10k.
+- `b5d5387d` to cherry-pick `23c50516` (FixCollections, `notices.names_text`) - identyczna tresc, merge bez konfliktu; uzywam jej w `unit_list` BDOT10k.
 - Pliki wspolne: `tests/conftest.py` (autouse `_offline_package_sizes`: HEAD limitu obszaru BDOT10k bez sieci; `FakeCorine` odpowiada na GetCapabilities), `download/collections.py` (tylko pomoc limitu i jedno wywolanie w `run_request`), `auth/client.py` (tylko `is_available`/`credentials_problem`, bez `proxy_request`/`last_error` FixStderr), `providers/pl/bdot10k.py` (tylko blok `layers` w `_extract_gpkg_from_zip`; petle FixCancel nietkniete), `store.py` (rozpoznanie segmentu soil).
 - Nie ruszane (poza slice): P2-5 (Ctrl-C), P2-8 (bbox CRS - FixPlSheets), P3-23/P3-25.

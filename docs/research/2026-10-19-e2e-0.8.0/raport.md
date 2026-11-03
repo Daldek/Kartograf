@@ -9,7 +9,7 @@ roboczym kazdego przebiegu.
 ## Metoda
 
 - **Czysta instalacja:** wheel i sdist zbudowane `python -m build` z `git archive` (runda 1:
-  `develop` `e019126a`; runda 2: `integrate/e2e-fixes` `cf39177a`; smoke koncowy: `42ec581b`),
+  `develop` `e610ebe6`; runda 2: `integrate/e2e-fixes` `2828808f`; smoke koncowy: `631e36df`),
   zainstalowane z `[mcp]` w nowym venv Pythona 3.13 (pyproj 3.8.0, PROJ 9.8.1, bez siatek PROJ
   uzytkownika). CLI = skrypt `kartograf` z wheel, nie kod z drzewa.
 - **Runda 1 (samodzielnie, bez MCP):** 5 rownoleglych wycinkow (A elevation; B imagery, maps,
@@ -25,7 +25,7 @@ roboczym kazdego przebiegu.
 - **Poprawki** na 7 galeziach `fix/e2e-*` (kazda z testami regresji failing-before i dowodem
   na zywo przed/po), integracja na `integrate/e2e-fixes`, runda 2 (regresja wszystkich P2
   i poprawionych P3 + powtorka 1 307 polecen rundy 1 + smoke 13 grup), runda 3 poprawek
-  i smoke koncowy na wheel z `42ec581b`.
+  i smoke koncowy na wheel z `631e36df`.
 
 Szczegolowe raporty (tabele przypadkow, polecenia, dowody) leza obok tego pliku:
 `e2e-A.md` ... `e2e-E.md` (runda 1), `audyt-dokumentacji.md`, `fix-*.md` (poprawki),
@@ -42,7 +42,7 @@ Szczegolowe raporty (tabele przypadkow, polecenia, dowody) leza obok tego pliku:
 | Runda 1, E projekt/magazyn | 718 wywolan, 133 przypadki | 0 | 2 | 25 |
 | Runda 2, regresja | 32 pozycje, 1 307 powtorzonych polecen, smoke 13 grup | 0 | 1 (nowe, nie regresja) | 7 |
 | Runda 2, MCP haiku | 6 zadan | 0 | 0 | 5 |
-| Smoke koncowy (`42ec581b`) | 22 polecenia, 13 grup | 0 | 0 | 0 |
+| Smoke koncowy (`631e36df`) | 22 polecenia, 13 grup | 0 | 0 | 0 |
 
 P1 (zle dane, cicho bledny wynik, utrata danych) nie znaleziono w zadnej rundzie. Dane
 zweryfikowane niezaleznie: wycinki WCS PL bit w bit z oknem arkusza, reprojekcje S-JTSK/TM33
@@ -77,14 +77,14 @@ i erraty ADR (DECISIONS, "test E2E 0.8.0").
 
 ## MCP z malym agentem (haiku)
 
-Runda 1 (wheel `e019126a`, 7 zadan): serwer `connected`, 29 narzedzi; wszystkie odpowiedzi
+Runda 1 (wheel `e610ebe6`, 7 zadan): serwer `connected`, 29 narzedzi; wszystkie odpowiedzi
 poprawne (NMT 5 m: rok 2019, sha `23d160d0...` = pobranie CLI; granice gmin; glina
 SoilGrids; arkusz na morzu - agent wyjasnil brak ladu i nic nie pobral; Cieszyn PL+CZ;
 projekt init/add/download/status; przeglad magazynu). Koszt 0,005-0,01 USD i 10-34 s na
 zadanie. Luka: narzedzia MCP nie daja obrysu w WGS84 (`file_footprint` jest tylko w
 bibliotece) - agent odmowil zgadywania.
 
-Runda 2 (wheel `cf39177a`, 6 zadan, `r2-mcp.md`): 6/6 poprawnych, 17 wywolan narzedzi
+Runda 2 (wheel `2828808f`, 6 zadan, `r2-mcp.md`): 6/6 poprawnych, 17 wywolan narzedzi
 (2 oczekiwane `is_error`), 0,037 USD lacznie; mapa katastralna `auto` dla obszaru PL dziala
 (plik PL + `auto_partial_success`), zly CRS bbox daje `invalid_input` z `option=bbox`, agent
 dostaje pola KD (`full_m2`, `campaign_coverage`) jednym wywolaniem; stderr serwera czysty.
@@ -97,7 +97,7 @@ Uwaga metodyczna: w rundzie 1 skrypt uruchamial `claude -p` w petli `while read`
 DECISIONS, PRD, SCOPE, STANDARDS), 400 przykladow CLI przez prawdziwy parser, 54 bloki
 Pythona zgodne z API, 274 linki. README poza zakresem (nastepny krok).
 
-## Smoke koncowy (wheel `42ec581b`)
+## Smoke koncowy (wheel `631e36df`)
 
 22 polecenia w 13 grupach (`--json`): NMT arkusz + powtorka + `--check-updates` pierwszego
 przykladu USAGE 1.1 (kod 0), availability PL i CZ, wycinek orto, BDOO, SoilGrids, HSG,

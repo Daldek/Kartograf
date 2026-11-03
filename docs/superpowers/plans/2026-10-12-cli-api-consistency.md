@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-12-cli-api-consistency-design.md` — ZAAKCEPTOWANY 2026-10-12 (Z1-Z7, S1-S6 wg propozycji). Dowody: `docs/research/2026-10-12-cli-api-consistency/raport.md` (R1-R13).
 
-**Galaz:** `chore/cli-api-consistency` (z `develop` `d5215e8`). Do `develop` po Task 18, za zgoda uzytkownika.
+**Galaz:** `chore/cli-api-consistency` (z `develop` `7026ac1`). Do `develop` po Task 18, za zgoda uzytkownika.
 
 ---
 

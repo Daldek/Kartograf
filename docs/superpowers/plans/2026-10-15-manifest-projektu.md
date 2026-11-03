@@ -28,7 +28,7 @@ i zrodel grup przeniesione z CLI do biblioteki.
 (CLI = API), ADR-039 (grupy).
 
 **Galaz:** `feat/project-manifest` z aktualnego `develop` (grupy ADR-039
-scalone w `dd5641b`). Integracja do `develop` - koordynator.
+scalone w `2cf825f`). Integracja do `develop` - koordynator.
 
 ---
 
@@ -59,7 +59,7 @@ scalone w `dd5641b`). Integracja do `develop` - koordynator.
 - Dane live wylacznie poza repo i `/tmp` (`<katalog-danych>`), z jawnym
   `--output` przy `project init`; sciezki danych nie trafiaja do repo.
 
-**Fixtury offline (istniejace na `develop` dd5641b):**
+**Fixtury offline (istniejace na `develop` 2cf825f):**
 - arkusze PL: `tests/test_manager_campaigns.py::FakeCampaignProvider`,
   `REC`, `C14_ALL`; `tests/test_parity.py::AnySheetProvider`, `_pl_store`
   (patch `kartograf.download.data._create_provider_and_storage`);
@@ -433,7 +433,7 @@ def task_to_json(task: ProjectTask) -> dict
   `TaskCommand.files`; budowa `PinnedFile` (decyzja 6); zapis
   `commit_tasks` po kazdym zadaniu; konflikt scalania = blad zadania;
   wyjatki `KartografError` biblioteki konczace tylko zadanie.
-- [x] **Step 5: Brama i commit** - Task 5 i 6 razem w `4bd9fff` (`feat(project): download - przypiecie zadan, odtwarzanie po SHA-256 i --upgrade/--force`).
+- [x] **Step 5: Brama i commit** - Task 5 i 6 razem w `405d3fd` (`feat(project): download - przypiecie zadan, odtwarzanie po SHA-256 i --upgrade/--force`).
 
 ---
 
@@ -458,7 +458,7 @@ def task_to_json(task: ProjectTask) -> dict
 - [x] **Step 2: Implementacja** - wspolna sciezka z Task 5 z
   `update=...`; przy pelnym sukcesie przypiecia = wynik w calosci,
   `unchanged` gdy identyczne (bez zapisu pliku).
-- [x] **Step 3: Brama i commit** - wspolny commit z Task 5: `4bd9fff`.
+- [x] **Step 3: Brama i commit** - wspolny commit z Task 5: `405d3fd`.
 
 ---
 

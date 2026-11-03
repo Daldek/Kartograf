@@ -1,7 +1,7 @@
 # E2E interfejsu dla agentow AI (2026-10-18): wheel z `py.typed`, `--json`, katalog, serwer MCP przez stdio, Claude Code
 
-Galaz `feat/agent-interface-e2e` (od `1a300b7d`, pelna implementacja po scaleniu torow), jedna
-poprawka znaleziona w E2E: `a7ba1336`. Plan: `docs/superpowers/plans/2026-10-18-agent-interface.md`
+Galaz `feat/agent-interface-e2e` (od `0eb4c0a6`, pelna implementacja po scaleniu torow), jedna
+poprawka znaleziona w E2E: `c70f0b54`. Plan: `docs/superpowers/plans/2026-10-18-agent-interface.md`
 (T9), spec: `docs/superpowers/specs/2026-10-18-agent-interface-design.md` (sekcje 14 i 16).
 
 Metoda. Wheel i sdist zbudowane `python -m build` z `git archive HEAD` poza repo (sdist, potem wheel
@@ -12,13 +12,13 @@ worktree (cache metadanych `.kartograf_cache.db` zostaje lokalnie, STANDARDS 6.4
 `StdioServerParameters`) oraz reczny klient JSON-RPC (pomiary na drucie). Dane na zywo wylacznie w
 `<katalog-danych>/kartograf-live/agent-interface/` (jawne `-o`/`output_dir`, ok. 80 MB), venv, wheel i
 skrypty jednorazowe w `<katalog-danych>/kartograf/agent-interface/e2e/` (poza repo i poza `/tmp`).
-Wszystkie kroki ponowiono na wheel z `a7ba1336` (liczby ponizej pochodza z tego przebiegu; pierwszy
-przebieg na `1a300b7d` dal te same wyniki produktu poza bledem B1).
+Wszystkie kroki ponowiono na wheel z `c70f0b54` (liczby ponizej pochodza z tego przebiegu; pierwszy
+przebieg na `0eb4c0a6` dal te same wyniki produktu poza bledem B1).
 
 ## Werdykt
 
 **Kod gotowy do wydania 0.8.0, bez blokerow.** E2E znalazlo jeden blad (B1: serwer MCP konczyl sie
-tracebackiem, gdy nie mozna utworzyc katalogu cache) - naprawiony i objety testem (`a7ba1336`). Reszta
+tracebackiem, gdy nie mozna utworzyc katalogu cache) - naprawiony i objety testem (`c70f0b54`). Reszta
 uwag to odchylenia planu T9 od rzeczywistego zachowania uslug i drobne pozycje do decyzji (sekcja
 "Uwagi"), zadna nie blokuje wydania.
 
@@ -48,8 +48,8 @@ CHANGELOG `[0.8.0]`, PROGRESS) czekaja na T8; wydanie po jego scaleniu i po pono
 
 | Stan | ruff check | ruff format --check | mypy | pytest (offline) | czas |
 |---|---|---|---|---|---|
-| `1a300b7d` | czysto | 305 plikow bez zmian | 0 bledow w 303 plikach | 7069 passed, 18 deselected, 147,80 s | 166 s |
-| `a7ba1336` | czysto | 305 plikow bez zmian | 0 bledow w 303 plikach | 7070 passed, 18 deselected, 153,72 s | 156 s |
+| `0eb4c0a6` | czysto | 305 plikow bez zmian | 0 bledow w 303 plikach | 7069 passed, 18 deselected, 147,80 s | 166 s |
+| `c70f0b54` | czysto | 305 plikow bez zmian | 0 bledow w 303 plikach | 7070 passed, 18 deselected, 153,72 s | 156 s |
 
 `mypy` wypisuje 75 notatek `annotation-unchecked` (nie bledy; 20 w `tests/test_serialization.py`).
 Testow `live` repo (`-m live`, 18 odznaczonych) nie uruchamiano: plan T9 ich nie wymaga (E2E ponizej
@@ -218,7 +218,7 @@ ramka JSON-RPC, stderr pusty, kod 0 po zamknieciu stdin.
 |---|---|---|---|---|---|
 | A: "sprawdz dostepnosc NMT dla arkusza M-34-64-D-d-1-2 i pobierz go (5 m, EVRF2007)" | `get_catalog(command, params)`, `elevation_availability(product, sheet)`, `elevation_download(..., year: 2019)` | 4 | 15,3 s | 0,0052 USD | pobrany, status `new`, sha256 `23d160d0...` (= pobranie CLI i MCP), odpowiedz z latami i rozdzielczosciami |
 | B: 5 m dla `N-34-130-D-d-2-4` (ma tylko 1 m), "jesli nie istnieje, pobierz najblizszy" | `get_catalog`, `availability`, `download 5m` = `is_error: true`, `ok: false`, `download 1m` | 5 | 32,3 s | 0,0058 USD | agent wyjasnil brak 5 m na podstawie komunikatu z podpowiedzia i pobral 1 m (2025, ok. 37 MB), podal sciezke i sha256 |
-| A na wheel z `1a300b7d` | `elevation_availability`, `elevation_download` | 3 | 15,6 s | 0,0067 USD | pobrany |
+| A na wheel z `0eb4c0a6` | `elevation_availability`, `elevation_download` | 3 | 15,6 s | 0,0067 USD | pobrany |
 
 ### Zrzut `--help` (wheel vs zrzut odniesienia T0, `baseline_dump.py --drop-json`)
 
@@ -239,7 +239,7 @@ ramka JSON-RPC, stderr pusty, kod 0 po zamknieciu stdin.
 
 ## Blad znaleziony i naprawiony
 
-**B1 (`a7ba1336`, sredni): `kartograf-mcp` konczyl sie tracebackiem przy starcie, gdy nie mozna utworzyc
+**B1 (`c70f0b54`, sredni): `kartograf-mcp` konczyl sie tracebackiem przy starcie, gdy nie mozna utworzyc
 katalogu cache.** Powtorzenie: `HOME=/proc/nohome XDG_CACHE_HOME= kartograf-mcp` albo `kartograf-mcp
 --cache-file <plik>/sub/m.db`, gdzie `<plik>` to zwykly plik: `Path.mkdir` w `_open_cache` rzucal
 `FileNotFoundError`, `PermissionError` albo `NotADirectoryError`, kod 1, traceback na stderr. CLI i

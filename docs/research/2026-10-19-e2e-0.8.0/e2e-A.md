@@ -1,6 +1,6 @@
 # E2E Kartograf 0.8.0 - plasterek A: `elevation` (download NMT/NMPT/LAZ/warstwice PL+CZ, availability, list-sources)
 
-Data testu: 2026-10-19, develop @ e019126a (wheel `kartograf 0.8.0` z `git archive HEAD`, czysta instalacja z `[mcp]`).
+Data testu: 2026-10-19, develop @ e610ebe6 (wheel `kartograf 0.8.0` z `git archive HEAD`, czysta instalacja z `[mcp]`).
 Raport pisany bez polskich znakow diakrytycznych. Sciezka danych w raporcie = `<katalog-danych>`.
 
 ## Zakres

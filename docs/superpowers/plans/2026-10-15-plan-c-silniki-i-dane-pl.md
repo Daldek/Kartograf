@@ -84,7 +84,7 @@ rozwiaz na korzysc stanu po A/B. Integracja do `develop` - koordynator.
   dokumentow ani commitow. Cache metadanych CLI w korzeniu worktree.
 - `docs/DECISIONS.md` ma CRLF - zachowaj przy edycji (STANDARDS 5.5).
 
-## Zweryfikowane punkty zaczepienia (develop `bcdf37d`, numery linii orientacyjne)
+## Zweryfikowane punkty zaczepienia (develop `2e2a419`, numery linii orientacyjne)
 
 | Symbol | Miejsce | Fakt istotny dla planu |
 |---|---|---|

@@ -61,7 +61,7 @@ gniazda), `rasterio` (tylko istniejacy pomiar), bez nowych zaleznosci.
   84183 (2025-10-21) NIE, 83233 (2025-04-27) TAK; N-34-139-C-a-3-4:
   84183 TAK. Asercje na fakty (sciezki, inode, godla, pola wyniku),
   nie na cale brzmienie komunikatow.
-- Numery linii = stan `develop` `fc4c176`; po wczesniejszych zadaniach
+- Numery linii = stan `develop` `8dceccd`; po wczesniejszych zadaniach
   przesuwaja sie — szukaj po symbolu.
 - Dane na zywo (Task 6): poza repo i poza `/tmp`, jawne `--output`,
   katalog wskazuje uzytkownik (sciezki nie zapisuj w repo); CLI z korzenia

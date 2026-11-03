@@ -63,7 +63,7 @@ live tylko w `<katalog-danych>`, CRLF w `docs/DECISIONS.md`). Dodatkowo:
   `tests/fixtures` w calosci (przyciety do kilku wpisow z prawdziwymi
   id, `updated`, linkami i kategoriami).
 
-## Zweryfikowane punkty zaczepienia (develop `bcdf37d` + plan C)
+## Zweryfikowane punkty zaczepienia (develop `2e2a419` + plan C)
 
 | Symbol | Miejsce | Fakt istotny dla planu |
 |---|---|---|

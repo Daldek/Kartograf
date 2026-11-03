@@ -4,7 +4,7 @@
 **Status:** decyzja uzytkownika 2026-10-19: spec i plan pisze agent, przeglad
 wlasny i wdrozenie w tej samej sesji; ksztalt pol zatwierdza uzytkownik przy
 przegladzie diffu galezi
-**Galaz:** `feat/availability-sheet-details` (z `develop`, `9393bb9f`)
+**Galaz:** `feat/availability-sheet-details` (z `develop`, `c9a070d4`)
 **Wersja docelowa:** 0.8.0 (wydanie nietagowane; zmiana addytywna schematu
 `kartograf-availability/1`, USAGE 9: w obrebie `/1` tylko nowe klucze)
 **Warunek wstepny:** raport dostepnosci (ADR-041, plany A i B), dokumenty JSON

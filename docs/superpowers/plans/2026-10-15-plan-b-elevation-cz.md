@@ -317,7 +317,7 @@ tlumaczy). Dodatkowo:
 | `tests/test_cuzk_raster.py` (z `test_cuzk_dmr.py`), `tests/test_cuzk_laz.py`, `tests/test_cz_laz.py` (NOWE), `tests/test_cz_sheets.py`, `tests/test_cz_cutout.py`, `tests/test_availability.py`, `tests/test_parity.py`, `tests/test_cli.py`, `tests/test_gugik_laz.py`, `tests/test_laz_download.py`, `tests/test_sources_registry.py` | Task 2-7 |
 | `docs/DECISIONS.md` (CRLF), `docs/CHANGELOG.md`, `docs/USAGE.md`, `docs/ARCHITECTURE.md`, `docs/SCOPE.md`, `docs/PRD.md` | Task 8 |
 
-## Fakty o obecnym kodzie (zweryfikowane 2026-10-15 na `bcdf37d`, przed planem A)
+## Fakty o obecnym kodzie (zweryfikowane 2026-10-15 na `2e2a419`, przed planem A)
 
 - Rejestr CZ: `kartograf/sources/registry.py:276-310` `cz.cuzk.dmr5g`,
   `:312-360` `cz.cuzk.dmr4g` (kanaly `DIRECT_FILES` SM5 z `endpoint=".../DMR4G-TIFF/epsg-5514/{sheet}.zip"`
