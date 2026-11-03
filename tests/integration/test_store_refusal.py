@@ -283,7 +283,7 @@ def test_a_run_into_a_refused_store_root_is_the_error_of_the_command_before_a_re
         expected.exit_code,
         expected.reason,
     )
-    assert error.details()["path"] == str(root.resolve())
+    assert error.details()["path"] == root.resolve().as_posix()
     assert asked == []
     assert tree(tmp_path) == before  # not a byte, not the marker
 
@@ -310,11 +310,12 @@ def test_the_plan_of_a_conflicting_store_root_lists_the_conflict_and_asks_nothin
         "conflict",
         REFUSALS[refusal].reason,
     )
-    assert item.path == root.resolve() and item.name == item.unit == str(root.resolve())
+    root_id = root.resolve().as_posix()
+    assert item.path == root.resolve() and item.name == item.unit == root_id
     assert item.error is not None and MARKER in item.error
     assert (plan.mode, plan.root, plan.output_dir) == (
         "store",
-        str(root.resolve()),
+        root_id,
         None,
     )
     assert plan.ok  # a plan that lists a conflict is a result: only the run fails
@@ -491,9 +492,9 @@ def test_the_cli_check_of_a_conflicting_root_prints_the_plan_and_exits_0(
     assert [(i["track"], i["action"], i["reason"]) for i in plan["items"]] == [
         ("store", "conflict", REFUSALS[refusal].reason)
     ]
-    assert plan["ok"] is True and plan["root"] == str(root.resolve())
+    assert plan["ok"] is True and plan["root"] == root.resolve().as_posix()
     assert [(i["id"], i["status"]) for i in envelope["items"]] == [
-        (str(root.resolve()), "ok")
+        (root.resolve().as_posix(), "ok")
     ]
     assert asked == []
 

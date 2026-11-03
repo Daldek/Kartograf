@@ -1,5 +1,6 @@
 """Tests of standard path links to versions (kartograf.download.links, spec 3.2)."""
 
+import errno
 import hashlib
 import json
 import os
@@ -98,7 +99,8 @@ def test_link_without_hardlink_support_is_error(tmp_path, monkeypatch):
     a, _ = _a(tmp_path)
     link = _link(tmp_path)
     monkeypatch.setattr(os, "symlink", Mock(side_effect=AssertionError("symlink")))
-    monkeypatch.setattr(os, "link", Mock(side_effect=OSError(95, "not supported")))
+    unsupported = OSError(errno.EOPNOTSUPP, "not supported")  # 95 on Linux only
+    monkeypatch.setattr(os, "link", Mock(side_effect=unsupported))
     with pytest.raises(DownloadError, match="hardlink"):
         link_atomic(a, link)
     assert not link.exists() and not link.is_symlink()

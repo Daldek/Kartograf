@@ -268,8 +268,12 @@ def _notice(raw: Mapping[str, object]) -> Notice:
 
 
 def store_id(root: str | Path) -> str:
-    """Identity of a store in a plan: the resolved output directory."""
-    return str(Path(root).resolve())
+    """Identity of a store in a plan: the resolved output directory.
+
+    Written as every document writes a path (``Path.as_posix()``), so a plan names
+    its store as the documents of the run do, on Windows too.
+    """
+    return Path(root).resolve().as_posix()
 
 
 def plain_items(write: Staging, items: Iterable[PlanItem]) -> tuple[PlanItem, ...]:
@@ -344,13 +348,13 @@ def conflict_plan(root: str | Path, refusal: KartografError) -> UpdatePlan:
     """
     if not isinstance(refusal, ConflictError):
         raise refusal
-    path = Path(store_id(root))
+    root_id = store_id(root)
     item = PlanItem(
         track="store",
         segment="",
         hierarchy="",
-        name=str(path),
-        unit=str(path),
+        name=root_id,
+        unit=root_id,
         local_label=None,
         local_sha256=None,
         available_label=None,
@@ -358,7 +362,7 @@ def conflict_plan(root: str | Path, refusal: KartografError) -> UpdatePlan:
         status="unverifiable",
         error=str(refusal),
         action="conflict",
-        path=path,
+        path=Path(root_id),
         reason=refusal.reason,
     )
     return new_plan(root, [item])

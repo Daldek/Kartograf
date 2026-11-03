@@ -151,7 +151,10 @@ def test_the_layout_of_a_store_without_a_marker_is_store_unavailable(tmp_path, c
     assert (error.reason, error.exit_code) == ("no_marker", 8)
     assert f"kartograf store init --root {tmp_path}" in (error.hint or "")
     assert not (tmp_path / MARKER).exists()
-    assert error_report(error).details == {"reason": "no_marker", "path": str(tmp_path)}
+    assert error_report(error).details == {
+        "reason": "no_marker",
+        "path": tmp_path.absolute().as_posix(),
+    }
 
 
 def test_the_files_of_version_0_7_are_a_layout_too(tmp_path):

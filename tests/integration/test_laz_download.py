@@ -373,7 +373,7 @@ class TestRunLazDownload:
         plan = _check_selection(
             _selection(current, missing), provider=provider, root=tmp_path
         )
-        assert plan.root == str(tmp_path.resolve())
+        assert plan.root == tmp_path.resolve().as_posix()
         assert [(item.track, item.unit, item.status) for item in plan.items] == [
             ("laz_tile", current.sheet, "current"),
             ("laz_tile", missing.sheet, "missing"),

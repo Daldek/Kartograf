@@ -370,7 +370,7 @@ def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):
     assert code == 9 and out == ""
     assert document["code"] == "io_error"
     assert document["exit_code"] == 9
-    assert document["details"] == {"errno": "EISDIR", "path": str(plan_file)}
+    assert document["details"] == {"errno": "EISDIR", "path": plan_file.as_posix()}
 
 
 def test_internal_error_in_json_mode_and_debug_reraises(capsys, monkeypatch):

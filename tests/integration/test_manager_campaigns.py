@@ -207,8 +207,12 @@ def meta(path: Path) -> dict:
 
 
 def linked(path: Path) -> str:
-    """Version file per the standard sidecar (the only source of the target)."""
-    return str(linked_version(path))
+    """Version file per the standard sidecar (the only source of the target).
+
+    POSIX form, so path fragments with ``/`` match on every platform.
+    """
+    target = linked_version(path)
+    return "" if target is None else target.as_posix()
 
 
 def hardlinked(path: Path) -> bool:
@@ -267,8 +271,8 @@ def test_newest_downloads_into_versions_and_links(tmp_path):
         == tmp_path / "nmt/pl_1992_1m_evrf2007/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc"
     )
     version = campaign_path(tmp_path, REC["84183"])
-    assert hardlinked(path) and linked(path) == str(version)
-    assert "versions/N-34/139/C/a/3/1/2025-10-21_84183_" in str(version)
+    assert hardlinked(path) and linked(path) == version.as_posix()
+    assert "versions/N-34/139/C/a/3/1/2025-10-21_84183_" in version.as_posix()
     data = json.loads((path.parent / (path.name + ".meta.json")).read_text())
     assert data["extra"]["link"] == "hardlink"
     assert data["extra"]["campaign"]["id"] == "84183"
@@ -321,7 +325,7 @@ def test_legacy_regular_file_replaced_by_link(tmp_path):
     )
     DownloadManager(provider=FakeCampaignProvider(C14), root=tmp_path).download_sheet(G)
     assert hardlinked(std)
-    assert linked(std) == str(campaign_path(tmp_path, REC["84183"]))
+    assert linked(std) == campaign_path(tmp_path, REC["84183"]).as_posix()
     data = meta(std)
     assert data["extra"]["campaign"]["id"] == "84183"
     assert "parent_requests" not in data["extra"]
@@ -533,7 +537,7 @@ def test_removed_version_dir_redownloads_newest(tmp_path):
     result = m.download_sheet(G)
     assert fake.downloads == [REC["84183"].url] * 2
     assert hardlinked(std)
-    assert linked(std) == str(campaign_path(tmp_path, REC["84183"]))
+    assert linked(std) == campaign_path(tmp_path, REC["84183"]).as_posix()
     assert result.new == [G] and result.files[G][0].status == "new"
 
 
@@ -560,7 +564,7 @@ def test_force_changed_content_same_campaign_new_version_and_relink(tmp_path):
     versions = list(first.parent.parent.glob(f"2025-10-21_84183_*/{G}.asc"))
     (second,) = [v for v in versions if v != first]
     assert "v1" in first.read_text() and "v2" in second.read_text()  # old kept
-    assert "v2" in std.read_text() and linked(std) == str(second)
+    assert "v2" in std.read_text() and linked(std) == second.as_posix()
     assert result.new == [G] and result.files[G][0].status == "new"
 
 
@@ -782,7 +786,7 @@ def test_version_without_sidecar_is_redownloaded_and_repaired(tmp_path):
     assert fake.downloads == [REC["84183"].url] * 2
     assert campaign_path(tmp_path, REC["84183"]) == target
     assert meta(target)["extra"]["campaign"]["id"] == "84183"
-    assert hardlinked(std) and linked(std) == str(target)
+    assert hardlinked(std) and linked(std) == target.as_posix()
 
 
 def _mock_provider(tmp_payload: bytes = b"ncols 1\n") -> Mock:

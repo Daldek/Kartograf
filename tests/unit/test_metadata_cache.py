@@ -20,6 +20,7 @@ Tests cover:
 import logging
 import os
 import sqlite3
+import sys
 import threading
 import time
 from pathlib import Path
@@ -1484,15 +1485,16 @@ def _unreadable_db(path: Path) -> None:
     path.chmod(0)
 
 
-_needs_non_root = pytest.mark.skipif(
-    hasattr(os, "geteuid") and os.geteuid() == 0,
-    reason="root ignoruje prawa dostepu do pliku",
+_chmod_denies_access = pytest.mark.skipif(
+    sys.platform == "win32" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+    reason="chmod does not deny access here: root ignores it, on Windows it only "
+    "sets the read-only attribute (a file stays readable, a directory writable)",
 )
 
 BROKEN_DBS = [
     pytest.param(_garbage_db, id="garbage"),
     pytest.param(_truncated_db, id="truncated"),
-    pytest.param(_unreadable_db, id="no-read-permission", marks=_needs_non_root),
+    pytest.param(_unreadable_db, id="no-read-permission", marks=_chmod_denies_access),
 ]
 
 
@@ -1674,7 +1676,7 @@ class TestCLICacheCommandsUnreadable:
         assert c.get_record("nmt", "1m", "EVRF2007", SHEET) == {"source": SOURCE}
         c.close()
 
-    @_needs_non_root
+    @_chmod_denies_access
     def test_clear_without_delete_permission_is_error(
         self, tmp_path, monkeypatch, capsys
     ):

@@ -1,11 +1,18 @@
 """Check the ``kartograf ...`` lines that the documents for readers quote."""
 
 import shlex
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from kartograf import parse_command, validate_command
 from kartograf.catalog.cliparser import build_parser, parse_command_line
 from kartograf.catalog.commands import declared
+
+
+def is_absolute_root(root: str) -> bool:
+    """Return whether ``root`` is absolute: in the POSIX form the documents quote
+    (``/data/kartograf``, which has no drive on Windows) or as a path of this system.
+    """
+    return PurePosixPath(root).is_absolute() or Path(root).is_absolute()
 
 
 def check_command_line(line: str) -> None:
@@ -23,7 +30,7 @@ def check_command_line(line: str) -> None:
         call = parse_command(words)
         root = call.run.get("root")
         if root is not None:
-            assert Path(str(root)).is_absolute(), line
+            assert is_absolute_root(str(root)), line
         validate_command(
             call.command,
             call.options,

@@ -144,7 +144,7 @@ def test_the_laz_plan_lists_each_tile_with_its_action_and_fetches_none(tmp_path)
     assert (before.mode, before.root, before.output_dir) == (
         "plain",
         None,
-        str(out.resolve()),
+        out.resolve().as_posix(),
     )
     assert [(i.action, i.status) for i in before.items] == [("write", "missing")] * 4
     assert sorted(i.path.name for i in before.items) == names
@@ -256,7 +256,7 @@ def test_the_plain_pl_cutout_plan_asks_neither_the_mask_nor_the_service(tmp_path
     assert (before.mode, before.root, before.output_dir) == (
         "plain",
         None,
-        str(out.resolve()),
+        out.resolve().as_posix(),
     )
     (planned,) = before.items
     assert (planned.action, planned.status, planned.path) == (

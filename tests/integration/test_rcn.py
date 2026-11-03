@@ -6,6 +6,8 @@ import json
 import sqlite3
 import zipfile
 from pathlib import Path
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 import pyogrio
 import pytest
@@ -64,7 +66,11 @@ def test_rcn_powiat_export_is_one_geopackage_of_three_layers(tmp_path, monkeypat
     connect = sqlite3.connect
 
     def spy(database, *args, **kwargs):
-        opened.append(Path(str(database).removeprefix("file:").split("?", 1)[0]))
+        # a file: URI (file:///C:/... on Windows) back to the path it names
+        text = str(database)
+        if text.startswith("file:"):
+            text = url2pathname(urlsplit(text).path)
+        opened.append(Path(text))
         return connect(database, *args, **kwargs)
 
     monkeypatch.setattr(unit_package.sqlite3, "connect", spy)

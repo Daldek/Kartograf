@@ -97,7 +97,7 @@ def test_a_plain_collection_is_one_file_per_unit_named_as_in_the_store(
     assert not default_root.exists()
     document = report.to_dict()
     assert document["mode"] == "plain" and document["root"] is None
-    assert document["output_dir"] == str(out)
+    assert document["output_dir"] == out.as_posix()
 
 
 def test_a_second_plain_collection_run_names_every_file_and_fetches_nothing(
@@ -137,7 +137,7 @@ def test_the_plain_collection_plan_says_write_replace_or_conflict(
     assert (before.mode, before.root, before.output_dir) == (
         "plain",
         None,
-        str(out.resolve()),
+        out.resolve().as_posix(),
     )
     assert [(i.name, i.action) for i in before.items] == [
         ("0208.zip", "write"),
@@ -378,6 +378,6 @@ def test_calculate_hsg_function_reports_and_summarises_a_plain_write(tmp_path):
             )
 
     assert report.summary is not None and report.summary["B"]["percent"] == 100.0
-    assert report.to_dict()["output_dir"] == str(out)
+    assert report.to_dict()["output_dir"] == out.as_posix()
     assert error.value.reason == "store_only_option"
     assert not (out / "x").exists()

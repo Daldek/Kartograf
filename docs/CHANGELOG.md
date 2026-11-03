@@ -10,6 +10,50 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Everything below ships in 0.8.0: the release pull request renames this heading to
 `[0.8.0] - <date>` (REL-2.1).
 
+### Windows and macOS portability
+
+The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the release.
+
+**Fixed**
+
+- `FileStorage.write_atomic` overwrites an existing file on Windows: it moved its temporary
+  file with `Path.rename`, which raises `FileExistsError` there when the target exists;
+  `Path.replace` overwrites on every platform.
+- The store size of `config show` counts a hard-linked version file once on Windows
+  (`config._tree_size`): `os.DirEntry.stat()` leaves `st_nlink`, `st_ino` and `st_dev` at 0
+  there, so every name of the file was counted; the size walk reads them with `os.stat()`.
+- A `kartograf-plan/1` document names its store as a POSIX path (`download/plan.py`,
+  `store_id`): `root`, `output_dir` and the name and unit of a refused store root were
+  `str(Path.resolve())`, so on Windows a plan said `C:\...` while every other document says
+  `C:/...` (`Path.absolute().as_posix()`).
+- `details.path` of an `io_error` document is a POSIX path (`error_report._io_path`): it was
+  `os.fspath(filename)`, a native `C:\...` (or `\p` for `Path('/p')`) on Windows.
+- `scripts/generate_errors.py` pipes UTF-8 to ruff: subprocess text mode used the locale
+  encoding, and cp1252 of Windows wrote the section sign of the module as a byte ruff refuses
+  (exit 2).
+
+**Changed**
+
+- Tests: the assertions hold on Windows and macOS. Documents and error details are compared
+  by their POSIX paths (`Path.absolute().as_posix()`) and path components by `Path.parts`;
+  fixtures are written as bytes and read as UTF-8; a case-insensitive glob, the
+  platform-dependent sha256 of a ZIP (the frozen clock moves 1 s in `test_collections`),
+  `shlex.quote`, `url2pathname` (`test_rcn`), `errno.EOPNOTSUPP` (`test_links`) and a TOML root
+  as a POSIX path are accounted for; the chmod cases of the cache are skipped on Windows.
+- Tests: a smoke of the CLI as a process of its own (ADR-054 step 9,
+  `tests/integration/test_cli_plain_subprocess.py`). The plain write runs the real
+  `kartograf` main in a child process with only `_create_provider_and_storage` patched to
+  `FakeCampaignProvider` (`tests/support/plain_driver.py`; no source can be replaced from the
+  command line), and checks the exit code, `files[]`, the file in the output directory and an
+  untouched default store; the installed `kartograf` script is run for the two refusals before
+  any request, an output directory in a store (`output_in_store`, exit 4) and `--root` beside
+  `--output-dir` (exit 2). The offline environment of a child process (user directories,
+  settings, dead loopback proxies, `PYTHONUTF8=1`) is `tests/support/offline_process.py`.
+- Documentation: plain mode beside the store in `docs/ARCHITECTURE.md` 1, 3.3 and 4.x (the two
+  targets, the refusals, the flows on the handle root of a plain write) and in `README.md` (the
+  `output_in_store` refusal, the `conflict` exit code, the path of a plain report, no sidecar
+  for a plain file).
+
 ### Projects move to Archiwista (ADR-057)
 
 **Breaking**
@@ -89,7 +133,7 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   not apply, as for SHP); a file without features is refused as an empty GPKG layer. Archiwista
   passes its area as a WGS84 GeoJSON file.
 
-### Nogat standard 2.1 adoption (so far)
+### Nogat standard 2.1 adoption
 
 **Breaking**
 

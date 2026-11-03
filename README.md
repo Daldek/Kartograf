@@ -90,9 +90,9 @@ The plan is `"check": true` with `result.schema` `kartograf-plan/1` and one item
 }
 ```
 
-`result.files[].path` is the file below the store, listed with its `size_bytes` and `sha256`. An area, a country or another product is another option set: `kartograf commands schema --command "elevation download"`.
+`result.files[].path` is the file below the store (with `-o`, the file in the output directory), listed with its `size_bytes` and `sha256`. An area, a country or another product is another option set: `kartograf commands schema --command "elevation download"`.
 
-Where the files go: `--root DIR` writes the versioned store (`versions/`, sidecars); `-o DIR` / `--output-dir DIR` writes plain files named as in the store, with no sidecar and no hard links (it works on FAT, exFAT and SMB; `--force` replaces existing files, and without it an existing file is a conflict before the first byte; PL sheets take the newest FULL flight). A command with neither option writes the default store (`KARTOGRAF_ROOT`, `[kartograf] root`, `<data_dir>/kartograf`). `--upgrade`, `--plan` and `--all-campaigns` work only with a store. Details: [USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md) 1.12.
+Where the files go: `--root DIR` writes the versioned store (`versions/`, sidecars); `-o DIR` / `--output-dir DIR` writes plain files named as in the store, flat in `DIR`, with no sidecar and no hard links (it works on FAT, exFAT and SMB; `--force` replaces existing files, and without it an existing file is a conflict before the first byte; PL sheets take the newest FULL flight). An output directory that is, or lies in, a store is a `conflict` before any request: write a store with `--root`. A command with neither option writes the default store (`KARTOGRAF_ROOT`, `[kartograf] root`, `<data_dir>/kartograf`). `--upgrade`, `--plan` and `--all-campaigns` work only with a store. There is no `--output FILE`: no command writes exactly one file. Details: [USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md) 1.12.
 
 ```bash
 # plain files in ./dem, named as in the store; a rerun is a conflict, --force replaces them
@@ -139,7 +139,7 @@ The server lists the tools of the catalog. A tool is called with the options as 
 
 ## Capabilities
 
-The CLI group is `kartograf <group> download` and `product` selects the data; `kartograf <group> list-sources` lists the sources and values of a group offline. The MCP tool is `kartograf_<group>_download`. Every row reads from the source named in the last column and writes a store version with its licence.
+The CLI group is `kartograf <group> download` and `product` selects the data; `kartograf <group> list-sources` lists the sources and values of a group offline. The MCP tool is `kartograf_<group>_download`. Every row reads from the source named in the last column and writes a store version with its licence, or with `-o` a plain file.
 
 | Task | CLI group (`--product`) | Python function | Data source and licence |
 |---|---|---|---|
@@ -229,9 +229,10 @@ An error is a `kartograf-error/1` document with `code`, `title`, `message`, `hin
 | `source_unavailable` | 5 | network, HTTP or timeout: retry the same call later |
 | `no_data` | 14 | the source has no data there (`details.reason`): change the area or the year |
 | `io_error` | 9 | a directory or file is unavailable: check `details.path` and the permissions |
+| `conflict` | 4 | the target is taken (`details.reason`, `details.paths`): `--force` replaces existing files; an output directory in a store needs `--root` instead |
 | `forbidden` | 12 | MCP only: a path outside `--allow-dir`, or a write without `--allow-writes` |
 
-Ctrl-C ends with 130 and SIGTERM with 143; nothing half written stays in the store.
+Ctrl-C ends with 130 and SIGTERM with 143; nothing half written stays in the store or in the output directory.
 
 ## Data and licensing
 
@@ -244,9 +245,9 @@ Sources, as in the [Nogat registry](https://github.com/Daldek/Nogat/blob/main/ec
 | Copernicus CLMS | CORINE Land Cover | Copernicus data policy, attribution required |
 | ISRIC SoilGrids | soil properties, input of HSG | CC BY 4.0 |
 
-Every file has a sidecar `<file>.meta.json` (`kartograf-meta/1`) with the CRS, the source, the request, the SHA-256 and the licence with a ready-made attribution text; pass it on when you publish results.
+Every file of the store has a sidecar `<file>.meta.json` (`kartograf-meta/1`) with the CRS, the source, the request, the SHA-256 and the licence with a ready-made attribution text; pass it on when you publish results. A plain file (`-o`) has no sidecar: its licence is the one of its source in the table above.
 
-Files go to the directory of `--root` (`root`), one directory per product: `<root>/<product>/<country>_<system>[_<variant>]/...`. A version is a file in `versions/<label>_<sha8>/`; the standard path and `full_sheet/` are hard links to the newest local version ([ARCHITECTURE.md](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md), section 3).
+Files go to the directory of `--root` (`root`), one directory per product: `<root>/<product>/<country>_<system>[_<variant>]/...`. A version is a file in `versions/<label>_<sha8>/`; the standard path and `full_sheet/` are hard links to the newest local version ([ARCHITECTURE.md](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md), section 3). With `-o DIR` the same file names lie flat in `DIR` (`N-34-139-C-a-3-1.asc`), with nothing else.
 
 ### Settings, directories and backup
 
@@ -254,10 +255,10 @@ Settings come from the first of: the command-line option, the variable `KARTOGRA
 
 | Variable | Key in `nogat.toml` | Meaning | Default |
 |---|---|---|---|
-| `KARTOGRAF_ROOT` | `[kartograf] root` | root of the store (reported by `config show`; the commands still take the store from `--root`) | `<data_dir>/kartograf` |
+| `KARTOGRAF_ROOT` | `[kartograf] root` | root of the store a command writes when it names neither `--root` nor `--output-dir` (ADR-054) | `<data_dir>/kartograf` |
 | `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR` | `data_dir` | parent of the stores | user data directory of `nogat` (`~/.local/share/nogat`) |
 | `KARTOGRAF_CACHE_DIR`, `NOGAT_CACHE_DIR` | `cache_dir` | parent of the caches; the metadata cache is `<cache_dir>/kartograf/metadata.db` | user cache directory of `nogat` (`~/.cache/nogat`) |
-| `KARTOGRAF_LANG`, `NOGAT_LANG` | `lang` | language of human-readable output, `pl` or `en`; `--lang` overrides it; the `--json` output and the error line are English (the library texts move into the message catalog area by area) | `pl` |
+| `KARTOGRAF_LANG`, `NOGAT_LANG` | `lang` | language of human-readable output, `pl` or `en`; `--lang` overrides it; the `--json` output and the error line are English | `pl` |
 | `KARTOGRAF_DEBUG` | `[kartograf] debug` | print tracebacks and every library log record | off |
 | `NOGAT_CONFIG` | - | path of `nogat.toml` | user configuration directory |
 | `CLMS_CREDENTIALS` | never in the file | CLMS API credentials for CORINE as GeoTIFF ([USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md), section 6); `config show` says present or missing | - |

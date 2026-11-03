@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -522,12 +523,17 @@ def test_force_same_bytes_unchanged(tmp_path, session, frozen_clock):
     assert forced.files[0].file.version_path == first.files[0].file.version_path
 
 
-def test_force_new_bytes_new_version(tmp_path, session, frozen_clock):
+def test_force_new_bytes_new_version(tmp_path, session, frozen_clock, monkeypatch):
     url = LOD1_2024.format(woj="12", teryt="1261")
     session.routes.update([_zip_route(url)])
     first = _lod1(tmp_path)
     old_sidecar = Path(f"{first.files[0].file.version_path}.meta.json").read_bytes()
     session.routes.update([_zip_route(url, content=b"nowa tresc")])
+    # The forced download is the later one: with one frozen instant the two
+    # versions would tie on the label date and downloaded_at, leaving the order
+    # to their sha256 (which differs by platform: ZIP headers name the OS).
+    later = frozen_clock + timedelta(seconds=1)
+    monkeypatch.setattr("kartograf._clock.now", lambda: later)
     forced = _lod1(tmp_path, update="force")
     new = forced.files[0].file
     assert new.status == "new"

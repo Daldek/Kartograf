@@ -28,6 +28,12 @@ from kartograf.providers.pl.gugik_laz import LazTile, SupersededLazTile
 from kartograf.serialization import SCHEMAS, Document, EncodeContext, encode
 
 
+def absolute(text: str) -> str:
+    """The encoding of ``Path(text)``: on Windows "/a" is "D:/a", on the drive of
+    the working directory."""
+    return Path(text).absolute().as_posix()
+
+
 @dataclass(frozen=True)
 class Item:
     name: str
@@ -101,7 +107,7 @@ def test_path_is_absolute_posix(tmp_path, monkeypatch):
 
 def test_sequences_and_sets_sorted():
     assert encode((1, 2)) == [1, 2]
-    assert encode([Path("/a"), "b"]) == ["/a", "b"]
+    assert encode([Path("/a"), "b"]) == [absolute("/a"), "b"]
     assert encode(frozenset({"b", "a"})) == ["a", "b"]
     assert encode({3, 1, 2}) == [1, 2, 3]
     with pytest.raises(TypeError, match="orderable"):
@@ -109,7 +115,7 @@ def test_sequences_and_sets_sorted():
 
 
 def test_mapping_keys_must_be_str():
-    assert encode({"b": (1,), "a": Path("/x")}) == {"b": [1], "a": "/x"}
+    assert encode({"b": (1,), "a": Path("/x")}) == {"b": [1], "a": absolute("/x")}
     assert list(encode({"b": 1, "a": 2})) == ["b", "a"]  # insertion order
     with pytest.raises(TypeError, match="keys"):
         encode({1: "a"})
@@ -468,20 +474,24 @@ def test_download_report_equals_the_spec_example():
     assert report.to_dict() == {
         "schema": "kartograf-download/1",
         "mode": "store",
-        "root": "/data/kartograf",
+        "root": absolute("/data/kartograf"),
         "output_dir": None,
         "files": [
             {
                 "unit": "N-34-130-D-d-2-4",
                 "country": "PL",
-                "path": "/data/kartograf/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/"
-                "N-34-130-D-d-2-4.asc",
+                "path": absolute(
+                    "/data/kartograf/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/"
+                    "N-34-130-D-d-2-4.asc"
+                ),
                 "size_bytes": 48,
                 "sha256": _SPEC_SHA256,
                 "status": "new",
                 "label": "2022-05-10_83233",
-                "version_path": "/data/kartograf/nmt/pl_1992_1m_evrf2007/versions/"
-                "N-34/130/D/d/2/4/2022-05-10_83233_10be475e/N-34-130-D-d-2-4.asc",
+                "version_path": absolute(
+                    "/data/kartograf/nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/"
+                    "2022-05-10_83233_10be475e/N-34-130-D-d-2-4.asc"
+                ),
             }
         ],
         "raw": [],

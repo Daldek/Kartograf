@@ -675,9 +675,10 @@ def test_geometry_request_measures_each_feature(tmp_path):
     assert area.area_m2 == 2_000_000.0
     combo = _combo(report, 2025, "PL-1992", "1m")
     assert combo.complete and len(combo.sheets_full) < 6
+    # the hint is a shell line: a Windows path (backslashes) is quoted
     assert combo.download_hint[0].startswith(
-        f"elevation download --product nmt --country pl --geometry {path} "
-        "--sheet-system 1992"
+        "elevation download --product nmt --country pl "
+        f"--geometry {shlex.quote(str(path))} --sheet-system 1992"
     )
     assert report.request["geometry"] == str(path)
 
@@ -713,8 +714,8 @@ def test_geometry_request_measures_the_polygon_not_its_envelope(tmp_path):
         _combo(_report("nmt", "krakow"), 2025, "PL-1992", "1m").sheets_full
     )
     assert combo.download_hint[0].startswith(
-        f"elevation download --product nmt --country pl --geometry {path} "
-        "--sheet-system 1992"
+        "elevation download --product nmt --country pl "
+        f"--geometry {shlex.quote(str(path))} --sheet-system 1992"
     )
 
 

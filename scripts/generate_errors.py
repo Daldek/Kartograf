@@ -109,12 +109,16 @@ def render(registry: dict[str, Any]) -> str:
 
 
 def _formatted(text: str) -> str:
-    """Return ``text`` formatted by ruff with the settings of the project."""
+    """Return ``text`` formatted by ruff with the settings of the project.
+
+    The pipe is UTF-8 (ruff reads nothing else), not the locale encoding: the
+    module holds ``§``, which cp1252 of Windows would write as a byte ruff refuses.
+    """
     done = subprocess.run(
         [sys.executable, "-m", "ruff", "format", "--stdin-filename", str(MODULE), "-"],
         input=text,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=True,
         cwd=ROOT,
     )

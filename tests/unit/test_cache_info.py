@@ -7,6 +7,7 @@ directory is a ``tmp_path`` that no cache file ever lands in (DEV-18.2).
 import json
 import os
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -71,15 +72,18 @@ def _no_read_permission(path: Path) -> None:
     path.chmod(0)
 
 
-_needs_non_root = pytest.mark.skipif(
-    hasattr(os, "geteuid") and os.geteuid() == 0,
-    reason="root ignoruje prawa dostepu do pliku",
+_chmod_denies_access = pytest.mark.skipif(
+    sys.platform == "win32" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+    reason="chmod does not deny access here: root ignores it, on Windows it only "
+    "sets the read-only attribute (a file stays readable, a directory writable)",
 )
 
 UNREADABLE = [
     pytest.param(_garbage, id="garbage"),
     pytest.param(_truncated, id="truncated"),
-    pytest.param(_no_read_permission, id="no-read-permission", marks=_needs_non_root),
+    pytest.param(
+        _no_read_permission, id="no-read-permission", marks=_chmod_denies_access
+    ),
 ]
 
 
@@ -204,7 +208,7 @@ def test_clear_removes_an_unreadable_file_with_wal_and_shm(db, make_broken):
     cache.close()
 
 
-@_needs_non_root
+@_chmod_denies_access
 def test_clear_without_the_right_to_delete_is_a_cache_error(tmp_path, monkeypatch):
     monkeypatch.setenv("KARTOGRAF_CACHE_DIR", str(tmp_path / "ro"))
     target = default_cache_path()
