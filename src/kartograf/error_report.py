@@ -19,6 +19,7 @@ import json
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import PurePath
 
 from kartograf._errors import BY_CODE, OUTCOME_MEANINGS, OUTCOMES
 from kartograf.exceptions import (
@@ -440,13 +441,16 @@ def _library_hint(
 
 
 def _io_path(exc: OSError) -> str | None:
-    """Return the file name of an ``OSError`` as text (``None``: it has none)."""
+    """Return the file name of an ``OSError`` as text (``None``: it has none).
+
+    Written as every document writes a path (``as_posix()``), so a Windows name
+    with backslashes has slashes; a relative name stays relative.
+    """
     filename = exc.filename
-    if isinstance(filename, bytes):
-        return os.fsdecode(filename)
-    if isinstance(filename, str | os.PathLike):
-        return os.fspath(filename)
-    return None
+    if not isinstance(filename, str | bytes | os.PathLike):
+        return None
+    name = os.fsdecode(filename)
+    return PurePath(name).as_posix() if name else None
 
 
 def _io_details(exc: OSError) -> dict[str, object]:
