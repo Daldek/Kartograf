@@ -47,7 +47,7 @@ def test_the_store_commands_read_the_default_store_without_a_root(
     code, out, err = run(capsys, "store", "overview", "--json")
 
     assert (code, err) == (0, "")
-    assert json.loads(out)["result"]["root"] == str(store)
+    assert json.loads(out)["result"]["root"] == store.absolute().as_posix()
 
 
 @needs_mcp
@@ -64,14 +64,17 @@ def test_an_mcp_call_without_a_root_needs_the_default_store_inside_allow_dir(
     report = error_of(refused, code="forbidden")
     assert report["details"]["option"] == "root"
     assert report["details"]["reason"] == "outside_allowed_dirs"
-    assert report["details"]["path"] == str(outside.resolve())
-    assert report["details"]["allowed"] == [str(allowed.resolve())]
+    assert report["details"]["path"] == outside.resolve().as_posix()
+    assert report["details"]["allowed"] == [allowed.resolve().as_posix()]
 
     monkeypatch.setenv("KARTOGRAF_ROOT", str(allowed / "store"))
     (allowed / "store").mkdir()
     allowed_call = call("kartograf_store_overview", {}, allow_dirs=[allowed])
     assert allowed_call.is_error is False
-    assert allowed_call.structured_content["result"]["root"] == str(allowed / "store")
+    assert (
+        allowed_call.structured_content["result"]["root"]
+        == (allowed / "store").absolute().as_posix()
+    )
 
 
 @needs_mcp

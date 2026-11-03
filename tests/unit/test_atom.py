@@ -374,7 +374,9 @@ def test_unpack_members_missing_member_is_download_error(tmp_path):
 
     with pytest.raises(DownloadError, match=r"\.TM34N\.jgw \(0\)"):
         unpack_members(archive, ORTO, tmp_path, "CTES96", url="u")
-    assert not list(tmp_path.glob("CTES96*"))
+    # Nothing unpacked; a "CTES96*" glob would also match ctes96.zip on a
+    # case-insensitive file system (Windows).
+    assert list(tmp_path.iterdir()) == [archive]
 
 
 def _file_response(body: bytes, length: int | None = None):

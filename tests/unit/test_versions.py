@@ -52,7 +52,7 @@ def test_layout_is_per_file_under_hierarchy(tmp_path):
 
 def test_read_content_hashes_and_measures_in_one_pass(tmp_path):
     p = tmp_path / NAME
-    p.write_text(ASC)
+    p.write_bytes(ASC.encode())  # text mode would turn \n into \r\n on Windows
     d = v.read_content(p, ext=".asc", coverage=True)
     assert d.sha256 == hashlib.sha256(ASC.encode()).hexdigest()
     assert d.size_bytes == len(ASC.encode())

@@ -10,6 +10,7 @@ import io
 import json
 import os
 import re
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest  # noqa: F401 - required for fixtures
@@ -29,7 +30,7 @@ class TestFileStorageBasic:
     def test_init_custom_directory(self):
         """Test initialisation with a custom directory."""
         storage = FileStorage("/custom/path", resolution="1m", vertical_crs="EVRF2007")
-        assert str(storage.root) == "/custom/path"
+        assert storage.root == Path("/custom/path")
 
     def test_repr(self):
         """Test the string representation."""
@@ -73,7 +74,7 @@ class TestFileStorageGetPath:
         path = storage.get_path("N-34-130-D", ".tif")
 
         assert path.name == "N-34-130-D.tif"
-        parts = str(path).split("/")
+        parts = path.parts
         assert "N-34" in parts
         assert "130" in parts
         assert "D" in parts
@@ -84,7 +85,7 @@ class TestFileStorageGetPath:
         path = storage.get_path("N-34-130-D-d", ".tif")
 
         assert path.name == "N-34-130-D-d.tif"
-        parts = str(path).split("/")
+        parts = path.parts
         assert "N-34" in parts
         assert "130" in parts
         assert "D" in parts
@@ -96,7 +97,7 @@ class TestFileStorageGetPath:
         path = storage.get_path("N-34-130-D-d-2", ".tif")
 
         assert path.name == "N-34-130-D-d-2.tif"
-        parts = str(path).split("/")
+        parts = path.parts
         assert "N-34" in parts
         assert "130" in parts
         assert "D" in parts
@@ -109,7 +110,7 @@ class TestFileStorageGetPath:
         path = storage.get_path("N-34-130-D-d-2-4", ".tif")
 
         assert path.name == "N-34-130-D-d-2-4.tif"
-        parts = str(path).split("/")
+        parts = path.parts
         assert "N-34" in parts
         assert "130" in parts
         assert "D" in parts
@@ -389,7 +390,7 @@ class TestFileStorageProduct:
         )
         path = storage.get_path("N-34-130-D-d-2-4", ".asc")
 
-        parts = str(path).split("/")
+        parts = path.parts
         assert "nmpt" in parts
         assert "nmt_1m" not in parts
 
@@ -400,7 +401,7 @@ class TestFileStorageProduct:
         )
         path = storage.get_path("N-34-130-D-d-2-4", ".tif")
 
-        parts = str(path).split("/")
+        parts = path.parts
         assert "orto" in parts
         assert path.name == "N-34-130-D-d-2-4.tif"
 
@@ -409,7 +410,7 @@ class TestFileStorageProduct:
         storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         path = storage.get_path("N-34-130-D", ".asc")
 
-        parts = str(path).split("/")
+        parts = path.parts
         assert "pl_1992_1m_evrf2007" in parts
 
     def test_product_subdir_structure(self, tmp_path):
@@ -588,10 +589,10 @@ class TestFileStorageGetRawPath:
         path = storage.get_raw_path(
             "N-33-131-B-a-1-1-4", "81121_1573132_N-33-131-B-a-1-1-4.laz"
         )
-        parts = str(path).split("/")
+        parts = path.parts
         assert "laz" in parts
         # Hierarchy: base "N-33" then each remaining component
-        assert parts[-8:-1] == ["N-33", "131", "B", "a", "1", "1", "4"]
+        assert parts[-8:-1] == ("N-33", "131", "B", "a", "1", "1", "4")
         assert path.name == "81121_1573132_N-33-131-B-a-1-1-4.laz"
 
     def test_raw_path_pl2000_sheet(self, tmp_path):
@@ -600,8 +601,7 @@ class TestFileStorageGetRawPath:
             tmp_path, resolution=None, vertical_crs="EVRF2007", product="laz"
         )
         path = storage.get_raw_path("6.162.34.02.3", "x_6.162.34.02.3.laz")
-        parts = str(path).split("/")
-        assert parts[-6:-1] == ["6", "162", "34", "02", "3"]
+        assert path.parts[-6:-1] == ("6", "162", "34", "02", "3")
         assert path.name == "x_6.162.34.02.3.laz"
 
     def test_raw_path_does_not_parse_identifier(self, tmp_path):
@@ -612,7 +612,7 @@ class TestFileStorageGetRawPath:
         # get_path would raise ParseError on this; get_raw_path must not
         path = storage.get_raw_path("M-34-27-B-b-2-1-1", "f.laz")
         assert path.name == "f.laz"
-        assert "laz" in str(path).split("/")
+        assert "laz" in path.parts
 
     def test_raw_path_preserves_original_filename(self, tmp_path):
         """The provided filename is used verbatim (preserves density/seq id)."""
