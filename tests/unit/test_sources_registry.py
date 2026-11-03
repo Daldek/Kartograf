@@ -122,9 +122,9 @@ _CZ_PUBLICATION = {
 _CUZK_FIXTURES = Path(__file__).parent.parent / "fixtures" / "cuzk" / "real_2026_10_15"
 _OPENZU_HEAD = {
     response["url"]: response["status"]
-    for response in json.loads((_CUZK_FIXTURES / "openzu_head.json").read_text())[
-        "responses"
-    ]
+    for response in json.loads(
+        (_CUZK_FIXTURES / "openzu_head.json").read_text(encoding="utf-8")
+    )["responses"]
 }
 
 
@@ -466,7 +466,9 @@ class TestRegistry:
                 frozenset({"bbox_raster"}),
             )
             published = json.loads(
-                (_CUZK_FIXTURES / f"imageserver_{service}.json").read_text()
+                (_CUZK_FIXTURES / f"imageserver_{service}.json").read_text(
+                    encoding="utf-8"
+                )
             )
             pixel = resolution_label(Decimal(str(published["pixelSizeX"])))
             assert pixel == resolution
