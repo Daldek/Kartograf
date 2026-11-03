@@ -10,6 +10,12 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Everything below ships in 0.8.0: the release pull request renames this heading to
 `[0.8.0] - <date>` (REL-2.1).
 
+### Changed
+
+- `marker.STORE_MARKERS` recognises the store of Obserwator (formerly IMGWTools) by
+  `obserwator-store.json` instead of `imgw-store.json`, following the producer's rename in its
+  v3.0.0 (author's decision of 2026-11-03, admitted by the freeze as an API break of a producer).
+
 ### Windows and macOS portability
 
 The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the release.
@@ -629,7 +635,7 @@ each; "Migration guide: data output" at the end of this section lists what a cal
   (DEV-19.2): the root by the order of DEV-18.1 (`KARTOGRAF_ROOT`, `[kartograf] root`,
   `<data_dir>/kartograf`), the layer that gave it and whether `kartograf-store.json` is a file in it.
   It reads no store: nothing is listed or measured, unlike `get_config().store` (which measures the
-  size); IMGWTools exposes the same function. It replaces the internal `config.store_root()` that
+  size); Obserwator exposes the same function. It replaces the internal `config.store_root()` that
   returned the bare path (use `.root`).
 - `store_state(root)` (`kartograf.store_state`, `kartograf.marker.store_state`; requested by
   Archiwista, whose adapter kept a copy of the judgement, as Retman does) says what a directory is
@@ -678,7 +684,7 @@ the allowed directories is `forbidden`.
 directory (`N-34-130-D-d-2-4.asc`, `0208.zip`, `<coordinates>.tif`, `CTES96.laz`), no sidecar, no
 `versions/`, no standard path, no `full_sheet/`, no hard link: it works on FAT, exFAT and SMB. The
 whole list of targets is checked before the first byte: a name two files share is `conflict`
-(`duplicate_output_name`), a store of Kartograf or IMGWTools as the directory is `conflict`
+(`duplicate_output_name`), a store of Kartograf or Obserwator as the directory is `conflict`
 (`output_in_store`), an existing file without `--force` is `conflict` (`output_exists`); the error
 lists every path in `details.paths`. `--force` replaces each existing target with `os.replace` and
 deletes nothing else. The year options filter the flights as in the store. **PL sheets (NMT,
@@ -700,7 +706,7 @@ directory and writes only the HSG raster (`inputs[]` is empty).
 |---|---|---|
 | `conflict` (4) | `output_exists` | a plain target exists and there is no `--force`; `details.paths` lists every such file |
 | `conflict` (4) | `duplicate_output_name` | two targets of one request have one name; `details.paths` |
-| `conflict` (4) | `output_in_store` | the directory is, lies in or would enter a store of Kartograf or IMGWTools (hint `--root`) |
+| `conflict` (4) | `output_in_store` | the directory is, lies in or would enter a store of Kartograf or Obserwator (hint `--root`) |
 | `conflict` (4) | `nested_store` | the root lies in, holds or nests a store of any tool |
 | `conflict` (4) | `not_empty` | a new store in a directory with other files and no layout |
 | `store_unavailable` (8) | `no_marker` | a root that has the layout and no marker; hint `kartograf store init --root DIR` |

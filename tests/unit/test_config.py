@@ -129,7 +129,7 @@ def test_the_marker_of_another_tool_is_not_the_marker_of_kartograf(
     tmp_path, monkeypatch
 ):
     monkeypatch.setenv("KARTOGRAF_ROOT", str(tmp_path))
-    (tmp_path / "imgw-store.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "obserwator-store.json").write_text("{}", encoding="utf-8")
 
     assert kartograf.store_root().marker_exists is False
 
@@ -182,7 +182,7 @@ def test_the_nogat_section_holds_only_the_shared_keys(tmp_path, monkeypatch):
     write_config(
         tmp_path,
         monkeypatch,
-        '[nogat]\nlang = "en"\ndebug = true\n\n[imgw]\nlang = "pl"\n',
+        '[nogat]\nlang = "en"\ndebug = true\n\n[obserwator]\nlang = "pl"\n',
     )
 
     assert source_of("lang") == ("en", "file", "[nogat]")

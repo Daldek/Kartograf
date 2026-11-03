@@ -1893,7 +1893,7 @@ makes the choice (`Target(mode, path)`); the default root comes from `kartograf.
   directory is, or lies in, a store of any tool, or the write would enter a subdirectory that holds
   a marker; a store elsewhere below the directory does not matter, so `<data_dir>` is a fine output
   although the default store lies in it) and `output_exists` (an existing target without `force`).
-  A store is recognised by the marker file name (`kartograf-store.json`, `imgw-store.json`;
+  A store is recognised by the marker file name (`kartograf-store.json`, `obserwator-store.json`;
   `kartograf.marker.STORE_MARKERS`), nothing is imported from another tool.
 - `refuse(entries)` raises `ConflictError` for a plan that lists a conflict: `details.reason` is
   the first reason in that order and `details.paths` lists every offending path of all reasons.

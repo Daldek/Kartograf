@@ -155,7 +155,7 @@ def test_a_directory_that_is_or_lies_in_a_store_of_any_tool_is_refused(
 
 def test_a_subdirectory_the_write_would_enter_must_not_hold_a_marker(tmp_path):
     (tmp_path / "out" / "inner").mkdir(parents=True)
-    (tmp_path / "out" / "inner" / "imgw-store.json").write_text("{}")
+    (tmp_path / "out" / "inner" / "obserwator-store.json").write_text("{}")
 
     entering = plan_plain(tmp_path / "out", ["inner/x.asc"], force=False)
     beside = plan_plain(tmp_path / "out", ["other/x.asc"], force=False)

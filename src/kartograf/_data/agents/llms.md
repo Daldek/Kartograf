@@ -2,7 +2,7 @@
 
 > Downloader of official spatial data for Poland and Czechia: elevation models and LAZ point clouds, orthophotos, land cover, soils and HSG, boundaries, cadastre and 3D models, saved as versions with metadata in a store. Python library, CLI and MCP server.
 
-Kartograf is for getting the data of an area (a sheet code, a bbox, a geometry file, a TERYT code) from GUGiK (PL), CUZK (CZ), Copernicus and ISRIC, and for reading what was downloaded. It is not for hydrological computation (use Hydrolog) or for IMGW and CHMU measurement series (use IMGWTools).
+Kartograf is for getting the data of an area (a sheet code, a bbox, a geometry file, a TERYT code) from GUGiK (PL), CUZK (CZ), Copernicus and ISRIC, and for reading what was downloaded. It is not for hydrological computation (use Hydrolog) or for IMGW and CHMU measurement series (use Obserwator).
 
 Interfaces: Python (<!-- kartograf:python_example -->), the CLI (`kartograf <group> <command> --option value --json`) and the MCP server (`kartograf-mcp`, read only unless started with `--allow-writes --allow-dir DIR`; a tool is an `operation_id`). Install with `pip install "kartograf @ git+https://github.com/Daldek/Kartograf.git"`; the extra `mcp` adds the server.
 

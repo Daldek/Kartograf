@@ -1809,10 +1809,10 @@ describe the result, not the solution.
 
 ```
 HYDROGRAF (main application)
-    ├── IMGWTools (IMGW data)
+    ├── Obserwator (IMGW data)
     ├── Kartograf (GIS data) ← THIS PROJECT
     └── Hydrolog (hydrological calculations)
-            ├── IMGWTools (required)
+            ├── Obserwator (required)
             └── Kartograf (optional)
 ```
 

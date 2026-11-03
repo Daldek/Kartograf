@@ -11,7 +11,7 @@ Kartograf downloads spatial data: digital elevation models (DEM, Polish NMT), su
 ## When not to use
 
 - Hydrological computation (concentration time, SCS-CN, hydrographs, statistics): [Hydrolog](https://github.com/Daldek/Hydrolog). Kartograf only classifies HSG.
-- IMGW-PIB and CHMU measurement series, PMAXTP: [IMGWTools](https://github.com/Daldek/IMGWTools).
+- IMGW-PIB and CHMU measurement series, PMAXTP: [Obserwator](https://github.com/Daldek/Obserwator).
 - Watershed delineation and design hydrographs in a web application: [Hydrograf](https://github.com/Daldek/Hydrograf), which takes its elevation and land cover data from Kartograf.
 - Browsing and managing a store in a browser: [Archiwista](https://github.com/Daldek/Archiwista). Projects (task lists with pinned versions) are kept by Archiwista (ADR-057).
 - Areas outside Poland and Czechia: use the provider of that country. The only global source is SoilGrids.
@@ -214,8 +214,8 @@ Tool descriptions and instructions are English; the server plans until `--allow-
 
 - [Hydrolog](https://github.com/Daldek/Hydrolog) reads the SoilGrids rasters that `soil download` writes and computes HSG, curve numbers and hydrographs.
 - [Hydrograf](https://github.com/Daldek/Hydrograf) is a web application that downloads its DEM, land cover and HSG through the Kartograf library.
-- [IMGWTools](https://github.com/Daldek/IMGWTools) provides the hydro-meteorological observations and PMAXTP that Kartograf does not; its store follows the same design.
-- [Archiwista](https://github.com/Daldek/Archiwista) browses Kartograf and IMGWTools stores through `iter_store` and `read_sidecar`.
+- [Obserwator](https://github.com/Daldek/Obserwator) provides the hydro-meteorological observations and PMAXTP that Kartograf does not; its store follows the same design.
+- [Archiwista](https://github.com/Daldek/Archiwista) browses Kartograf and Obserwator stores through `iter_store` and `read_sidecar`.
 - [Retman](https://github.com/Daldek/Retman) is a Polish natural-language layer over the catalogs of the tools.
 - External: the Geoportal of GUGiK (https://www.geoportal.gov.pl) for one-off manual downloads and ordering; OpenTopography for global DEMs outside Poland and Czechia.
 
