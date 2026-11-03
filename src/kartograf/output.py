@@ -1,0 +1,852 @@
+"""
+Plain output: ordinary files in a directory, without metadata (DEV §19, ADR-054).
+
+Every plain write of Kartograf goes through the steps of this module, written once:
+
+0. the write target is the directory ``output_dir`` (plain mode) or the store at
+   ``root`` (store mode), never both, and the store at the default root when
+   neither is given (`resolve_target`);
+1. the target list is built before the first byte and checked as a whole
+   (`plan_plain`): duplicate names are a ``conflict`` with the reason
+   ``duplicate_output_name``, a directory that is or lies in a store one with
+   ``output_in_store``, an existing target without ``force`` one with
+   ``output_exists``; the error lists every offending path (`refuse`);
+2. the files are written to a staging directory
+   ``<dir>/.kartograf-incoming/<host>_<pid>_<token>/`` on the same file system, read
+   once for their size and SHA-256 (`Staging.commit`) and moved into place with
+   ``os.replace``; the staging directory is removed on success, on error, on SIGINT
+   and on SIGTERM, and leftovers older than 24 hours are removed by the next run.
+
+No sidecar, no hard link and no ``versions/`` directory: the output works on FAT,
+exFAT and SMB. A store is recognised by its marker file name alone, so nothing is
+imported from another tool (DEV-19.11, DEV-19.12; ``kartograf.marker``).
+"""
+
+import contextlib
+import functools
+import hashlib
+import os
+import secrets
+import shutil
+import socket
+import threading
+import time
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from types import TracebackType
+from typing import Any, Final, Literal, Protocol, Self, cast
+
+from kartograf.config import resolve_root
+from kartograf.exceptions import ConflictError, ValidationError
+from kartograf.interrupt import sigterm_interrupts
+from kartograf.marker import STORE_MARKERS, lenient_store, store_around
+from kartograf.messages import message
+
+__all__ = [
+    "STAGING",
+    "FileResult",
+    "Mode",
+    "PlainWriter",
+    "PlanEntry",
+    "Staging",
+    "Target",
+    "digest_of",
+    "directory_refusal",
+    "guard_store",
+    "plain_of",
+    "plan_plain",
+    "preflight",
+    "refuse",
+    "report_target",
+    "resolve_target",
+    "store_only",
+    "unit_of",
+    "wrapping",
+    "writes",
+    "writing",
+]
+
+STAGING: Final = ".kartograf-incoming"
+"""Name of the staging directory inside the output directory (DEV-19.7)."""
+_STALE_SECONDS: Final = 24 * 60 * 60
+_CHUNK: Final = 1 << 20
+
+Mode = Literal["plain", "store"]
+Action = Literal["write", "replace", "conflict"]
+Reason = Literal["duplicate_output_name", "output_exists", "output_in_store"]
+_REASONS: Final[tuple[Reason, ...]] = (
+    "duplicate_output_name",
+    "output_in_store",
+    "output_exists",
+)
+
+
+@dataclass(frozen=True)
+class FileResult:
+    """
+    One file a plain write put in place (DEV-19.19).
+
+    Attributes
+    ----------
+    path : Path
+        The target.
+    size_bytes : int
+        Size of the file in bytes.
+    sha256 : str
+        SHA-256 of the file, 64 lower-case hexadecimal digits.
+    status : {"written", "replaced"}
+        ``written`` for a new file, ``replaced`` for an existing one (with
+        ``force``).
+    """
+
+    path: Path
+    size_bytes: int
+    sha256: str
+    status: Literal["written", "replaced"]
+
+
+@dataclass(frozen=True)
+class PlanEntry:
+    """
+    One target of a plain write and what would happen to it (DEV-19.10).
+
+    Attributes
+    ----------
+    path : Path
+        The target.
+    action : {"write", "replace", "conflict"}
+        ``write`` for a new file, ``replace`` for an existing file with ``force``,
+        ``conflict`` for a target that cannot be written.
+    reason : {"duplicate_output_name", "output_exists", "output_in_store"} or None
+        Why the target is a conflict; None for ``write`` and ``replace``.
+    """
+
+    path: Path
+    action: Action
+    reason: Reason | None = None
+
+
+@dataclass(frozen=True)
+class Target:
+    """
+    Where a writing command puts its data (DEV-19.1, DEV-19.2).
+
+    Attributes
+    ----------
+    mode : {"plain", "store"}
+        ``plain``: ordinary files in ``path`` (``output_dir``); ``store``: the
+        versioned store at ``path`` (``root``).
+    path : Path
+        The output directory or the store root, as given (the default root is
+        absolute).
+    """
+
+    mode: Mode
+    path: Path
+
+
+def resolve_target(
+    *,
+    output_dir: str | os.PathLike[str] | None = None,
+    root: str | os.PathLike[str] | None = None,
+) -> Target:
+    """
+    Choose between plain files and the store (DEV-19.1, DEV-19.2).
+
+    Parameters
+    ----------
+    output_dir : str or os.PathLike or None, optional
+        Directory of the plain files.
+    root : str or os.PathLike or None, optional
+        Root of the store.
+
+    Returns
+    -------
+    Target
+        The plain directory when ``output_dir`` is given, else the store at ``root``
+        or, when neither is given, the store at the default root (``KARTOGRAF_ROOT``,
+        ``[kartograf] root`` of ``nogat.toml`` or ``<data_dir>/kartograf``).
+
+    Raises
+    ------
+    ValidationError
+        Both are given (``details.reason`` is ``exclusive_options``,
+        ``details.option`` is ``root`` and ``details.options`` lists the pair), or
+        one of them is an empty string.
+    """
+    if output_dir is not None and root is not None:
+        raise ValidationError(
+            message("output.exclusive_options"),
+            option="root",
+            options=("output_dir", "root"),
+            hint=message("output.exclusive_options_hint"),
+            reason="exclusive_options",
+        )
+    if output_dir is not None:
+        if not os.fspath(output_dir):
+            raise ValidationError(
+                message("output.empty_output_dir"), option="output_dir"
+            )
+        return Target("plain", Path(output_dir))
+    return Target("store", resolve_root(root))
+
+
+def plan_plain(
+    directory: Path, relative: Sequence[str], *, force: bool
+) -> list[PlanEntry]:
+    """
+    Check the full target list of a plain write without writing anything.
+
+    Parameters
+    ----------
+    directory : pathlib.Path
+        The output directory (it need not exist yet).
+    relative : sequence of str
+        POSIX sub-path of every target below ``directory`` (the file name in the
+        store, below the sub-path of its source).
+    force : bool
+        Replace existing targets.
+
+    Returns
+    -------
+    list of PlanEntry
+        One entry per target in the given order: duplicates are conflicts (every
+        occurrence), then targets of a directory that is or lies in a store, or that
+        enter a subdirectory that holds a marker, then existing targets without
+        ``force``; the rest is ``write`` or ``replace``. A store elsewhere below
+        ``directory`` does not matter: nothing is written into it.
+    """
+    in_store = store_around(directory) is not None
+    counts: dict[str, int] = {}
+    for name in relative:
+        counts[name] = counts.get(name, 0) + 1
+    entries: list[PlanEntry] = []
+    for name in relative:
+        path = directory.joinpath(*name.split("/"))
+        if counts[name] > 1:
+            entries.append(PlanEntry(path, "conflict", "duplicate_output_name"))
+        elif in_store or _holds_marker(directory, name):
+            entries.append(PlanEntry(path, "conflict", "output_in_store"))
+        elif path.exists():
+            entries.append(
+                PlanEntry(path, "replace")
+                if force
+                else PlanEntry(path, "conflict", "output_exists")
+            )
+        else:
+            entries.append(PlanEntry(path, "write"))
+    return entries
+
+
+def _holds_marker(directory: Path, name: str) -> bool:
+    """Say whether a directory the write would enter holds a store marker."""
+    parent = directory
+    for part in name.split("/")[:-1]:
+        parent = parent / part
+        if any((parent / marker).is_file() for marker in STORE_MARKERS):
+            return True
+    return False
+
+
+def refuse(entries: Sequence[PlanEntry]) -> None:
+    """
+    Raise ``conflict`` when the plan lists a conflict (DEV-19.6, DEV-19.11).
+
+    Parameters
+    ----------
+    entries : sequence of PlanEntry
+        The plan of `plan_plain`.
+
+    Raises
+    ------
+    ConflictError
+        ``details.reason`` is the first reason in the order
+        ``duplicate_output_name``, ``output_in_store``, ``output_exists``, and
+        ``details.paths`` lists every path with a conflict of any reason.
+    """
+    conflicts = [entry for entry in entries if entry.action == "conflict"]
+    if not conflicts:
+        return
+    first = next(
+        reason
+        for reason in _REASONS
+        if any(entry.reason == reason for entry in conflicts)
+    )
+    paths = [str(entry.path) for entry in conflicts]
+    messages = {
+        "duplicate_output_name": (
+            message("output.duplicate_output_name", count=len(paths), first=paths[0]),
+            message("output.duplicate_output_name_hint"),
+        ),
+        "output_in_store": (
+            message("output.output_in_store", count=len(paths), first=paths[0]),
+            message("output.output_in_store_hint"),
+        ),
+        "output_exists": (
+            message("output.output_exists", count=len(paths), first=paths[0]),
+            message("output.output_exists_hint"),
+        ),
+    }
+    summary, hint = messages[first]
+    raise ConflictError(summary, reason=first, paths=paths, hint=hint)
+
+
+def digest_of(path: Path) -> tuple[int, str]:
+    """
+    Read a file once, in chunks, for its size and SHA-256.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        An existing file.
+
+    Returns
+    -------
+    tuple of (int, str)
+        The size in bytes and the SHA-256 in lower-case hexadecimal digits.
+    """
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as stream:
+        while chunk := stream.read(_CHUNK):
+            digest.update(chunk)
+            size += len(chunk)
+    return size, digest.hexdigest()
+
+
+def _leftovers(staging: Path) -> None:
+    """Remove staging directories of earlier runs that are over 24 hours old."""
+    if not staging.is_dir():
+        return
+    cutoff = time.time() - _STALE_SECONDS
+    for child in staging.iterdir():
+        with contextlib.suppress(OSError):
+            if (
+                child.is_dir()
+                and not child.is_symlink()
+                and child.stat().st_mtime < cutoff
+            ):
+                shutil.rmtree(child, ignore_errors=True)
+
+
+class Staging:
+    """
+    The plain write of one request: its staging directory and the root its tracks use.
+
+    Used as a context manager: entering arms SIGTERM (in the main thread it
+    interrupts the run like Ctrl-C, ``sigterm_interrupts``) and registers the handle
+    root; nothing is created before the first transfer, so a request that fails its
+    validation or its preflight leaves no directory behind. The first
+    `stage_directory` creates ``<directory>/.kartograf-incoming/<host>_<pid>_<token>/``
+    (the output directory too, when it is missing) and removes leftovers older than
+    24 hours; leaving removes the staging directory, and the ``.kartograf-incoming``
+    directory when it is empty, whatever ended the block (success, an error, SIGINT,
+    SIGTERM). Threads of one run may stage and commit at the same time.
+
+    The tracks take ``handle`` where they take a store root: a path inside the
+    staging directory that no file ever reaches, by which `plain_of` recognises the
+    write from any slot built on it, so a plain run reads nothing from and writes
+    nothing to the store.
+
+    Parameters
+    ----------
+    directory : pathlib.Path
+        The output directory.
+    force : bool, optional
+        Replace a target that exists when the file is committed. Without it a target
+        that appeared after the plan is a ``conflict`` and nothing is replaced.
+    """
+
+    def __init__(self, directory: Path, *, force: bool = False) -> None:
+        """Name the staging directory of ``directory`` without creating it."""
+        self.directory = directory
+        self.force = force
+        self.root = directory / STAGING
+        self.path = (
+            self.root / f"{socket.gethostname()}_{os.getpid()}_{secrets.token_hex(4)}"
+        )
+        self.handle = self.path / "root"
+        self._opened = False
+        self._counter = 0
+        self._lock = threading.Lock()
+        self._signals = contextlib.ExitStack()
+
+    def __enter__(self) -> "Staging":
+        """Arm the SIGTERM handler and register the handle root."""
+        self._signals.enter_context(sigterm_interrupts())
+        with _OPEN_LOCK:
+            for key in _keys(self.handle):
+                _OPEN[key] = self
+        return self
+
+    def __exit__(
+        self,
+        kind: type[BaseException] | None,
+        error: BaseException | None,
+        trace: TracebackType | None,
+    ) -> None:
+        """Remove the staging directory, forget the handle and restore SIGTERM."""
+        with _OPEN_LOCK:
+            for key in _keys(self.handle):
+                _OPEN.pop(key, None)
+        self._signals.close()
+        if self._opened:
+            shutil.rmtree(self.path, ignore_errors=True)
+            with contextlib.suppress(OSError):
+                self.root.rmdir()  # only when no other run is staging beside this one
+
+    def _open(self) -> None:
+        """Create the output and the staging directory at the first transfer."""
+        with self._lock:
+            if self._opened:
+                return
+            self.directory.mkdir(parents=True, exist_ok=True)
+            _leftovers(self.root)
+            self.path.mkdir(parents=True)
+            self._opened = True
+
+    def target(self, name: str) -> Path:
+        """Return the path of the file ``name`` in the output directory."""
+        return self.directory.joinpath(*name.split("/"))
+
+    def plan(self, names: Sequence[str]) -> list[PlanEntry]:
+        """Check the target list of this write (`plan_plain`) with its ``force``."""
+        return plan_plain(self.directory, names, force=self.force)
+
+    def stage_directory(self) -> Path:
+        """
+        Make a private directory for the files of one download.
+
+        Returns
+        -------
+        pathlib.Path
+            A new empty directory inside the staging directory.
+        """
+        self._open()
+        with self._lock:
+            self._counter += 1
+            number = self._counter
+        private = self.path / f"{number:06d}"
+        private.mkdir()
+        return private
+
+    def stage_path(self, name: str) -> Path:
+        """
+        Name a private path where a download writes the file ``name``.
+
+        Parameters
+        ----------
+        name : str
+            The file name (its extension may steer the download); the file is created
+            by the caller.
+
+        Returns
+        -------
+        pathlib.Path
+            ``<private directory>/<name>`` on the file system of the output directory.
+        """
+        return self.stage_directory() / name
+
+    def commit(
+        self,
+        staged: Path,
+        target: Path,
+        *,
+        size_bytes: int | None = None,
+        sha256: str | None = None,
+    ) -> FileResult:
+        """
+        Move a staged file into place with ``os.replace`` (DEV-19.9).
+
+        Parameters
+        ----------
+        staged : pathlib.Path
+            The file the download wrote.
+        target : pathlib.Path
+            The target; its directory is created when missing.
+        size_bytes, sha256 : int and str, optional
+            Size and SHA-256 when the caller has read the file already; both come
+            from one chunked read of the file otherwise.
+
+        Returns
+        -------
+        FileResult
+            ``written`` for a new target, ``replaced`` for an existing one.
+
+        Raises
+        ------
+        ConflictError
+            ``output_exists``: the target exists, appeared after the plan, and the
+            write is not forced. Nothing is replaced.
+        """
+        if size_bytes is None or sha256 is None:
+            size_bytes, sha256 = digest_of(staged)
+        replaced = target.exists()
+        if replaced and not self.force:
+            raise ConflictError(
+                message("output.target_appeared", path=target),
+                reason="output_exists",
+                paths=[str(target)],
+                hint=message("output.output_exists_hint"),
+            )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(staged, target)
+        return FileResult(
+            target, size_bytes, sha256, "replaced" if replaced else "written"
+        )
+
+    def discard(self, staged: Path) -> None:
+        """
+        Remove the private directory of a download that failed.
+
+        Parameters
+        ----------
+        staged : pathlib.Path
+            A path made by `stage_path`, or any file in a directory of
+            `stage_directory`; nothing else is removed.
+        """
+        if staged.parent.parent == self.path:
+            shutil.rmtree(staged.parent, ignore_errors=True)
+
+    def scratch(self) -> "Staging":
+        """
+        Open a private plain write inside this one for files that are not kept.
+
+        A derived product (the HSG) fetches inputs that no caller asked for: the
+        returned write is used like this one (``with write.scratch() as inputs:``,
+        its ``handle`` as the store root of a track), but its directory is a private
+        directory of this staging directory, so its files are removed with it and
+        nothing of them reaches the output directory. A target that exists is
+        replaced: the directory is new.
+
+        Returns
+        -------
+        Staging
+            The write, not yet entered.
+        """
+        return Staging(self.stage_directory(), force=True)
+
+
+_OPEN: dict[Path, Staging] = {}
+_OPEN_LOCK = threading.Lock()
+
+
+def _keys(path: str | os.PathLike[str]) -> tuple[Path, Path]:
+    """Return the absolute and the real path: a handle is found by either."""
+    raw = os.fspath(path)
+    return Path(os.path.abspath(raw)), Path(os.path.realpath(raw))
+
+
+def plain_of(root: str | os.PathLike[str] | None) -> Staging | None:
+    """
+    Return the plain write whose handle root ``root`` is.
+
+    Parameters
+    ----------
+    root : str or os.PathLike or None
+        What a track takes as the store root.
+
+    Returns
+    -------
+    Staging or None
+        The open write when ``root`` is its handle (or lies below it); None for a
+        store root.
+    """
+    if root is None or not _OPEN:
+        return None
+    with _OPEN_LOCK:
+        for key in _keys(root):
+            for handle, write in _OPEN.items():
+                if key == handle or handle in key.parents:
+                    return write
+    return None
+
+
+def preflight(root: str | os.PathLike[str], names: Iterable[str]) -> None:
+    """
+    Refuse a plain write whose target list conflicts, before its first byte.
+
+    Parameters
+    ----------
+    root : str or os.PathLike
+        What the track takes as the store root.
+    names : iterable of str
+        The file name of every target of the track (DEV-19.5).
+
+    Raises
+    ------
+    ConflictError
+        ``root`` is a plain write and the plan lists a conflict (`refuse`). Nothing
+        happens for a store.
+    """
+    write = plain_of(root)
+    if write is not None:
+        refuse(write.plan(list(names)))
+
+
+def store_only(option: str) -> ValidationError:
+    """
+    Build the error of an option that acts on versions, given with ``output_dir``.
+
+    Parameters
+    ----------
+    option : str
+        The CLI spelling of the option (``--upgrade``).
+
+    Returns
+    -------
+    ValidationError
+        ``details.reason`` is ``store_only_option``, ``details.option`` the option,
+        and the hint names ``--root`` (DEV-19.17).
+    """
+    return ValidationError(
+        message("output.store_only_option", option=option),
+        option=option,
+        hint=message("output.store_only_option_hint", option=option),
+        reason="store_only_option",
+    )
+
+
+def guard_store(root: str | os.PathLike[str]) -> None:
+    """
+    Refuse a store root that a write would refuse, before its first request.
+
+    Every command that writes the store calls this before any request or unit of
+    work, so the refusal is the error of the command, with its own registry code and
+    ``details.reason``, and not the failure of each unit (DEV-19.13, DEV-19.14).
+    Nothing is created. The handle root of a plain write is no store root: nothing
+    happens for it.
+
+    Parameters
+    ----------
+    root : str or os.PathLike
+        What a track takes as the store root; it need not exist.
+
+    Raises
+    ------
+    ConflictError
+        ``nested_store`` (inside another store, holding one, or with one below it) or
+        ``not_empty`` (neither empty nor the layout of a store).
+    StoreUnavailableError
+        ``no_marker``: the layout of a store without its marker.
+    InvalidLayoutError
+        The marker is not a ``kartograf-store/1`` document.
+    """
+    if plain_of(root) is None:
+        lenient_store(root)
+
+
+def directory_refusal(directory: Path) -> ConflictError | None:
+    """
+    Return the error of an output directory that is, or lies in, a store, or None.
+
+    The directory alone says it (DEV-19.11): its ancestors, or it, hold the marker of a
+    store of any tool, so the refusal needs no list of targets, and so no request.
+    ``details.reason`` is ``output_in_store``, ``details.paths`` is the directory and
+    the hint names ``--root``. The directory need not exist.
+
+    Parameters
+    ----------
+    directory : pathlib.Path
+        The output directory of a plain write.
+
+    Returns
+    -------
+    ConflictError or None
+        The error, or None when the directory is no store and lies in none.
+    """
+    store = store_around(directory)
+    if store is None:
+        return None
+    return ConflictError(
+        message("output.directory_in_store", path=directory, store=store),
+        reason="output_in_store",
+        path=directory,
+        paths=[str(directory)],
+        hint=message("output.output_in_store_hint"),
+    )
+
+
+@contextlib.contextmanager
+def writing(
+    *,
+    output_dir: str | os.PathLike[str] | None = None,
+    root: str | os.PathLike[str] | None = None,
+    update: str | None = None,
+    plan: object | None = None,
+    all_campaigns: bool = False,
+    force: bool = False,
+    guard: bool = True,
+) -> Iterator[Path]:
+    """
+    Open the write of one request and give what its tracks take as the store root.
+
+    Parameters
+    ----------
+    output_dir, root : str or os.PathLike or None, optional
+        The target (`resolve_target`); ``root`` may also be the handle root of an
+        enclosing plain write, which this block then joins.
+    update : str or None, optional
+        The update mode of the request: ``force`` lets a plain write replace
+        existing files (DEV-19.9); ``upgrade`` acts on versions and is refused.
+    plan : object or None, optional
+        A saved update plan (``--plan``), refused in plain mode.
+    all_campaigns : bool, optional
+        Several flights of one sheet (``--all-campaigns``), refused in plain mode.
+    force : bool, optional
+        Replace existing files, as ``update="force"`` does (the plan of a check, which
+        has no update mode).
+    guard : bool, optional
+        Refuse a store root that a write would refuse (`guard_store`), or an output
+        directory that is, or lies in, a store (`directory_refusal`), before the block
+        runs. A check passes False and plans the refusal itself, and a request that is
+        judged first (a dry validation) looks at the target itself.
+
+    Yields
+    ------
+    pathlib.Path
+        The store root (the default root when none is given), or the handle root of
+        the plain write, which lives as long as the block.
+
+    Raises
+    ------
+    ValidationError
+        Both targets are given (`resolve_target`), or ``output_dir`` is given with
+        ``update="upgrade"``, a ``plan`` or ``all_campaigns`` (`store_only`).
+    ConflictError, StoreUnavailableError, InvalidLayoutError
+        The store root or the output directory is refused (`guard_store`,
+        `directory_refusal`), unless ``guard`` is False.
+    """
+    if root is not None and plain_of(root) is not None:
+        yield Path(root)
+        return
+    target = resolve_target(output_dir=output_dir, root=root)
+    if target.mode == "store":
+        if guard:
+            guard_store(target.path)
+        yield target.path
+        return
+    if update == "upgrade":
+        raise store_only("--upgrade")
+    if plan is not None:
+        raise store_only("--plan")
+    if all_campaigns:
+        raise store_only("--all-campaigns")
+    if guard and (refusal := directory_refusal(target.path)) is not None:
+        raise refusal
+    with Staging(target.path, force=force or update == "force") as write:
+        yield write.handle
+
+
+def report_target(root: str | os.PathLike[str]) -> tuple[Path | None, Path | None]:
+    """
+    Say where a report of what a track wrote tells it wrote (``kartograf-download/1``).
+
+    Parameters
+    ----------
+    root : str or os.PathLike
+        What the track took as the store root.
+
+    Returns
+    -------
+    tuple of (Path or None, Path or None)
+        ``(root, None)`` for a store, ``(None, output_dir)`` for a plain write.
+    """
+    write = plain_of(root)
+    if write is None:
+        return Path(root), None
+    return None, write.directory
+
+
+def unit_of(path: Path, root: str | os.PathLike[str]) -> str:
+    """
+    Name a file as a message does: below the store root or the output directory.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        A file a track wrote.
+    root : str or os.PathLike
+        What the track took as the store root.
+
+    Returns
+    -------
+    str
+        The POSIX path of ``path`` below the store root, or below the output directory
+        when ``root`` is the handle root of a plain write.
+    """
+    write = plain_of(root)
+    base = Path(root) if write is None else write.directory
+    return path.relative_to(base).as_posix()
+
+
+class PlainWriter(Protocol):
+    """
+    A class that writes plain files when it is made with ``output_dir`` (`writes`).
+
+    ``_output_dir`` is the directory of the plain files, None for a store. ``_on``
+    returns a copy of the object whose store root is ``handle``, the handle root of
+    the write of one call; ``_store_root`` is the store root the object writes to.
+    """
+
+    _output_dir: Path | None
+
+    def _on(self, handle: Path) -> Self:
+        """Return a copy that writes where the plain write says."""
+        ...
+
+    @property
+    def _store_root(self) -> Path:
+        """Return the store root: the handle root inside a plain write."""
+        ...
+
+
+def wrapping[F: Callable[..., Any]](
+    method: F, *, refusal: Callable[[Path], Any] | None = None
+) -> F:
+    """
+    Run a public method of an object made with ``output_dir`` in its plain write.
+
+    The call opens the write (`writing`: the staging directory, SIGTERM) and works on
+    a copy of the object whose store root is the handle root of that write, so every
+    slot it builds is a slot of the plain write; an object of a store calls the method
+    as it is, after its store root has been looked at: a root that a write would
+    refuse (`guard_store`) is the error of the call, before the method makes a request
+    or does a unit of work. The write replaces existing files with ``update="force"``
+    or ``force=True`` of the call; ``update="upgrade"`` and a ``plan`` are refused
+    (`store_only`), and so is ``_all_campaigns`` of the object.
+
+    ``refusal`` is for a method that plans: ``refusal(root)`` returns what the call
+    returns instead of running the method for a refused store root (its plan), or
+    None; it raises the refusals that no plan lists.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self: PlainWriter, *args: Any, **kwargs: Any) -> Any:
+        if self._output_dir is None:
+            if refusal is None:
+                guard_store(self._store_root)
+            elif (planned := refusal(self._store_root)) is not None:
+                return planned
+            return method(self, *args, **kwargs)
+        with writing(
+            output_dir=self._output_dir,
+            update=kwargs.get("update"),
+            plan=kwargs.get("plan"),
+            all_campaigns=getattr(self, "_all_campaigns", False),
+            force=bool(kwargs.get("force")),
+            guard=refusal is None,  # a planning method lists the conflicts it finds
+        ) as handle:
+            return method(self._on(handle), *args, **kwargs)
+
+    return cast(F, wrapper)
+
+
+def writes[F: Callable[..., Any]](method: F) -> F:
+    """
+    Wrap a public method that writes (`wrapping`).
+
+    A store root that a write would refuse is the error of the call.
+    """
+    return wrapping(method)

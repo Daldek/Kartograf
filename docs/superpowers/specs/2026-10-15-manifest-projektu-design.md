@@ -1,8 +1,8 @@
 # Spec: Manifest projektu (podprojekt 2 roadmapy v1.0.0)
 
 **Data:** 2026-10-15
-**Status:** projekt do implementacji; architektura z wolnej reki uzytkownika
-(2026-10-15), decyzje: ADR-040
+**Status:** Superseded by ADR-057 (projects move to Archiwista, 2026-10-31); before: projekt do
+implementacji; architektura z wolnej reki uzytkownika (2026-10-15), decyzje: ADR-040
 **Wersja docelowa:** 0.8.0
 **Warunek wstepny:** magazyn wersjonowany (ADR-036), CLI = API (ADR-037),
 grupy komend CLI wg typu danych (ADR-039) scalone do `develop`

@@ -1,0 +1,563 @@
+"""The command layer of the library (spec 8.7; KB-2..KB-5): ``parse_command``,
+``validate_command``, ``format_command``, ``run_command``, ``check_command``."""
+
+import json
+import shlex
+import socket
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from kartograf import (
+    CommandCall,
+    UpdatePlan,
+    ValidationError,
+    calculate_hsg,
+    check_command,
+    check_data,
+    download_data,
+    format_command,
+    parse_command,
+    run_command,
+    validate_command,
+)
+from kartograf.catalog.commands import declared
+from kartograf.catalog.formatting import example_command_line
+from kartograf.data_commands import DATA_COMMANDS
+from kartograf.exceptions import ConflictError, UsageError
+from kartograf.serialization import encode
+from tests.integration.test_hsg import RasterSoilGrids
+from tests.integration.test_manager_campaigns import REC, FakeCampaignProvider
+from tests.support.data_fixtures import (
+    HSG_SHEET,
+    PL_SHEET,
+    G,
+    landcover_sources,
+    pl_sheets,
+)
+
+LINE = (
+    "elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m "
+    "--vertical-crs EVRF2007 --root ./data"
+)
+NMT = "elevation download --product nmt"
+
+
+def test_parse_command_returns_only_given_options():
+    expected = CommandCall(
+        "elevation download",
+        {
+            "product": "nmt",
+            "sheet": "N-34-130-D-d-2-4",
+            "resolution": "1m",
+            "vertical_crs": "EVRF2007",
+        },
+        {"root": "./data"},
+    )
+
+    assert parse_command(LINE) == expected
+    assert parse_command(shlex.split(LINE)) == expected
+
+
+def test_parse_command_takes_the_whole_line_with_its_program_name():
+    """``format_command`` writes ``kartograf ...``; an agent gives it back as it is."""
+    expected = parse_command(LINE)
+
+    assert parse_command(f"kartograf {LINE}") == expected
+    assert parse_command(["kartograf", *shlex.split(LINE)]) == expected
+    call = format_command(expected.command, expected.options, run=expected.run)
+    assert call.startswith("kartograf ")
+    assert parse_command(call) == expected
+
+
+def test_parse_command_with_only_the_program_name_is_an_empty_line():
+    with pytest.raises(UsageError, match="give a command"):
+        parse_command("kartograf")
+
+
+def test_parse_command_writes_the_json_form_of_every_kind():
+    area = parse_command(
+        f"{NMT} --resolution pl=1m,cz=2m --cutout --year 2024 --geometry rel/a.gpkg"
+        " --layer zlewnia"
+    )
+    layers = parse_command(
+        "landcover download --product bdot10k --teryt 1465 --layers SWRS,PTWP"
+        " --keep-raw"
+    )
+
+    assert area.options == {
+        "product": "nmt",
+        "resolution": {"pl": "1m", "cz": "2m"},
+        "cutout": True,
+        "year": 2024,
+        "geometry": "rel/a.gpkg",
+        "layer": "zlewnia",
+    }
+    assert layers.options == {
+        "product": "bdot10k",
+        "teryt": "1465",
+        "layers": ["SWRS", "PTWP"],
+        "keep_raw": True,
+    }
+
+
+def test_parse_command_bbox_always_comes_with_crs():
+    default = parse_command(f"{NMT} --bbox 450000,550000,451000,551000")
+    degrees = parse_command(f"{NMT} --bbox 18.6,49.7,18.7,49.8 --bbox-crs EPSG:4326")
+    negative = parse_command(
+        [
+            *NMT.split(),
+            "--bbox",
+            "-447000,-1114000,-446000,-1113000",
+            "--bbox-crs",
+            "EPSG:5514",
+        ]
+    )
+
+    assert default.options["bbox"] == [450000, 550000, 451000, 551000]
+    assert default.options["bbox_crs"] == "EPSG:2180"
+    assert degrees.options["bbox"] == [18.6, 49.7, 18.7, 49.8]
+    assert degrees.options["bbox_crs"] == "EPSG:4326"
+    assert negative.options["bbox"] == [-447000, -1114000, -446000, -1113000]
+    assert negative.options["bbox_crs"] == "EPSG:5514"
+    # a crs without an area is a mistake, not an option of the call
+    with pytest.raises(ValidationError) as lone:
+        parse_command(f"{NMT} --sheet {G} --bbox-crs EPSG:4326")
+
+    assert not isinstance(lone.value, UsageError)
+    assert lone.value.option == "bbox_crs"
+    assert lone.value.options == ("bbox", "bbox_crs")
+    assert "--bbox-crs" in str(lone.value) and "--bbox" in str(lone.value)
+
+
+def test_parse_command_bbox_with_a_wrong_number_of_values_is_a_validation_error():
+    with pytest.raises(ValidationError) as caught:
+        parse_command(f"{NMT} --bbox 1,2,3")
+
+    assert not isinstance(caught.value, UsageError)
+    assert "bbox" in str(caught.value)
+
+
+def test_parse_command_distinguishes_given_workers():
+    without = parse_command(f"{NMT} --sheet {G}")
+    default = parse_command(f"{NMT} --sheet {G} -w 4")
+    other = parse_command(f"{NMT} --sheet {G} --workers=8")
+
+    assert "workers" not in without.run
+    assert default.run == {"workers": 4}
+    assert other.run == {"workers": 8}
+
+
+def test_parse_command_puts_the_flags_of_the_run_apart_from_the_options():
+    call = parse_command(f"{NMT} --sheet {G} --upgrade --plan p.json -q --json")
+
+    assert call.options == {"product": "nmt", "sheet": G}
+    assert call.run == {"upgrade": True, "plan": "p.json", "quiet": True, "json": True}
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "",
+        "frobnicate",
+        "elevation",
+        "elevation download --nope",
+        "elevation download --product",
+        "elevation download --bbox-crs EPSG:9999",
+        "elevation download --check --upgrade",
+        f"{NMT} --help",
+        "--version",
+        "download --product nmt",
+        "elevation download 'unclosed",
+    ],
+    ids=[
+        "empty",
+        "unknown-command",
+        "group-without-command",
+        "unknown-flag",
+        "flag-without-value",
+        "value-outside-choices",
+        "exclusive-flags",
+        "help",
+        "version",
+        "removed-command",
+        "unbalanced-quote",
+    ],
+)
+def test_parse_command_syntax_error_is_usage_error(line):
+    with pytest.raises(UsageError) as caught:
+        parse_command(line)
+
+    assert (caught.value.code, caught.value.reason) == ("validation_error", "usage")
+    assert caught.value.exit_code == 2
+
+
+@pytest.mark.parametrize(
+    ("line", "command"),
+    [
+        ("elevation download --nope", "elevation download"),
+        ("elevation download --product", "elevation download"),
+        ("soil hsg --depth 0-5cm --stats", "soil hsg"),
+        (f"{NMT} --help", "elevation download"),
+        ("elevation download 'unclosed", None),
+        ("elevation frobnicate", None),
+        ("elevation", None),
+        ("download --product nmt", None),
+        ("", None),
+    ],
+)
+def test_usage_error_names_the_command_the_line_named(line, command):
+    with pytest.raises(UsageError) as caught:
+        parse_command(line)
+
+    assert caught.value.command == command
+
+
+@pytest.mark.parametrize(
+    ("line", "command"),
+    [
+        ("sheet parse N-34", "sheet parse"),
+        ("commands list", "commands list"),
+        ("elevation availability --bbox 1,2,3,4", "elevation availability"),
+        ("elevation list-sources", "elevation list-sources"),
+        ("soil list-layers", "soil list-layers"),
+        ("cache stats", "cache stats"),
+    ],
+)
+def test_parse_command_reads_the_line_of_a_command_that_is_no_data_command(
+    line, command
+):
+    assert parse_command(line).command == command
+
+
+def test_validate_command_is_offline_and_names_the_option(tmp_path, monkeypatch):
+    def refuse(*args, **kwargs):
+        raise AssertionError("validate_command opened a connection")
+
+    monkeypatch.setattr(socket.socket, "connect", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    store = tmp_path / "not-created"
+
+    assert validate_command("elevation download", PL_SHEET, root=store) is None
+    assert validate_command("elevation download", PL_SHEET) is None
+    assert not store.exists()
+    without_vertical_crs = {k: v for k, v in PL_SHEET.items() if k != "vertical_crs"}
+    with pytest.raises(ValidationError) as missing:
+        validate_command("elevation download", without_vertical_crs)
+    with pytest.raises(ValidationError) as no_area:
+        validate_command("elevation download", {"product": "nmt"})
+    with pytest.raises(ValidationError) as unknown:
+        validate_command("elevation download", {**PL_SHEET, "root": "data"})
+    with pytest.raises(ValidationError) as wrong_form:
+        validate_command("elevation download", {**PL_SHEET, "year": "2024"})
+
+    assert missing.value.option == "vertical_crs"
+    assert no_area.value.options == ("sheet", "bbox", "geometry")
+    assert (unknown.value.option, wrong_form.value.option) == ("root", "year")
+
+
+def test_format_command_rejects_options_that_do_not_belong():
+    with pytest.raises(ValidationError) as foreign:
+        format_command("elevation download", {"product": "nmt", "teryt": "1465"})
+    with pytest.raises(ValidationError) as twice:
+        format_command(
+            "elevation download",
+            {"product": "nmt", "workers": 2},
+            run={"workers": 2},
+        )
+
+    assert foreign.value.option == "teryt"
+    assert twice.value.option == "workers"
+
+
+@pytest.mark.parametrize(
+    ("run", "option", "text"),
+    [
+        (
+            {"workers": "4"},
+            "workers",
+            "option workers: expected integer, got '4'",
+        ),
+        (
+            {"workers": True},
+            "workers",
+            "option workers: expected integer, got True",
+        ),
+        (
+            {"upgrade": "tak"},
+            "upgrade",
+            "option upgrade: expected true, got 'tak'",
+        ),
+        (
+            {"root": 5},
+            "root",
+            "option root: expected non-empty path (string), got 5",
+        ),
+        (
+            {"plan": {"items": []}},
+            "plan",
+            "option plan: expected non-empty path (string), got {'items': []}",
+        ),
+        # the library argument ``update`` has no flag: the flags are --upgrade
+        # and --force; an option of the call does not belong among the flags of a run
+        ({"update": "upgrade"}, "update", "unknown option 'update'"),
+        ({"sheet": G}, "sheet", "unknown option 'sheet'"),
+    ],
+    ids=[
+        "workers-text",
+        "workers-bool",
+        "flag-text",
+        "output-dir-number",
+        "plan-document",
+        "api-only-update",
+        "call-option",
+    ],
+)
+def test_format_command_run_flags_are_validated_like_options(run, option, text):
+    with pytest.raises(ValidationError) as caught:
+        format_command("elevation download", {"product": "nmt"}, run=run)
+
+    assert caught.value.option == option
+    assert str(caught.value).startswith(text)
+
+
+def test_format_command_writes_the_flags_of_a_valid_run():
+    line = format_command(
+        "elevation download",
+        {"product": "nmt", "sheet": G},
+        run={
+            "root": Path("data"),
+            "plan": "plan.json",
+            "workers": 4,
+            "upgrade": True,
+            "force": False,
+            "quiet": None,
+        },
+    )
+
+    call = parse_command(line[len("kartograf ") :])
+    assert call.run == {
+        "root": "data",
+        "plan": "plan.json",
+        "workers": 4,
+        "upgrade": True,
+    }
+
+
+_EXAMPLES = [
+    pytest.param(
+        command.id,
+        example,
+        example_command_line(command, example),
+        id=f"{command.id}#{index}",
+    )
+    for command in declared().commands
+    if command.kind == "data"
+    for index, example in enumerate(command.examples)
+]
+
+
+def test_every_data_command_has_catalog_examples():
+    assert {p.values[0] for p in _EXAMPLES} == set(DATA_COMMANDS)
+
+
+@pytest.mark.parametrize(("command", "example", "example_line"), _EXAMPLES)
+def test_format_parse_round_trip_for_every_catalog_example(
+    command, example, example_line
+):
+    options: dict[str, Any] = encode(example.options)  # type: ignore[assignment]
+    run = {"root": "./data"}
+
+    line = format_command(command, options, run=run)
+    call = parse_command(line[len("kartograf ") :])
+
+    assert (call.command, call.options, call.run) == (command, options, run)
+    assert parse_command(example_line[len("kartograf ") :]).options == options
+    validate_command(command, options)
+
+
+def _normal(document, store: Path) -> str:
+    """The document as text, with the store directory named."""
+    return json.dumps(document.to_dict()).replace(str(store), "<store>")
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_run_command_equals_download_data(tmp_path):
+    with pl_sheets():
+        called = run_command(
+            "elevation download", PL_SHEET, root=tmp_path / "a", cache=False
+        )
+    with pl_sheets():
+        direct = download_data(**PL_SHEET, root=tmp_path / "b", cache=False)
+
+    assert [f.file.status for f in called.result.files] == ["new"]  # type: ignore[attr-defined]
+    assert (called.command, called.check, called.status) == (
+        "elevation download",
+        False,
+        "ok",
+    )
+    assert [item.id for item in called.items] == ["N-34-139-C-a-3-1"]
+    assert _normal(called.result, tmp_path / "a") == _normal(direct, tmp_path / "b")
+    assert called.to_dict()["result"] == called.result.to_dict()
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_check_command_equals_check_data(tmp_path):
+    fake = FakeCampaignProvider({"newest": [REC["83233"]]})
+    with pl_sheets(fake):
+        run_command("elevation download", PL_SHEET, root=tmp_path, cache=False)
+    fake.records = {"newest": [REC["84183"]]}
+    with pl_sheets(fake):
+        plan = check_command("elevation download", PL_SHEET, root=tmp_path, cache=False)
+    with pl_sheets(fake):
+        direct = check_data(**PL_SHEET, root=tmp_path, cache=False)
+
+    assert isinstance(plan.result, UpdatePlan)
+    assert (plan.command, plan.check, plan.status) == ("elevation download", True, "ok")
+    assert [item.status for item in plan.result.items] == ["newer"]
+    assert _normal(plan.result, tmp_path) == _normal(direct, tmp_path)
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_run_command_passes_update_and_plan_to_the_function(tmp_path):
+    fake = FakeCampaignProvider({"newest": [REC["83233"]]})
+    with pl_sheets(fake):
+        run_command("elevation download", PL_SHEET, root=tmp_path, cache=False)
+    fake.records = {"newest": [REC["84183"]]}
+    with pl_sheets(fake):
+        plan = check_command("elevation download", PL_SHEET, root=tmp_path, cache=False)
+    with pl_sheets(fake):
+        kept = run_command("elevation download", PL_SHEET, root=tmp_path, cache=False)
+        upgraded = run_command(
+            "elevation download",
+            PL_SHEET,
+            root=tmp_path,
+            update="upgrade",
+            plan=plan.result,
+            cache=False,
+        )
+
+    assert [f.file.status for f in kept.result.files] == ["local"]  # type: ignore[attr-defined]
+    (new,) = upgraded.result.files  # type: ignore[attr-defined]
+    assert new.file.status == "new" and new.file.label.startswith("2025-10-21_84183")
+    with pl_sheets(fake), pytest.raises(ValidationError) as without_upgrade:
+        run_command(
+            "elevation download",
+            PL_SHEET,
+            root=tmp_path,
+            plan=plan.result,
+            cache=False,
+        )
+    assert without_upgrade.value.options == ("plan", "update")
+
+
+def test_run_command_summary_is_for_soil_hsg_only(tmp_path):
+    hsg = {"sheet": HSG_SHEET, "depth": "0-5cm"}
+    with landcover_sources(soilgrids=RasterSoilGrids):
+        with_summary = run_command(
+            "soil hsg", hsg, root=tmp_path / "a", summary=True, cache=False
+        )
+        without = run_command("soil hsg", hsg, root=tmp_path / "b", cache=False)
+    with landcover_sources(soilgrids=RasterSoilGrids):
+        direct = calculate_hsg(root=tmp_path / "c", cache=False, summary=True, **hsg)
+    with pytest.raises(ValidationError) as caught:
+        run_command("elevation download", PL_SHEET, root=tmp_path, summary=True)
+
+    assert without.result.summary is None  # type: ignore[attr-defined]
+    assert with_summary.result.summary == direct.summary  # type: ignore[attr-defined]
+    assert set(with_summary.result.summary) == {"A", "B", "C", "D", "nodata"}  # type: ignore[attr-defined]
+    assert caught.value.option == "summary"
+    assert not (tmp_path / "data").exists()
+
+
+def test_run_and_check_need_the_store(tmp_path):
+    for call in (run_command, check_command):
+        with pytest.raises(ValidationError) as caught:
+            call("elevation download", PL_SHEET, root="")
+        assert caught.value.option == "root"
+
+
+def test_output_dir_is_a_flag_of_the_run_and_survives_the_round_trip():
+    call = parse_command(f"{NMT} --sheet {G} -o ./plain --force")
+
+    assert call.options == {"product": "nmt", "sheet": G}
+    assert call.run == {"output_dir": "./plain", "force": True}
+    line = format_command(call.command, call.options, run=call.run)
+    assert line.endswith("-o ./plain --force")
+    assert parse_command(line[len("kartograf ") :]) == call
+
+
+def test_both_targets_are_one_validation_error_in_every_function(tmp_path):
+    for call in (validate_command, run_command, check_command):
+        with pytest.raises(ValidationError) as caught:
+            call(
+                "elevation download",
+                PL_SHEET,
+                output_dir=tmp_path / "a",
+                root=tmp_path / "b",
+            )
+
+        error = caught.value
+        assert (error.reason, error.option) == ("exclusive_options", "root")
+        assert error.options == ("output_dir", "root")
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_run_command_with_output_dir_writes_plain_files_and_check_command_plans_them(
+    tmp_path,
+):
+    out = tmp_path / "out"
+    with pl_sheets() as fake:
+        called = run_command(
+            "elevation download", PL_SHEET, output_dir=out, cache=False
+        )
+        direct = download_data(**PL_SHEET, output_dir=tmp_path / "b", cache=False)
+
+    assert [f.file.status for f in called.result.files] == ["written"]  # type: ignore[attr-defined]
+    assert (called.status, called.result.mode) == ("ok", "plain")  # type: ignore[attr-defined]
+    assert _normal(called.result, out) == _normal(direct, tmp_path / "b")
+    assert fake.downloads == [REC["83233"].url] * 2  # the newest FULL flight
+    assert sorted(path.name for path in out.iterdir()) == [f"{G}.asc"]
+    with pl_sheets():
+        refused = check_command(
+            "elevation download", PL_SHEET, output_dir=out, cache=False
+        )
+        replaced = check_command(
+            "elevation download", PL_SHEET, output_dir=out, force=True, cache=False
+        )
+        with pytest.raises(ConflictError) as error:
+            run_command("elevation download", PL_SHEET, output_dir=out, cache=False)
+        forced = run_command(
+            "elevation download",
+            PL_SHEET,
+            output_dir=out,
+            update="force",
+            cache=False,
+        )
+
+    assert [(i.action, i.reason) for i in refused.result.items] == [  # type: ignore[attr-defined]
+        ("conflict", "output_exists")
+    ]
+    assert [i.action for i in replaced.result.items] == ["replace"]  # type: ignore[attr-defined]
+    assert refused.status == replaced.status == "ok"  # a plan with a conflict is ok
+    assert error.value.reason == "output_exists"
+    assert [f.file.status for f in forced.result.files] == ["replaced"]  # type: ignore[attr-defined]
+
+
+def test_run_command_with_output_dir_refuses_what_needs_a_store(tmp_path):
+    with pl_sheets() as fake, pytest.raises(ValidationError) as caught:
+        run_command(
+            "elevation download",
+            PL_SHEET,
+            output_dir=tmp_path / "out",
+            update="upgrade",
+            cache=False,
+        )
+
+    assert (caught.value.reason, caught.value.option) == (
+        "store_only_option",
+        "--upgrade",
+    )
+    assert fake.downloads == [] and not (tmp_path / "out").exists()

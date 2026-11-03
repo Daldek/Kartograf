@@ -1,0 +1,900 @@
+"""Declarations of the command catalog (spec 8.2-8.4): what a declaration
+derives, when its providers run and which declarations are refused."""
+
+import dataclasses
+import importlib
+import importlib.util
+import inspect
+from pathlib import Path
+
+import pytest
+
+import kartograf
+from kartograf import _errors
+from kartograf.catalog import commands as commands_package
+from kartograf.catalog import shared
+from kartograf.catalog.build import is_option
+from kartograf.catalog.commands import declared, elevation
+from kartograf.catalog.excerpts import EXCERPTS
+from kartograf.catalog.kinds import convert_arguments
+from kartograf.catalog.meanings import meaning
+from kartograf.catalog.spec import (
+    CORE_MAX,
+    FAMILIES,
+    SHEET_SYSTEMS,
+    Command,
+    Constraint,
+    Example,
+    Group,
+    Param,
+    resolve,
+)
+from kartograf.core.parser_2000 import SCALE_HIERARCHY_2000
+from kartograf.core.parser_registry import SYSTEMS, detect_system, ztm_sheet_system
+from kartograf.core.sheet_parser import PL_BBOX_CRS, SheetParser
+from kartograf.data_commands import DATA_COMMANDS
+from kartograf.download.availability import (
+    AVAILABILITY_COUNTRIES,
+    AVAILABILITY_PRODUCTS,
+)
+from kartograf.download.collections import (
+    collection_choice_values,
+    collection_countries,
+    collection_products,
+)
+from kartograf.download.cutout import CUTOUT_CRS
+from kartograf.download.cz_contours import contours_formats
+from kartograf.download.options import (
+    BBOX_CRS_CHOICES,
+    COUNTRIES,
+    ELEVATION_PRODUCTS,
+    IMAGERY_PRODUCTS,
+    SCALES_2000,
+)
+from kartograf.download.orto_cutout import ORTO_CUTOUT_CRS
+from kartograf.landcover.manager import LANDCOVER_PRODUCTS
+from kartograf.messages import LANGS, Message, localize
+from kartograf.providers.pl.gugik_orto import (
+    ORTO_KEY,
+    cutout_resolution_labels,
+    image_source,
+)
+from kartograf.sources.registry import sources_for
+from kartograf.sources.variants import parse_resolution, variants
+
+
+def _command(*params: Param, **fields) -> Command:
+    """A minimal valid command around ``params``."""
+    values = {
+        "id": "elevation download",
+        "summary": "Pobierz dane",
+        "kind": "data",
+        "function": "download_data",
+        "result_schema": "kartograf-download/1",
+        "params": params,
+    }
+    return Command(**{**values, **fields})
+
+
+def test_param_derives_flag_and_argument_from_name():
+    param = Param("vertical_crs", "str")
+
+    assert param.cli_flag == "--vertical-crs"
+    assert param.api_argument == "vertical_crs"
+    assert param.cli_dest == "vertical_crs"
+
+
+def test_flag_none_is_api_only_and_argument_none_is_cli_only():
+    api_only = Param("update", "str", flag=None)
+    cli_only = Param("quiet", "flag", argument=None)
+    renamed = Param("root", "path", flag="--root", short="-o", dest="output")
+
+    assert (api_only.cli_flag, api_only.api_argument) == (None, "update")
+    assert (cli_only.cli_flag, cli_only.api_argument) == ("--quiet", None)
+    assert (renamed.cli_flag, renamed.api_argument, renamed.cli_dest) == (
+        "--root",
+        "root",
+        "output",
+    )
+
+
+def test_positional_param_has_no_flag():
+    sheet = Param("sheet", "str", positional=True, metavar="GODLO")
+
+    assert sheet.cli_flag is None
+    assert sheet.api_argument == "sheet"
+
+
+def test_providers_are_called_late() -> None:
+    calls: list[str] = []
+
+    def allowed() -> tuple[str, ...]:
+        calls.append("allowed")
+        return ("nmt", "nmpt")
+
+    def description() -> str:
+        calls.append("description")
+        return "Produkt (wymagany)"
+
+    param = Param("product", "str", description, allowed=allowed, choices=True)
+    command = _command(param, description=description)
+
+    assert calls == []
+    assert resolve(param.allowed) == ("nmt", "nmpt")
+    assert resolve(param.description) == "Produkt (wymagany)"
+    assert resolve(command.description) == "Produkt (wymagany)"
+    assert calls == ["allowed", "description", "description"]
+    assert resolve("plain text") == "plain text"
+    assert resolve(("a", "b")) == ("a", "b")
+
+
+def test_shared_param_can_be_overridden():
+    product = dataclasses.replace(
+        shared.PRODUCT,
+        description="Produkt grupy",
+        allowed=("nmt", "nmpt"),
+        required=False,
+    )
+
+    assert product.description == "Produkt grupy"
+    assert product.allowed == ("nmt", "nmpt")
+    assert product.required is False
+    # the shared declaration stays as it was
+    assert shared.PRODUCT.required is True
+    assert shared.PRODUCT.allowed is None
+
+
+def test_required_needs_an_api_argument():
+    with pytest.raises(ValueError, match="argument"):
+        Param("quiet", "flag", argument=None, required=True)
+
+    assert Param("sheet", "str", required=True).required is True
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"name": "Bad-Name", "kind": "str"},
+        {"name": "x", "kind": "float"},
+        {"name": "x", "kind": "str", "flag": "-x"},
+        {"name": "x", "kind": "str", "short": "-xx"},
+        {"name": "x", "kind": "str", "flag": None, "short": "-x"},
+        {"name": "x", "kind": "str", "choices": True},
+        {"name": "x", "kind": "str", "normalize": "title"},
+        {"name": "x", "kind": "str", "nargs": "*"},
+        {"name": "x", "kind": "str", "positional": True, "flag": "--x"},
+        {"name": "x", "kind": "str", "positional": True, "dest": "y"},
+        {"name": "x", "kind": "str", "exclusive": "update", "flag": None},
+        {"name": "x", "kind": "str", "accepts": ("pl1992",)},
+        {"name": "sheet", "kind": "str", "accepts": ("pl1993",)},
+    ],
+)
+def test_invalid_declaration_of_a_param_is_refused(fields):
+    with pytest.raises(ValueError):
+        Param(**fields)
+
+
+def test_command_derives_group_name_and_check_support():
+    plain = _command(Param("product", "str"))
+    with_check = _command(
+        Param("product", "str"),
+        check_function="check_data",
+        check_result_schema="kartograf-plan/1",
+    )
+    root = _command(id="sheet parse", function="describe_sheet", kind="query")
+
+    assert (plain.group, plain.name, plain.operation_id) == (
+        "elevation",
+        "download",
+        "kartograf_elevation_download",
+    )
+    assert plain.supports_check is False
+    assert with_check.supports_check is True
+    assert (root.group, root.name, root.operation_id) == (
+        "sheet",
+        "parse",
+        "kartograf_sheet_parse",
+    )
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"id": "Elevation Download"},
+        {"id": "a b c"},
+        {"check_function": "check_data"},
+        {"check_result_schema": "kartograf-plan/1"},
+        {"kind": "other"},
+        {"effects": ("teleport",)},
+        {"result_schema": "download"},
+    ],
+)
+def test_invalid_declaration_of_a_command_is_refused(fields):
+    with pytest.raises(ValueError):
+        _command(Param("product", "str"), **fields)
+
+
+def test_command_params_must_have_unique_names():
+    with pytest.raises(ValueError, match="product"):
+        _command(Param("product", "str"), Param("product", "int"))
+
+
+def test_constraint_and_example_are_plain_data():
+    constraint = Constraint(
+        "requires", ("horizontal_crs",), "--cutout wymaga --horizontal-crs", "cutout"
+    )
+    example = Example({"product": "nmt"}, run={"quiet": True})
+
+    assert (constraint.type, constraint.param, constraint.params) == (
+        "requires",
+        "cutout",
+        ("horizontal_crs",),
+    )
+    assert constraint.when is None
+    assert example.title is None
+    assert example.options == {"product": "nmt"}
+
+
+def test_group_has_a_position_in_the_help_list():
+    plain = Group("elevation", "Wysokosci", "Dane wysokosciowe")
+    last = Group("cache", "Cache", "Cache metadanych", position=2)
+
+    assert plain.position < last.position
+
+
+# =============================================================================
+# The declared commands: every module of kartograf/catalog/commands/
+# =============================================================================
+
+_DECLARED = declared()
+_IDS = [command.id for command in _DECLARED.commands]
+_DATA = [command for command in _DECLARED.commands if command.kind == "data"]
+_EXAMPLES = [(c, i) for c in _DATA for i in range(len(c.examples))]
+_EXAMPLE_IDS = [f"{c.id}#{i}" for c, i in _EXAMPLES]
+# the registry values a command offers: each must come from a provider
+_REGISTRY_PARAMS = (
+    "product",
+    "country",
+    "resolution",
+    "vertical_crs",
+    "format",
+    "model",
+    "scale",
+    "sheet_system",
+    "bbox_crs",
+    "horizontal_crs",
+    "coverage",
+    "direction",
+)
+
+
+def test_elevation_and_imagery_commands_are_declared():
+    assert {
+        "elevation download",
+        "elevation list-sources",
+        "elevation availability",
+        "imagery download",
+        "imagery list-sources",
+    } <= set(_IDS)
+
+
+_STORE_AND_SHEET_SEARCH = (
+    "sheet find",
+    "store overview",
+    "store entries",
+    "store sidecar",
+)
+
+
+def test_cache_parse_catalog_sheet_search_and_store_commands_are_declared():
+    assert {
+        "cache stats",
+        "cache path",
+        "cache clear",
+        "sheet parse",
+        "commands list",
+        "commands schema",
+        *_STORE_AND_SHEET_SEARCH,
+    } <= set(_IDS)
+    # every command has a CLI: the four that began as API-only functions have flags
+    assert [c.id for c in _DECLARED.commands if c.group == "store"] == [
+        "store overview",
+        "store entries",
+        "store sidecar",
+        "store init",
+    ]
+    assert next(g for g in _DECLARED.groups if g.name == "cache").position == 2
+
+
+def test_the_catalog_commands_take_no_options_but_the_command_to_describe():
+    listing = _COMMAND_BY_ID["commands list"]
+    schema = _COMMAND_BY_ID["commands schema"]
+    params = {p.name: p for p in schema.params}
+
+    assert [p.name for p in listing.params] == ["json", "lang"]
+    assert [p.name for p in schema.params] == ["command", "json", "lang"]
+    assert resolve(params["command"].allowed) == _IDS  # every command, no copy
+    assert callable(params["command"].allowed)
+    assert (params["command"].required, params["command"].choices) == (True, False)
+    assert (params["command"].cli_flag, params["command"].positional) == (
+        "--command",
+        False,
+    )
+    assert (listing.function, listing.result_schema) == (
+        "list_commands",
+        "kartograf-command-list/1",
+    )
+    assert (schema.function, schema.result_schema) == (
+        "command_schema",
+        "kartograf-commands/1",
+    )
+    assert listing.core and schema.core and listing.family == schema.family
+
+
+def test_the_sheet_search_requires_the_choice_of_sheets_and_one_area():
+    find = _COMMAND_BY_ID["sheet find"]
+    params = {p.name: p for p in find.params}
+
+    assert {name for name, p in params.items() if p.required} == {
+        "scale",
+        "sheet_system",
+    }
+    assert [(c.type, c.params) for c in find.constraints] == [
+        ("one_of", ("bbox", "geometry")),
+        ("requires", ("geometry",)),
+    ]
+    assert (params["bbox"].kind, params["bbox_crs"].kind) == ("bbox", "bbox_crs")
+    assert (params["bbox"].cli_flag, params["scale"].cli_flag) == ("--bbox", "--scale")
+    assert find.examples
+
+
+def test_the_store_reads_require_what_the_spec_requires():
+    required = {
+        command_id: {p.name for p in _COMMAND_BY_ID[command_id].params if p.required}
+        for command_id in ("store overview", "store entries", "store sidecar")
+    }
+
+    assert required == {
+        "store overview": set(),
+        "store entries": {"segment", "limit"},
+        "store sidecar": {"path"},
+    }
+
+
+def test_sheet_systems_are_those_of_the_parser_registry():
+    assert set(SHEET_SYSTEMS) == {system.id for system in SYSTEMS} | {"cz_ztm"}
+
+
+@pytest.mark.parametrize(("command", "index"), _EXAMPLES, ids=_EXAMPLE_IDS)
+def test_examples_pass_validation(command, index, tmp_path):
+    data_command = DATA_COMMANDS[command.id]
+
+    data_command.validate(
+        tmp_path,
+        convert_arguments(data_command.options, command.examples[index].options),
+    )
+
+
+def _countries_of(command: Command) -> set[str]:
+    """PL and CZ among the countries of the sources of the command's products."""
+    product = next((p for p in command.params if p.name == "product"), None)
+    names = resolve(product.allowed) if product and product.allowed else ()
+    found = {d.country for name in names for d in sources_for(product=name)}
+    return found & {"PL", "CZ"}
+
+
+def _example_countries(example: Example) -> set[str]:
+    """The countries an example targets: its ``country``, the country of its sheet
+    code, a CZ cadastral area or PL unit, or the only country of its product."""
+    options = example.options
+    country = options.get("country")
+    if country in ("pl", "cz"):
+        return {str(country).upper()}
+    if country == "auto":
+        return {"PL", "CZ"}
+    sheet = options.get("sheet")
+    if isinstance(sheet, str):
+        if ztm_sheet_system(sheet) is not None:
+            return {"CZ"}
+        return {detect_system(sheet).country}
+    if "ku" in options:
+        return {"CZ"}
+    if "teryt" in options:
+        return {"PL"}
+    found = {d.country for d in sources_for(product=str(options.get("product")))}
+    found &= {"PL", "CZ"}
+    return found if len(found) == 1 else set()
+
+
+@pytest.mark.parametrize("command", _DATA, ids=[c.id for c in _DATA])
+def test_examples_cover_pl_and_cz(command):
+    """A data command shows an example of every country its products have."""
+    targeted = [_example_countries(example) for example in command.examples]
+
+    for country in sorted(_countries_of(command)):
+        assert any(country in found for found in targeted), country
+
+
+_SCALES_1992 = list(SheetParser.SCALE_HIERARCHY)
+_COMMAND_BY_ID = {command.id: command for command in _DECLARED.commands}
+_COLLECTION_GROUPS = (
+    "boundaries",
+    "cadastre",
+    "models3d",
+    "hydro",
+    "names",
+    "maps",
+    "geodesy",
+)
+_PRODUCTS_OF = {
+    "elevation download": ELEVATION_PRODUCTS,
+    "elevation availability": AVAILABILITY_PRODUCTS,
+    "elevation list-sources": ELEVATION_PRODUCTS,
+    "imagery download": IMAGERY_PRODUCTS,
+    "imagery list-sources": IMAGERY_PRODUCTS,
+    "landcover download": LANDCOVER_PRODUCTS,
+    "landcover list-sources": LANDCOVER_PRODUCTS,
+    "landcover list-layers": LANDCOVER_PRODUCTS,
+    "soil list-sources": ("soil",),
+}
+
+
+def _collected(group: str, key: str) -> set[str]:
+    """The values of the option ``key`` over the products of a collection group."""
+    return {
+        value
+        for product in collection_products(group)
+        for values in collection_choice_values(product, key).values()
+        for value in values
+    }
+
+
+def _expected_allowed(command_id: str, name: str) -> list[str] | set[str]:
+    """The allowed values of a registry parameter, read from the registry in
+    another way than the declaration does (a set: the order is the registry's)."""
+    if command_id == "commands guide":  # the formats of the generator of the guide
+        return ["agents", "llms", "agents-md-block"]
+    if command_id == "sheet find":  # the sheet search takes the Polish CRSs
+        scales_2000 = [s for s in SCALE_HIERARCHY_2000 if s not in _SCALES_1992]
+        return {
+            "bbox_crs": list(PL_BBOX_CRS),
+            "scale": [*_SCALES_1992, *scales_2000],
+            "sheet_system": list(SheetParser.VALID_SYSTEMS),
+        }[name]
+    group = command_id.split()[0]
+    collection = group in _COLLECTION_GROUPS
+    if name == "bbox_crs":
+        return list(BBOX_CRS_CHOICES)
+    if name in ("scale", "sheet_system", "format") and collection:
+        return _collected(group, name)
+    if name == "scale":
+        return list(SCALES_2000)
+    if name == "sheet_system":
+        return ["1992", "2000"]
+    if name == "country":
+        if command_id == "elevation availability":
+            return list(AVAILABILITY_COUNTRIES)
+        if collection:
+            return [*collection_countries(collection_products(group)), "auto"]
+        return list(COUNTRIES)
+    if name == "product":
+        if collection:
+            return list(collection_products(group))
+        return list(_PRODUCTS_OF[command_id])
+    if group == "landcover" and name == "format":
+        return ["GPKG", "SHP", "GML"]
+    if group == "landcover" and name == "horizontal_crs":
+        return ["EPSG:5514", "EPSG:3045"]
+    if name == "resolution" and command_id == "elevation download":
+        labels = {v.label for p in ("nmt", "nmpt") for v in variants(product=p)}
+        return sorted(
+            (label for label in labels if label is not None),
+            key=lambda label: parse_resolution(label) or 0,
+        )
+    if name == "resolution":  # the WCS pixels of the orthophotomap and true orto
+        true_orto = image_source("true-orto")
+        assert true_orto is not None
+        return {
+            *cutout_resolution_labels(ORTO_KEY, "standard"),
+            *cutout_resolution_labels(ORTO_KEY, "high"),
+            *cutout_resolution_labels(true_orto.key, None),
+        }
+    if name == "vertical_crs":
+        return {v.vertical_crs for v in variants() if v.vertical_crs}
+    if name == "model":
+        return {v.model for v in variants(product="laz", country="CZ") if v.model}
+    if name == "format":
+        formats = {
+            v.format
+            for product in ("nmt", "nmpt")
+            for v in variants(product=product, country="PL")
+        }
+        return formats | set(contours_formats())
+    if name == "horizontal_crs":
+        return (
+            list(CUTOUT_CRS)
+            if command_id == "elevation download"
+            else [ORTO_CUTOUT_CRS]
+        )
+    if name == "coverage":
+        return {"standard", "high"}
+    if name == "direction":
+        return ["n", "e", "s", "w"]
+    raise KeyError((command_id, name))
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_allowed_comes_from_a_provider_not_a_copy(command):
+    for param in command.params:
+        if param.name not in _REGISTRY_PARAMS or param.allowed is None:
+            continue
+        assert callable(param.allowed), f"{command.id}.{param.name}: a copy"
+        expected = _expected_allowed(command.id, param.name)
+        got = resolve(param.allowed)
+        if isinstance(expected, set):
+            assert set(got) == expected, (command.id, param.name)
+        else:
+            assert list(got) == expected, (command.id, param.name)
+
+
+def test_a_provider_reads_the_registry_when_it_is_called(monkeypatch):
+    """The values are those of the registry at the time of the call: a variant
+    registered later is offered (no copy of the lists)."""
+    real = elevation.variants
+
+    def with_test_variant(**filters):
+        found = real(**filters)
+        return (*found, dataclasses.replace(found[0], vertical_crs="TESTCRS"))
+
+    vertical = next(
+        p
+        for p in _COMMAND_BY_ID["elevation download"].params
+        if p.name == "vertical_crs"
+    )
+    assert "TESTCRS" not in resolve(vertical.allowed)
+
+    monkeypatch.setattr(elevation, "variants", with_test_variant)
+
+    assert "TESTCRS" in resolve(vertical.allowed)
+
+
+# =============================================================================
+# The texts (AGI-2.2, AGI-9.1, DOC-1.7): English, Polish next to them, the budgets
+# =============================================================================
+
+_REGISTRY_CODES = {entry.code for entry in _errors.CODES if entry.exit_code is not None}
+
+
+def _texts(command: Command) -> list[tuple[str, str]]:
+    """Every text of a command that a person reads, with where it is declared."""
+    texts = [
+        ("summary", command.summary),
+        ("description", resolve(command.description)),
+    ]
+    texts += [(f"rule {i}", rule) for i, rule in enumerate(command.rules)]
+    for param in command.params:
+        texts.append((f"{param.name} description", resolve(param.description)))
+        texts.append((f"{param.name} section", param.section or ""))
+    texts += [(f"constraint {c.type}", c.message) for c in command.constraints]
+    texts += [(f"example {i}", e.title or "") for i, e in enumerate(command.examples)]
+    return texts
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_texts_are_ascii_in_both_languages(command):
+    for where, text in _texts(command):
+        for lang in LANGS:
+            assert localize(text, lang).isascii(), (where, lang)
+    for param in command.params:
+        for lang in LANGS:
+            assert localize(param.metavar or "", lang).isascii(), param.name
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_every_text_of_a_command_is_a_catalog_message_so_both_languages_exist(command):
+    assert command.summary and resolve(command.description)
+    for where, text in _texts(command):
+        if where.endswith("section") and not text:
+            continue  # a flat help has no sections
+        assert isinstance(text, Message), (command.id, where)
+    for example in command.examples:
+        assert example.title, command.id
+    for param in command.params:
+        if is_option(command, param):
+            assert resolve(param.description), f"{command.id}.{param.name}: no English"
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_the_tool_description_fits_its_budget(command):
+    """Summary, description and rules are the MCP tool description: 100 characters
+    for the summary and 600 together (DOC-1.7)."""
+    description = "\n\n".join(
+        (command.summary, resolve(command.description), " ".join(command.rules))
+    )
+
+    assert command.summary[0].isupper() and len(command.summary) <= 100
+    assert len(description) <= 600, len(description)
+    assert len(localize(command.summary, "pl")) <= 120
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_a_command_declares_registry_errors_and_one_example_at_least(command):
+    assert set(command.errors) <= _REGISTRY_CODES
+    assert command.examples, command.id
+
+
+def test_the_core_family_has_at_most_ten_tools_and_only_tools_have_a_family():
+    core = [c.id for c in _DECLARED.commands if c.core]
+
+    assert len(core) <= CORE_MAX
+    assert {c.id for c in _DECLARED.commands if c.family is None} == {
+        "cache stats",
+        "cache clear",
+        "cache path",
+        "config show",
+        "commands guide",
+    }
+    assert all(c.family in FAMILIES for c in _DECLARED.commands if c.family)
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_a_path_parameter_says_what_it_is_for(command):
+    for param in command.params:
+        assert (param.kind == "path") == (param.path_role is not None), param.name
+
+
+def test_the_options_that_write_are_roots_or_outputs():
+    roles = {
+        (command.id, param.name): param.path_role
+        for command in _DECLARED.commands
+        for param in command.params
+        if param.path_role is not None
+    }
+
+    assert {name for (_, name) in roles} == {
+        "root",
+        "output_dir",
+        "geometry",
+        "path",
+        "inject",
+    }
+    assert {role for (_, name), role in roles.items() if name == "root"} == {"root"}
+    assert {role for (_, name), role in roles.items() if name == "output_dir"} == {
+        "output"
+    }
+
+
+def test_every_data_command_has_both_targets_and_the_store_commands_say_store_only():
+    """DEV-19.1 and DEV-19.18: ``output_dir`` and ``root`` are one optional ``one_of``
+    group of every data command; ``store init`` takes only ``root``, and its catalog
+    entry says so."""
+    commands = _DECLARED.commands
+    with_output = {c.id for c in commands if _has(c, "output_dir")}
+    with_root = {c.id for c in commands if _has(c, "root")}
+    says_store_only = {c.id for c in commands if "Store only:" in " ".join(c.rules)}
+
+    assert with_output <= with_root
+    assert with_root - with_output == {
+        "store entries",
+        "store init",
+        "store overview",
+    }
+    assert says_store_only == {"store init"}
+    for command in commands:
+        if command.id in with_output:
+            target = next(c for c in command.constraints if c.group == "target")
+            assert (target.type, target.params, target.optional) == (
+                "one_of",
+                ("output_dir", "root"),
+                True,
+            ), command.id
+
+
+def _has(command: Command, name: str) -> bool:
+    return any(param.name == name for param in command.params)
+
+
+def test_group_texts_are_catalog_messages_and_ascii_in_both_languages():
+    for group in _DECLARED.groups:
+        for text in (group.summary, group.description):
+            assert isinstance(text, Message), group.name
+            for lang in LANGS:
+                assert localize(text, lang).isascii(), group.name
+        for name, summary in resolve(group.products):
+            assert name.isascii() and localize(summary, "pl").isascii() and summary
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_every_allowed_value_has_a_meaning(command):
+    """The catalog document gives each allowed value of an option its meaning
+    (AGI-2.3); ``command`` and ``group`` take theirs from the catalog itself."""
+    for param in command.params:
+        if param.allowed is None or param.name in ("command", "group"):
+            continue
+        for value in resolve(param.allowed):
+            assert meaning(param.name, str(value)), (command.id, param.name, value)
+
+
+def test_a_value_without_a_meaning_is_refused_and_a_pattern_gives_one():
+    assert meaning("resolution", "0.25m") == "Cell or pixel size 0.25m (metres)."
+    assert meaning("depth", "5-15cm").endswith("below the surface.")
+    assert meaning("horizontal_crs", "EPSG:5514") == meaning("bbox_crs", "EPSG:5514")
+    with pytest.raises(KeyError, match="nope"):
+        meaning("product", "nope")
+
+
+def test_every_result_schema_has_an_excerpt_of_a_document_of_that_schema():
+    """An example shows an excerpt of its result: the keys of the excerpt are keys
+    of the real document (the contract of ``test_json_contract``)."""
+    from tests.contract.test_json_contract import CONTRACT
+
+    schemas = {
+        schema for command in _DECLARED.commands for schema in (command.result_schema,)
+    }
+
+    assert schemas <= set(EXCERPTS)
+    for schema in schemas:
+        excerpt = EXCERPTS[schema]
+        assert excerpt["schema"] == schema
+        assert set(excerpt) <= set(CONTRACT[schema]), schema
+    for command in _DECLARED.commands:
+        for example in command.examples:
+            assert example.result is None or example.result["schema"] == (
+                command.result_schema
+            )
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_constraints_reference_declared_params(command):
+    names = {param.name for param in command.params}
+
+    for constraint in command.constraints:
+        for name in (constraint.param, *constraint.params, *(constraint.when or {})):
+            assert name is None or name in names, (command.id, constraint, name)
+    for example in command.examples:
+        assert set(example.options) | set(example.run) <= names
+
+
+def _library_function(name: str):
+    """The function of a command: exported by ``kartograf`` (spec 12.5 c)."""
+    assert name in kartograf.__all__, f"{name} is not in kartograf.__all__"
+    function = getattr(kartograf, name)
+    assert callable(function), name
+    return function
+
+
+def _default(parameter: inspect.Parameter) -> object:
+    return None if parameter.default is inspect.Parameter.empty else parameter.default
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_arguments_match_the_signature_of_the_function(command):
+    """Every argument of a command is a parameter of its function, a parameter
+    without a default is required, the defaults agree and the function takes
+    keyword arguments (the first one may name the object)."""
+    arguments = {
+        p.api_argument: p
+        for p in command.params
+        if p.api_argument is not None and p.kind != "bbox_crs"
+    }
+    for name in (command.function, command.check_function):
+        if name is None:
+            continue
+        function = _library_function(name)
+        parameters = inspect.signature(function).parameters
+        # the check twin takes the options of a call and the store, not the run options
+        options = command.call_options
+        wanted = {
+            argument: param
+            for argument, param in arguments.items()
+            if name == command.function or param in options or argument == "root"
+        }
+        for argument, param in wanted.items():
+            assert argument in parameters, f"{name} has no argument {argument}"
+            assert param.default == _default(parameters[argument]), (name, argument)
+        for position, (argument, parameter) in enumerate(parameters.items()):
+            if parameter.default is inspect.Parameter.empty:
+                assert argument in arguments and arguments[argument].required, (
+                    f"{name}: {argument} has no default, so it is required"
+                )
+            if position > 0 or parameter.kind is inspect.Parameter.KEYWORD_ONLY:
+                assert parameter.kind is inspect.Parameter.KEYWORD_ONLY, (
+                    name,
+                    argument,
+                )
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_result_schemas_are_registered(command):
+    """The schema a command names is that of a document class of the library."""
+    from kartograf.serialization import SCHEMAS
+
+    for schema in (command.result_schema, command.check_result_schema):
+        if schema is None:
+            continue
+        assert schema in SCHEMAS, f"{command.id}: {schema} is not registered"
+
+
+def test_every_document_of_the_library_is_the_result_of_a_command_but_two():
+    """A document nobody returns is a dead type or a missing command; the error
+    document and the envelope are the answer of every command."""
+    from kartograf.serialization import SCHEMAS
+
+    library = {
+        schema
+        for schema, classes in SCHEMAS.items()
+        if all(cls.__module__.startswith("kartograf.") for cls in classes)
+    }
+    produced = {
+        schema
+        for command in _DECLARED.commands
+        for schema in (command.result_schema, command.check_result_schema)
+        if schema is not None
+    }
+
+    assert library - produced == {"kartograf-error/1", "kartograf-result/1"}
+
+
+def test_declaration_modules_do_not_call_providers_at_import(monkeypatch):
+    """Importing a declaration module computes nothing from the registry: every
+    function that reads it is replaced by one that fails, and each module is
+    executed afresh."""
+    stubs = {
+        "kartograf.sources.registry": ("sources_for", "all_sources", "get_source"),
+        "kartograf.sources.variants": (
+            "variants",
+            "cz_model_text",
+            "cz_resolution_text",
+            "format_tokens",
+        ),
+        "kartograf.download.options": (
+            "resolution_text",
+            "vertical_crs_text",
+            "format_text",
+            "cz_resolution_help",
+            "store_files",
+            "product_directory",
+        ),
+        "kartograf.download.cz_contours": ("contours_formats",),
+        "kartograf.download.collections": (
+            "collection_products",
+            "collection_product_choices",
+            "collection_countries",
+            "collection_choice_values",
+            "collection_level_choices",
+            "collection_variant_choices",
+        ),
+        "kartograf.landcover.manager": (
+            "bdot10k_archive_choices",
+            "bdoo_year_choices",
+            "corine_year_choices",
+            "soil_choices",
+        ),
+        "kartograf.download.orto_cutout": (
+            "orto_coverage_choices",
+            "cutout_resolution_choices",
+        ),
+        "kartograf.providers.pl.gugik_orto": (
+            "wcs_cutout_channels",
+            "image_source",
+            "image_directions",
+        ),
+    }
+
+    def failing(name):
+        def call(*args, **kwargs):
+            raise AssertionError(f"{name} called while a declaration was imported")
+
+        return call
+
+    for module_name, names in stubs.items():
+        module = importlib.import_module(module_name)
+        for name in names:
+            monkeypatch.setattr(module, name, failing(name))
+    package = Path(commands_package.__file__).parent
+    for path in sorted(package.glob("[a-z]*.py")):
+        spec = importlib.util.spec_from_file_location(f"_probe_{path.stem}", path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert module.COMMANDS

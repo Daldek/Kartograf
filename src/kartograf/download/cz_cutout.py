@@ -1,0 +1,450 @@
+"""Versioned CZ (CUZK) raster bbox cutouts (NMT, NMPT) shared by the CLI and library.
+
+The result grid starts at the bbox normalized to the requested image CRS.
+The standard ``bbox/<coords>.tif`` path is a hardlink to an immutable
+version; local versions restore ``all_nodata`` from their sidecar.
+Public pair (Z2): ``download_cz_cutout`` / ``check_cz_cutout`` with the same
+selection arguments; data messages are ``Notice``s in the result.
+"""
+
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import Any, cast
+
+from kartograf.cache.defaults import open_cache
+from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import BBox, bbox_coords
+from kartograf.download.fetch import (
+    FileSlot,
+    UpdateMode,
+    VersionedFile,
+    fetch_version,
+    inspect_version,
+    link_version,
+    local_file,
+    local_version,
+    refreshes_cache,
+    validate_update,
+)
+from kartograf.download.plan import (
+    PlanItem,
+    UpdatePlan,
+    new_plan,
+    refusal_plan,
+    require_store,
+    select_planned,
+    store_id,
+)
+from kartograf.download.storage import bbox_slot
+from kartograf.download.versions import ContentDigest, VersionRef, read_version
+from kartograf.exceptions import ValidationError
+from kartograf.messages import message
+from kartograf.notices import ALL_NODATA, Notice, NoticeSink
+from kartograf.output import plain_of, preflight, writing
+from kartograf.providers.cuzk.client import wkid
+from kartograf.providers.cuzk.raster import (
+    CUZK_NODATA,
+    NATIVE_CRS,
+    CuzkRasterProvider,
+    CzRasterRoute,
+)
+from kartograf.sources.registry import get_source
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CzCutoutResult:
+    """Result of a CZ cutout; ``file=None`` only when a plan excludes a missing file.
+
+    ``notices`` holds the all-nodata message of a freshly downloaded file.
+    """
+
+    file: VersionedFile | None
+    all_nodata: bool = False
+    stale: tuple[PlanItem, ...] = ()
+    notices: tuple[Notice, ...] = ()
+
+
+def emit_cz_all_nodata(
+    sink: NoticeSink, file: VersionedFile | None, all_nodata: bool
+) -> None:
+    """``ALL_NODATA`` for a downloaded (not reused local) CZ raster without data."""
+    if all_nodata and file is not None and file.status != "local":
+        sink.emit(
+            "warning",
+            ALL_NODATA,
+            message("cutouts.cz_all_nodata", path=file.path),
+        )
+
+
+def read_tif_nodata(path: Path) -> float | None:
+    """Nodata from a GeoTIFF tag (None if missing/unreadable)."""
+    try:
+        import rasterio
+
+        with rasterio.open(path) as src:
+            nodata: float | None = src.nodata
+            return nodata
+    except Exception:  # noqa: BLE001 — enriching metadata < data
+        return None
+
+
+def _all_nodata(path: Path, nodata: float | None) -> bool:
+    """Return True when the raster has no valid pixel (no tag: CUZK writes -9999).
+
+    Best-effort like ``read_tif_nodata``: an unreadable file gives False
+    (debug log) - the check never aborts a finished download.
+    """
+    from kartograf.transport.mosaic import has_valid_pixels
+
+    try:
+        return not has_valid_pixels(path, CUZK_NODATA if nodata is None else nodata)
+    except Exception as e:  # noqa: BLE001 — a flag never aborts the download
+        logger.debug(f"Nodata check of {path} skipped: {e}")
+        return False
+
+
+def write_cz_sidecar(
+    provider: CuzkRasterProvider,
+    route: CzRasterRoute,
+    target: Path,
+    *,
+    request: dict[str, Any],
+    nodata: float | None,
+    extra: dict[str, Any] | None,
+    version: VersionRef,
+    digest: ContentDigest,
+    http: dict[str, Any] | None,
+) -> None:
+    """Write the mandatory, exclusive sidecar of a versioned CZ cutout.
+
+    ``route`` (``CzRasterRoute`` of the cutout, ``provider.route()``) gives
+    the CRS of the ACTUAL result (``--horizontal-crs``, not the channel's
+    default CRS) and both operations performed locally - horizontal and
+    vertical alike, pinned (ADR-024). Previously the horizontal field carried
+    `"server:EPSG:<code>"` without an accuracy, which hid the server-side
+    reprojection error (135 m) from the sidecar consumer.
+    """
+    from kartograf.sources.sidecar import emit_sidecar
+
+    metadata_extra = dict(extra or {})
+    if http is not None:
+        metadata_extra["http"] = http
+    emit_sidecar(
+        provider.descriptor_key,
+        target,
+        request=request,
+        vertical_crs=provider.vertical_crs,
+        horizontal_crs=route.horizontal_crs,
+        pinned_transforms={
+            "horizontal": route.horizontal,
+            "vertical": route.vertical,
+        },
+        capability=route.capability,
+        nodata=nodata,
+        extra=metadata_extra,
+        version=version.to_extra(),
+        digest=(digest.sha256, digest.size_bytes),
+        exclusive=True,
+    )
+
+
+def _cutout_slot(
+    provider: CuzkRasterProvider,
+    bbox: BBox,
+    root: str | Path,
+    image_crs: str | None,
+) -> tuple[BBox, str, FileSlot]:
+    """Normalize to the result CRS before choosing the stable bbox file name."""
+    from kartograf.providers.cuzk.raster import bbox_to_crs  # CLI patch point
+
+    image_sr = image_crs or NATIVE_CRS
+    if wkid(bbox.crs) != wkid(image_sr):
+        bbox = bbox_to_crs(bbox, image_sr)
+    descriptor = get_source(cast(str, provider.descriptor_key))
+    slot = bbox_slot(
+        root,
+        descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
+        bbox,
+        ".tif",
+    )
+    return bbox, image_sr, slot
+
+
+def _result(
+    file: VersionedFile | None,
+    stale: tuple[PlanItem, ...] = (),
+    *,
+    all_nodata: bool | None = None,
+) -> CzCutoutResult:
+    """Read the nodata flag from the immutable version sidecar, not the raster.
+
+    A plain file has no sidecar: ``all_nodata`` is the flag the run measured.
+    """
+    if file is None:
+        return CzCutoutResult(None, stale=stale)
+
+    if all_nodata is None:
+        version = read_version(file.version_path.parent, file.version_path.name)
+        extra = version.meta.get("extra", {}) if version is not None else {}
+        all_nodata = extra.get("all_nodata") is True
+    return CzCutoutResult(file, all_nodata=all_nodata, stale=stale)
+
+
+def _check_cutout(
+    provider: CuzkRasterProvider,
+    bbox: BBox,
+    *,
+    root: str | Path,
+    image_crs: str | None,
+) -> UpdatePlan:
+    """Plan of a CZ bbox version without raster access or network requests."""
+    _, _, slot = _cutout_slot(provider, bbox, root, image_crs)
+    item = inspect_version(
+        slot,
+        track="cz_cutout",
+        unit=slot.std.stem,
+        signal="none",
+    )
+    return new_plan(store_id(root), (item,))
+
+
+def _run_cz_cutout(
+    provider: CuzkRasterProvider,
+    bbox: BBox,
+    *,
+    root: str | Path,
+    image_crs: str | None,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
+    parent_request: dict[str, Any] | None = None,
+    on_download: Callable[[], None] | None = None,
+) -> CzCutoutResult:
+    """Fetch or reuse a CZ cutout; planned upgrades fetch only selected files.
+
+    A plan-excluded cutout with no local version returns ``file=None``.
+    Local versions restore ``all_nodata`` from their immutable sidecar.
+    """
+    validate_update(update)
+    if plan is not None:
+        if update != "upgrade":
+            raise ValidationError(message("cutouts.cz_cutout_requires_upgrade"))
+        require_store(plan, store_id(root))
+    # the route (pinned operations) before any request
+    route = provider.route()
+    bbox, image_sr, slot = _cutout_slot(provider, bbox, root, image_crs)
+    preflight(root, [slot.name])
+    plain_empty: bool | None = None
+    stale: tuple[PlanItem, ...] = ()
+    if plan is not None:
+        fresh = inspect_version(
+            slot,
+            track="cz_cutout",
+            unit=slot.std.stem,
+            signal="none",
+        )
+        todo, skipped = select_planned(plan, [fresh], "cz_cutout")
+        stale = tuple(skipped)
+        if not todo:
+            local = local_version(slot)
+            if local is None:
+                return _result(None, stale)
+            link_version(slot.std, local, refresh=False)
+            return _result(
+                local_file(slot.std, local),
+                stale,
+            )
+
+    def fetch(staged: Path) -> None:
+        nonlocal plain_empty
+        provider.download_bbox(bbox, staged, on_download=on_download)
+        if plain_of(root) is not None:  # no sidecar says it: look at the raster
+            plain_empty = _all_nodata(staged, read_tif_nodata(staged))
+
+    def sidecar(
+        data: Path, ref: VersionRef, digest: ContentDigest, http: dict[str, Any] | None
+    ) -> None:
+        nodata = read_tif_nodata(data)
+        empty = _all_nodata(data, nodata)
+        extra: dict[str, Any] = {"all_nodata": empty}
+        if parent_request:
+            extra["parent_request"] = parent_request
+        write_cz_sidecar(
+            provider,
+            route,
+            data,
+            request={
+                "bbox": bbox_coords(bbox),
+                "bbox_crs": bbox.crs,
+            },
+            nodata=nodata if nodata is not None else CUZK_NODATA,
+            extra=extra,
+            version=ref,
+            digest=digest,
+            http=http,
+        )
+
+    file = fetch_version(
+        slot,
+        update,
+        signal="none",
+        fetch=fetch,
+        version=VersionRef.downloaded(),
+        write_sidecar=sidecar,
+    )
+    return _result(file, stale, all_nodata=plain_empty)
+
+
+def _image_crs(target_crs: str) -> str | None:
+    """``None`` for the native EPSG:5514 result, else the requested result CRS."""
+    return None if wkid(target_crs) == wkid(NATIVE_CRS) else target_crs
+
+
+def _cz_provider(
+    *,
+    product: str,
+    horizontal_crs: str,
+    vertical_crs: str,
+    resolution: str,
+    cache: MetadataCache | None,
+) -> CuzkRasterProvider:
+    """CZ raster provider of a cutout (``TransformError`` before any network)."""
+    from kartograf.download.cutout import CUTOUT_CRS
+    from kartograf.providers.cuzk import create_cz_raster_provider
+
+    if horizontal_crs not in CUTOUT_CRS:
+        raise ValidationError(
+            message(
+                "cutouts.cz_cutout_unsupported_crs",
+                horizontal_crs=horizontal_crs,
+                cutout_crs=", ".join(CUTOUT_CRS),
+            )
+        )
+    provider = create_cz_raster_provider(
+        product=product,
+        resolution=resolution,
+        cache=cache,
+        horizontal_crs=_image_crs(horizontal_crs),
+        vertical_crs=vertical_crs,
+    )
+    provider.route()  # every pinned operation of the cutout before any network
+    return provider
+
+
+def check_cz_cutout(
+    *,
+    bbox: BBox,
+    root: str | Path | None = None,
+    output_dir: str | Path | None = None,
+    product: str,
+    horizontal_crs: str,
+    vertical_crs: str,
+    resolution: str,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> UpdatePlan:
+    """Update plan of ``download_cz_cutout`` with the same arguments, no download.
+
+    The cutout channel has no remote version signal: the plan reads only the
+    local store (no network, no metadata cache). ``cache`` and ``on_notice``
+    are accepted for symmetry with the download. Invalid choices raise the
+    same ``ValidationError``/``TransformError`` as the download. With
+    ``output_dir`` the position is the target of a plain write (``action``,
+    ``path``).
+    """
+    from kartograf.download.options import validate_request_bbox
+
+    bbox = validate_request_bbox(bbox)
+    del cache, on_notice  # same signature as the download (Z2); unused here
+    provider = _cz_provider(
+        product=product,
+        horizontal_crs=horizontal_crs,
+        vertical_crs=vertical_crs,
+        resolution=resolution,
+        cache=None,
+    )
+    with writing(output_dir=output_dir, root=root, guard=False) as store:
+        if (refused := refusal_plan(store)) is not None:
+            return refused
+        return _check_cutout(
+            provider, bbox, root=store, image_crs=_image_crs(horizontal_crs)
+        )
+
+
+def download_cz_cutout(
+    *,
+    bbox: BBox,
+    root: str | Path | None = None,
+    output_dir: str | Path | None = None,
+    product: str,
+    horizontal_crs: str,
+    vertical_crs: str,
+    resolution: str,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
+    parent_request: dict[str, Any] | None = None,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+    on_download: Callable[[], None] | None = None,
+) -> CzCutoutResult:
+    """Download a CZ cutout of the ImageServer in ``horizontal_crs``.
+
+    E.g. EPSG:2180 + EVRF2007, A6.
+
+    No configuration defaults (A8): output directory, product, CRSs and
+    resolution are explicit (``product="nmt"``: ``"2m"`` DMR 5G / ``"5m"``
+    DMR 4G; ``"nmpt"``: ``"0.5m"`` DMP OK / ``"2m"`` DMP 1G). The grid
+    starts at ``bbox`` converted to ``horizontal_crs``. ``plan`` (from
+    ``check_cz_cutout`` with ``update="upgrade"``) downloads only its missing
+    position; a changed position lands in ``stale``. ``output_dir`` writes the
+    plain file ``bbox_<coords>.tif`` into that directory instead of the store (no
+    sidecar, no version; ``update="force"`` replaces an existing file, a conflict
+    stops before the first byte; it excludes ``root``, ``update="upgrade"`` and
+    ``plan``). ``cache``: ``True`` =
+    default metadata cache in the current directory, a ``MetadataCache`` =
+    that cache, ``False`` = none. ``on_notice`` receives each data notice
+    when emitted; ``on_download`` is called right before the first service
+    request.
+
+    Raises
+    ------
+    ValidationError
+        Bad product, resolution, CRS, vertical CRS or plan/update combination.
+    TransformError
+        No safe pinned operation to ``horizontal_crs``.
+    DownloadError
+        CUZK service failure.
+    """
+    from kartograf.download.options import validate_request_bbox
+
+    bbox = validate_request_bbox(bbox)
+    validate_update(update, check="check_cz_cutout")
+    sink = NoticeSink(on_notice)
+    with (
+        writing(output_dir=output_dir, root=root, update=update, plan=plan) as store,
+        open_cache(
+            cache, force=refreshes_cache(update), on_notice=sink.add
+        ) as metadata,
+    ):
+        provider = _cz_provider(
+            product=product,
+            horizontal_crs=horizontal_crs,
+            vertical_crs=vertical_crs,
+            resolution=resolution,
+            cache=metadata,
+        )
+        result = _run_cz_cutout(
+            provider,
+            bbox,
+            root=store,
+            image_crs=_image_crs(horizontal_crs),
+            update=update,
+            plan=plan,
+            parent_request=parent_request,
+            on_download=on_download,
+        )
+    emit_cz_all_nodata(sink, result.file, result.all_nodata)
+    return replace(result, notices=sink.notices)

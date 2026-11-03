@@ -1,0 +1,347 @@
+"""
+Tests for SoilGrids provider functionality.
+
+Tests cover SoilGridsProvider class for downloading soil property data
+from ISRIC SoilGrids via WCS API.
+"""
+
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
+
+from kartograf.core.sheet_parser import BBox
+from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.providers.soilgrids import (
+    PROPERTY_DESCRIPTIONS,
+    STAT_DESCRIPTIONS,
+    SoilGridsProvider,
+)
+from kartograf.transform.bbox import envelope_from_2180
+
+
+class TestSoilGridsProvider:
+    """Test SoilGridsProvider."""
+
+    def test_provider_name(self):
+        """Test provider name."""
+        provider = SoilGridsProvider()
+        assert provider.name == "SoilGrids"
+
+    def test_source_url(self):
+        """Test source URL."""
+        provider = SoilGridsProvider()
+        assert "soilgrids.org" in provider.source_url
+
+    def test_available_properties(self):
+        """Test available properties."""
+        provider = SoilGridsProvider()
+        props = provider.get_available_properties()
+        assert "soc" in props  # soil organic carbon
+        assert "clay" in props
+        assert "sand" in props
+        assert "silt" in props
+        assert "phh2o" in props
+        assert len(props) == 11
+
+    def test_available_depths(self):
+        """The standard six depths, and 0-30cm for ocs only."""
+        provider = SoilGridsProvider()
+        depths = provider.get_available_depths()
+        assert depths[:6] == [
+            "0-5cm",
+            "5-15cm",
+            "15-30cm",
+            "30-60cm",
+            "60-100cm",
+            "100-200cm",
+        ]
+        assert "0-30cm" in depths
+        assert provider.depths_for("ocs") == ["0-30cm"]
+        assert provider.depths_for("clay") == depths[:6]
+
+    def test_available_stats(self):
+        """Test available statistics."""
+        provider = SoilGridsProvider()
+        stats = provider.get_available_stats()
+        assert "mean" in stats
+        assert "Q0.05" in stats
+        assert "Q0.5" in stats
+        assert "Q0.95" in stats
+        assert "uncertainty" in stats
+        assert len(stats) == 5
+
+    def test_supported_formats(self):
+        """Test supported formats."""
+        provider = SoilGridsProvider()
+        formats = provider.get_supported_formats()
+        assert "GTiff" in formats
+
+    def test_get_available_layers_alias(self):
+        """Test that get_available_layers returns properties."""
+        provider = SoilGridsProvider()
+        layers = provider.get_available_layers()
+        props = provider.get_available_properties()
+        assert layers == props
+
+
+class TestSoilGridsValidation:
+    """Test SoilGridsProvider input validation."""
+
+    def test_download_by_bbox_wrong_crs(self):
+        """Test download with wrong CRS."""
+        provider = SoilGridsProvider()
+        bbox = BBox(14.0, 52.0, 15.0, 53.0, "EPSG:4326")
+        with pytest.raises(ValidationError, match="EPSG:2180"):
+            provider.download_by_bbox(
+                bbox, Path("/tmp/test.tif"), property="soc", depth="0-5cm", stat="mean"
+            )
+
+    def test_download_by_bbox_invalid_property(self):
+        """Test download with invalid property."""
+        provider = SoilGridsProvider()
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        with pytest.raises(ValidationError, match="Invalid property"):
+            provider.download_by_bbox(
+                bbox,
+                Path("/tmp/test.tif"),
+                property="invalid_property",
+                depth="0-5cm",
+                stat="mean",
+            )
+
+    def test_download_by_bbox_invalid_depth(self):
+        """Test download with invalid depth."""
+        provider = SoilGridsProvider()
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        with pytest.raises(ValidationError, match="Invalid depth"):
+            provider.download_by_bbox(
+                bbox,
+                Path("/tmp/test.tif"),
+                property="soc",
+                depth="invalid_depth",
+                stat="mean",
+            )
+
+    def test_download_by_bbox_invalid_stat(self):
+        """Test download with invalid stat."""
+        provider = SoilGridsProvider()
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        with pytest.raises(ValidationError, match="Invalid statistic"):
+            provider.download_by_bbox(
+                bbox,
+                Path("/tmp/test.tif"),
+                property="soc",
+                depth="0-5cm",
+                stat="invalid_stat",
+            )
+
+
+class TestSoilGridsWCSUrl:
+    """Test WCS URL construction."""
+
+    def test_construct_wcs_url_basic(self):
+        """Test basic WCS URL construction."""
+        provider = SoilGridsProvider()
+        bbox_wgs84 = (14.0, 52.0, 15.0, 53.0)
+        url = provider._construct_wcs_url(bbox_wgs84, "soc", "0-5cm", "mean")
+
+        assert "maps.isric.org" in url
+        assert "WCS" in url
+        assert "GetCoverage" in url
+        assert "soc_0-5cm_mean" in url
+        # Note: image/tiff is URL-encoded as image%2Ftiff
+        assert "image%2Ftiff" in url or "image/tiff" in url
+
+    def test_construct_wcs_url_different_property(self):
+        """Test WCS URL with different property."""
+        provider = SoilGridsProvider()
+        bbox_wgs84 = (14.0, 52.0, 15.0, 53.0)
+        url = provider._construct_wcs_url(bbox_wgs84, "clay", "15-30cm", "Q0.5")
+
+        assert "clay_15-30cm_Q0.5" in url
+        assert "/map/clay.map" in url
+
+    def test_construct_wcs_url_bbox_in_url(self):
+        """Test that bbox coordinates are in URL."""
+        provider = SoilGridsProvider()
+        bbox_wgs84 = (14.5, 52.5, 15.5, 53.5)
+        url = provider._construct_wcs_url(bbox_wgs84, "soc", "0-5cm", "mean")
+
+        assert "long(14.5,15.5)" in url
+        assert "lat(52.5,53.5)" in url
+
+
+class TestSoilGridsCRSTransform:
+    """Test CRS transformation."""
+
+    def test_transform_bbox_to_wgs84(self):
+        """Test transformation from EPSG:2180 to WGS84."""
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        result = envelope_from_2180(bbox, "EPSG:4326")
+
+        # Result should be (min_lon, min_lat, max_lon, max_lat)
+        min_lon, min_lat, max_lon, max_lat = result
+
+        # Check approximate bounds for Poland
+        assert 14 < min_lon < 25  # Poland longitude range
+        assert 49 < min_lat < 55  # Poland latitude range
+        assert min_lon < max_lon
+        assert min_lat < max_lat
+
+    def test_download_by_bbox_sends_envelope_covering_all_corners(self, tmp_path):
+        """WCS gets the WGS84 envelope of the whole rectangle, not just SW and NE."""
+        from pyproj import Transformer
+
+        from kartograf.core.sheet_parser import SheetParser
+
+        bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
+        provider = SoilGridsProvider()
+        with patch.object(provider, "_download_via_wcs") as wcs:
+            provider.download_by_bbox(
+                bbox, tmp_path / "x.tif", property="soc", depth="0-5cm", stat="mean"
+            )
+        min_lon, min_lat, max_lon, max_lat = wcs.call_args.kwargs["bbox_wgs84"]
+
+        transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
+        for x, y in (
+            (bbox.min_x, bbox.min_y),
+            (bbox.min_x, bbox.max_y),
+            (bbox.max_x, bbox.min_y),
+            (bbox.max_x, bbox.max_y),
+        ):
+            lon, lat = transformer.transform(x, y)
+            assert min_lon <= lon <= max_lon, f"corner {(x, y)}: lon outside envelope"
+            assert min_lat <= lat <= max_lat, f"corner {(x, y)}: lat outside envelope"
+
+        # Two corners span 0.1657 deg of latitude, the true envelope 0.1830 deg.
+        assert max_lat - min_lat > 0.18
+
+
+class TestSoilGridsTeryt:
+    """Test TERYT-related functionality."""
+
+    def test_validate_teryt_valid(self):
+        """Test TERYT validation with valid codes."""
+        provider = SoilGridsProvider()
+        assert provider.validate_teryt("1465") is True
+        assert provider.validate_teryt("1234567") is True
+
+    def test_validate_teryt_invalid(self):
+        """Test TERYT validation with invalid codes."""
+        provider = SoilGridsProvider()
+        assert provider.validate_teryt("") is False
+        assert provider.validate_teryt("123") is False
+        assert provider.validate_teryt("abc") is False
+
+    @pytest.mark.parametrize("code", ["1465", "invalid"])
+    def test_download_by_teryt_raises_not_implemented(self, code, tmp_path):
+        """TERYT selection is not supported - no data for a guessed area."""
+        provider = SoilGridsProvider()
+        with pytest.raises(NotImplementedError, match="TERYT"):
+            provider.download_by_teryt(code, tmp_path / "x.tif")
+
+    def test_download_by_admin_unit_raises_not_implemented(self, tmp_path):
+        """Canonical name behaves like the deprecated alias."""
+        provider = SoilGridsProvider()
+        with pytest.raises(NotImplementedError, match="TERYT"):
+            provider.download_by_admin_unit("1465", tmp_path / "x.tif")
+
+
+class TestSoilGridsDownload:
+    """Test download functionality with mocks."""
+
+    _BBOX = (19.0, 50.0, 19.1, 50.1)
+
+    def test_download_via_wcs_success(self, tmp_path):
+        """Test successful download."""
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.headers = {"Content-Type": "image/tiff"}
+        mock_response.iter_content.return_value = [b"fake tiff data"]
+        mock_response.raise_for_status = Mock()
+        mock_session.get.return_value = mock_response
+        provider = SoilGridsProvider(session=mock_session)
+
+        result = provider._download_via_wcs(
+            self._BBOX, tmp_path / "test.tif", "soc", "0-5cm", "mean", 30
+        )
+
+        assert result == tmp_path / "test.tif"
+        assert result.read_bytes() == b"fake tiff data"
+
+    @patch("kartograf.transport.http.time.sleep")
+    def test_download_via_wcs_xml_error(self, sleep, tmp_path):
+        """Test download handling WCS error response."""
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.headers = {"Content-Type": "application/xml"}
+        mock_response.text = "<ServiceExceptionReport>Error</ServiceExceptionReport>"
+        mock_response.raise_for_status = Mock()
+        mock_session.get.return_value = mock_response
+        provider = SoilGridsProvider(session=mock_session)
+
+        with pytest.raises(DownloadError, match="WCS returned error"):
+            provider._download_via_wcs(
+                self._BBOX, tmp_path / "test.tif", "soc", "0-5cm", "mean", 30
+            )
+        assert mock_session.get.call_count == 1
+        sleep.assert_not_called()
+        assert list(tmp_path.iterdir()) == []
+
+
+class TestSoilGridsCLI:
+    """Test CLI integration."""
+
+    def test_soil_list_sources_includes_soilgrids(self, capsys):
+        """The soil group exposes its registered descriptor."""
+        from kartograf.cli.commands import main
+
+        result = main(["soil", "list-sources"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "soilgrids" in captured.out
+        assert "SoilGrids" in captured.out
+
+    def test_soil_list_layers(self, capsys):
+        """Properties remain discoverable under the soil group."""
+        from kartograf.cli.commands import main
+
+        result = main(["soil", "list-layers"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "soc" in captured.out
+        assert "clay" in captured.out
+        assert "0-5cm" in captured.out
+        assert "mean" in captured.out
+
+
+class TestSoilGridsManager:
+    """Test LandCoverManager integration."""
+
+    def test_manager_soilgrids_provider(self):
+        """Test manager with soilgrids provider."""
+        from kartograf.landcover.manager import LandCoverManager
+
+        manager = LandCoverManager(root="data", provider="soilgrids")
+        assert manager.provider_name == "SoilGrids"
+
+    def test_manager_available_providers(self):
+        """Test that soilgrids is in available providers."""
+        from kartograf.landcover.manager import LandCoverManager
+
+        providers = LandCoverManager.get_available_providers()
+        assert "soilgrids" in providers
+
+
+class TestPropertyDescriptions:
+    """Test property descriptions dictionary."""
+
+    def test_all_properties_and_stats_have_descriptions(self):
+        """Every --property and --stat value has a description (--help and
+        ``soil list-layers``)."""
+        provider = SoilGridsProvider()
+        for prop in provider.PROPERTIES:
+            assert PROPERTY_DESCRIPTIONS[prop]
+        for stat in provider.STATS:
+            assert STAT_DESCRIPTIONS[stat]

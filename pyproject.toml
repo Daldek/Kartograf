@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Hydrology",
     "Typing :: Typed",
 ]
 dependencies = [
@@ -33,6 +34,9 @@ dependencies = [
     "numpy>=1.24.0",
     "pyshp>=2.3.0",
     "pyogrio>=0.10",
+    "platformdirs>=4",
+    # 2.1: orient_polygons (GeoJSON ring order of the PL-2000 sheet outlines).
+    "shapely>=2.1",
 ]
 
 [project.scripts]
@@ -41,50 +45,98 @@ kartograf-mcp = "kartograf.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/Daldek/Kartograf"
-Repository = "https://github.com/Daldek/Kartograf.git"
+Source = "https://github.com/Daldek/Kartograf"
+Documentation = "https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md"
+Changelog = "https://github.com/Daldek/Kartograf/blob/main/docs/CHANGELOG.md"
 Issues = "https://github.com/Daldek/Kartograf/issues"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["kartograf*"]
 
 [tool.setuptools.package-data]
-kartograf = ["py.typed"]
+kartograf = [
+    "py.typed",
+    "_data/agents/*.md",
+    "_data/pl2000_zones.json.gz",
+    "_data/pl2000_powiat_zones.json",
+]
 
 [tool.setuptools.dynamic]
 version = {attr = "kartograf.__version__"}
 
 [project.optional-dependencies]
+# MCP SDK v2: kartograf.mcp_server uses its low-level Server API; a major
+# release of the SDK may break it (known incompatibility, DEV-6.4).
 mcp = ["mcp>=2.3.0,<3"]
-dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.8", "mypy>=1.13", "mcp>=2.3.0,<3"]
+
+[dependency-groups]
+dev = ["ruff>=0.8", "mypy>=1.13", "pytest>=8.0", "pytest-cov>=5.0", "jsonschema>=4.18"]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 88
-# Local Claude Code settings and temporary agent worktrees (also in .gitignore)
-extend-exclude = [".claude"]
+# Local Claude Code settings and temporary agent worktrees (also in .gitignore);
+# Markdown code blocks are documentation examples, not formatted by ruff.
+extend-exclude = [".claude", "*.md"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests need no docstrings (DEV-7.2); the research scripts of docs/ are frozen
+# records of past investigations.
+"tests/**" = ["D"]
+"docs/**" = ["D", "C4"]
 
 [tool.ruff.format]
 quote-style = "double"
 
 [tool.mypy]
+strict = true
+files = ["src", "tests"]
 # Same as ruff: never descend into local agent worktrees (mypy .)
 exclude = ['^\.claude/']
 
 [[tool.mypy.overrides]]
-module = ["requests.*", "rasterio.*", "shapefile.*", "affine.*", "pyogrio.*", "jsonschema.*"]
+# Packages without type information (mypy cannot follow them).
+module = [
+    "rasterio.*",
+    "shapefile.*",
+    "affine.*",
+    "pyogrio.*",
+    "jsonschema.*",
+    "shapely",
+    "shapely.*",
+]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Shortfall of the tests (DEV-7.3; a deviation listed in CLAUDE.md): the test
+# functions and their fakes are not annotated, so their bodies are not checked.
+module = ["tests", "tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_any_generics = false
+warn_return_any = false
+check_untyped_defs = false
+warn_unused_ignores = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+# The default run and the gate exclude `live` (DEV-10.1); `-m live` replaces it.
+addopts = "--strict-markers -m 'not live' --tb=short"
 markers = [
-    "live: marks tests that require network access to GUGiK WMS (deselect with '-m \"not live\"')",
+    "live: real network services (GUGiK, CUZK, CLMS, ISRIC); run on demand and weekly in CI",
+    "slow: more than ~10 s or Docker",
+    "db: needs a database (none in this project)",
     "real_wms_layers: opt out of the offline GetCapabilities stub (tests that exercise _fetch_wms_layers itself)",
     "real_wfs_types: opt out of the offline WFS feature-type stub of the NMT/NMPT index services (tests that exercise WfsIndex.feature_types itself)",
 ]
@@ -94,7 +146,7 @@ source = ["kartograf"]
 omit = ["*/tests/*", "*/__init__.py"]
 
 [tool.coverage.report]
-fail_under = 60
+fail_under = 80
 show_missing = true
 exclude_lines = [
     "pragma: no cover",
