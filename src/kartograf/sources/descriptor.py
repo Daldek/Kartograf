@@ -24,6 +24,7 @@ archive of the same source, ADR-059). A new product of such a channel is a
 descriptor entry, not a provider.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
@@ -351,6 +352,17 @@ class ArchiveLayersParams:
     native_crs: str
     layers: tuple[FeatureLayer, ...]
     area_omitted: str | None = None
+
+
+def layer_groups_token(codes: Iterable[str]) -> str:
+    """Return the segment token of a choice of layer groups (ADR-059 decision 5).
+
+    The codes of ``ArchiveLayersParams.layers`` chosen by ``layers``: sorted,
+    lowercase, ``_`` written as ``-``, joined by ``-`` (``PGW_WP`` and ``SIG``:
+    ``pgw-wp-sig``). The writer names the segment with it and the read API of the
+    store knows the segment by it.
+    """
+    return "-".join(sorted(code.lower().replace("_", "-") for code in codes))
 
 
 ChannelParams = (

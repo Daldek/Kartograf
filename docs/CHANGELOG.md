@@ -93,6 +93,8 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
   archive, else `missing`); no feature in the area is a `no_coverage` failure; in a plain write
   (`-o DIR`) the archive is fetched into the staging directory and only `<coords>.gpkg` is
   written. `--layers` with `--whole-country` or `--product network` is a `validation_error`.
+  The read API of the store (`describe_segment`, `iter_store`) knows the segments `hydro/pl_pgw`
+  and `hydro/pl_pgw_<layers>` (`layer_groups_token` of `kartograf.sources.descriptor`).
 - `kartograf.testing.build_pgw_archive(path)` and `build_pgw_store(root)` (`PgwFixture`,
   `PGW_DATASET`, `PGW_ARCHIVE_SEGMENT`, `PGW_AREA`): a tiny archive with the published
   structure of the geodatabase (feature datasets, layers, fields, CRS definition), built offline

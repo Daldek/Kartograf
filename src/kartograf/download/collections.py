@@ -187,6 +187,7 @@ from kartograf.sources.descriptor import (
     SignalKind,
     SourceDescriptor,
     UnitPackageParams,
+    layer_groups_token,
 )
 from kartograf.sources.edition import Edition
 from kartograf.sources.registry import (
@@ -1576,7 +1577,7 @@ def _archive_content(
         )
     chosen = {spelled[code.upper()] for code in wanted}
     published = [code for code in codes if code in chosen]
-    token = "-".join(sorted(code.lower().replace("_", "-") for code in published))
+    token = layer_groups_token(published)
     layers = tuple(layer for layer in params.layers if layer.code in chosen)
     return layers, (token,), {"layers": published}
 

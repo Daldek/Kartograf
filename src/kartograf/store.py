@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import itertools
 import json
 import os
 import re
@@ -35,12 +36,14 @@ from kartograf.download.versions import INCOMING_DIR, STALE_AFTER_S, VERSIONS_DI
 from kartograf.exceptions import InvalidSidecarError, ValidationError
 from kartograf.messages import message, reason
 from kartograf.sources.descriptor import (
+    ArchiveLayersParams,
     AtomFilesParams,
     FeatureBBoxParams,
     SheetIndexParams,
     SourceDescriptor,
     UnitPackageParams,
     WcsCutoutParams,
+    layer_groups_token,
 )
 from kartograf.sources.registry import all_sources, get_source
 from kartograf.sources.variants import parse_resolution
@@ -659,7 +662,7 @@ def _content_variant(descriptor: SourceDescriptor, suffix: str) -> str | None:
                 isinstance(params, FeatureBBoxParams)
                 and params.selection == "all"
                 and not params.choice
-            ):
+            ) or isinstance(params, ArchiveLayersParams):
                 return ""
         return None
     for channel in descriptor.channels:
@@ -700,6 +703,13 @@ def _content_variant(descriptor: SourceDescriptor, suffix: str) -> str | None:
                 and parts[-1] in (layer.code.lower() for layer in params.layers)
             ):
                 return " · " + " · ".join(parts)
+        elif isinstance(params, ArchiveLayersParams) and len(parts) == 1:
+            # the layer groups chosen by ``layers`` (ADR-059 decision 5)
+            codes = tuple(dict.fromkeys(layer.code for layer in params.layers))
+            for size in range(1, len(codes) + 1):
+                for chosen in itertools.combinations(codes, size):
+                    if parts[0] == layer_groups_token(chosen):
+                        return " · " + ", ".join(chosen)
     return None
 
 
@@ -708,7 +718,12 @@ def _content_variant(descriptor: SourceDescriptor, suffix: str) -> str | None:
 _PREFIX_ONLY = frozenset(
     {"pl.gugik.bdot10k", "eu.clms.corine", "global.isric.soilgrids"}
 )
-_COLLECTION_PARAMS = (UnitPackageParams, AtomFilesParams, FeatureBBoxParams)
+_COLLECTION_PARAMS = (
+    UnitPackageParams,
+    AtomFilesParams,
+    FeatureBBoxParams,
+    ArchiveLayersParams,
+)
 
 
 def _bare_template(descriptor: SourceDescriptor) -> bool:
