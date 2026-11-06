@@ -29,11 +29,18 @@ from kartograf import (
     list_segments,
     read_sidecar,
 )
-from kartograf.exceptions import DownloadError, InvalidSidecarError, ValidationError
+from kartograf.download.collections import download_collection
+from kartograf.exceptions import (
+    CommandNotRebuildableError,
+    DownloadError,
+    InvalidSidecarError,
+    ValidationError,
+)
 from kartograf.testing import (
     CZ_SEGMENT,
     PGW_ARCHIVE_SEGMENT,
     PGW_AREA,
+    PGW_AREA_SEGMENT,
     PL_SEGMENT,
     PL_SHEET,
     VARIANTS,
@@ -378,19 +385,27 @@ def test_pgw_archive_bytes_do_not_change_between_builds(pgw_archive):
     assert _pgw_archive_bytes.__wrapped__() == pgw_archive.read_bytes()
 
 
-def test_pgw_store_holds_the_archive_as_the_whole_country_command_stores_it(
-    tmp_path, pgw_archive
-):
-    store = build_pgw_store(tmp_path / "data")
+@pytest.fixture(scope="module")
+def pgw_store(tmp_path_factory: pytest.TempPathFactory):
+    return build_pgw_store(tmp_path_factory.mktemp("pgw-store") / "data")
 
-    assert list_segments(store.root) == [PGW_ARCHIVE_SEGMENT]
-    entries = list(iter_store(store.root))
-    assert sorted(entry.kind for entry in entries) == ["link", "version"]
+
+def test_pgw_store_holds_the_archive_as_the_whole_country_command_stores_it(
+    pgw_store, pgw_archive
+):
+    assert list_segments(pgw_store.root) == [PGW_ARCHIVE_SEGMENT, PGW_AREA_SEGMENT]
+    entries = list(iter_store(pgw_store.root))
+    assert sorted(entry.kind for entry in entries) == [
+        "link",
+        "link",
+        "version",
+        "version",
+    ]
     assert all(entry.problem is None for entry in entries)
-    (version,) = store.archive.versions
+    (version,) = pgw_store.archive.versions
     assert (version.label, version.status) == ("2023-09-15", "new")
     assert version.path.read_bytes() == pgw_archive.read_bytes()
-    assert store.archive.path.samefile(version.path)
+    assert pgw_store.archive.path.samefile(version.path)
     meta = read_sidecar(version.path)
     assert (meta.dataset_key, meta.product, meta.unit) == ("pl.pgw.pgw", "pgw", "pl")
     assert meta.request == {"whole_country": True}
@@ -401,6 +416,56 @@ def test_pgw_store_holds_the_archive_as_the_whole_country_command_stores_it(
         "country": "pl",
         "whole_country": True,
     }
+
+
+def test_pgw_store_holds_the_area_geopackage_the_area_command_writes(tmp_path):
+    """The GeoPackage of ``PGW_AREA`` with the layers of ``PGW_WP``, written from
+    the stored archive it names: the same request reuses it without a request,
+    and ``command_for_file`` refuses it (a file chosen by an area)."""
+    pgw_store = build_pgw_store(tmp_path / "data")
+    (version,) = pgw_store.area.versions
+    (archive,) = pgw_store.archive.versions
+    meta = read_sidecar(version.path)
+
+    again = download_collection(
+        product="pgw",
+        country="pl",
+        bbox=PGW_AREA,
+        layers=["PGW_WP"],
+        root=pgw_store.root,
+        cache=False,
+    )
+
+    assert (pgw_store.area.segment, pgw_store.area.unit) == (
+        PGW_AREA_SEGMENT,
+        "380000_540000_390000_550000",
+    )
+    assert (version.label, version.status) == ("2023-09-15", "new")
+    assert pgw_store.area.path.samefile(version.path)
+    layers = [str(name) for name, _ in pyogrio.list_layers(version.path)]
+    assert len(layers) == 16 and "zlewnie_jcwp_rzecznych" in layers
+    catchments = pyogrio.read_info(version.path, layer="zlewnie_jcwp_rzecznych")
+    assert (catchments["features"], catchments["crs"]) == (3, "EPSG:2180")
+    assert meta.request == {
+        "bbox": [380000.0, 540000.0, 390000.0, 550000.0],
+        "bbox_crs": "EPSG:2180",
+        "layers": ["PGW_WP"],
+    }
+    assert meta.extra is not None
+    assert [(f["sha256"], f["label"]) for f in meta.extra["source_files"]] == [
+        (archive.sha256, archive.label)
+    ]
+    (reused,) = again.files
+    assert (reused.file.status, reused.file.version_path) == ("reused", version.path)
+    with pytest.raises(CommandNotRebuildableError):
+        command_for_file(meta)
+
+
+def test_two_pgw_store_builds_are_byte_identical(tmp_path, pgw_store):
+    """The GeoPackage and the sidecars too: a fixed clock and a fixed GDAL date."""
+    again = build_pgw_store(tmp_path / "data")
+
+    assert _tree(again.root) == _tree(pgw_store.root)
 
 
 # --- make_sidecar ------------------------------------------------------------------

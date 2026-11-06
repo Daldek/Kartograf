@@ -177,3 +177,8 @@ into `develop` (DEV-3.3).
   with `--whole-country`) with a parity scenario and the `inputs` row of the JSON contract. The CLI prints the
   `inputs` of a collection report before its files, as `soil hsg` does. The generated guides and tables did not
   change.
+- The rest of step 7: `build_pgw_store` also holds the GeoPackage of `PGW_AREA` written by `hydro download
+  --layers PGW_WP` from the stored archive (`PgwFixture.area`, `PGW_AREA_SEGMENT`); its test found that the read
+  API did not know the area segments (`unknown_segment`), fixed in `store.py` with one token rule shared with the
+  writer (`layer_groups_token`). `command_for_file` rebuilds the archive and refuses the area file (tests in
+  `tests/unit/test_testing.py`).

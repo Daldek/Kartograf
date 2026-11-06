@@ -299,7 +299,7 @@ def test_area_check_judges_the_geopackage_by_the_local_archive(
     empty = tmp_path / "empty"
     session = _published(archive)
     monkeypatch.setattr(col, "_session", lambda: session)
-    choice = {**AREA, "layers": ["PGW_WP"]}
+    choice = {**AREA, "layers": ["SIG"]}
 
     def statuses(root: Path) -> list[tuple[str, str]]:
         plan = check_collection(**choice, root=root)
@@ -314,18 +314,18 @@ def test_area_check_judges_the_geopackage_by_the_local_archive(
 
     assert before == [
         (PGW_ARCHIVE_SEGMENT, "missing"),
-        ("hydro/pl_pgw_pgw-wp", "missing"),
+        ("hydro/pl_pgw_sig", "missing"),
     ]
     assert [(item.segment, item.status) for item in plan.items] == [
         (PGW_ARCHIVE_SEGMENT, "unverifiable"),
-        ("hydro/pl_pgw_pgw-wp", "missing"),
+        ("hydro/pl_pgw_sig", "missing"),
     ]
     assert upgraded.ok and upgraded.stale == ()
     assert [item.file.status for item in upgraded.files] == ["new"]
     assert [item.file.status for item in upgraded.inputs] == ["local"]
     assert after == [
         (PGW_ARCHIVE_SEGMENT, "unverifiable"),
-        ("hydro/pl_pgw_pgw-wp", "current"),
+        ("hydro/pl_pgw_sig", "current"),
     ]
     assert session.calls == []
 
@@ -377,7 +377,6 @@ def test_geometry_area_is_its_envelope(tmp_path):
         product="pgw",
         country="pl",
         geometry=geometry,
-        layers=["PGW_WP"],
         root=store.root,
         cache=False,
     )
@@ -406,7 +405,7 @@ def test_area_without_features_fails_with_no_coverage(tmp_path):
         "700000_200000_701000_201000",
         "no_coverage",
     )
-    assert list(store.root.rglob("*.gpkg")) == []
+    assert list(store.root.rglob("700000_200000_701000_201000*")) == []
 
 
 def test_area_whose_archive_fails_has_no_geopackage(tmp_path, monkeypatch):

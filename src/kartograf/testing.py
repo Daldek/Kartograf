@@ -37,6 +37,9 @@ The PGW store (``build_pgw_store``, ADR-059)::
     hydro/pl_pgw_gdb/                        the national IIaPGW geodatabase archive
         country/pl.zip                               standard path (hard link)
         versions/country/2023-09-15_<sha8>/pl.zip    the edition 2023-09-15
+    hydro/pl_pgw_pgw-wp/                     the GeoPackage of PGW_AREA, --layers PGW_WP
+        bbox/380000_540000_390000_550000.gpkg        standard path (hard link)
+        versions/bbox/2023-09-15_<sha8>/380000_540000_390000_550000.gpkg
 
 Its archive (``build_pgw_archive``) is a tiny File Geodatabase in a ZIP with the
 published structure of the real one: the geodatabase name of the edition, the
@@ -45,7 +48,9 @@ feature datasets ``PGW_WP``, ``JCWPd`` and ``SIG`` with their 25 spatial layers
 and the attribute table ``Charakterystyka_JCWP``, recorded from the archive of
 2023-09-15 in ``_data/pgw_geodatabase.json`` (``scripts/build_pgw_geodatabase.py``).
 Its features are fictional and lie around ``PGW_AREA``; the archive is stored by
-the job of ``hydro download --whole-country`` itself, served from memory.
+the job of ``hydro download --whole-country`` itself, served from memory, and the
+GeoPackage is what ``hydro download --bbox <PGW_AREA> --layers PGW_WP`` (the
+request of Hydrograf) writes from that stored archive.
 """
 
 import contextlib
@@ -73,6 +78,7 @@ from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import path_parts
 from kartograf.download.campaigns import FULL_SHEET_DIR, CampaignRef
 from kartograf.download.collections import (
+    download_collection,
     package_job,
     run_job,
     validate_collection_request,
@@ -103,6 +109,7 @@ __all__ = [
     "CZ_SHEET",
     "PGW_DATASET",
     "PGW_ARCHIVE_SEGMENT",
+    "PGW_AREA_SEGMENT",
     "PGW_AREA",
     "VARIANTS",
     "Variant",
@@ -134,6 +141,8 @@ PGW_ARCHIVE_SEGMENT = "hydro/pl_pgw_gdb"
 # The 10 x 10 km square of EPSG:2180 around which the features of the PGW
 # archive lie (``build_pgw_archive``).
 PGW_AREA = BBox(380000.0, 540000.0, 390000.0, 550000.0, "EPSG:2180")
+# The segment of the GeoPackage of ``PGW_AREA`` with the layers of ``PGW_WP``.
+PGW_AREA_SEGMENT = "hydro/pl_pgw_pgw-wp"
 
 _PL_DATASET = "pl.gugik.nmt_1m"
 _CZ_DATASET = "cz.cuzk.dmr4g"
@@ -591,10 +600,16 @@ class PgwFixture:
     archive : FixtureFile
         The national archive: segment ``PGW_ARCHIVE_SEGMENT``, unit ``pl``, one
         version labelled by the edition ``2023-09-15``.
+    area : FixtureFile
+        The GeoPackage of ``PGW_AREA`` with the 16 layers of ``PGW_WP``: segment
+        ``PGW_AREA_SEGMENT``, unit ``380000_540000_390000_550000``, one version
+        labelled by the edition of the archive, whose sidecar names that archive
+        version (``extra.source_files``).
     """
 
     root: Path
     archive: FixtureFile
+    area: FixtureFile
 
 
 # --- writers -------------------------------------------------------------------
@@ -836,6 +851,34 @@ def _pgw_archive_file(root: Path, body: bytes) -> FixtureFile:
     )
 
 
+def _pgw_area_file(root: Path) -> FixtureFile:
+    """Write the GeoPackage of ``PGW_AREA`` by ``hydro download --layers PGW_WP``.
+
+    The command itself reads the archive already stored in ``root``: no request.
+    """
+    report = download_collection(
+        product="pgw",
+        country="pl",
+        bbox=PGW_AREA,
+        layers=["PGW_WP"],
+        root=root,
+        cache=False,
+    )
+    assert report.ok and len(report.files) == 1
+    (area,) = report.files
+    stored = area.file
+    version = FixtureVersion(
+        stored.label,
+        stored.sha256,
+        stored.size_bytes,
+        stored.version_path,
+        _commit_status(stored.status),
+    )
+    return FixtureFile(
+        PGW_AREA_SEGMENT, area.unit, PGW_DATASET, stored.path, None, (version,)
+    )
+
+
 # --- public API ----------------------------------------------------------------
 
 
@@ -969,14 +1012,21 @@ def build_pgw_archive(path: str | Path) -> Path:
 
 
 def build_pgw_store(root: str | Path) -> PgwFixture:
-    """Build a store with the national PGW archive under ``root``, offline.
+    """Build a store with the national PGW archive and an area of it, offline.
 
     The archive of ``build_pgw_archive`` is stored by the job of ``hydro download
     --product pgw --country pl --whole-country`` with its requests answered from
     memory: the version ``2023-09-15_<sha8>`` of ``hydro/pl_pgw_gdb/country/pl.zip``
     with the sidecar that command writes (``request`` ``{"whole_country": true}``,
     ``extra.source``, ``extra.http``, ``extra.version``) and the standard path
-    linked to it.
+    linked to it. Then ``hydro download --product pgw --country pl --bbox
+    380000,540000,390000,550000 --bbox-crs EPSG:2180 --layers PGW_WP`` writes the
+    GeoPackage of ``PGW_AREA`` from that archive: the version ``2023-09-15_<sha8>``
+    of ``hydro/pl_pgw_pgw-wp/bbox/380000_540000_390000_550000.gpkg`` (EPSG:2180,
+    the 16 layers of ``PGW_WP``, three river catchments) with its sidecar
+    (``request`` with ``layers``, ``extra.source`` with the layers and their
+    features, ``extra.source_files`` naming the archive version) and the standard
+    path linked to it. The same request on the store reuses that version.
 
     Parameters
     ----------
@@ -986,7 +1036,7 @@ def build_pgw_store(root: str | Path) -> PgwFixture:
     Returns
     -------
     PgwFixture
-        ``root`` and the archive with its version.
+        ``root``, the archive and the GeoPackage with their versions.
 
     Raises
     ------
@@ -1001,15 +1051,16 @@ def build_pgw_store(root: str | Path) -> PgwFixture:
     >>> from kartograf.testing import build_pgw_store
     >>> with tempfile.TemporaryDirectory() as tmp:
     ...     store = build_pgw_store(Path(tmp) / "data")
-    ...     print(list_segments(store.root), store.archive.versions[0].label)
-    ['hydro/pl_pgw_gdb'] 2023-09-15
+    ...     print(list_segments(store.root), store.area.versions[0].label)
+    ['hydro/pl_pgw_gdb', 'hydro/pl_pgw_pgw-wp'] 2023-09-15
     """
     base = _new_root(root)
     with _fixed_clock():
         prepare_store(base)  # the marker, as the first write into a root writes it
         archive = _pgw_archive_file(base, _pgw_archive_bytes())
+        area = _pgw_area_file(base)
     _remove_staging(base)
-    return PgwFixture(base, archive)
+    return PgwFixture(base, archive, area)
 
 
 def make_sidecar(

@@ -96,10 +96,13 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
   The read API of the store (`describe_segment`, `iter_store`) knows the segments `hydro/pl_pgw`
   and `hydro/pl_pgw_<layers>` (`layer_groups_token` of `kartograf.sources.descriptor`).
 - `kartograf.testing.build_pgw_archive(path)` and `build_pgw_store(root)` (`PgwFixture`,
-  `PGW_DATASET`, `PGW_ARCHIVE_SEGMENT`, `PGW_AREA`): a tiny archive with the published
-  structure of the geodatabase (feature datasets, layers, fields, CRS definition), built offline
-  with fictional features around `PGW_AREA`, and a store holding it as the command stores it.
-  `scripts/build_pgw_geodatabase.py` records that structure from the downloaded archive.
+  `PGW_DATASET`, `PGW_ARCHIVE_SEGMENT`, `PGW_AREA_SEGMENT`, `PGW_AREA`): a tiny archive with
+  the published structure of the geodatabase (feature datasets, layers, fields, CRS definition),
+  built offline with fictional features around `PGW_AREA`, and a store holding it as the command
+  stores it, with the GeoPackage of `PGW_AREA` that `hydro download --layers PGW_WP` writes from
+  it (`PgwFixture.area`: `hydro/pl_pgw_pgw-wp/bbox/380000_540000_390000_550000.gpkg`, the
+  request of Hydrograf). `scripts/build_pgw_geodatabase.py` records that structure from the
+  downloaded archive.
 
 ### Projects move to Archiwista (ADR-057)
 
