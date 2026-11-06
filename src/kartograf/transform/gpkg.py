@@ -48,7 +48,8 @@ features in id order, the layer geometry type from the geometries (one
 family -> its Multi type, else ``Unknown``) or, for an empty layer, from the
 schema; ``OGR_CURRENT_DATE`` is fixed while writing, so the same pages give
 the same bytes (per GDAL version). GDAL config options are process-wide: one
-lock serialises the configured GDAL work of this module (parallel jobs).
+lock (``gdal_config``) serialises the configured GDAL work of this module
+(parallel jobs) and of the fixtures ``kartograf.testing`` writes with GDAL.
 """
 
 import json
@@ -198,8 +199,12 @@ def write_gpkg(
 
 
 @contextmanager
-def _gdal_config(options: dict[str, str]) -> Iterator[None]:
-    """GDAL config options for the block, then the previous values again."""
+def gdal_config(options: dict[str, str]) -> Iterator[None]:
+    """Set GDAL config options for the block, then the previous values again.
+
+    The options are process-wide, so one lock serialises every configured GDAL
+    work of Kartograf.
+    """
     with _GDAL_LOCK:
         previous = {key: pyogrio.get_gdal_config_option(key) for key in options}
         pyogrio.set_gdal_config_options(options)
@@ -247,7 +252,7 @@ def _read_wfs(
     if _declares_types(layer_pages.schema):
         options["XSD"] = str(layer_pages.schema)
     table: _Table | None = None
-    with _gdal_config({"GML_FETCH_ALL_GEOMETRIES": "YES"}):
+    with gdal_config({"GML_FETCH_ALL_GEOMETRIES": "YES"}):
         for page in layer_pages.pages:
             try:
                 meta, _, geometries, values = pyogrio.raw.read(page, **options)
@@ -749,7 +754,7 @@ def _write_layer(
         for name in names
         if name in table.utc
     }
-    with _gdal_config({"OGR_CURRENT_DATE": _FIXED_DATE}):
+    with gdal_config({"OGR_CURRENT_DATE": _FIXED_DATE}):
         pyogrio.raw.write(
             path,
             geometry,

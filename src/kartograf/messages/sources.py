@@ -130,6 +130,16 @@ MESSAGES = {
         "plik krajowy GPKG (ok. 194 MB) w EPSG:3045 (kategoria feedu ATOM), tylko z "
         "--whole-country",
     ),
+    "pgw_name": Text(
+        "IIaPGW geodatabase - water management plans 2022-2027 (PGW Wody Polskie)",
+        "Geobaza IIaPGW - plany gospodarowania wodami 2022-2027 (PGW Wody Polskie)",
+    ),
+    "pgw_national_gdb_note": Text(
+        "national ZIP of the File Geodatabase (approx. 142 MB, EPSG:2180, edition "
+        "2023-09-15) stored as published, only with --whole-country",
+        "krajowy ZIP z File Geodatabase (ok. 142 MB, EPSG:2180, wydanie 2023-09-15) "
+        "zapisany 1:1, tylko z --whole-country",
+    ),
     "cz_dmr5g_name": Text(
         "DMR 5G - Digitalni model reliefu 5. generace (2 m, ImageServer: TM33 tile "
         "and cutout)",

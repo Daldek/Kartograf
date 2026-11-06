@@ -87,6 +87,14 @@ _CUZK_LICENSE = LicenseInfo(
     url="https://geoportal.cuzk.gov.cz",
 )
 
+# The IIaPGW publication names no licence (its page, 2026-11-06): the id names the
+# conditions of that publication, the attribution quotes its reservation (ADR-059).
+_PGW_LICENSE = LicenseInfo(
+    id="PL-APGW",
+    attribution=message("legal.pgw_attribution"),
+    url="https://apgw.gov.pl/pl/III-cykl-materialy-do-pobrania",
+)
+
 _PL_VERTICAL_BOTH = ("EPSG:9650", "EPSG:9651")
 
 # --- Collection channels of GUGiK (ADR-042, plan C) ---------------------------
@@ -2381,6 +2389,52 @@ _PL_GEOID2021 = SourceDescriptor(
 )
 _E5_PL_SOURCES = (_PL_MESH, _PL_TREES, _PL_CONTROL, _PL_GEOID2021)
 
+# --- PGW Wody Polskie (ADR-059) -------------------------------------------------
+# The spatial geodatabase of the second update of the river basin management plans
+# (IIaPGW, 2022-2027): one File Geodatabase in a ZIP, the only spatial file of
+# https://apgw.gov.pl/pl/III-cykl-materialy-do-pobrania (HEAD recorded 2026-11-06,
+# tests/fixtures/pl/pgw: 200, application/zip, 142048450 B, no ETag or
+# Last-Modified - signal none). The file id and the name in the URL name the
+# edition; the member check finds its date in the geodatabase name, so a file of
+# another edition behind the URL is never a version under this label.
+_PGW_DOWNLOAD = "https://wody.isok.gov.pl/api/repo-mdd/publ/download/file"
+_PL_PGW = SourceDescriptor(
+    key="pl.pgw.pgw",
+    country="PL",
+    product="pgw",
+    name=message("sources.pgw_name"),
+    provider_name="PGW Wody Polskie",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="none",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_PGW_DOWNLOAD}/",
+            notes=message("sources.pgw_national_gdb_note"),
+            params=UnitPackageParams(
+                unit="country",
+                variants=(
+                    PackageVariant(
+                        choice=(),
+                        url_template=(
+                            f"{_PGW_DOWNLOAD}/bccfebcf31ac47799fe1de6294b73c29/"
+                            "geobaza-2apgw-ver-20230915-gdb-zip"
+                        ),
+                        edition="2023-09-15",
+                        segment_tokens=("gdb",),
+                        members=("_ver_20230915.gdb/gdb",),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="hydro/pl_pgw",
+    default_extension=".gpkg",
+    license=_PGW_LICENSE,
+)
+
 # Survey control of CR (raport E, wiersz 23; service and layers recorded
 # 2026-10-16, tests/fixtures/cz/survey_control): --network -> the point layers
 # of BodovaPole/MapServer, layer names without diacritics. The points
@@ -2781,6 +2835,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         *_E4_PL_SOURCES,
         # plan E - E5: mesh 3D, 3D trees, survey control networks, PL-geoid2021.
         *_E5_PL_SOURCES,
+        # ADR-059: the water management plan data of PGW Wody Polskie.
+        _PL_PGW,
         SourceDescriptor(
             key="eu.clms.corine",
             country="EU",

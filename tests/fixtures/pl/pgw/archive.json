@@ -1,0 +1,24 @@
+{
+ "recorded": "2026-11-06",
+ "page": "https://apgw.gov.pl/pl/III-cykl-materialy-do-pobrania",
+ "url": "https://wody.isok.gov.pl/api/repo-mdd/publ/download/file/bccfebcf31ac47799fe1de6294b73c29/geobaza-2apgw-ver-20230915-gdb-zip",
+ "head": {
+  "status": 200,
+  "headers": {
+   "Content-Type": "application/zip",
+   "Content-Length": "142048450",
+   "Content-Disposition": "attachment; filename=Geobaza_2aPGW_ver_20230915.gdb.zip"
+  }
+ },
+ "members_total": 304,
+ "members": [
+  "Geobaza_2aPGW_ver_20230915.gdb/",
+  "Geobaza_2aPGW_ver_20230915.gdb/a00000001.gdbindexes",
+  "Geobaza_2aPGW_ver_20230915.gdb/a00000001.gdbtable",
+  "Geobaza_2aPGW_ver_20230915.gdb/a00000001.gdbtablx",
+  "Geobaza_2aPGW_ver_20230915.gdb/a00000001.TablesByName.atx",
+  "Geobaza_2aPGW_ver_20230915.gdb/a00000002.gdbtable",
+  "Geobaza_2aPGW_ver_20230915.gdb/gdb",
+  "Geobaza_2aPGW_ver_20230915.gdb/timestamps"
+ ]
+}

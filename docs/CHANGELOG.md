@@ -60,6 +60,25 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
   `output_in_store` refusal, the `conflict` exit code, the path of a plain report, no sidecar
   for a plain file).
 
+### Water management plan data of PGW Wody Polskie (ADR-059)
+
+**Added**
+
+- `hydro download --product pgw --country pl --whole-country`
+  (`download_collection(product="pgw", country="pl", whole_country=True)`): the spatial
+  geodatabase of the second update of the river basin management plans (IIaPGW, 2022-2027) of
+  PGW Wody Polskie, stored as published in `hydro/pl_pgw_gdb/country/pl.zip` and labelled by
+  its edition, `2023-09-15`. The archive must hold the geodatabase of that edition (a member
+  ending in `_ver_20230915.gdb/gdb`); the source sends no freshness signal, so `--check` says
+  `unverifiable`. The sidecar names the source and the reservation of the publication
+  (`license` id `PL-APGW`). The group `hydro` offers `--country pl`; the GeoPackage of an area
+  comes next (plan `docs/plans/2026-11-06-pgw-water-management-plan-data.md`).
+- `kartograf.testing.build_pgw_archive(path)` and `build_pgw_store(root)` (`PgwFixture`,
+  `PGW_DATASET`, `PGW_ARCHIVE_SEGMENT`, `PGW_AREA`): a tiny archive with the published
+  structure of the geodatabase (feature datasets, layers, fields, CRS definition), built offline
+  with fictional features around `PGW_AREA`, and a store holding it as the command stores it.
+  `scripts/build_pgw_geodatabase.py` records that structure from the downloaded archive.
+
 ### Projects move to Archiwista (ADR-057)
 
 **Breaking**

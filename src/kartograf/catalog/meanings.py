@@ -49,6 +49,7 @@ MEANINGS: Final[Mapping[str, Mapping[str, str]]] = {
         "mesh": "3D city mesh models (OBJ with textures); PL.",
         "trees": "3D tree models (CityGML, LoD1); PL.",
         "network": "HY-NET hydrographic network (INSPIRE Hydrography - Network); CZ.",
+        "pgw": "IIaPGW geodatabase of the water management plans (PGW); PL.",
         "geographic": "Geographic names: PRNG (PL), Geonames (CZ).",
         "world": "Polish geographic names of the world (PRNG); PL.",
         "topographic": "Topographic maps: BDOT10k visualisations (PL), ZTM (CZ).",

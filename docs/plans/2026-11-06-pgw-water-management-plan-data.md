@@ -159,3 +159,10 @@ into `develop` (DEV-3.3).
 (filled in per step)
 
 - Step 1: this plan, ADR-059 and PROGRESS item 27.
+- Step 2, with step 3 and the archive part of step 7: `pl.pgw.pgw` and its national channel
+  (`--whole-country` stores the ZIP 1:1, label `2023-09-15`, the edition marker required, signal `none`), the
+  `hydro` texts and an example, the attribution in `messages/legal.py`; `kartograf.testing.build_pgw_archive` and
+  `build_pgw_store` replace the planned cut of the real archive: a tiny File Geodatabase in a ZIP with the
+  structure recorded from the real one (`_data/pgw_geodatabase.json`, `scripts/build_pgw_geodatabase.py`),
+  stored by the job of the command with its requests answered from memory; the recorded `HEAD` in
+  `tests/fixtures/pl/pgw/`.

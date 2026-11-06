@@ -60,6 +60,7 @@ kartograf = [
     "_data/agents/*.md",
     "_data/pl2000_zones.json.gz",
     "_data/pl2000_powiat_zones.json",
+    "_data/pgw_geodatabase.json",
 ]
 
 [tool.setuptools.dynamic]

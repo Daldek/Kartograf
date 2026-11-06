@@ -126,6 +126,9 @@ _OPENZU_HEAD = {
         (_CUZK_FIXTURES / "openzu_head.json").read_text(encoding="utf-8")
     )["responses"]
 }
+# The only spatial file of the IIaPGW publication (ADR-059, recorded 2026-11-06).
+_PGW_FIXTURE = Path(__file__).parent.parent / "fixtures" / "pl" / "pgw" / "archive.json"
+_PGW_RECORDED = json.loads(_PGW_FIXTURE.read_text(encoding="utf-8"))
 
 
 # Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md;
@@ -163,6 +166,7 @@ CHANNEL_SIGNALS = [
     ("cz.cuzk.hynet", TransportKind.DIRECT_FILES, "http"),
     ("cz.cuzk.orto", TransportKind.DIRECT_FILES, "metadata"),
     ("pl.gugik.nmt_100m", TransportKind.DIRECT_FILES, "metadata"),
+    ("pl.pgw.pgw", TransportKind.DIRECT_FILES, "none"),
 ]
 
 
@@ -915,6 +919,33 @@ class TestCollectionChannels:
             assert (d.product, d.storage_subdir) == (product, subdir)
             assert d.license == pl["pl.gugik.bdot10k"].license
             assert all(ch.horizontal_crs == "EPSG:2180" for ch in d.channels)
+
+    def test_pgw_archive_is_the_recorded_publication(self):
+        """The national channel of PGW (ADR-059): the recorded URL, the version
+        label = the edition date of the published file name, and one required
+        member that only an archive of that edition holds (its geodatabase
+        marker)."""
+        d = get_source("pl.pgw.pgw")
+        (national,) = (
+            ch
+            for ch in d.channels
+            if isinstance(ch.params, UnitPackageParams) and ch.params.unit == "country"
+        )
+        assert isinstance(national.params, UnitPackageParams)
+        (variant,) = national.params.variants
+        assert variant.url_template == _PGW_RECORDED["url"]
+        disposition = _PGW_RECORDED["head"]["headers"]["Content-Disposition"]
+        stamp = re.search(r"_ver_(\d{4})(\d{2})(\d{2})\.gdb\.zip$", disposition)
+        assert stamp is not None
+        assert variant.edition == "-".join(stamp.groups())
+        (marker,) = variant.members
+        matched = [
+            name
+            for name in _PGW_RECORDED["members"]
+            if name.lower().endswith(marker.lower())
+        ]
+        assert matched == ["Geobaza_2aPGW_ver_20230915.gdb/gdb"]
+        assert d.license.url == _PGW_RECORDED["page"]
 
     def test_bdot10k_archive_is_channel_of_bdot10k(self):
         d = get_source("pl.gugik.bdot10k")

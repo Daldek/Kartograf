@@ -91,7 +91,7 @@ One line per command: name, `operation_id`, summary. Options, allowed values, un
 - `cadastre list-sources` (`kartograf_cadastre_list_sources`): List the registered data sources of the cadastre group (offline)
 - `models3d download` (`kartograf_models3d_download`): Download 3D models: building and tree county packages or city mesh tiles (PL)
 - `models3d list-sources` (`kartograf_models3d_list_sources`): List the registered data sources of the models3d group (offline)
-- `hydro download` (`kartograf_hydro_download`): Download the CZ water network (HY-NET) for an area or the national file
+- `hydro download` (`kartograf_hydro_download`): Download hydrography: the CZ water network (HY-NET) or the PL water management plan data (PGW)
 - `hydro list-sources` (`kartograf_hydro_list_sources`): List the registered data sources of the hydro group (offline)
 - `names download` (`kartograf_names_download`): Download geographic names of an area or the national files (PL, CZ, world)
 - `names list-sources` (`kartograf_names_list_sources`): List the registered data sources of the names group (offline)

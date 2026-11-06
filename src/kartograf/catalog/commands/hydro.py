@@ -1,4 +1,4 @@
-"""``kartograf hydro``: hydrography - the HY-NET water network (CUZK) (ADR-042 D16)."""
+"""``kartograf hydro``: hydrography - HY-NET (CUZK, ADR-042 D16) and PGW (ADR-059)."""
 
 from kartograf.catalog.commands._collection import (
     collection_commands,
@@ -26,8 +26,13 @@ COMMANDS = collection_commands(
             {"product": "network", "country": "cz", "whole_country": True},
             title=message("catalog_hydro.example_water_network_national_file"),
         ),
+        Example(
+            {"product": "pgw", "country": "pl", "whole_country": True},
+            title=message("catalog_hydro.example_pgw_national_archive"),
+        ),
     ),
-    # sheet codes and TERYT select PL areas; HY-NET is CZ only
+    # no sheet or TERYT selection: PGW catchments are taken for a study area, and
+    # HY-NET is CZ (ADR-059 decision 1)
     sheet=False,
     whole_country=message("catalog_hydro.whole_country_description"),
     check=message("catalog_hydro.check_description"),
