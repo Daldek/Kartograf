@@ -28,6 +28,7 @@ from kartograf.source_info import SOURCE_GROUPS
 from kartograf.sources.descriptor import (
     PACKAGE_URL_TOKENS,
     AccessChannel,
+    ArchiveLayersParams,
     AtomFilesParams,
     CountryProfile,
     FeatureBBoxParams,
@@ -738,6 +739,9 @@ class TestResolveSubdir:
 # A segment token (ADR-044 D7): lowercase letters and digits, "-" between the
 # words of one token (ascii-nmt, 0-5cm, ptwp-swrs), "." in a number (0.5m).
 _SEGMENT_TOKEN = re.compile(r"[a-z0-9]+(?:[.-][a-z0-9]+)*")
+# The Polish letters written without diacritics: the GeoPackage names of the
+# layers of a geodatabase (ADR-059 decision 6).
+_PL_ASCII = str.maketrans("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", "acelnoszzACELNOSZZ")
 
 
 class TestCollectionChannels:
@@ -748,7 +752,9 @@ class TestCollectionChannels:
         assert channels
         for d, ch in channels:
             if ch.transport == TransportKind.DIRECT_FILES:
-                assert isinstance(ch.params, UnitPackageParams | AtomFilesParams), d.key
+                assert isinstance(
+                    ch.params, UnitPackageParams | AtomFilesParams | ArchiveLayersParams
+                ), d.key
                 if isinstance(ch.params, AtomFilesParams):
                     assert ch.params.service_feed == ch.endpoint, d.key
                     assert ch.endpoint.startswith("https://"), d.key
@@ -907,6 +913,39 @@ class TestCollectionChannels:
                 for layer in layers:
                     assert _SEGMENT_TOKEN.fullmatch(layer.code), (d.key, layer.code)
 
+    def test_archive_layers_read_one_national_archive(self):
+        """An area read from a national archive (ADR-059): the descriptor has
+        exactly one national file of one variant, published in the CRS the
+        layers are written in, and the same freshness signal; every layer once,
+        under the source name in lowercase ASCII, and a code that makes a
+        segment token."""
+        archives = [
+            (d, ch)
+            for d, ch in _collection_channels()
+            if isinstance(ch.params, ArchiveLayersParams)
+        ]
+        assert [d.key for d, _ in archives] == ["pl.pgw.pgw"]
+        for d, ch in archives:
+            assert isinstance(ch.params, ArchiveLayersParams)
+            (national,) = (
+                c
+                for c in d.channels
+                if isinstance(c.params, UnitPackageParams)
+                and c.params.unit == "country"
+            )
+            assert isinstance(national.params, UnitPackageParams)
+            assert len(national.params.variants) == 1, d.key
+            assert national.horizontal_crs == ch.horizontal_crs == ch.params.native_crs
+            assert national.update_signal == ch.update_signal, d.key
+            layers = ch.params.layers
+            for attribute in ("name", "source"):
+                values = [getattr(layer, attribute) for layer in layers]
+                assert len(set(values)) == len(values), (d.key, attribute)
+            for layer in layers:
+                assert layer.name == layer.source.translate(_PL_ASCII).lower()
+                token = layer.code.lower().replace("_", "-")
+                assert _SEGMENT_TOKEN.fullmatch(token), (d.key, layer.code)
+
     def test_new_sources_registered(self):
         pl = {d.key: d for d in sources_for(country="PL")}
         expected = {
@@ -1014,8 +1053,9 @@ _CHOICE_TOKENS: dict[str, list[tuple[str, ...]]] = {
 def _content_tokens(d: SourceDescriptor) -> list[tuple[str, ...]]:
     """Content tokens of every variant ``d`` declares (none: the prefix):
     unit package variants (with the classes of a release), the EPSG of each
-    CRS of an ATOM file, feature choices and levels, the WCS cutout variant
-    and pixel, the land cover and soil choices."""
+    CRS of an ATOM file, feature choices and levels, each choice of the layer
+    groups of an archive area, the WCS cutout variant and pixel, the land cover
+    and soil choices."""
     found: list[tuple[str, ...]] = [(), *_CHOICE_TOKENS.get(d.key, ())]
     cutouts = wcs_cutout_channels(d.key)
     for channel in d.channels:
@@ -1035,6 +1075,15 @@ def _content_tokens(d: SourceDescriptor) -> list[tuple[str, ...]]:
                 found.extend((*chosen, layer.code) for layer in params.layers)
             else:
                 found.append(chosen)
+        elif isinstance(params, ArchiveLayersParams):
+            codes = sorted(
+                {layer.code.lower().replace("_", "-") for layer in params.layers}
+            )
+            found.extend(
+                ("-".join(chosen),)
+                for size in range(1, len(codes) + 1)
+                for chosen in itertools.combinations(codes, size)
+            )
         elif isinstance(params, WcsCutoutParams):
             coverage = params.variant if len(cutouts) > 1 else None
             found.extend(

@@ -858,7 +858,7 @@ class LandCoverManager:
             request = self._collection_request(
                 teryt, sheet, bbox, geometry, layer, options, sink
             )
-            unit_files, unit_failures, stale = run_request(
+            unit_files, _, unit_failures, stale = run_request(
                 request,
                 update=update,
                 plan=plan,

@@ -233,6 +233,7 @@ def _data_report() -> Document:
 def _collection_report() -> Document:
     return CollectionReport(
         files=(_unit_file(),),
+        inputs=(_unit_file(),),
         failed=(_unit_failure(),),
         stale=(_plan_item(),),
         notices=(_notice(),),

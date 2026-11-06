@@ -1773,7 +1773,7 @@ def _download_pl_files(
         if run.check:
             run.plans.append(plan_request(request, cache=run.cache, sink=run.sink))
             return 0
-        files, failed, stale = run_request(
+        files, _, failed, stale = run_request(
             request,
             update=run.update,
             plan=run.loaded,

@@ -17,9 +17,11 @@ Collection channels (ADR-042, ADR-043) carry typed engine configuration in
 ``AccessChannel.params``: ``UnitPackageParams`` (one file per unit - TERYT
 unit, country, map sheet, index tile or CZ cadastral area - from a URL
 template or from the record of an index), ``FeatureBBoxParams`` (features of
-an area from WFS / ArcGIS REST / OGC API Features into one GeoPackage) and
-``AtomFilesParams`` (files listed by a CUZK ATOM feed). A new product of such
-a channel is a descriptor entry, not a provider.
+an area from WFS / ArcGIS REST / OGC API Features into one GeoPackage),
+``AtomFilesParams`` (files listed by a CUZK ATOM feed) and
+``ArchiveLayersParams`` (features of an area read from the stored national
+archive of the same source, ADR-059). A new product of such a channel is a
+descriptor entry, not a provider.
 """
 
 from dataclasses import dataclass
@@ -240,12 +242,13 @@ class UnitPackageParams:
 
 @dataclass(frozen=True)
 class FeatureLayer:
-    """One source layer of a ``feature_bbox`` channel.
+    """One source layer of a ``feature_bbox`` or ``ArchiveLayersParams`` channel.
 
-    ``code`` is the public value (``--level gmina``) or a fixed layer code,
-    ``source`` the WFS type name (``ms:A03_Granice_gmin``) or the ArcGIS
-    layer id (``"12"``), ``name`` the GeoPackage layer name and ``id_field``
-    the stable feature identifier (deduplication, order of the features).
+    ``code`` is the public value (``--level gmina``, ``--layers PGW_WP``) or a
+    fixed layer code, ``source`` the WFS type name (``ms:A03_Granice_gmin``),
+    the ArcGIS layer id (``"12"``) or the layer of a geodatabase, ``name`` the
+    GeoPackage layer name and ``id_field`` the stable feature identifier
+    (deduplication, order of the features).
     """
 
     code: str
@@ -329,10 +332,32 @@ class AtomFilesParams:
     force_https: bool = False
 
 
+@dataclass(frozen=True)
+class ArchiveLayersParams:
+    """Layers of an area read from the national archive of a source (ADR-059).
+
+    The archive is the file of the descriptor's national channel
+    (``UnitPackageParams(unit="country")``, exactly one): its local version, or
+    one download into its slot. ``layers``: one ``FeatureLayer`` per layer of
+    the vector dataset in the archive - ``code`` = the group the option
+    ``layers`` chooses (a feature dataset of a File Geodatabase), ``source`` =
+    the layer name in the dataset, ``name`` = the GeoPackage layer and
+    ``id_field`` = its identifier (FID) column. ``native_crs``: the CRS written
+    to the GeoPackage; every layer must be in its projection (nothing is
+    reprojected). ``area_omitted``: the text of the ``Info`` (``AREA_OMITTED``)
+    of every area request: what the area result leaves out and where it is.
+    """
+
+    native_crs: str
+    layers: tuple[FeatureLayer, ...]
+    area_omitted: str | None = None
+
+
 ChannelParams = (
     UnitPackageParams
     | FeatureBBoxParams
     | AtomFilesParams
+    | ArchiveLayersParams
     | WcsCutoutParams
     | SheetIndexParams
 )

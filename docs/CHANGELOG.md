@@ -71,8 +71,28 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
   its edition, `2023-09-15`. The archive must hold the geodatabase of that edition (a member
   ending in `_ver_20230915.gdb/gdb`); the source sends no freshness signal, so `--check` says
   `unverifiable`. The sidecar names the source and the reservation of the publication
-  (`license` id `PL-APGW`). The group `hydro` offers `--country pl`; the GeoPackage of an area
-  comes next (plan `docs/plans/2026-11-06-pgw-water-management-plan-data.md`).
+  (`license` id `PL-APGW`). The group `hydro` offers `--country pl` (plan
+  `docs/plans/2026-11-06-pgw-water-management-plan-data.md`).
+- The GeoPackage of an area: `hydro download --product pgw --country pl --bbox ...|--geometry
+  ... [--layers PGW_WP,JCWPd,SIG]` (`download_collection(..., layers=[...])`) writes one
+  GeoPackage in EPSG:2180, `hydro/pl_pgw[_<layers>]/bbox/<coords>.gpkg`, with the whole
+  features of the spatial layers that intersect the envelope of the area (the boundary
+  included), read from the national archive in the store: its local version, or one download
+  into its slot (`DOWNLOAD_SIZE` before the 142 MB transfer, the area as its
+  `extra.parent_request`), reported in the new `CollectionReport.inputs` (`inputs` of
+  `kartograf-download/1`) and printed by the CLI before the GeoPackage. `--layers` chooses the
+  feature datasets in any letter case (not given: all 25 layers; a choice is a segment token,
+  `pgw-wp-sig`); every chosen layer is written, an empty one with its schema, under its
+  lowercase ASCII name, the features in the order of their identifier (`OBJECTID`, kept as a
+  field), and the `Info` `area_omitted` says that the 34 attribute tables stay in the archive.
+  The ESRI definition of the CS92 grid of the layers is checked against EPSG:2180 and written
+  as EPSG:2180 without a reprojection. The GeoPackage is labelled by the edition of the archive;
+  its `extra.source_files` names the archive version, and a version written from an archive of
+  the same sha256 is reused (`reused`, as `soil hsg`). `--check` gives the archive
+  (`unverifiable` or `missing`) and the GeoPackage (`current` when written from the local
+  archive, else `missing`); no feature in the area is a `no_coverage` failure; in a plain write
+  (`-o DIR`) the archive is fetched into the staging directory and only `<coords>.gpkg` is
+  written. `--layers` with `--whole-country` or `--product network` is a `validation_error`.
 - `kartograf.testing.build_pgw_archive(path)` and `build_pgw_store(root)` (`PgwFixture`,
   `PGW_DATASET`, `PGW_ARCHIVE_SEGMENT`, `PGW_AREA`): a tiny archive with the published
   structure of the geodatabase (feature datasets, layers, fields, CRS definition), built offline

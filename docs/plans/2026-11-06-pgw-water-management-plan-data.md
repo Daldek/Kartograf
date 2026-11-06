@@ -150,7 +150,8 @@ into `develop` (DEV-3.3).
 - No licence is named: whether the data may be redistributed is an open question for the author.
 - The bytes of a GeoPackage are deterministic for one GDAL version only, as for `write_gpkg`.
 - GDAL warns that two spatial index files of the archive have a suspicious depth and scans those layers; the exact
-  test keeps the selection the same, and the writer logs the warnings instead of passing them on.
+  test keeps the selection the same, and the writer ignores that warning and the one of the measured types read in
+  2D (both about the reading, not the data) instead of passing them on.
 - A very large area through the area path writes every feature it meets; `--whole-country` is the cheaper way to
   the whole country.
 
@@ -166,3 +167,13 @@ into `develop` (DEV-3.3).
   structure recorded from the real one (`_data/pgw_geodatabase.json`, `scripts/build_pgw_geodatabase.py`),
   stored by the job of the command with its requests answered from memory; the recorded `HEAD` in
   `tests/fixtures/pl/pgw/`.
+- Steps 4 to 6: `ArchiveLayersParams` and the area channel of `pl.pgw.pgw` (the 25 layers, `AREA_OMITTED`);
+  `transform.gpkg.write_archive_gpkg` (unit tests on the fixture archive: the rectangle with its boundary, empty
+  layers with their schema, the identifier order and column, integer fields with nulls, ASCII names and
+  `DESCRIPTION`, the projection check, a missing layer, no or two geodatabases, equal bytes twice); the archive
+  and the derived jobs of `download/collections.py` (reuse by the archive `sha256`, `inputs`, `no_data`, plain
+  mode through the staging directory, the archive and GeoPackage items of `--check`, `--upgrade --plan`) with
+  their integration tests in `tests/integration/test_pgw.py`; `--layers` in the catalog (rules: `pgw` only, not
+  with `--whole-country`) with a parity scenario and the `inputs` row of the JSON contract. The CLI prints the
+  `inputs` of a collection report before its files, as `soil hsg` does. The generated guides and tables did not
+  change.
