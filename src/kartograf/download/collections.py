@@ -3264,15 +3264,17 @@ class _Source:
 
 
 def _head_length(session: requests.Session, url: str) -> int | None:
-    """Return the ``Content-Length`` of a ``HEAD`` of ``url``.
+    """Return the length of the file at ``url`` from a ``HEAD``.
 
-    ``Content-Length`` of a ``HEAD`` of ``url``; ``None``: not given or the
-    request failed (the transfer itself reports a failure).
+    The ``Content-Length`` of a ``HEAD`` asking for the file without a content
+    coding (a server that gzips its answers counts the coded bytes otherwise);
+    ``None``: not given or the request failed (the transfer itself reports a
+    failure).
     """
     try:
-        length: int | None = head_signal(session, url, timeout=SIZE_TIMEOUT)[
-            "content_length"
-        ]
+        length: int | None = head_signal(
+            session, url, timeout=SIZE_TIMEOUT, identity=True
+        )["content_length"]
         return length
     except DownloadError as e:
         logger.debug("HEAD %s: %s", url, e)

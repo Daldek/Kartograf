@@ -33,7 +33,7 @@ from kartograf.testing import (
     build_pgw_archive,
     build_pgw_store,
 )
-from tests.support.fake_packages import FakePackageSession, zip_bytes
+from tests.support.fake_packages import FakePackageSession, FakeResponse, zip_bytes
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "pl" / "pgw" / "archive.json"
 RECORDED = json.loads(FIXTURE.read_text(encoding="utf-8"))
@@ -62,6 +62,21 @@ def _published(body: bytes) -> FakePackageSession:
         {URL: (200, {**HEAD, "Content-Length": str(len(body))}, body)},
         heads={URL: HEAD},
     )
+
+
+class _CodingServer(FakePackageSession):
+    """The published file as the server answers ``requests``: coded with gzip
+    unless a request asks for ``identity`` (``head_gzip``, ``get_gzip``); the
+    ``GET`` body is ``body`` as ``requests`` decodes it."""
+
+    def __init__(self, body: bytes) -> None:
+        super().__init__({URL: (200, RECORDED["get_gzip"]["headers"], body)})
+
+    def head(self, url: str, **kwargs) -> FakeResponse:
+        self.calls.append(("HEAD", url))
+        asked = (kwargs.get("headers") or {}).get("Accept-Encoding")
+        coded = RECORDED["head_gzip"]["headers"]
+        return FakeResponse(200, HEAD if asked == "identity" else coded, b"")
 
 
 def _meta(path: Path) -> dict:
@@ -166,6 +181,29 @@ def test_archive_of_another_edition_is_refused(tmp_path, monkeypatch):
     assert failure.kind == "download"
     assert "_ver_20230915.gdb/gdb" in failure.error
     assert list(tmp_path.rglob("*.zip")) == []
+
+
+@pytest.mark.parametrize(
+    ("choice", "code"),
+    [(CHOICE, WHOLE_COUNTRY_SIZE), (AREA, DOWNLOAD_SIZE)],
+    ids=["whole-country", "area"],
+)
+def test_size_of_a_server_that_compresses_its_answers(
+    tmp_path, monkeypatch, archive, choice, code
+):
+    """The server gzips its answers unless asked for ``identity`` (recorded): the
+    size announced before the transfer is that of the file, 142048450 B, not the
+    20 B of a coded ``HEAD``, and the decoded body is stored."""
+    monkeypatch.setattr(col, "_session", lambda: _CodingServer(archive))
+
+    report = download_collection(**choice, root=tmp_path)
+
+    assert report.ok
+    (size,) = [n for n in report.notices if n.code in (DOWNLOAD_SIZE, code)]
+    assert size.code == code
+    assert "142048450 B" in size.message
+    (stored,) = report.inputs or report.files
+    assert stored.file.path.read_bytes() == archive
 
 
 # --- the GeoPackage of an area -------------------------------------------------

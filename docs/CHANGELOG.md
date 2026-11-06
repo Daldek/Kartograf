@@ -104,6 +104,16 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
   request of Hydrograf). `scripts/build_pgw_geodatabase.py` records that structure from the
   downloaded archive.
 
+**Fixed**
+
+- A size from `HEAD` is the length of the file: a `Content-Length` of an answer with a content
+  coding (`gzip`) no longer counts as one (`response_signal`: `content_length` is `None`, so the
+  size checks of a download skip it), and the size probe of the collections (volume check,
+  `DOWNLOAD_SIZE`, `WHOLE_COUNTRY_SIZE`) asks for `Accept-Encoding: identity`
+  (`head_signal(identity=True)`). The PGW server gzips its answers for `requests`: the `HEAD`
+  said 20 B for the 142 MB archive, so `--whole-country` announced "20 B" and an area request
+  no `DOWNLOAD_SIZE`.
+
 ### Projects move to Archiwista (ADR-057)
 
 **Breaking**

@@ -10,6 +10,28 @@
    "Content-Disposition": "attachment; filename=Geobaza_2aPGW_ver_20230915.gdb.zip"
   }
  },
+ "head_gzip": {
+  "accept_encoding": "gzip, deflate",
+  "status": 200,
+  "headers": {
+   "Content-Type": "application/zip",
+   "Content-Encoding": "gzip",
+   "Content-Length": "20",
+   "Content-Disposition": "attachment; filename=Geobaza_2aPGW_ver_20230915.gdb.zip",
+   "Vary": "Origin,Accept-Encoding,Access-Control-Request-Method,Access-Control-Request-Headers"
+  }
+ },
+ "get_gzip": {
+  "accept_encoding": "gzip, deflate",
+  "status": 200,
+  "headers": {
+   "Content-Type": "application/zip",
+   "Content-Encoding": "gzip",
+   "Transfer-Encoding": "chunked",
+   "Content-Disposition": "attachment; filename=Geobaza_2aPGW_ver_20230915.gdb.zip",
+   "Vary": "Origin,Accept-Encoding,Access-Control-Request-Method,Access-Control-Request-Headers"
+  }
+ },
  "members_total": 304,
  "members": [
   "Geobaza_2aPGW_ver_20230915.gdb/",
