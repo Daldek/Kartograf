@@ -408,6 +408,23 @@ class TestHeadSignal:
         assert session.head.call_count == 2
         assert sleep.call_count == 1
 
+    @pytest.mark.parametrize(
+        ("identity", "headers"), [(True, {"Accept-Encoding": "identity"}), (False, {})]
+    )
+    def test_head_signal_asks_for_the_file_without_a_coding_only_when_told(
+        self, identity, headers
+    ):
+        """A size probe asks for ``identity`` (a coded ``HEAD`` counts the coded
+        bytes); a freshness probe keeps the coding of the downloads."""
+        session = MagicMock()
+        session.head.return_value = _response(200, {"Content-Length": "142"})
+        url = "https://example.test/p"
+
+        signal = head_signal(session, url, timeout=5, identity=identity)
+
+        assert signal["content_length"] == 142
+        assert session.head.call_args.kwargs.get("headers", {}) == headers
+
     def test_head_signal_404_is_download_error_without_retry(self):
         session = MagicMock()
         session.head.return_value = _response(404, {})

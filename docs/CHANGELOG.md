@@ -113,6 +113,10 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
   (`head_signal(identity=True)`). The PGW server gzips its answers for `requests`: the `HEAD`
   said 20 B for the 142 MB archive, so `--whole-country` announced "20 B" and an area request
   no `DOWNLOAD_SIZE`.
+- The other size probes ask for the file without a content coding too: the CZ availability
+  report (size of the `openzu` files) and the campaign providers of the GUGiK index
+  (`record_length`, the volume check of a campaign) use `head_signal(identity=True)`; the
+  freshness probes keep the coding of the downloads.
 
 ### Projects move to Archiwista (ADR-057)
 
