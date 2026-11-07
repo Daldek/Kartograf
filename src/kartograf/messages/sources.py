@@ -130,6 +130,31 @@ MESSAGES = {
         "plik krajowy GPKG (ok. 194 MB) w EPSG:3045 (kategoria feedu ATOM), tylko z "
         "--whole-country",
     ),
+    "pgw_name": Text(
+        "IIaPGW geodatabase - water management plans 2022-2027 (PGW Wody Polskie)",
+        "Geobaza IIaPGW - plany gospodarowania wodami 2022-2027 (PGW Wody Polskie)",
+    ),
+    "pgw_national_gdb_note": Text(
+        "national ZIP of the File Geodatabase (approx. 142 MB, EPSG:2180, edition "
+        "2023-09-15) stored as published, only with --whole-country",
+        "krajowy ZIP z File Geodatabase (ok. 142 MB, EPSG:2180, wydanie 2023-09-15) "
+        "zapisany 1:1, tylko z --whole-country",
+    ),
+    "pgw_area_note": Text(
+        "whole features of the spatial layers that intersect the area (--layers "
+        "PGW_WP, JCWPd, SIG), read from the national archive in the store, one "
+        "GeoPackage in EPSG:2180",
+        "cale obiekty warstw przestrzennych przecinajace obszar (--layers PGW_WP, "
+        "JCWPd, SIG), czytane z archiwum krajowego w magazynie, jeden GeoPackage w "
+        "EPSG:2180",
+    ),
+    "pgw_area_omitted": Text(
+        "area result without the 34 attribute tables of the geodatabase "
+        "(characteristics, objectives, pressures, measures) - they are in the "
+        "national archive: --whole-country --country pl",
+        "wynik obszaru bez 34 tabel atrybutow geobazy (charakterystyki, cele, presje, "
+        "dzialania) - sa w archiwum krajowym: --whole-country --country pl",
+    ),
     "cz_dmr5g_name": Text(
         "DMR 5G - Digitalni model reliefu 5. generace (2 m, ImageServer: TM33 tile "
         "and cutout)",

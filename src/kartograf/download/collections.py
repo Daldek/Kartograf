@@ -32,6 +32,14 @@ version without a transfer. Every file goes through
 ``fetch_version``/``inspect_version`` of its slot (plan track
 ``collection``); a failing unit lands in ``failed``, the others still run.
 
+An area of a product published as one national archive (PGW, ADR-059:
+``ArchiveLayersParams``) runs two jobs: the archive of the national channel
+(its local version, or one download into its slot; in a plain write a private
+staging directory) and the GeoPackage of the area read from it - the version
+written from the same archive ``sha256`` (``extra.source_files``) is reused,
+otherwise ``transform.gpkg.write_archive_gpkg`` writes a new one labelled by
+the archive's label. The archive is reported in ``inputs``.
+
 ``download_landcover`` (``LandCoverManager``) runs the BDOT10k archive
 through the same unit jobs (``package_job``, ``run_job``, ``inspect_job``)
 and ZABAGED, BDOO, Data50 and Data250 through
@@ -41,6 +49,7 @@ package (``UnitPackageParams.class_pattern``).
 """
 
 import concurrent.futures
+import contextlib
 import functools
 import logging
 import re
@@ -91,13 +100,16 @@ from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
     VersionedFile,
+    discard_staging,
     emit_file_notices,
     fetch_version,
     inspect_version,
     link_version,
     local_file,
     local_version,
+    new_staging,
     refreshes_cache,
+    store_file,
     validate_update,
 )
 from kartograf.download.manager import DownloadProgress
@@ -114,6 +126,7 @@ from kartograf.download.options import (
     validate_request_bbox,
 )
 from kartograf.download.plan import (
+    ItemStatus,
     PlanItem,
     Track,
     UpdatePlan,
@@ -124,7 +137,13 @@ from kartograf.download.plan import (
     store_id,
 )
 from kartograf.download.storage import bbox_cutout_path, content_segment, unit_slot
-from kartograf.download.versions import ContentDigest, VersionRef
+from kartograf.download.versions import (
+    ContentDigest,
+    LocalVersion,
+    VersionRef,
+    list_versions,
+    newest_version,
+)
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.interrupt import run_parallel
 from kartograf.messages import message, reason
@@ -145,12 +164,20 @@ from kartograf.notices import (
     names_text,
     size_text,
 )
-from kartograf.output import guard_store, preflight, report_target, unit_of, writing
+from kartograf.output import (
+    guard_store,
+    plain_of,
+    preflight,
+    report_target,
+    unit_of,
+    writing,
+)
 from kartograf.providers.pl.bdot10k import WOJEWODZTWO_NAMES
 from kartograf.providers.pl.prg import discover_teryts_for_bbox
 from kartograf.serialization import Document
 from kartograf.sources.descriptor import (
     AccessChannel,
+    ArchiveLayersParams,
     AtomFilesParams,
     ChannelParams,
     FeatureBBoxParams,
@@ -160,6 +187,7 @@ from kartograf.sources.descriptor import (
     SignalKind,
     SourceDescriptor,
     UnitPackageParams,
+    layer_groups_token,
 )
 from kartograf.sources.edition import Edition
 from kartograf.sources.registry import (
@@ -558,8 +586,10 @@ class CollectionReport(WriteTarget, Document):
 
     ``files``: one ``UnitFile`` per file (``unit`` = TERYT, bbox
     coordinates, the country code with its theme, the sheet code, the tile
-    or the CZ cadastral area); ``failed``: units that failed (``kind``
-    ``no_coverage`` - no data of the unit at the source - or
+    or the CZ cadastral area); ``inputs``: the national archive the area
+    result of a product published as one archive was read from (PGW,
+    ADR-059; empty otherwise and in a plain write); ``failed``: units that
+    failed (``kind`` ``no_coverage`` - no data of the unit at the source - or
     ``download``), the others still ran; ``stale``: planned positions
     changed since the plan; ``ok`` = no failure and no stale position.
     """
@@ -567,8 +597,7 @@ class CollectionReport(WriteTarget, Document):
     SCHEMA = DOWNLOAD_SCHEMA
     JSON_KEYS = DOWNLOAD_KEYS
     JSON_FILL = {
-        key: DOWNLOAD_FILL[key]
-        for key in ("raw", "inputs", "skipped", "superseded", "summary")
+        key: DOWNLOAD_FILL[key] for key in ("raw", "skipped", "superseded", "summary")
     }
 
     files: tuple[UnitFile, ...]
@@ -578,6 +607,7 @@ class CollectionReport(WriteTarget, Document):
     ok: bool
     root: Path | None = None
     output_dir: Path | None = None
+    inputs: tuple[UnitFile, ...] = ()
 
 
 def _str(value: object) -> str | None:
@@ -647,13 +677,13 @@ def _selections(
     ``county package``).
 
     An area reaches the channels ``_channel_for`` gives it: the objects of
-    the area (``feature_bbox``), its sheets, tiles or cadastral areas, and
-    only without those the packages of its powiats (or of its voivodeships
-    for a product without powiat packages).
+    the area (``feature_bbox``, or the layers of a national archive), its
+    sheets, tiles or cadastral areas, and only without those the packages of
+    its powiats (or of its voivodeships for a product without powiat packages).
     """
     params = channel.params
     area = _area_flags(descriptor, channel)
-    if isinstance(params, FeatureBBoxParams):
+    if isinstance(params, FeatureBBoxParams | ArchiveLayersParams):
         return [(area, message("collections.what_area_features"))]
     if isinstance(params, AtomFilesParams):
         return [("--whole-country", message("collections.what_country_file"))]
@@ -856,16 +886,27 @@ def _package_channels(descriptor: SourceDescriptor, unit: str) -> list[AccessCha
 
 
 def _area_channels(descriptor: SourceDescriptor) -> list[AccessChannel]:
-    """Channels of an area: features, sheets, tiles and cadastral areas."""
+    """Channels of an area: features, archive layers, sheets, tiles, cadastral areas."""
     return [
         channel
         for channel in descriptor.channels
-        if isinstance(channel.params, FeatureBBoxParams)
+        if isinstance(channel.params, FeatureBBoxParams | ArchiveLayersParams)
         or (
             isinstance(channel.params, UnitPackageParams)
             and channel.params.unit in _AREA_UNITS
         )
     ]
+
+
+def _national_channel(descriptor: SourceDescriptor) -> AccessChannel:
+    """Return the channel of the national file of a source (exactly one; ADR-059).
+
+    The archive an ``ArchiveLayersParams`` channel reads: the descriptor's only
+    ``UnitPackageParams(unit="country")`` channel, of one variant (a registry test
+    keeps both).
+    """
+    (channel,) = _package_channels(descriptor, "country")
+    return channel
 
 
 def _area_package_channels(descriptor: SourceDescriptor) -> list[AccessChannel]:
@@ -1255,6 +1296,7 @@ def _content(
     horizontal_crs: str | None,
     countries: tuple[str, ...] = (),
     classes: Sequence[str] | None = None,
+    whole_country: bool = False,
 ) -> CollectionPart:
     """Describe the content of one country part.
 
@@ -1263,7 +1305,8 @@ def _content(
     ``network`` (``None`` = not given). ``countries``: the countries of an
     area request (hint of the per-country ``--level`` syntax). ``classes``:
     the ``layers`` of a land cover source whose packages hold class files
-    (BDOO; ``None`` = not given).
+    (BDOO) or of an area read from a national archive (the codes of its
+    layer groups, PGW; ``None`` = not given).
     """
     product = descriptor.product
     params = channel.params
@@ -1291,7 +1334,7 @@ def _content(
         )
         if record_year:
             year_filter = year
-        kept = _chosen_classes(variant, classes, product)
+        kept = _chosen_classes(variant, classes, product, whole_country=whole_country)
         tokens = (*variant.segment_tokens, *_class_tokens(kept))
         segment = content_segment(descriptor.key, tokens)
         ext = params.unpack or FILE_SUFFIX[variant.file_kind]
@@ -1327,7 +1370,7 @@ def _content(
             given,
             message("collections.national_file_subject", product=product, code=code),
         )
-        _chosen_classes(None, classes, product)
+        _chosen_classes(None, classes, product, whole_country=whole_country)
         check_atom_crs(params, horizontal_crs)
         segment = content_segment(
             descriptor.key, atom_segment_tokens(params, horizontal_crs)
@@ -1335,6 +1378,13 @@ def _content(
         ext = ".zip"
         choice = dict(given)
         crs = horizontal_crs or channel.horizontal_crs
+    elif isinstance(params, ArchiveLayersParams):
+        layers, tokens, choice = _archive_content(
+            params, descriptor, level_value, lod, year, given, classes
+        )
+        segment = content_segment(descriptor.key, tokens)
+        ext = ".gpkg"
+        crs = params.native_crs
     else:
         assert isinstance(params, FeatureBBoxParams)
         layers, tokens, choice = _feature_content(
@@ -1385,12 +1435,17 @@ def _content(
 
 
 def _chosen_classes(
-    variant: PackageVariant | None, classes: Sequence[str] | None, product: str
+    variant: PackageVariant | None,
+    classes: Sequence[str] | None,
+    product: str,
+    *,
+    whole_country: bool = False,
 ) -> tuple[str, ...]:
     """Return the classes ``layers`` keeps from each package of ``variant``, sorted.
 
     The classes ``layers`` keeps from each package of ``variant``, sorted
-    (``()``: not given).
+    (``()``: not given). ``whole_country``: the content is the national file
+    of ``whole_country`` (its refusal names both options).
 
     Raises
     ------
@@ -1403,6 +1458,11 @@ def _chosen_classes(
         return ()
     published = variant.classes if variant is not None else ()
     if variant is None or not published:
+        if whole_country:
+            raise ValidationError(
+                message("collections.layers_not_for_national_file", product=product),
+                options=("layers", "whole_country"),
+            )
         raise ValidationError(
             message("collections.layers_not_applicable", product=product),
             option="layers",
@@ -1452,6 +1512,74 @@ def _check_selecting(
                 option=key,
                 allowed=(selecting[key],),
             )
+
+
+def _archive_content(
+    params: ArchiveLayersParams,
+    descriptor: SourceDescriptor,
+    level_value: str | None,
+    lod: int | None,
+    year: int | None,
+    given: Mapping[str, str],
+    classes: Sequence[str] | None,
+) -> tuple[tuple[FeatureLayer, ...], tuple[str, ...], dict[str, object]]:
+    """Return the layers, segment tokens and request values of an archive area.
+
+    ``classes``: the ``layers`` codes - the groups of the layers
+    (``FeatureLayer.code``, the feature datasets of PGW) in any letter case;
+    ``None``: every layer, no token. A choice is one token (ADR-059 decision 5):
+    the codes sorted, lowercase, ``_`` written as ``-``, joined by ``-``; the
+    request lists them as published.
+
+    Raises
+    ------
+    ValidationError
+        A content option of another kind of channel (``level``, ``lod``,
+        ``year``, ``format``, ...), an empty choice or an unknown code.
+    """
+    product, country = descriptor.product, descriptor.country
+    offered = {"level": level_value, "lod": lod, "year": year, **given}
+    for name, value in offered.items():
+        if value is not None:
+            raise ValidationError(
+                message(
+                    "collections.flag_not_for_area_features",
+                    cli_flag=cli_flag(name),
+                    product=product,
+                    country=country,
+                ),
+                option=name,
+            )
+    if classes is None:
+        return params.layers, (), {}
+    codes = _distinct(layer.code for layer in params.layers)
+    spelled = {code.upper(): code for code in codes}
+    wanted = [code.strip() for code in classes]
+    unknown = [code for code in wanted if code.upper() not in spelled]
+    if not wanted or unknown:
+        problem = (
+            message(
+                "collections.layers_unknown_groups",
+                unknown=",".join(unknown),
+                product=product,
+            )
+            if unknown
+            else message("collections.layers_need_one_group", product=product)
+        )
+        raise ValidationError(
+            message(
+                "collections.layers_problem_available",
+                problem=problem,
+                published=", ".join(codes),
+            ),
+            option="layers",
+            allowed=codes,
+        )
+    chosen = {spelled[code.upper()] for code in wanted}
+    published = [code for code in codes if code in chosen]
+    token = layer_groups_token(published)
+    layers = tuple(layer for layer in params.layers if layer.code in chosen)
+    return layers, (token,), {"layers": published}
 
 
 def _feature_content(
@@ -1624,6 +1752,16 @@ def _to_crs(bbox: BBox, crs: str) -> BBox:
     return transform_bbox(bbox, crs)
 
 
+def _codes_example(descriptors: Mapping[str, SourceDescriptor]) -> str:
+    """Return the example of a ``layers`` list in a message: codes of the product."""
+    for descriptor in descriptors.values():
+        for channel in descriptor.channels:
+            if isinstance(channel.params, ArchiveLayersParams):
+                codes = _distinct(layer.code for layer in channel.params.layers)
+                return repr(list(codes[:2]))
+    return "['ADJA', 'PTWP']"
+
+
 def validate_collection_request(
     *,
     product: str | None,
@@ -1644,6 +1782,7 @@ def validate_collection_request(
     sheet_system: str | None = None,
     network: str | Mapping[str, str] | None = None,
     horizontal_crs: str | None = None,
+    layers: Sequence[str] | None = None,
 ) -> CollectionRequest:
     """Check a collection request without network (ADR-042 D2, ADR-043).
 
@@ -1662,9 +1801,11 @@ def validate_collection_request(
     an error for this country alone; the variant (``lod``, ``year`` and those
     options) required when the source publishes several, a level (``level``,
     per country with ``auto``) for an area of a product with levels;
-    ``horizontal_crs`` only equal to the CRS of the file. ``country``,
-    ``format``, ``horizontal_crs`` and the ``bbox`` CRS are taken in any
-    case (``PL``, ``shp``, ``epsg:5514``). Reads the geometry file (its
+    ``horizontal_crs`` only equal to the CRS of the file; ``layers`` (an area
+    of a product read from a national archive: the codes of its layer groups,
+    any letter case; PGW ``PGW_WP``, ``JCWPd``, ``SIG``) not empty and known.
+    ``country``, ``format``, ``horizontal_crs`` and the ``bbox`` CRS are taken
+    in any case (``PL``, ``shp``, ``epsg:5514``). Reads the geometry file (its
     envelope) - never the network.
 
     Raises
@@ -1702,13 +1843,14 @@ def _resolve(
     args["country"] = canonical_country(args["country"])
     args["format"] = canonical_format(args["format"])
     args["horizontal_crs"] = canonical_crs(args["horizontal_crs"])
-    # ``layers``: the classes of a land cover source (``landcover_request``)
-    classes = args.get("layers")
-    if classes is not None:
-        require_codes(classes, "--layers", "['ADJA', 'PTWP']")
     product = args["product"]
     if descriptors is None:
         descriptors = _descriptors(product)
+    # ``layers``: the classes of a land cover source (``landcover_request``) or
+    # the layer groups of an area read from a national archive (PGW)
+    classes = args["layers"]
+    if classes is not None:
+        require_codes(classes, "--layers", _codes_example(descriptors))
     kind = _selection_kind(args, descriptors)
     check_per_country(args["level"], "--level")
     country = args["country"]
@@ -1759,6 +1901,7 @@ def _resolve(
             descriptor,
             channel,
             countries=countries,
+            whole_country=area_kind == "whole_country",
             **{**content, "options": here},
         )
 
@@ -1947,7 +2090,7 @@ def _sheet_part(
 
 def _part_area(base: CollectionPart, area: BBox) -> BBox:
     params = base.channel.params
-    if isinstance(params, FeatureBBoxParams):
+    if isinstance(params, FeatureBBoxParams | ArchiveLayersParams):
         return _to_crs(area, params.native_crs)
     return area
 
@@ -2025,7 +2168,9 @@ def _area_parts(
         base = bases[code]
         native = _part_area(base, pieces[code].bbox)
         derived = auto or geometry is not None or native != area
-        packages = not isinstance(base.channel.params, FeatureBBoxParams)
+        packages = not isinstance(
+            base.channel.params, FeatureBBoxParams | ArchiveLayersParams
+        )
         parts.append(
             replace(base, area=native, parent=parent if derived or packages else None)
         )
@@ -2057,7 +2202,9 @@ class UnitJob:
     the ATOM feed found then - the transfer asks for neither again.
     ``unchecked``: a sheet with a local version in the default mode - its
     index record was not asked (ADR-036 erratum 3), the local version is
-    used as it is.
+    used as it is. ``archive``: the job of the national archive whose layers
+    this area job reads (``ArchiveLayersParams``, ADR-059; it runs first, and
+    the area has no file when it fails); ``None``: a file of its own source.
     """
 
     descriptor: SourceDescriptor
@@ -2082,6 +2229,7 @@ class UnitJob:
     sized: bool = False
     atom_file: AtomFile | None = None
     unchecked: bool = False
+    archive: "UnitJob | None" = None
 
     @property
     def key(self) -> _SLOT_KEY:
@@ -2222,6 +2370,33 @@ def _feature_job(root: Path, part: CollectionPart) -> UnitJob:
         layers=part.layers,
         bbox=part.area,
     )
+
+
+def _archive_jobs(root: Path, part: CollectionPart) -> list[UnitJob]:
+    """Return the national archive and the GeoPackage of an archive area (ADR-059).
+
+    The archive is the file of the descriptor's national channel with the request
+    of that file and the area request as ``extra.parent_request`` (an area that
+    downloads it created that version); its size is announced as a unit file's
+    (``DOWNLOAD_SIZE``). The GeoPackage reads it (``UnitJob.archive``).
+    """
+    assert part.area is not None
+    channel = _national_channel(part.descriptor)
+    params = channel.params
+    assert isinstance(params, UnitPackageParams)
+    (variant,) = params.variants
+    archive = package_job(
+        root,
+        part.descriptor,
+        channel,
+        variant,
+        country=part.country,
+        teryt=None,
+        request={"whole_country": True},
+        parent=part.parent or parent_request_for(part.area, [part.country]),
+    )
+    archive = replace(archive, whole_country=False)
+    return [archive, replace(_feature_job(root, part), archive=archive)]
 
 
 def _atom_job(root: Path, part: CollectionPart) -> UnitJob:
@@ -2723,12 +2898,17 @@ def _part_jobs(
     out = request.root
     params = part.channel.params
     if part.layers:
-        if isinstance(params, FeatureBBoxParams) and params.area_omitted:
+        if (
+            isinstance(params, FeatureBBoxParams | ArchiveLayersParams)
+            and params.area_omitted
+        ):
             sink.emit(
                 "info",
                 AREA_OMITTED,
                 f"{part.descriptor.product}: {params.area_omitted}",
             )
+        if isinstance(params, ArchiveLayersParams):
+            return _archive_jobs(out, part)
         return [_feature_job(out, part)]
     if isinstance(params, AtomFilesParams):
         if request.whole_country:
@@ -2976,6 +3156,92 @@ def inspect_job(
     )
 
 
+def _input_keys(jobs: Sequence[UnitJob]) -> set[_SLOT_KEY]:
+    """Return the slots of the archives other jobs read (``UnitJob.archive``)."""
+    return {job.archive.key for job in jobs if job.archive is not None}
+
+
+def _inspect_jobs(
+    jobs: Sequence[UnitJob], *, track: Track, cache: MetadataCache | None
+) -> list[PlanItem]:
+    """Return the plan positions of the jobs of a request, in their order.
+
+    ``inspect_job`` of each job; the GeoPackage of an archive area is judged
+    from the position of its archive (``_layers_item``), and in a plain write
+    the archive is no position: it is not kept.
+    """
+    inputs = _input_keys(jobs)
+    found: dict[_SLOT_KEY, PlanItem] = {}
+    items: list[PlanItem] = []
+    for job in jobs:
+        if job.archive is not None:
+            item = _layers_item(job, found.get(job.archive.key), track)
+        elif job.key in inputs and plain_of(job.slot.root) is not None:
+            continue
+        else:
+            item = inspect_job(job, track=track, cache=cache)
+        found[job.key] = item
+        items.append(item)
+    return items
+
+
+def _layers_version(slot: FileSlot, archive_sha256: str) -> LocalVersion | None:
+    """Return the newest version of ``slot`` written from the archive of this sha256.
+
+    The archive a version was written from is its ``extra.source_files`` (as the
+    inputs of HSG).
+    """
+
+    def written_from(version: LocalVersion) -> tuple[str, ...]:
+        extra = version.meta.get("extra") or {}
+        files = extra.get("source_files") or []
+        return tuple(str(f.get("sha256")) for f in files if isinstance(f, dict))
+
+    return newest_version(
+        version
+        for version in list_versions(slot.versions_root, slot.name)
+        if written_from(version) == (archive_sha256,)
+    )
+
+
+def _layers_item(job: UnitJob, archive: PlanItem | None, track: Track) -> PlanItem:
+    """Return the plan position of the GeoPackage of an archive area (ADR-059).
+
+    ``current`` when a version written from the local archive exists,
+    ``missing`` otherwise or without a local archive, ``check_failed`` (with its
+    error) when the archive could not be checked; the label is the edition of
+    the archive. In a plain write: the position of its target.
+    """
+    assert job.archive is not None
+    if plain_of(job.slot.root) is not None:
+        return inspect_version(job.slot, track=track, unit=job.unit, signal=job.signal)
+    local = local_version(job.slot)
+    source = local_version(job.archive.slot)
+    written = _layers_version(job.slot, source.sha256) if source is not None else None
+    status: ItemStatus
+    error: str | None = None
+    if archive is not None and archive.status == "check_failed":
+        status, error = "check_failed", archive.error
+    elif written is not None:
+        status = "current"
+    else:
+        status = "missing"
+    variant = job.archive.variant
+    return PlanItem(
+        track=track,
+        segment=job.slot.segment,
+        hierarchy=job.slot.hierarchy,
+        name=job.slot.name,
+        unit=job.unit,
+        local_label=local.label if local is not None else None,
+        local_sha256=local.sha256 if local is not None else None,
+        available_label=variant.edition if variant is not None else None,
+        available_signal=None,
+        status=status,
+        error=error,
+    )
+
+
 def _local_only(slot: FileSlot, unverified: str | None = None) -> VersionedFile | None:
     """Return the local version of a position left out of the plan.
 
@@ -2998,15 +3264,17 @@ class _Source:
 
 
 def _head_length(session: requests.Session, url: str) -> int | None:
-    """Return the ``Content-Length`` of a ``HEAD`` of ``url``.
+    """Return the length of the file at ``url`` from a ``HEAD``.
 
-    ``Content-Length`` of a ``HEAD`` of ``url``; ``None``: not given or the
-    request failed (the transfer itself reports a failure).
+    The ``Content-Length`` of a ``HEAD`` asking for the file without a content
+    coding (a server that gzips its answers counts the coded bytes otherwise);
+    ``None``: not given or the request failed (the transfer itself reports a
+    failure).
     """
     try:
-        length: int | None = head_signal(session, url, timeout=SIZE_TIMEOUT)[
-            "content_length"
-        ]
+        length: int | None = head_signal(
+            session, url, timeout=SIZE_TIMEOUT, identity=True
+        )["content_length"]
         return length
     except DownloadError as e:
         logger.debug("HEAD %s: %s", url, e)
@@ -3373,6 +3641,121 @@ def run_job(
     )
 
 
+def run_layers_job(
+    job: UnitJob,
+    archive: VersionedFile,
+    *,
+    planned: set[_SLOT_KEY] | None = None,
+) -> VersionedFile | None:
+    """Return the GeoPackage of an archive area, reused or written (ADR-059).
+
+    ``job``: an area job with ``archive``; ``archive``: the outcome of that
+    archive job (its local version, a download, or a plain file of a private
+    write). Out of the plan (``planned`` given, the job not in it): the local
+    version or ``None``. In the store the version written from an archive of
+    the same sha256 is reused (status ``reused``, nothing read; also with
+    ``--force``, as HSG); otherwise ``write_archive_gpkg`` writes the layers
+    of the area in a local temporary directory and the file becomes a version
+    labelled by the archive's label, whose sidecar names the archive
+    (``extra.source_files``) and the layers (``extra.source``). In a plain
+    write the file goes to the output directory.
+
+    Raises
+    ------
+    NoCoverageError
+        No feature of the chosen layers intersects the area.
+    DownloadError
+        The archive is not a readable geodatabase of the declared layers and
+        CRS, or the version, sidecar or link failed.
+    """
+    if planned is not None and job.key not in planned:
+        return _local_only(job.slot)
+    assert job.archive is not None and job.bbox is not None
+    params = job.channel.params
+    assert isinstance(params, ArchiveLayersParams)
+    stored = plain_of(job.slot.root) is None
+    if stored:
+        match = _layers_version(job.slot, archive.sha256)
+        if match is not None:
+            link_version(job.slot.std, match, refresh=True)
+            logger.info("%s: version %s reused", job.slot.std, match.label)
+            return local_file(job.slot.std, match, status="reused")
+    # lazy: GDAL vector (pyogrio) only for area results
+    from kartograf.transform.gpkg import write_archive_gpkg
+
+    staged = new_staging(job.slot)
+    work = Path(tempfile.mkdtemp(prefix="kartograf-layers-"))
+    try:
+        result = work / "result.gpkg"
+        summary = write_archive_gpkg(
+            result,
+            archive.version_path,
+            params=params,
+            layers=job.layers,
+            area=job.bbox,
+        )
+        shutil.move(str(result), staged)
+    except BaseException:
+        discard_staging(staged, job.slot)
+        raise
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    variant = job.archive.variant
+    source = {
+        "url": job.archive.url,
+        "edition": variant.edition if variant is not None else None,
+        "member": summary.member,
+        "layers": [
+            {
+                "code": layer.code,
+                "source": layer.source,
+                "name": layer.name,
+                "features": summary.features.get(layer.name, 0),
+            }
+            for layer in job.layers
+        ],
+    }
+
+    def write(
+        data: Path, ref: VersionRef, digest: ContentDigest, http: dict[str, Any] | None
+    ) -> None:
+        extra: dict[str, Any] = {
+            "source": source,
+            "source_files": [
+                {
+                    "name": "archive",
+                    "file": archive.version_path.relative_to(job.slot.root).as_posix(),
+                    "sha256": archive.sha256,
+                    "label": archive.label,
+                }
+            ],
+            **job.extra,
+        }
+        if job.parent:
+            extra["parent_request"] = job.parent
+        emit_sidecar(
+            job.descriptor.key,
+            data,
+            request=job.request,
+            horizontal_crs=params.native_crs,
+            vertical_crs=None,
+            capability=_capability(job.descriptor, job.channel),
+            extra=extra,
+            digest=(digest.sha256, digest.size_bytes),
+            version=ref.to_extra(),
+            exclusive=True,
+        )
+
+    return store_file(
+        job.slot,
+        staged,
+        version=VersionRef(archive.label, "edition") if stored else None,
+        write_sidecar=write,
+        http=None,
+        signal=job.signal,
+    )
+
+
 def _record_crs(job: UnitJob) -> str | None:
     """Return the CRS of the file declared by its index record.
 
@@ -3416,6 +3799,7 @@ _CHOICE_NAMES = (
     "sheet_system",
     "network",
     "horizontal_crs",
+    "layers",
 )
 
 
@@ -3440,6 +3824,7 @@ def download_collection(
     sheet_system: str | None = None,
     network: str | Mapping[str, str] | None = None,
     horizontal_crs: str | None = None,
+    layers: Sequence[str] | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     workers: int = 1,
@@ -3454,18 +3839,22 @@ def download_collection(
 
     Choices as in ``validate_collection_request`` (called first, no network):
     ``product`` (``admin`` PRG and RUIAN, ``map`` EGiB, ``buildings`` 3D
-    models, ``network`` HY-NET, the products of plan E), one selection
-    (``teryt``, ``ku``, ``sheet``, ``bbox``, ``geometry`` or
-    ``whole_country``), ``country`` (``pl``/``cz``/``auto``), ``level``
-    (``admin`` of an area: PL ``wojewodztwo``, ``powiat``, ``gmina``,
-    ``jednostka-ewidencyjna``, ``obreb``; CZ ``kraj``, ``okres``, ``obec``,
-    ``katastralni-uzemi``; per country with ``auto``: ``{"pl": "gmina",
-    "cz": "obec"}``), ``lod`` and ``year`` (``buildings``: LoD1 2019, 2021,
-    2022, 2024; LoD2 2017; the year of the index records of a tile product,
-    whose newest record is taken without it), ``format``, ``scale``,
-    ``sheet_system``, ``network`` (values of the descriptor of the product:
-    a channel or a published variant), ``horizontal_crs`` (a national file
-    published in several CRSs). Files:
+    models, ``network`` HY-NET, ``pgw`` the IIaPGW geodatabase, the products
+    of plan E), one selection (``teryt``, ``ku``, ``sheet``, ``bbox``,
+    ``geometry`` or ``whole_country``), ``country`` (``pl``/``cz``/``auto``),
+    ``level`` (``admin`` of an area: PL ``wojewodztwo``, ``powiat``,
+    ``gmina``, ``jednostka-ewidencyjna``, ``obreb``; CZ ``kraj``, ``okres``,
+    ``obec``, ``katastralni-uzemi``; per country with ``auto``: ``{"pl":
+    "gmina", "cz": "obec"}``), ``lod`` and ``year`` (``buildings``: LoD1
+    2019, 2021, 2022, 2024; LoD2 2017; the year of the index records of a
+    tile product, whose newest record is taken without it), ``format``,
+    ``scale``, ``sheet_system``, ``network`` (values of the descriptor of the
+    product: a channel or a published variant), ``horizontal_crs`` (a
+    national file published in several CRSs), ``layers`` (an area of
+    ``pgw``: the layer groups ``PGW_WP``, ``JCWPd``, ``SIG``; every spatial
+    layer without it). An area of ``pgw`` is read from the national archive
+    in the store (downloaded once when missing, reported in ``inputs``;
+    ADR-059). Files:
     ``<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>[-<temat>]|ku/<kod>|<arkusz>|<strefa>/<kafel>}``
     with versions in ``versions/`` (ADR-042 D8, ADR-043). ``update``/``plan``
     as in every store command (``plan`` from ``check_collection`` with
@@ -3517,7 +3906,7 @@ def download_collection(
     ) as store:
         request = _resolve({**_choices(locals()), "root": store}, sink)
         guard_store(store)  # the request is judged first, then nothing is asked
-        files, failed, stale = run_request(
+        files, inputs, failed, stale = run_request(
             request,
             update=update,
             plan=plan,
@@ -3536,6 +3925,7 @@ def download_collection(
         ok=ok,
         root=stored,
         output_dir=plain,
+        inputs=inputs,
     )
 
 
@@ -3835,11 +4225,17 @@ def run_request(
     sink: NoticeSink,
     track: Track = _TRACK,
     on_progress: Callable[[DownloadProgress], None] | None = None,
-) -> tuple[tuple[UnitFile, ...], tuple[UnitFailure, ...], tuple[PlanItem, ...]]:
-    """Return the files, unit failures and stale plan positions of a request.
+) -> tuple[
+    tuple[UnitFile, ...],
+    tuple[UnitFile, ...],
+    tuple[UnitFailure, ...],
+    tuple[PlanItem, ...],
+]:
+    """Return the files, inputs, unit failures and stale plan positions of a request.
 
-    Files, unit failures and stale plan positions of a validated request
-    (``download_collection``; ``LandCoverManager`` on the track ``landcover``).
+    Files, inputs, unit failures and stale plan positions of a validated
+    request (``download_collection``; ``LandCoverManager`` on the track
+    ``landcover``).
 
     ``on_progress``: with more than one unit, one ``DownloadProgress`` per
     unit (its ``sheet`` = the unit) - ``downloading`` right before a
@@ -3850,6 +4246,13 @@ def run_request(
     A country of an area in PL and CZ (``auto``) whose units could not be
     found is a failure of that country (``UnitFailure``, its code as the
     unit) before the units of the other one run (``_jobs``).
+
+    An area read from a national archive (ADR-059) runs the archive, then its
+    GeoPackage (``run_layers_job``), one after the other whatever ``workers``;
+    an area whose archive failed has no GeoPackage. The archive is an input:
+    in ``inputs``, not in ``files`` - in a plain write it goes to a private
+    directory of the staging directory and is removed with it (no input, no
+    target).
 
     Raises
     ------
@@ -3873,15 +4276,22 @@ def run_request(
             )
         require_store(plan, store_id(request.root))
     require_workers(workers, "--workers")
-    with open_cache(
-        cache, force=refreshes_cache(update), on_notice=sink.add
-    ) as metadata:
+    write = plain_of(request.root)
+    with (
+        open_cache(
+            cache, force=refreshes_cache(update), on_notice=sink.add
+        ) as metadata,
+        contextlib.ExitStack() as scratch,
+    ):
         jobs, unlisted = _jobs(request, sink, metadata, update is None and plan is None)
-        preflight(request.root, [job.slot.name for job in jobs])
+        inputs = _input_keys(jobs)
+        preflight(
+            request.root, [job.slot.name for job in jobs if job.key not in inputs]
+        )
         planned: set[_SLOT_KEY] | None = None
         stale: tuple[PlanItem, ...] = ()
         if plan is not None:
-            current = [inspect_job(j, track=track, cache=metadata) for j in jobs]
+            current = _inspect_jobs(jobs, track=track, cache=metadata)
             todo, stale_items = select_planned(plan, current, track)
             planned = {(i.segment, i.hierarchy, i.name) for i in todo}
             stale = tuple(stale_items)
@@ -3895,16 +4305,35 @@ def run_request(
                 cache=metadata,
                 workers=workers,
             )
+        if write is not None and inputs:  # an input of a plain write is not kept
+            handle = scratch.enter_context(write.scratch()).handle
+            jobs = [
+                replace(
+                    job,
+                    slot=unit_slot(
+                        handle, job.slot.segment, job.slot.ext, country=job.unit
+                    ),
+                )
+                if job.key in inputs
+                else job
+                for job in jobs
+            ]
+        done: dict[_SLOT_KEY, VersionedFile | UnitFailure | None] = {}
 
         def one(job: UnitJob) -> VersionedFile | UnitFailure | None:
             try:
-                return run_job(
-                    job,
-                    update,
-                    sink=sink,
-                    planned=planned,
-                    cache=metadata,
-                )
+                if job.archive is None:
+                    return run_job(
+                        job,
+                        update,
+                        sink=sink,
+                        planned=planned,
+                        cache=metadata,
+                    )
+                archive = done.get(job.archive.key)
+                if not isinstance(archive, VersionedFile):
+                    return None  # the archive failed or is out of the plan
+                return run_layers_job(job, archive, planned=planned)
             except NoCoverageError as e:
                 return UnitFailure(job.unit, job.country, reason(e), "no_coverage")
             except DownloadError as e:
@@ -3920,7 +4349,7 @@ def run_request(
                 report(DownloadProgress(current, total, job.unit, status))
 
         outcomes: list[VersionedFile | UnitFailure | None]
-        if workers > 1 and len(jobs) > 1:
+        if workers > 1 and len(jobs) > 1 and not inputs:
             outcomes = run_parallel(
                 one,
                 jobs,
@@ -3940,17 +4369,21 @@ def run_request(
                 if job.key in transfers:
                     progress(position, job, "downloading")
                 outcomes.append(one(job))
+                done[job.key] = outcomes[-1]
                 progress(position, job, _progress_status(outcomes[-1]))
     files: list[UnitFile] = []
+    kept: list[UnitFile] = []
     failed: list[UnitFailure] = list(unlisted)
     for job, outcome in zip(jobs, outcomes, strict=True):
         if isinstance(outcome, UnitFailure):
             failed.append(outcome)
-        elif outcome is not None:
-            files.append(UnitFile(job.unit, job.country, outcome))
+        elif outcome is not None and not (job.key in inputs and write is not None):
+            (kept if job.key in inputs else files).append(
+                UnitFile(job.unit, job.country, outcome)
+            )
             unit = unit_of(outcome.path, request.root)
             emit_file_notices(sink, unit, outcome, update)
-    return tuple(files), tuple(failed), stale
+    return tuple(files), tuple(kept), tuple(failed), stale
 
 
 def plan_request(
@@ -3967,10 +4400,12 @@ def plan_request(
     refreshed, never read (``--check``). A country of an area in PL
     and CZ (``auto``) whose units could not be found is a ``CHECK_FAILED``
     warning, and the plan of the other one an ``AUTO_PARTIAL_SUCCESS`` one.
+    An area read from a national archive has the position of the archive and
+    of its GeoPackage (``_inspect_jobs``; in a plain write the GeoPackage only).
     """
     with open_cache(cache, force=True, on_notice=sink.add) as metadata:
         jobs, unlisted = _jobs(request, sink, metadata)
-        items = [inspect_job(job, track=track, cache=metadata) for job in jobs]
+        items = _inspect_jobs(jobs, track=track, cache=metadata)
     for failure in unlisted:
         sink.emit("warning", CHECK_FAILED, f"{failure.unit}: {failure.error}")
     _auto_partial_success(request, unlisted, sink, check=True)
@@ -3998,6 +4433,7 @@ def check_collection(
     sheet_system: str | None = None,
     network: str | Mapping[str, str] | None = None,
     horizontal_crs: str | None = None,
+    layers: Sequence[str] | None = None,
     force: bool = False,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
@@ -4012,10 +4448,12 @@ def check_collection(
     with ``ETag`` (``http``) are compared by ``HEAD``, files of an ATOM feed
     by the edition of the feed, files of an index record (signal ``index``)
     by the record's label. The units of an area are asked as for a download
-    (PRG powiats, sheet grid or index, tile index, RUIAN). With
-    ``output_dir`` the positions are the targets of a plain write (``action``,
-    ``path``, ``reason``; ``force`` makes an existing file ``replace``) and nothing
-    is asked of the source.
+    (PRG powiats, sheet grid or index, tile index, RUIAN). The GeoPackage of
+    an area read from a national archive (PGW) is ``current`` when a version
+    written from the local archive exists, else ``missing``, after the
+    position of the archive. With ``output_dir`` the positions are the
+    targets of a plain write (``action``, ``path``, ``reason``; ``force`` makes
+    an existing file ``replace``) and nothing is asked of the source.
     """
     sink = NoticeSink(on_notice)
     with writing(output_dir=output_dir, root=root, force=force, guard=False) as store:

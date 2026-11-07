@@ -6,11 +6,15 @@ frozen clock.
 
 Scenarios: PRG objects of an area (``--level``), PRG national file (size
 notice), RUIAN objects of an area (CZ), HY-NET national file (HEAD and GET),
+the GeoPackage of a PGW area (``--layers``) with the archive it is read from,
 EGiB export of a powiat, 3D models of a powiat, 3D models of an area with a
 powiat without a package, ``--check --plan`` + ``--upgrade --plan``,
 input errors. BDOT10k ``--year`` and ZABAGED:
 ``tests/contract/test_parity_landcover.py``.
 """
+
+import json
+from pathlib import Path
 
 import pytest
 
@@ -21,7 +25,13 @@ from kartograf.download.plan import UpdatePlan
 from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
 from kartograf.messages import localize
-from kartograf.notices import UNIT_LIST, WHOLE_COUNTRY_SIZE
+from kartograf.notices import (
+    AREA_OMITTED,
+    DOWNLOAD_SIZE,
+    UNIT_LIST,
+    WHOLE_COUNTRY_SIZE,
+)
+from kartograf.testing import PGW_AREA, build_pgw_archive
 from tests.integration.test_collections_cz import NATIONAL, FakeCuzk, _page_size
 from tests.integration.test_collections_products import (
     TWO_POWIATS,
@@ -161,6 +171,51 @@ def test_hynet_whole_country_reports_size(tmp_path, monkeypatch):
     _same(run, statuses=["new"])
     assert [n.code for n in run.api_result.notices] == [WHOLE_COUNTRY_SIZE]
     assert "194208037 B" in run.api_result.notices[0].message
+    assert session.calls == [("HEAD", url), ("GET", url)] * 2
+
+
+def test_pgw_area_layers_with_its_archive(tmp_path, monkeypatch):
+    """The GeoPackage of a PGW area with ``--layers``, after the national archive
+    it is read from is downloaded into the store (the recorded ``HEAD``, the
+    fixture archive as the body); the CLI prints both files."""
+    recorded = json.loads(
+        (Path(__file__).parents[1] / "fixtures/pl/pgw/archive.json").read_text("utf-8")
+    )
+    url, head = recorded["url"], recorded["head"]["headers"]
+    body = build_pgw_archive(tmp_path / "source" / "pl.zip").read_bytes()
+    session = _serve(
+        monkeypatch, (url, (200, {**head, "Content-Length": str(len(body))}, body))
+    )
+    session.heads[url] = head
+    run = run_both(
+        [
+            "hydro",
+            "download",
+            "--product",
+            "pgw",
+            "--country",
+            "pl",
+            "--bbox",
+            "380000,540000,390000,550000",
+            "--bbox-crs",
+            "EPSG:2180",
+            "--layers",
+            "PGW_WP",
+        ],
+        lambda out: download_collection(
+            product="pgw", root=out, country="pl", bbox=PGW_AREA, layers=["PGW_WP"]
+        ),
+        tmp_path,
+    )
+    _same(run, statuses=["new"])
+    assert [n.code for n in run.api_result.notices] == [AREA_OMITTED, DOWNLOAD_SIZE]
+    assert "hydro/pl_pgw_gdb/country/pl.zip: nowa wersja 2023-09-15_" in (
+        run.cli_stdout
+    )
+    assert (
+        "hydro/pl_pgw_pgw-wp/bbox/380000_540000_390000_550000.gpkg: nowa wersja "
+        "2023-09-15_" in run.cli_stdout
+    )
     assert session.calls == [("HEAD", url), ("GET", url)] * 2
 
 

@@ -157,6 +157,11 @@ MESSAGES = {
         "--layers does not apply to {product} (content is stored in full)",
         "--layers nie dotyczy {product} (zawartosc zapisywana w calosci)",
     ),
+    "layers_not_for_national_file": Text(
+        "--layers does not apply to the national file of {product} (--whole-country: "
+        "stored as published)",
+        "--layers nie dotyczy pliku krajowego {product} (--whole-country: zapis 1:1)",
+    ),
     "layers_unknown_classes": Text(
         "--layers {unknown}: no such classes in {product} {where}",
         "--layers {unknown}: brak takich klas w {product} {where}",
@@ -164,6 +169,14 @@ MESSAGES = {
     "layers_need_one_class": Text(
         "--layers: give at least one class of {product} {where}",
         "--layers: podaj co najmniej jedna klase {product} {where}",
+    ),
+    "layers_unknown_groups": Text(
+        "--layers {unknown}: no such layer groups in the area result of {product}",
+        "--layers {unknown}: brak takich grup warstw w wyniku obszaru {product}",
+    ),
+    "layers_need_one_group": Text(
+        "--layers: give at least one layer group of {product}",
+        "--layers: podaj co najmniej jedna grupe warstw {product}",
     ),
     "layers_problem_available": Text(
         "{problem}; available: {published}",

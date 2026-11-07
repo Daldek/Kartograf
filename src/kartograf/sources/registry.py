@@ -18,6 +18,7 @@ from kartograf.exceptions import ValidationError
 from kartograf.messages import message
 from kartograf.sources.descriptor import (
     AccessChannel,
+    ArchiveLayersParams,
     AtomFilesParams,
     CountryProfile,
     FeatureBBoxParams,
@@ -85,6 +86,14 @@ _CUZK_LICENSE = LicenseInfo(
     id="CC-BY-4.0",
     attribution="Podklad: Cesky urad zememericky a katastralni (CUZK), CC BY 4.0",
     url="https://geoportal.cuzk.gov.cz",
+)
+
+# The IIaPGW publication names no licence (its page, 2026-11-06): the id names the
+# conditions of that publication, the attribution quotes its reservation (ADR-059).
+_PGW_LICENSE = LicenseInfo(
+    id="PL-APGW",
+    attribution=message("legal.pgw_attribution"),
+    url="https://apgw.gov.pl/pl/III-cykl-materialy-do-pobrania",
 )
 
 _PL_VERTICAL_BOTH = ("EPSG:9650", "EPSG:9651")
@@ -2381,6 +2390,196 @@ _PL_GEOID2021 = SourceDescriptor(
 )
 _E5_PL_SOURCES = (_PL_MESH, _PL_TREES, _PL_CONTROL, _PL_GEOID2021)
 
+# --- PGW Wody Polskie (ADR-059) -------------------------------------------------
+# The spatial geodatabase of the second update of the river basin management plans
+# (IIaPGW, 2022-2027): one File Geodatabase in a ZIP, the only spatial file of
+# https://apgw.gov.pl/pl/III-cykl-materialy-do-pobrania (HEAD recorded 2026-11-06,
+# tests/fixtures/pl/pgw: 200, application/zip, 142048450 B, no ETag or
+# Last-Modified - signal none). The file id and the name in the URL name the
+# edition; the member check finds its date in the geodatabase name, so a file of
+# another edition behind the URL is never a version under this label.
+_PGW_DOWNLOAD = "https://wody.isok.gov.pl/api/repo-mdd/publ/download/file"
+# The 25 spatial layers of the geodatabase of 2023-09-15 (recorded in
+# src/kartograf/_data/pgw_geodatabase.json; the 34 attribute tables stay in the
+# archive): its feature dataset (the value of --layers), the source name, the
+# GeoPackage layer - the source name in lowercase with the Polish letters
+# written without diacritics, the source spelling kept (ADR-059 decision 6) -
+# and the identifier column.
+_PGW_LAYERS = tuple(
+    FeatureLayer(code, source, name, id_field)
+    for code, source, name, id_field in (
+        (
+            "PGW_WP",
+            "Jednolite_Części_Wód_Powierzchniowych_Przybrzeżnych",
+            "jednolite_czesci_wod_powierzchniowych_przybrzeznych",
+            "OBJECTID",
+        ),
+        (
+            "PGW_WP",
+            "Jednolite_Części_Wód_Powierzchniowych_Rzecznych",
+            "jednolite_czesci_wod_powierzchniowych_rzecznych",
+            "OBJECTID",
+        ),
+        ("PGW_WP", "Zlewnie_JCWP_rzecznych", "zlewnie_jcwp_rzecznych", "OBJECTID"),
+        (
+            "PGW_WP",
+            "Zlewnie_bezpośrednie_JCWP_zbiornikowych",
+            "zlewnie_bezposrednie_jcwp_zbiornikowych",
+            "OBJECTID",
+        ),
+        ("PGW_WP", "Pozostale_obszary_JCWP", "pozostale_obszary_jcwp", "OBJECTID"),
+        ("PGW_WP", "Obszary_dorzeczy", "obszary_dorzeczy", "OBJECTID"),
+        ("PGW_WP", "Regiony_wodne", "regiony_wodne", "OBJECTID"),
+        ("PGW_WP", "Ekoregiony", "ekoregiony", "OBJECTID"),
+        (
+            "PGW_WP",
+            "Jednolite_Części_Wód_Powierzchniowych_Jeziornych",
+            "jednolite_czesci_wod_powierzchniowych_jeziornych",
+            "OBJECTID",
+        ),
+        (
+            "PGW_WP",
+            "Jednolite_Części_Wód_Powierzchniowych_Przejściowych",
+            "jednolite_czesci_wod_powierzchniowych_przejsciowych",
+            "OBJECTID",
+        ),
+        (
+            "PGW_WP",
+            "Jednolite_Części_Wód_Powierzchniowych_Zbiornikowych",
+            "jednolite_czesci_wod_powierzchniowych_zbiornikowych",
+            "OBJECTID",
+        ),
+        (
+            "PGW_WP",
+            "Zlewnie_bezpośrednie_JCWP_jeziornych",
+            "zlewnie_bezposrednie_jcwp_jeziornych",
+            "OBJECTID",
+        ),
+        (
+            "PGW_WP",
+            "Zlewnie_JCWP_przejściowych",
+            "zlewnie_jcwp_przejsciowych",
+            "OBJECTID",
+        ),
+        (
+            "PGW_WP",
+            "Zlewnie_JCWP_przybrzeżnych",
+            "zlewnie_jcwp_przybrzeznych",
+            "OBJECTID",
+        ),
+        (
+            "PGW_WP",
+            "Regionalne_Zarządy_Gospodarki_Wodnej",
+            "regionalne_zarzady_gospodarki_wodnej",
+            "OBJECTID_1",
+        ),
+        ("PGW_WP", "Rzeki_glowne", "rzeki_glowne", "OBJECTID"),
+        (
+            "JCWPd",
+            "Jednolite_części_wód_podziemnych",
+            "jednolite_czesci_wod_podziemnych",
+            "OBJECTID",
+        ),
+        (
+            "SIG",
+            "Obszary_chronione_wodozależne_pominiki_przyrody",
+            "obszary_chronione_wodozalezne_pominiki_przyrody",
+            "OBJECTID",
+        ),
+        (
+            "SIG",
+            "Obszary_chronione_wodozależne",
+            "obszary_chronione_wodozalezne",
+            "OBJECTID",
+        ),
+        (
+            "SIG",
+            "Obszary_chronione_JCWP_TW_troć",
+            "obszary_chronione_jcwp_tw_troc",
+            "OBJECTID",
+        ),
+        (
+            "SIG",
+            "Obszary_chronione_cieki_troć",
+            "obszary_chronione_cieki_troc",
+            "OBJECTID",
+        ),
+        (
+            "SIG",
+            "Obszary_chronione_jeziora_zbiorniki_troć",
+            "obszary_chronione_jeziora_zbiorniki_troc",
+            "OBJECTID",
+        ),
+        (
+            "SIG",
+            "Obszary_chronione_cieki_węgorz",
+            "obszary_chronione_cieki_wegorz",
+            "OBJECTID",
+        ),
+        (
+            "SIG",
+            "Obszary_chronione_jeziora_zbiorniki_węgorz",
+            "obszary_chronione_jeziora_zbiorniki_wegorz",
+            "OBJECTID",
+        ),
+        (
+            "SIG",
+            "Obszary_chronione_JCWP_TW_węgorz",
+            "obszary_chronione_jcwp_tw_wegorz",
+            "OBJECTID",
+        ),
+    )
+)
+_PL_PGW = SourceDescriptor(
+    key="pl.pgw.pgw",
+    country="PL",
+    product="pgw",
+    name=message("sources.pgw_name"),
+    provider_name="PGW Wody Polskie",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="none",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_PGW_DOWNLOAD}/",
+            notes=message("sources.pgw_national_gdb_note"),
+            params=UnitPackageParams(
+                unit="country",
+                variants=(
+                    PackageVariant(
+                        choice=(),
+                        url_template=(
+                            f"{_PGW_DOWNLOAD}/bccfebcf31ac47799fe1de6294b73c29/"
+                            "geobaza-2apgw-ver-20230915-gdb-zip"
+                        ),
+                        edition="2023-09-15",
+                        segment_tokens=("gdb",),
+                        members=("_ver_20230915.gdb/gdb",),
+                    ),
+                ),
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="none",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=f"{_PGW_DOWNLOAD}/",
+            notes=message("sources.pgw_area_note"),
+            params=ArchiveLayersParams(
+                native_crs=PL_1992_CRS,
+                layers=_PGW_LAYERS,
+                area_omitted=message("sources.pgw_area_omitted"),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="hydro/pl_pgw",
+    default_extension=".gpkg",
+    license=_PGW_LICENSE,
+)
+
 # Survey control of CR (raport E, wiersz 23; service and layers recorded
 # 2026-10-16, tests/fixtures/cz/survey_control): --network -> the point layers
 # of BodovaPole/MapServer, layer names without diacritics. The points
@@ -2781,6 +2980,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         *_E4_PL_SOURCES,
         # plan E - E5: mesh 3D, 3D trees, survey control networks, PL-geoid2021.
         *_E5_PL_SOURCES,
+        # ADR-059: the water management plan data of PGW Wody Polskie.
+        _PL_PGW,
         SourceDescriptor(
             key="eu.clms.corine",
             country="EU",

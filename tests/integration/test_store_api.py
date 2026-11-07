@@ -28,11 +28,13 @@ from kartograf.providers.pl.gugik_orto import (
 )
 from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.sources.descriptor import (
+    ArchiveLayersParams,
     AtomFilesParams,
     FeatureBBoxParams,
     SheetIndexParams,
     UnitPackageParams,
     WcsCutoutParams,
+    layer_groups_token,
 )
 from kartograf.sources.registry import all_sources
 from kartograf.sources.sidecar import emit_sidecar
@@ -353,7 +355,7 @@ def _writer_segments() -> Iterator[tuple[str, str]]:
     """``(descriptor key, segment)`` of every segment the writers produce,
     built with the writers' own helpers (``resolve_subdir``,
     ``content_segment``, ``token_segment``, orthophoto variants and
-    cutouts, land cover tokens, ``hsg_segment``)."""
+    cutouts, land cover tokens, ``hsg_segment``, ``layer_groups_token``)."""
     land: dict[str, list[tuple[str, ...]]] = {
         "pl.gugik.bdot10k": [
             ("gpkg",),
@@ -428,6 +430,14 @@ def _writer_segments() -> Iterator[tuple[str, str]]:
                         yield d.key, content_segment(d.key, (*chosen, layer.code))
                 else:
                     yield d.key, content_segment(d.key, chosen)
+            elif isinstance(params, ArchiveLayersParams):
+                collection = True
+                yield d.key, content_segment(d.key, ())
+                codes = tuple(dict.fromkeys(layer.code for layer in params.layers))
+                for size in range(1, len(codes) + 1):
+                    for groups in itertools.combinations(codes, size):
+                        token = layer_groups_token(groups)
+                        yield d.key, content_segment(d.key, (token,))
         if not collection and d.key not in land:
             yield d.key, template
     for depth in SoilGridsProvider.DEPTHS:

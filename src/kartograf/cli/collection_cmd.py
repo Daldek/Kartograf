@@ -8,7 +8,8 @@ The CLI only translates: ``library_arguments`` turns the flags of a group into
 library arguments (the same conversion for every data command, from the
 declaration of the command in the catalog), ``cmd_collection_download`` runs the
 plan file cycle and prints one status line per file (its path below
-``--root``), the failures and the data notices. Every data decision is in
+``--root``; first the archive an area was read from, ``inputs``), the failures
+and the data notices. Every data decision is in
 ``kartograf.download.collections``.
 """
 
@@ -63,7 +64,8 @@ def _collection_download(args: argparse.Namespace) -> int:
             ),
         )
     update = _update_mode(args)
-    # a group whose request is always one file (hydro) has no --workers
+    # hydro has no --workers: one file, or the PGW archive and the GeoPackage read
+    # from it, one after the other
     workers = getattr(args, "workers", 1)
     on_progress = progress_printer(args, workers)
     report = download_collection(
@@ -92,7 +94,7 @@ def _print_collection(
     _end_progress(on_progress)
     output = _written_to(args, report)
     if not args.quiet:
-        for item in report.files:
+        for item in (*report.inputs, *report.files):
             print(_status_line(_unit_of(item.file.path, output), item.file, update))
         if len(report.files) + len(report.failed) > 1:
             _print_version_summary(

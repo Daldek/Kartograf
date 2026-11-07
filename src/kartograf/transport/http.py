@@ -258,7 +258,9 @@ def response_signal(response: requests.Response) -> dict[str, Any]:
     """HTTP freshness signal of a response (versioned store, ``extra.http``).
 
     ``{"etag", "last_modified", "content_length"}``; a missing header (or a
-    non-numeric ``Content-Length``) is ``None``.
+    non-numeric ``Content-Length``) is ``None``. ``content_length`` is the
+    length of the file: ``None`` for an answer with a content coding (``gzip``),
+    whose ``Content-Length`` counts the coded bytes (``requests`` decodes them).
     """
 
     def text(name: str) -> str | None:
@@ -267,6 +269,9 @@ def response_signal(response: requests.Response) -> dict[str, Any]:
         return value if isinstance(value, str) else None
 
     length = text("Content-Length")
+    coding = text("Content-Encoding")
+    if coding is not None and coding.strip().lower() != "identity":
+        length = None
     return {
         "etag": text("ETag"),
         "last_modified": text("Last-Modified"),
@@ -281,11 +286,16 @@ def head_signal(
     timeout: float,
     retries: int = MAX_RETRIES,
     description: str = "",
+    identity: bool = False,
 ) -> dict[str, Any]:
     """Return the ``response_signal`` of a ``HEAD`` request, with retries.
 
     ``response_signal`` of a ``HEAD`` request, with the retry policy of
-    ``get_with_retry`` (network errors, 429 and 5xx retried).
+    ``get_with_retry`` (network errors, 429 and 5xx retried). ``identity``: ask
+    for the file without a content coding (``Accept-Encoding: identity``), so a
+    server that compresses its answers gives the length of the file - for a
+    size; a freshness probe keeps the coding of the downloads, whose ``ETag``
+    may differ per coding.
 
     Raises
     ------
@@ -294,11 +304,16 @@ def head_signal(
         ``retries`` attempts.
     """
     context = description or url
+    coding: dict[str, Any] = (
+        {"headers": {"Accept-Encoding": "identity"}} if identity else {}
+    )
     last_error: requests.RequestException | None = None
     for attempt in range(retries):
         check_stop()
         try:
-            response = session.head(url, timeout=timeout, allow_redirects=True)
+            response = session.head(
+                url, timeout=timeout, allow_redirects=True, **coding
+            )
             response.raise_for_status()
             return response_signal(response)
         except requests.RequestException as exc:

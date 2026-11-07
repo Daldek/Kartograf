@@ -11,7 +11,7 @@ products plus ``auto``), one selection (``--teryt``, in ``cadastre``
 ``--lod``/``--year``, ``--format``, ``--network``, ...), the store flags
 and ``--workers`` (default 1; not in a group whose request is always one
 file - ``hydro``). ``--teryt`` and ``--sheet`` select PL units and sheet
-codes: a group without PL sources (``hydro``) has neither; ``--ku`` selects
+codes: ``hydro``, whose areas are study areas, has neither; ``--ku`` selects
 a CZ cadastral area. The choices in ``--help`` come from the source registry
 through the library; the examples are the ``epilog`` of ``download --help``.
 
@@ -227,7 +227,7 @@ def collection_commands(
         )
     ]
     if whole_country is not None:
-        # the countries of the group's products: hydro has CZ only
+        # the countries of the group's products (hydro: pl for PGW, cz for HY-NET)
         declared.append(
             Constraint(
                 "requires",

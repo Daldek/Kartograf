@@ -920,6 +920,20 @@ class _FailingHead(CuzkSession):
         return _response(self.outcome, {})
 
 
+class _Probes(CuzkSession):
+    """``CuzkSession`` keeping the headers of the requests of every ``HEAD``."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.asked: list[dict | None] = []
+
+    def head(self, url: str, timeout=None, allow_redirects=True, **kwargs):
+        self.asked.append(kwargs.get("headers"))
+        return super().head(
+            url, timeout=timeout, allow_redirects=allow_redirects, **kwargs
+        )
+
+
 class _Border:
     """The GUGiK answers of the PL part of Cieszyn (``RecordedIndex``) and the
     CUZK answers (``CuzkSession``) behind one session: ``country="auto"``."""
@@ -1156,6 +1170,17 @@ def test_cz_availability_never_gets_files():
         assert session.of("GET") == []
         assert {kind for kind, _ in session.calls} == {"QUERY", "HEAD"}
         assert all(url.startswith(f"{OPENZU}/") for url in session.of("HEAD"))
+
+
+def test_cz_availability_asks_for_sizes_without_a_content_coding():
+    """The size of a file comes from a ``HEAD`` asking for ``identity``: a server
+    that gzips its answers counts the coded bytes otherwise."""
+    session = _Probes()
+
+    _cz("nmt", session)
+
+    assert session.asked
+    assert all(headers == {"Accept-Encoding": "identity"} for headers in session.asked)
 
 
 def test_cz_hints(tmp_path):

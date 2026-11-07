@@ -729,6 +729,7 @@ are subject to the naming convention (section 3.3, rule 10; ADR-044 D7).
 | `cz.cuzk.zabaged` | `landcover/cz_zabaged` (prefix + tokens, rule 9) | `.gpkg` |
 | `cz.cuzk.ruian` | `boundaries/cz_ruian` (prefix + tokens, rule 9) | `.gpkg` |
 | `cz.cuzk.hynet` | `hydro/cz_hynet` (prefix + tokens, rule 9) | `.gpkg` |
+| `pl.pgw.pgw` | `hydro/pl_pgw` (prefix + `--layers` token, rule 9) and `hydro/pl_pgw_gdb` (the archive, format token `gdb`) | `.gpkg` (the archive `.zip`) |
 | `pl.gugik.bdoo` | `landcover/pl_bdoo` (prefix + tokens: vintage and `--layers` classes, rule 9); slot `teryt/<woj>` | `.zip` |
 | `cz.cuzk.data50`, `cz.cuzk.data250` | `landcover/cz_data50`, `landcover/cz_data250` (prefix + tokens, rule 9) | `.gpkg` (nationwide file `.zip`) |
 | `pl.gugik.mesh` | `models3d/pl_mesh` (prefix, rule 9); slot `<crs>[/<zone>]/<file of the tile>` | `.zip` |
@@ -888,6 +889,28 @@ The HY-NET type `WatercourseSeparatedCrossing` is not an area layer: it has
 no geometry in GML (a relation of two segments), and for a query
 with BBOX GeoServer returns `hits` 0 despite features on the pages (ADR-042 erratum 2);
 the crossings are contained in the country-wide file.
+
+`pl.pgw.pgw` (`hydro --product pgw --country pl`, ADR-059) has two channels with the signal
+`none` and one file: the geodatabase archive of PGW Wody Polskie (`geobaza-2apgw-ver-20230915-gdb-zip`,
+142 MB, `PackageVariant.edition` `2023-09-15` = the version label, `label_source="edition"`, member
+`_ver_20230915.gdb/gdb`).
+
+| Channel | Params | Result |
+|---|---|---|
+| `DIRECT_FILES` + `UnitPackageParams(unit="country")`, `country_files`, EPSG:2180 | the URL above | `hydro/pl_pgw_gdb/country/pl.zip` 1:1 |
+| `DIRECT_FILES` + `ArchiveLayersParams`, `bbox_vector`, EPSG:2180 | `layers` (`FeatureLayer`: `code` = the feature dataset `PGW_WP`/`JCWPd`/`SIG`, `source`, `name`, `id_field`), `area_omitted` | `hydro/pl_pgw[_<layers>]/bbox/<coords>.gpkg` |
+
+The area channel reads the archive of the national channel (one per descriptor; a registry test
+keeps it), so an area request runs two jobs in `download/collections.py`: the archive (the local
+version of its slot, or one download into it, `extra.parent_request` = the area task) and the
+GeoPackage, written by `transform/gpkg.py` (`/vsizip/` of the one `*.gdb`, the `PUWG_1992` check
+against EPSG:2180, rectangle selection with the boundary, whole features, deterministic bytes). The
+GeoPackage names the archive version it was read from in `extra.source_files`, and a version
+written from an archive of the same `sha256` is reused (`reused`, as `soil hsg`). The archive is
+listed in `CollectionReport.inputs`. A size probe asks for `Accept-Encoding: identity`
+(`head_signal(identity=True)`), because the PGW server gzips its answers and a coded `HEAD` counts
+the coded bytes (20 B for the 142 MB archive); `response_signal` never takes the `Content-Length`
+of a coded answer as the length of a file.
 
 Plan E1 channels (ADR-043; `download_data` products, not collections):
 
@@ -1212,7 +1235,9 @@ data/
 │                                               # versions <Freshness>_<report>_<sha8>
 ├── hydro/
 │   ├── cz_hynet/bbox/<coords>.gpkg             # HY-NET of the area (WFS: WatercourseLink, HydroNode), EPSG:5514
-│   └── cz_hynet_gpkg/country/cz.zip            # national file (GPKG in ZIP, EPSG:3045, http signal)
+│   ├── cz_hynet_gpkg/country/cz.zip            # national file (GPKG in ZIP, EPSG:3045, http signal)
+│   ├── pl_pgw[_<layers>]/bbox/<coords>.gpkg    # PGW layers of the area (read from the archive), EPSG:2180
+│   └── pl_pgw_gdb/country/pl.zip               # IIaPGW geodatabase archive 1:1 (ZIP, signal none, label = edition)
 ├── geodesy/
 │   ├── pl_control_horizontal/bbox/<coords>.gpkg      # network points of the area (network WFS), EPSG:2180
 │   ├── pl_control_horizontal_xls/teryt/1201.zip      # county package (XLS lists, JPG descriptions) 1:1
@@ -1510,7 +1535,7 @@ simply a descriptor entry with the channel parameters.
 | `boundaries/` | `boundaries` | `--product admin`, `addresses`, `special`, `geomorphology` |
 | `cadastre/` | `cadastre` | `--product map`, `prices` |
 | `models3d/` | `models3d` | `--product buildings`, `trees`, `mesh` |
-| `hydro/` | `hydro` | `--product network` |
+| `hydro/` | `hydro` | `--product network`, `pgw` |
 | `names/` | `names` | `--product geographic`, `world` |
 | `maps/` | `maps` | `--product topographic` |
 | `geodesy/` | `geodesy` | `--product control`, `geoid` |

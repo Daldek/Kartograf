@@ -1176,6 +1176,43 @@ kartograf hydro download --product network --country cz --whole-country --root .
 
 ---
 
+### 3.21.1 Feature: PGW water management plans (`hydro --product pgw`, ADR-059)
+
+**Priority:** P1 (High)
+**Status:** Implemented on branch `feature/pgw` (not merged into `develop`)
+
+#### Description
+The spatial data of the second update of the river basin management plans (IIaPGW, 2022-2027)
+of PGW Wody Polskie: the national geodatabase archive, and the GeoPackage of the layers of
+an area read from it. Consumers (Hydrograf) take the catchments and water bodies of PGW for a
+study area from the store.
+
+#### Requirements
+- `--whole-country --country pl`: the File Geodatabase archive (142 MB, edition `2023-09-15`)
+  stored 1:1 in `hydro/pl_pgw_gdb/country/pl.zip`, its size in a `Warning:` before the transfer;
+  an archive of another edition behind the URL is refused.
+- Area (`--bbox`, `--geometry`): one GeoPackage in EPSG:2180 with the whole features (no clipping)
+  of the chosen layers that intersect the envelope of the area, boundary included, lowercase ASCII
+  layer names, features in the order of `OBJECTID`, an empty layer with its schema; no feature in any
+  layer is `no_coverage`.
+- `--layers PGW_WP,JCWPd,SIG` (any letter case; all 25 layers when omitted) is a segment of the store;
+  with `--whole-country` or `--product network` it is a `validation_error`.
+- The archive is downloaded once into the store and reported in `inputs`; a GeoPackage written from
+  an archive of the same `sha256` is reused; the 34 attribute tables stay in the archive
+  (`area_omitted`).
+- Label = edition, no freshness signal: `--check` says `unverifiable` for the archive.
+- A size from `HEAD` is the length of the file (`Accept-Encoding: identity`).
+- Licence: none named by the portal (`PL-APGW` in the sidecar, with the reservation of the publication).
+
+#### CLI Commands
+```bash
+kartograf hydro download --product pgw --country pl --whole-country --root ./data
+kartograf hydro download --product pgw --country pl --layers PGW_WP --bbox 380000,540000,390000,550000 --root ./data
+kartograf hydro download --product pgw --country pl --layers PGW_WP --bbox 380000,540000,390000,550000 --check --root ./data
+```
+
+---
+
 ### 3.22 Feature: PRG addresses, PRG special boundaries and RCN (`boundaries`, `cadastre`, ADR-043)
 
 **Priority:** P2 (Medium)

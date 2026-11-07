@@ -340,6 +340,21 @@ class TestResponseSignal:
         assert response_signal(resp)["content_length"] is None
         assert response_signal(resp)["etag"] == "W/1"
 
+    @pytest.mark.parametrize(
+        ("coding", "length"),
+        [("gzip", None), ("GZIP, br", None), ("identity", 20), (None, 20)],
+    )
+    def test_length_of_a_coded_answer_is_not_the_length_of_the_file(
+        self, coding, length
+    ):
+        """A ``Content-Length`` of an answer with a content coding counts the
+        coded bytes (PGW: 20 for a ``HEAD`` of a 142 MB ZIP), never the file."""
+        headers = {"Content-Length": "20", "ETag": '"e"'}
+        if coding is not None:
+            headers["Content-Encoding"] = coding
+        signal = response_signal(_response(200, headers))
+        assert (signal["content_length"], signal["etag"]) == (length, '"e"')
+
     def test_download_to_on_response_sees_last_attempt(self, tmp_path):
         session = MagicMock()
         session.get.side_effect = [
@@ -392,6 +407,23 @@ class TestHeadSignal:
         assert signal == {"etag": '"e1"', "last_modified": "lm", "content_length": None}
         assert session.head.call_count == 2
         assert sleep.call_count == 1
+
+    @pytest.mark.parametrize(
+        ("identity", "headers"), [(True, {"Accept-Encoding": "identity"}), (False, {})]
+    )
+    def test_head_signal_asks_for_the_file_without_a_coding_only_when_told(
+        self, identity, headers
+    ):
+        """A size probe asks for ``identity`` (a coded ``HEAD`` counts the coded
+        bytes); a freshness probe keeps the coding of the downloads."""
+        session = MagicMock()
+        session.head.return_value = _response(200, {"Content-Length": "142"})
+        url = "https://example.test/p"
+
+        signal = head_signal(session, url, timeout=5, identity=identity)
+
+        assert signal["content_length"] == 142
+        assert session.head.call_args.kwargs.get("headers", {}) == headers
 
     def test_head_signal_404_is_download_error_without_retry(self):
         session = MagicMock()

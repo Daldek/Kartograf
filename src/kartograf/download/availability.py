@@ -1733,9 +1733,10 @@ def _heads(
 def _head(url: str, sessions: SessionPerThread, cache: MetadataCache | None) -> _Head:
     """Return the ``HEAD`` result of one file.
 
-    The cache (``head|<url>``) or one ``HEAD`` (retry policy of ``head_signal``).
-    404 = no file; any other failure (5xx, timeout, other 4xx) = ``DownloadError`` -
-    never "no file".
+    The cache (``head|<url>``) or one ``HEAD`` (retry policy of ``head_signal``)
+    asking for the file without a content coding, so the size is the length of
+    the file. 404 = no file; any other failure (5xx, timeout, other 4xx) =
+    ``DownloadError`` - never "no file".
     """
     key = f"head|{url}"
     if cache is not None:
@@ -1743,7 +1744,7 @@ def _head(url: str, sessions: SessionPerThread, cache: MetadataCache | None) -> 
         if restored is not None:
             return restored
     try:
-        signal = head_signal(sessions.get(), url, timeout=_CZ_TIMEOUT)
+        signal = head_signal(sessions.get(), url, timeout=_CZ_TIMEOUT, identity=True)
     except DownloadError as error:
         if error.status_code != 404:
             raise

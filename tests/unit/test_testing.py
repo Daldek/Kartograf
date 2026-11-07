@@ -12,10 +12,15 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+import pyogrio
+import pyogrio.raw
 import pytest
+import shapely
 
+import kartograf
 from kartograf import (
     _clock,
+    command_for_file,
     describe_segment,
     file_footprint,
     iter_store,
@@ -24,14 +29,26 @@ from kartograf import (
     list_segments,
     read_sidecar,
 )
-from kartograf.exceptions import DownloadError, InvalidSidecarError, ValidationError
+from kartograf.download.collections import download_collection
+from kartograf.exceptions import (
+    CommandNotRebuildableError,
+    DownloadError,
+    InvalidSidecarError,
+    ValidationError,
+)
 from kartograf.testing import (
     CZ_SEGMENT,
+    PGW_ARCHIVE_SEGMENT,
+    PGW_AREA,
+    PGW_AREA_SEGMENT,
     PL_SEGMENT,
     PL_SHEET,
     VARIANTS,
     FixtureStore,
+    _pgw_archive_bytes,
     build_fixture_store,
+    build_pgw_archive,
+    build_pgw_store,
     make_sidecar,
 )
 
@@ -298,6 +315,157 @@ def test_two_builds_with_the_same_arguments_are_byte_identical(tmp_path, variant
     assert all(
         stamp is not None and stamp.startswith("2026-10-12T") for stamp in stamps
     )
+
+
+# --- build_pgw_archive and build_pgw_store (ADR-059) -------------------------------
+
+_PGW_GDB = "Geobaza_2aPGW_ver_20230915.gdb"
+
+
+@pytest.fixture(scope="module")
+def pgw_archive(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return build_pgw_archive(tmp_path_factory.mktemp("pgw") / "pl.zip")
+
+
+def _pgw_structure() -> dict:
+    data = Path(kartograf.__file__).parent / "_data" / "pgw_geodatabase.json"
+    return json.loads(data.read_text(encoding="utf-8"))
+
+
+def test_pgw_archive_has_the_recorded_structure_of_the_publication(pgw_archive):
+    """Every spatial layer of the published archive in its feature dataset, with
+    its identifier and geometry columns, fields and CRS definition, and the
+    attribute table beside them."""
+    structure = _pgw_structure()
+    gdb = f"/vsizip/{pgw_archive}/{_PGW_GDB}"
+    _, _, _, (names, paths) = pyogrio.raw.read(
+        gdb,
+        layer="GDB_Items",
+        columns=["Name", "Path"],
+        read_geometry=False,
+        LIST_ALL_TABLES="YES",
+    )
+    owner = {
+        str(name): str(path).strip("\\").split("\\")[0]
+        for name, path in zip(names, paths, strict=True)
+        if str(path).count("\\") == 2
+    }
+    for layer in structure["layers"]:
+        info = pyogrio.read_info(gdb, layer=layer["name"])
+        assert owner[layer["name"]] == layer["dataset"]
+        assert (info["fid_column"], info["geometry_name"]) == (
+            layer["fid"],
+            layer["geometry_column"],
+        )
+        assert list(info["fields"]) == list(layer["fields"])
+        assert info["crs"] == structure["crs"]
+    table = pyogrio.read_info(gdb, layer=structure["table"]["name"])
+    assert table["geometry_type"] is None
+    assert list(table["fields"]) == list(structure["table"]["fields"])
+    assert len(pyogrio.list_layers(gdb)) == len(structure["layers"]) + 1
+
+
+def test_pgw_river_catchments_lie_around_the_fixture_area_as_documented(pgw_archive):
+    """Inside the square, across its east edge, on its north edge, outside."""
+    _, _, geometries, (codes, *_) = pyogrio.raw.read(
+        f"/vsizip/{pgw_archive}/{_PGW_GDB}", layer="Zlewnie_JCWP_rzecznych"
+    )
+    square = shapely.box(PGW_AREA.min_x, PGW_AREA.min_y, PGW_AREA.max_x, PGW_AREA.max_y)
+    shapes = dict(zip(codes, shapely.from_wkb(geometries), strict=True))
+    inside, across, edge, outside = (shapes[code] for code in sorted(shapes))
+    assert inside.within(square)
+    assert across.intersects(square) and not across.within(square)
+    assert edge.touches(square)
+    assert outside.disjoint(square)
+
+
+def test_pgw_archive_bytes_do_not_change_between_builds(pgw_archive):
+    """Reproducible UUIDs and fixed member dates: an independent build of the
+    geodatabase gives the ZIP the first build gave."""
+    assert _pgw_archive_bytes.__wrapped__() == pgw_archive.read_bytes()
+
+
+@pytest.fixture(scope="module")
+def pgw_store(tmp_path_factory: pytest.TempPathFactory):
+    return build_pgw_store(tmp_path_factory.mktemp("pgw-store") / "data")
+
+
+def test_pgw_store_holds_the_archive_as_the_whole_country_command_stores_it(
+    pgw_store, pgw_archive
+):
+    assert list_segments(pgw_store.root) == [PGW_ARCHIVE_SEGMENT, PGW_AREA_SEGMENT]
+    entries = list(iter_store(pgw_store.root))
+    assert sorted(entry.kind for entry in entries) == [
+        "link",
+        "link",
+        "version",
+        "version",
+    ]
+    assert all(entry.problem is None for entry in entries)
+    (version,) = pgw_store.archive.versions
+    assert (version.label, version.status) == ("2023-09-15", "new")
+    assert version.path.read_bytes() == pgw_archive.read_bytes()
+    assert pgw_store.archive.path.samefile(version.path)
+    meta = read_sidecar(version.path)
+    assert (meta.dataset_key, meta.product, meta.unit) == ("pl.pgw.pgw", "pgw", "pl")
+    assert meta.request == {"whole_country": True}
+    assert meta.extra is not None
+    assert meta.extra["version"] == {"label": "2023-09-15", "label_source": "edition"}
+    assert command_for_file(meta).options == {
+        "product": "pgw",
+        "country": "pl",
+        "whole_country": True,
+    }
+
+
+def test_pgw_store_holds_the_area_geopackage_the_area_command_writes(tmp_path):
+    """The GeoPackage of ``PGW_AREA`` with the layers of ``PGW_WP``, written from
+    the stored archive it names: the same request reuses it without a request,
+    and ``command_for_file`` refuses it (a file chosen by an area)."""
+    pgw_store = build_pgw_store(tmp_path / "data")
+    (version,) = pgw_store.area.versions
+    (archive,) = pgw_store.archive.versions
+    meta = read_sidecar(version.path)
+
+    again = download_collection(
+        product="pgw",
+        country="pl",
+        bbox=PGW_AREA,
+        layers=["PGW_WP"],
+        root=pgw_store.root,
+        cache=False,
+    )
+
+    assert (pgw_store.area.segment, pgw_store.area.unit) == (
+        PGW_AREA_SEGMENT,
+        "380000_540000_390000_550000",
+    )
+    assert (version.label, version.status) == ("2023-09-15", "new")
+    assert pgw_store.area.path.samefile(version.path)
+    layers = [str(name) for name, _ in pyogrio.list_layers(version.path)]
+    assert len(layers) == 16 and "zlewnie_jcwp_rzecznych" in layers
+    catchments = pyogrio.read_info(version.path, layer="zlewnie_jcwp_rzecznych")
+    assert (catchments["features"], catchments["crs"]) == (3, "EPSG:2180")
+    assert meta.request == {
+        "bbox": [380000.0, 540000.0, 390000.0, 550000.0],
+        "bbox_crs": "EPSG:2180",
+        "layers": ["PGW_WP"],
+    }
+    assert meta.extra is not None
+    assert [(f["sha256"], f["label"]) for f in meta.extra["source_files"]] == [
+        (archive.sha256, archive.label)
+    ]
+    (reused,) = again.files
+    assert (reused.file.status, reused.file.version_path) == ("reused", version.path)
+    with pytest.raises(CommandNotRebuildableError):
+        command_for_file(meta)
+
+
+def test_two_pgw_store_builds_are_byte_identical(tmp_path, pgw_store):
+    """The GeoPackage and the sidecars too: a fixed clock and a fixed GDAL date."""
+    again = build_pgw_store(tmp_path / "data")
+
+    assert _tree(again.root) == _tree(pgw_store.root)
 
 
 # --- make_sidecar ------------------------------------------------------------------

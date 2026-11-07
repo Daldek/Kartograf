@@ -838,8 +838,10 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         )
 
     def record_length(self, record: SkorowidzRecord) -> int | None:
-        """Return the ``Content-Length`` of the record file from ``HEAD``.
+        """Return the length of the record file from ``HEAD``.
 
+        The ``Content-Length`` of a ``HEAD`` asking for the file without a content
+        coding (a server that gzips its answers counts the coded bytes otherwise);
         ``None`` when the server gives none or the request fails (the download that
         follows reports its own failure).
         """
@@ -850,6 +852,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 timeout=self.DEFAULT_TIMEOUT,
                 retries=self.MAX_RETRIES,
                 description=f"HEAD {record.url.rsplit('/', 1)[-1]}",
+                identity=True,
             )
         except DownloadError as e:
             logger.debug("HEAD %s: %s", record.url, e)

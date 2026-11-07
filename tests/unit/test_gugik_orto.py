@@ -24,6 +24,7 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+from kartograf.providers.pl.skorowidz import parse_skorowidz_records
 from tests.conftest import render_gfi_body
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "gugik_skorowidz"
@@ -937,3 +938,24 @@ class TestForceRefreshesRecordCache:
         with open_cache(True, force=False) as cache:
             assert cache is not None
             assert cache.get_record(*key)["source"]["url"] == RGB_2024
+
+
+def test_record_length_asks_for_the_file_without_a_content_coding():
+    """The size of a record comes from a ``HEAD`` asking for ``identity``: a server
+    that gzips its answers gives the coded 20 bytes otherwise (PGW, 2026-11-06)."""
+    session = Mock()
+    session.head.return_value = Mock(
+        status_code=200,
+        headers={"Content-Length": "41000000"},
+        raise_for_status=Mock(),
+    )
+    provider = GugikOrtoProvider(session=session, color="RGB")
+    (record,) = parse_skorowidz_records(
+        "X.push({" + ", ".join(f'{k}: "{v}"' for k, v in orto_record().items()) + "})",
+        "Skorowidze",
+    )
+
+    length = provider.record_length(record)
+
+    assert length == 41_000_000
+    assert session.head.call_args.kwargs["headers"] == {"Accept-Encoding": "identity"}

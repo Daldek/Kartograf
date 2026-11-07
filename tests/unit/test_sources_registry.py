@@ -28,6 +28,7 @@ from kartograf.source_info import SOURCE_GROUPS
 from kartograf.sources.descriptor import (
     PACKAGE_URL_TOKENS,
     AccessChannel,
+    ArchiveLayersParams,
     AtomFilesParams,
     CountryProfile,
     FeatureBBoxParams,
@@ -126,6 +127,9 @@ _OPENZU_HEAD = {
         (_CUZK_FIXTURES / "openzu_head.json").read_text(encoding="utf-8")
     )["responses"]
 }
+# The only spatial file of the IIaPGW publication (ADR-059, recorded 2026-11-06).
+_PGW_FIXTURE = Path(__file__).parent.parent / "fixtures" / "pl" / "pgw" / "archive.json"
+_PGW_RECORDED = json.loads(_PGW_FIXTURE.read_text(encoding="utf-8"))
 
 
 # Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md;
@@ -163,6 +167,7 @@ CHANNEL_SIGNALS = [
     ("cz.cuzk.hynet", TransportKind.DIRECT_FILES, "http"),
     ("cz.cuzk.orto", TransportKind.DIRECT_FILES, "metadata"),
     ("pl.gugik.nmt_100m", TransportKind.DIRECT_FILES, "metadata"),
+    ("pl.pgw.pgw", TransportKind.DIRECT_FILES, "none"),
 ]
 
 
@@ -734,6 +739,9 @@ class TestResolveSubdir:
 # A segment token (ADR-044 D7): lowercase letters and digits, "-" between the
 # words of one token (ascii-nmt, 0-5cm, ptwp-swrs), "." in a number (0.5m).
 _SEGMENT_TOKEN = re.compile(r"[a-z0-9]+(?:[.-][a-z0-9]+)*")
+# The Polish letters written without diacritics: the GeoPackage names of the
+# layers of a geodatabase (ADR-059 decision 6).
+_PL_ASCII = str.maketrans("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", "acelnoszzACELNOSZZ")
 
 
 class TestCollectionChannels:
@@ -744,7 +752,9 @@ class TestCollectionChannels:
         assert channels
         for d, ch in channels:
             if ch.transport == TransportKind.DIRECT_FILES:
-                assert isinstance(ch.params, UnitPackageParams | AtomFilesParams), d.key
+                assert isinstance(
+                    ch.params, UnitPackageParams | AtomFilesParams | ArchiveLayersParams
+                ), d.key
                 if isinstance(ch.params, AtomFilesParams):
                     assert ch.params.service_feed == ch.endpoint, d.key
                     assert ch.endpoint.startswith("https://"), d.key
@@ -903,6 +913,39 @@ class TestCollectionChannels:
                 for layer in layers:
                     assert _SEGMENT_TOKEN.fullmatch(layer.code), (d.key, layer.code)
 
+    def test_archive_layers_read_one_national_archive(self):
+        """An area read from a national archive (ADR-059): the descriptor has
+        exactly one national file of one variant, published in the CRS the
+        layers are written in, and the same freshness signal; every layer once,
+        under the source name in lowercase ASCII, and a code that makes a
+        segment token."""
+        archives = [
+            (d, ch)
+            for d, ch in _collection_channels()
+            if isinstance(ch.params, ArchiveLayersParams)
+        ]
+        assert [d.key for d, _ in archives] == ["pl.pgw.pgw"]
+        for d, ch in archives:
+            assert isinstance(ch.params, ArchiveLayersParams)
+            (national,) = (
+                c
+                for c in d.channels
+                if isinstance(c.params, UnitPackageParams)
+                and c.params.unit == "country"
+            )
+            assert isinstance(national.params, UnitPackageParams)
+            assert len(national.params.variants) == 1, d.key
+            assert national.horizontal_crs == ch.horizontal_crs == ch.params.native_crs
+            assert national.update_signal == ch.update_signal, d.key
+            layers = ch.params.layers
+            for attribute in ("name", "source"):
+                values = [getattr(layer, attribute) for layer in layers]
+                assert len(set(values)) == len(values), (d.key, attribute)
+            for layer in layers:
+                assert layer.name == layer.source.translate(_PL_ASCII).lower()
+                token = layer.code.lower().replace("_", "-")
+                assert _SEGMENT_TOKEN.fullmatch(token), (d.key, layer.code)
+
     def test_new_sources_registered(self):
         pl = {d.key: d for d in sources_for(country="PL")}
         expected = {
@@ -915,6 +958,33 @@ class TestCollectionChannels:
             assert (d.product, d.storage_subdir) == (product, subdir)
             assert d.license == pl["pl.gugik.bdot10k"].license
             assert all(ch.horizontal_crs == "EPSG:2180" for ch in d.channels)
+
+    def test_pgw_archive_is_the_recorded_publication(self):
+        """The national channel of PGW (ADR-059): the recorded URL, the version
+        label = the edition date of the published file name, and one required
+        member that only an archive of that edition holds (its geodatabase
+        marker)."""
+        d = get_source("pl.pgw.pgw")
+        (national,) = (
+            ch
+            for ch in d.channels
+            if isinstance(ch.params, UnitPackageParams) and ch.params.unit == "country"
+        )
+        assert isinstance(national.params, UnitPackageParams)
+        (variant,) = national.params.variants
+        assert variant.url_template == _PGW_RECORDED["url"]
+        disposition = _PGW_RECORDED["head"]["headers"]["Content-Disposition"]
+        stamp = re.search(r"_ver_(\d{4})(\d{2})(\d{2})\.gdb\.zip$", disposition)
+        assert stamp is not None
+        assert variant.edition == "-".join(stamp.groups())
+        (marker,) = variant.members
+        matched = [
+            name
+            for name in _PGW_RECORDED["members"]
+            if name.lower().endswith(marker.lower())
+        ]
+        assert matched == ["Geobaza_2aPGW_ver_20230915.gdb/gdb"]
+        assert d.license.url == _PGW_RECORDED["page"]
 
     def test_bdot10k_archive_is_channel_of_bdot10k(self):
         d = get_source("pl.gugik.bdot10k")
@@ -983,8 +1053,9 @@ _CHOICE_TOKENS: dict[str, list[tuple[str, ...]]] = {
 def _content_tokens(d: SourceDescriptor) -> list[tuple[str, ...]]:
     """Content tokens of every variant ``d`` declares (none: the prefix):
     unit package variants (with the classes of a release), the EPSG of each
-    CRS of an ATOM file, feature choices and levels, the WCS cutout variant
-    and pixel, the land cover and soil choices."""
+    CRS of an ATOM file, feature choices and levels, each choice of the layer
+    groups of an archive area, the WCS cutout variant and pixel, the land cover
+    and soil choices."""
     found: list[tuple[str, ...]] = [(), *_CHOICE_TOKENS.get(d.key, ())]
     cutouts = wcs_cutout_channels(d.key)
     for channel in d.channels:
@@ -1004,6 +1075,15 @@ def _content_tokens(d: SourceDescriptor) -> list[tuple[str, ...]]:
                 found.extend((*chosen, layer.code) for layer in params.layers)
             else:
                 found.append(chosen)
+        elif isinstance(params, ArchiveLayersParams):
+            codes = sorted(
+                {layer.code.lower().replace("_", "-") for layer in params.layers}
+            )
+            found.extend(
+                ("-".join(chosen),)
+                for size in range(1, len(codes) + 1)
+                for chosen in itertools.combinations(codes, size)
+            )
         elif isinstance(params, WcsCutoutParams):
             coverage = params.variant if len(cutouts) > 1 else None
             found.extend(

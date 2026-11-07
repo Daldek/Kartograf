@@ -83,6 +83,36 @@ MESSAGES = {
         "{source}: the identifiers {id_field} are not comparable",
         "{source}: identyfikatory {id_field} nie sa porownywalne",
     ),
+    "archive_unreadable": Text(
+        "{context}: GDAL cannot read it: {error}",
+        "{context}: GDAL nie odczytuje: {error}",
+    ),
+    "archive_geodatabases": Text(
+        "{archive}: {count} geodatabases (*.gdb directories) in the archive, expected "
+        "one",
+        "{archive}: {count} geobaz (katalogow *.gdb) w archiwum, oczekiwano jednej",
+    ),
+    "archive_missing_layers": Text(
+        "{context}: no layer {missing} in the geodatabase",
+        "{context}: brak warstwy {missing} w geobazie",
+    ),
+    "archive_layer_identifier": Text(
+        "{context}: the identifier column is {found}, expected {expected}",
+        "{context}: kolumna identyfikatora to {found}, oczekiwano {expected}",
+    ),
+    "archive_layer_grid": Text(
+        "{context}: the CRS {found} does not have the projection of {crs}; nothing is "
+        "reprojected",
+        "{context}: uklad {found} nie ma odwzorowania {crs}; nic nie jest przeliczane",
+    ),
+    "archive_geometry": Text(
+        "{context}: a geometry cannot be compared with the area: {error}",
+        "{context}: geometrii nie da sie porownac z obszarem: {error}",
+    ),
+    "archive_no_features": Text(
+        "{context}: no feature of {codes} intersects {bbox} ({crs})",
+        "{context}: zaden obiekt {codes} nie przecina {bbox} ({crs})",
+    ),
     # ``transform.raster``.
     "warp_grid_source_has_bands": Text(
         "warp_to_grid: the source {name} has {count} bands - the reprojection "

@@ -1,10 +1,26 @@
 """
-Deterministic GeoPackage of a ``feature_bbox`` answer (ADR-042 D5).
+Deterministic GeoPackages of area results (ADR-042 D5, ADR-059).
 
 ``write_gpkg`` reads the pages saved by ``transport.feature_bbox`` with GDAL
 (``pyogrio``), removes duplicates, sorts the features by the layer id field,
 moves the response-time fields (``drop_fields``) out of the file and writes
 one GPKG layer per source layer in the native CRS of the service.
+
+``write_archive_gpkg`` reads the one File Geodatabase of a ZIP through
+``/vsizip/``: every declared layer must be in it, with its identifier column
+and the projection of the native CRS (the layers of PGW carry an ESRI
+definition of the CS92 grid that pyproj does not equate with EPSG:2180, so the
+projection method, its parameters and the ellipsoid are compared; nothing is
+reprojected). The envelope of the area is GDAL's spatial filter, and a
+feature stays when shapely finds that its geometry intersects the area
+rectangle, the boundary included (the ``BBOX`` filter of a WFS). The features
+are written whole, in the order of the identifier, which is the first field;
+an integer field read with nulls (as floats by pyogrio) is written as its
+declared type with the nulls; every chosen layer is written, an empty one with
+its schema, under its lowercase ASCII name with ``DESCRIPTION`` =
+``<dataset>/<source layer>``. Two warnings of the read are ignored
+(``_ARCHIVE_WARNINGS``: measured types read in 2D, a spatial index GDAL does
+not use). No feature in any layer is ``NoCoverageError``.
 
 Reading. WFS GML pages: open options ``XSD=<DescribeFeatureType>`` (the same
 field types on every page, no guessing from the data), ``WRITE_GFS=NO`` (no
@@ -48,14 +64,17 @@ features in id order, the layer geometry type from the geometries (one
 family -> its Multi type, else ``Unknown``) or, for an empty layer, from the
 schema; ``OGR_CURRENT_DATE`` is fixed while writing, so the same pages give
 the same bytes (per GDAL version). GDAL config options are process-wide: one
-lock serialises the configured GDAL work of this module (parallel jobs).
+lock (``gdal_config``) serialises the configured GDAL work of this module
+(parallel jobs) and of the fixtures ``kartograf.testing`` writes with GDAL.
 """
 
 import json
 import math
 import struct
 import threading
+import warnings
 import xml.etree.ElementTree as ET
+import zipfile
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -65,13 +84,21 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pyogrio
 import pyogrio.raw
+import shapely
 from pyogrio.errors import DataLayerError, DataSourceError
+from pyproj import CRS
+from pyproj.exceptions import CRSError
 
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.messages import message, reason
 
 if TYPE_CHECKING:
-    from kartograf.sources.descriptor import FeatureBBoxParams
+    from kartograf.core.bbox import BBox
+    from kartograf.sources.descriptor import (
+        ArchiveLayersParams,
+        FeatureBBoxParams,
+        FeatureLayer,
+    )
     from kartograf.transport.feature_bbox import FeaturePages, LayerPages
 
 # gpkg_contents.last_change of every written layer (instead of "now").
@@ -80,6 +107,13 @@ _FIXED_DATE = "2000-01-01T00:00:00.000Z"
 _GDAL_LOCK = threading.Lock()
 _GML_OPEN_OPTIONS = {"WRITE_GFS": "NO", "DOWNLOAD_SCHEMA": "NO"}
 _GDAL_TZ_UTC = 100  # GDAL TZFlag of UTC (pyogrio ``gdal_tz_offsets``)
+# Warnings of reading the geodatabase of PGW (2023-09-15) about the reading, not
+# the data: its measured layers hold no M values and are read in 2D, and GDAL
+# reads a layer whose spatial index has a doubtful depth without the index.
+_ARCHIVE_WARNINGS = (
+    (UserWarning, r"Measured \(M\) geometry types are not supported"),
+    (RuntimeWarning, r"Cannot use .* as the index depth"),
+)
 
 # ArcGIS field type -> numpy dtype of the GPKG column (unknown types: text).
 _ESRI_DTYPES = {
@@ -120,16 +154,18 @@ _Row = tuple[tuple[Any, ...], bytes | None]
 
 @dataclass(frozen=True)
 class GpkgSummary:
-    """Result of ``write_gpkg``.
+    """Result of ``write_gpkg`` and ``write_archive_gpkg``.
 
     ``features``: GPKG layer name -> features written (unique; every layer,
     also 0). ``dropped``: drop field -> sorted unique non-null values read
     from the pages (e.g. ``{"DATA": ("2026-10-14",)}``); a field without any
-    value (absent from the layers or always null) has no key.
+    value (absent from the layers or always null) has no key. ``member``: the
+    geodatabase directory of the archive the layers were read from.
     """
 
     features: dict[str, int]
     dropped: dict[str, tuple[str, ...]]
+    member: str | None = None
 
 
 @dataclass
@@ -197,9 +233,266 @@ def write_gpkg(
     )
 
 
+def archive_geodatabase(archive: Path) -> str:
+    """Return the name of the one ``*.gdb`` directory of a ZIP archive.
+
+    Raises
+    ------
+    DownloadError
+        Not a readable ZIP, or no or several geodatabases in it.
+    """
+    try:
+        with zipfile.ZipFile(archive) as opened:
+            tops = {name.split("/", 1)[0] for name in opened.namelist() if "/" in name}
+    except (OSError, zipfile.BadZipFile) as e:
+        raise DownloadError(
+            message(
+                "transform.archive_unreadable", context=archive.name, error=reason(e)
+            )
+        ) from e
+    found = sorted(top for top in tops if top.lower().endswith(".gdb"))
+    if len(found) != 1:
+        raise DownloadError(
+            message(
+                "transform.archive_geodatabases", archive=archive.name, count=len(found)
+            )
+        )
+    return found[0]
+
+
+def write_archive_gpkg(
+    path: Path,
+    archive: Path,
+    *,
+    params: "ArchiveLayersParams",
+    layers: Sequence["FeatureLayer"],
+    area: "BBox",
+) -> GpkgSummary:
+    """Write the features of ``layers`` that intersect ``area`` as one GeoPackage.
+
+    ``archive``: a ZIP holding one File Geodatabase; ``area``: a rectangle in
+    ``params.native_crs``. ``path`` must not exist (local disk: SQLite needs
+    working file locks). On any failure no file is left behind; the rules are in
+    the module docstring.
+
+    Raises
+    ------
+    DownloadError
+        No or several geodatabases, a missing layer, a layer with another
+        identifier column or another projection, a layer or geometry GDAL or
+        GEOS cannot read.
+    NoCoverageError
+        No feature of any of ``layers`` intersects ``area``.
+    ValueError
+        ``path`` exists or no layers (programmer error).
+    """
+    path = Path(path)
+    if path.exists():
+        raise ValueError(f"File {path} already exists")
+    if not layers:
+        raise ValueError("No layers to write")
+    member = archive_geodatabase(archive)
+    source = f"/vsizip/{archive}/{member}"
+    context = f"{archive.name}/{member}"
+    with _archive_reading():
+        try:
+            present = {str(name) for name, _ in pyogrio.list_layers(source)}
+        except (DataSourceError, DataLayerError) as e:
+            raise DownloadError(
+                message(
+                    "transform.archive_unreadable", context=context, error=reason(e)
+                )
+            ) from e
+    missing = [layer.source for layer in layers if layer.source not in present]
+    if missing:
+        raise DownloadError(
+            message(
+                "transform.archive_missing_layers",
+                context=context,
+                missing=", ".join(missing),
+            )
+        )
+    features: dict[str, int] = {}
+    try:
+        for layer in layers:
+            features[layer.name] = _write_archive_layer(
+                path, source, f"{context}/{layer.source}", layer, params, area
+            )
+    except BaseException:
+        _remove(path)
+        raise
+    if not any(features.values()):
+        _remove(path)
+        raise NoCoverageError(
+            message(
+                "transform.archive_no_features",
+                context=context,
+                codes=", ".join(dict.fromkeys(layer.code for layer in layers)),
+                bbox=",".join(f"{value:.10g}" for value in area[:4]),
+                crs=params.native_crs,
+            )
+        )
+    return GpkgSummary(features=features, dropped={}, member=member)
+
+
+def _write_archive_layer(
+    path: Path,
+    source: str,
+    context: str,
+    layer: "FeatureLayer",
+    params: "ArchiveLayersParams",
+    area: "BBox",
+) -> int:
+    """Append the features of one archive layer that intersect ``area``; their count."""
+    with _archive_reading():
+        try:
+            info = pyogrio.read_info(source, layer=layer.source)
+            meta, fids, geometries, values = pyogrio.raw.read(
+                source,
+                layer=layer.source,
+                bbox=(area.min_x, area.min_y, area.max_x, area.max_y),
+                return_fids=True,
+            )
+        except (DataSourceError, DataLayerError) as e:
+            raise DownloadError(
+                message(
+                    "transform.archive_unreadable", context=context, error=reason(e)
+                )
+            ) from e
+    if info["fid_column"] != layer.id_field:
+        raise DownloadError(
+            message(
+                "transform.archive_layer_identifier",
+                context=context,
+                found=info["fid_column"] or "-",
+                expected=layer.id_field,
+            )
+        )
+    if not _same_grid(meta["crs"], params.native_crs):
+        raise DownloadError(
+            message(
+                "transform.archive_layer_grid",
+                context=context,
+                found=_crs_name(meta["crs"]),
+                crs=params.native_crs,
+            )
+        )
+    box = shapely.box(area.min_x, area.min_y, area.max_x, area.max_y)
+    try:
+        meets = shapely.intersects(shapely.from_wkb(geometries), box)
+    except shapely.errors.GEOSException as e:
+        raise DownloadError(
+            message("transform.archive_geometry", context=context, error=reason(e))
+        ) from e
+    order = [int(i) for i in np.argsort(fids, kind="stable") if meets[i]]
+    columns: list[tuple[np.ndarray, np.ndarray | None]] = [
+        (np.asarray(fids[order], dtype=np.int64), None)
+    ]
+    for column, declared in zip(values, meta["dtypes"], strict=True):
+        columns.append(_declared_column(column[order], np.dtype(declared)))
+    geometry = np.empty(len(order), dtype=object)
+    for position, index in enumerate(order):
+        geometry[position] = geometries[index]
+    with gdal_config({"OGR_CURRENT_DATE": _FIXED_DATE}):
+        pyogrio.raw.write(
+            path,
+            geometry,
+            [data for data, _ in columns],
+            [layer.id_field, *(str(name) for name in meta["fields"])],
+            field_mask=[mask for _, mask in columns],
+            layer=layer.name,
+            driver="GPKG",
+            geometry_type=_geometry_type(list(geometry), str(meta["geometry_type"])),
+            crs=params.native_crs,
+            promote_to_multi=True,
+            layer_options={"DESCRIPTION": f"{layer.code}/{layer.source}"},
+        )
+    return len(order)
+
+
 @contextmanager
-def _gdal_config(options: dict[str, str]) -> Iterator[None]:
-    """GDAL config options for the block, then the previous values again."""
+def _archive_reading() -> Iterator[None]:
+    """Read an archive through GDAL: no EPSG matching, the known warnings ignored.
+
+    ``USE_OSR_FIND_MATCHES=NO``: GDAL would otherwise look for an EPSG
+    equivalent of every layer CRS each time it opens the geodatabase (0.1 s for
+    the 25 layers of PGW, finding none: ``_same_grid`` compares the projection).
+    The warnings of ``_ARCHIVE_WARNINGS`` concern the reading, not the data.
+    """
+    with gdal_config({"USE_OSR_FIND_MATCHES": "NO"}), warnings.catch_warnings():
+        for category, text in _ARCHIVE_WARNINGS:
+            warnings.filterwarnings("ignore", message=text, category=category)
+        yield
+
+
+def _grid(crs: CRS) -> tuple[Any, ...] | None:
+    """Return the map projection of a projected CRS: method, parameters, ellipsoid."""
+    operation = crs.coordinate_operation
+    if not crs.is_projected or operation is None:
+        return None
+    parameters = tuple(
+        (
+            parameter.code or parameter.name,
+            parameter.value
+            if isinstance(parameter.value, str)
+            else round(parameter.value * parameter.unit_conversion_factor, 9),
+        )
+        for parameter in operation.params
+    )
+    ellipsoid = crs.ellipsoid
+    return (
+        operation.method_code or operation.method_name,
+        parameters,
+        round(ellipsoid.semi_major_metre, 3) if ellipsoid is not None else None,
+        round(ellipsoid.inverse_flattening, 9) if ellipsoid is not None else None,
+        tuple(axis.unit_conversion_factor for axis in crs.axis_info),
+    )
+
+
+def _same_grid(found: str | None, native: str) -> bool:
+    """Whether a layer CRS has the map projection of ``native`` (no reprojection)."""
+    if not found:
+        return False
+    try:
+        grid = _grid(CRS.from_user_input(found))
+        return grid is not None and grid == _grid(CRS.from_user_input(native))
+    except CRSError:
+        return False
+
+
+def _crs_name(found: str | None) -> str:
+    """Return the name of a layer CRS for a message (``-``: none)."""
+    if not found:
+        return "-"
+    try:
+        return str(CRS.from_user_input(found).name)
+    except CRSError:
+        return found[:60]
+
+
+def _declared_column(
+    column: np.ndarray, declared: np.dtype
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """Return a column read by pyogrio as its declared type, with its null mask.
+
+    pyogrio reads an integer or boolean field holding nulls as floats with NaN:
+    written back as its declared type, the nulls stay nulls.
+    """
+    if declared.kind in "iub" and column.dtype.kind == "f":
+        nulls = np.isnan(column)
+        return np.where(nulls, 0, column).astype(declared), (
+            nulls if nulls.any() else None
+        )
+    return column, None
+
+
+@contextmanager
+def gdal_config(options: dict[str, str]) -> Iterator[None]:
+    """Set GDAL config options for the block, then the previous values again.
+
+    The options are process-wide, so one lock serialises every configured GDAL
+    work of Kartograf.
+    """
     with _GDAL_LOCK:
         previous = {key: pyogrio.get_gdal_config_option(key) for key in options}
         pyogrio.set_gdal_config_options(options)
@@ -247,7 +540,7 @@ def _read_wfs(
     if _declares_types(layer_pages.schema):
         options["XSD"] = str(layer_pages.schema)
     table: _Table | None = None
-    with _gdal_config({"GML_FETCH_ALL_GEOMETRIES": "YES"}):
+    with gdal_config({"GML_FETCH_ALL_GEOMETRIES": "YES"}):
         for page in layer_pages.pages:
             try:
                 meta, _, geometries, values = pyogrio.raw.read(page, **options)
@@ -749,7 +1042,7 @@ def _write_layer(
         for name in names
         if name in table.utc
     }
-    with _gdal_config({"OGR_CURRENT_DATE": _FIXED_DATE}):
+    with gdal_config({"OGR_CURRENT_DATE": _FIXED_DATE}):
         pyogrio.raw.write(
             path,
             geometry,

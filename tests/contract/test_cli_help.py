@@ -134,7 +134,7 @@ def test_parse_off_grid_tm33_tile_and_unknown_code(capsys):
 
 @pytest.mark.parametrize(
     ("group", "product", "country"),
-    [("hydro", "network", "pl"), ("models3d", "buildings", "cz")],
+    [("models3d", "buildings", "cz")],
 )
 def test_country_offers_only_countries_of_the_group(group, product, country, capsys):
     """``--country`` of a group without sources of a country rejects it."""
