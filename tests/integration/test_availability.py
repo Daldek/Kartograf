@@ -927,9 +927,11 @@ class _Probes(CuzkSession):
         super().__init__()
         self.asked: list[dict | None] = []
 
-    def head(self, url: str, **kwargs):
+    def head(self, url: str, timeout=None, allow_redirects=True, **kwargs):
         self.asked.append(kwargs.get("headers"))
-        return super().head(url, **kwargs)
+        return super().head(
+            url, timeout=timeout, allow_redirects=allow_redirects, **kwargs
+        )
 
 
 class _Border:
