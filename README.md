@@ -151,7 +151,7 @@ The CLI group is `kartograf <group> download` and `product` selects the data; `k
 | Boundaries (PRG, RUIAN), addresses, geomorphology | `boundaries` | `download_collection` | GUGiK, CUZK |
 | Cadastral map (EGiB, RCN prices; CZ cadastral map) | `cadastre` | `download_collection` | GUGiK, CUZK |
 | 3D building and tree models, city meshes (PL) | `models3d` | `download_collection` | GUGiK |
-| Water network HY-NET (CZ) | `hydro` | `download_collection` | CUZK |
+| Water network HY-NET (CZ); water management plan layers of PGW Wody Polskie (PL) | `hydro` | `download_collection` | CUZK; PGW Wody Polskie (no licence named) |
 | Geographic names (PRNG, Geonames, world) | `names` | `download_collection` | GUGiK, CUZK |
 | Topographic maps (BDOT10k visualisations, ZTM) | `maps` | `download_collection` | GUGiK, CUZK |
 | Geodetic control networks, quasi-geoid models | `geodesy` | `download_collection` | GUGiK, CUZK |
@@ -242,6 +242,7 @@ Sources, as in the [Nogat registry](https://github.com/Daldek/Nogat/blob/main/ec
 |---|---|---|
 | GUGiK (Poland) | NMT, NMPT, orthophoto, LAZ, BDOT10k, PRG, EGiB, 3D models, geodesy | free reuse with attribution (Prawo geodezyjne i kartograficzne) |
 | CUZK (Czechia) | DMR, DMP, orthophoto, LAZ, ZABAGED, RUIAN, HY-NET | CC BY 4.0 |
+| PGW Wody Polskie (Poland) | IIaPGW geodatabase of the water management plans, 2022-2027 | no licence named; auxiliary materials, the plans in Dziennik Ustaw are binding |
 | Copernicus CLMS | CORINE Land Cover | Copernicus data policy, attribution required |
 | ISRIC SoilGrids | soil properties, input of HSG | CC BY 4.0 |
 

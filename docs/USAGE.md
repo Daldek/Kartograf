@@ -24,6 +24,7 @@ list of the public API: `src/kartograf/__init__.py` (`__all__`).
    - [1.10 Geographic names and topographic maps](#110-geographic-names-and-topographic-maps)
    - [1.11 3D mesh, trees, geodetic control networks and quasi-geoids](#111-3d-mesh-trees-geodetic-control-networks-and-quasi-geoids)
    - [1.12 Plain files or the store (`--output-dir`, `--root`)](#112-plain-files-or-the-store---output-dir---root)
+   - [1.13 PGW water management plans: the geodatabase and the layers of an area (Poland)](#113-pgw-water-management-plans-the-geodatabase-and-the-layers-of-an-area-poland)
 2. [Python library](#2-python-library)
 3. [Download result](#3-download-result)
 4. [GUGiK campaigns](#4-gugik-campaigns)
@@ -54,7 +55,7 @@ Commands are grouped by data type (`kartograf <group> <command>`, ADR-039):
 | `boundaries` | `download`, `list-sources` | unit boundaries (`admin`): PRG (PL), RUIAN (CZ); address points and streets (`addresses`) and special boundaries (`special`) from PRG (PL); geomorphological units (`geomorphology`, CZ) |
 | `cadastre` | `download`, `list-sources` | cadastral map (`map`): EGiB — parcels and buildings (PL), cadastral map (CZ, `--ku`); RCN real estate prices (`prices`, PL) |
 | `models3d` | `download`, `list-sources` | 3D models (PL): CityGML LoD1/LoD2 buildings (`buildings`), CityGML trees (`trees`), OBJ city 3D mesh (`mesh`) |
-| `hydro` | `download`, `list-sources` | HY-NET water network (`network`, CZ) |
+| `hydro` | `download`, `list-sources` | HY-NET water network (`network`, CZ); water management plan geodatabase of PGW Wody Polskie (`pgw`, PL: national archive, GeoPackage of the layers of an area; section 1.13) |
 | `names` | `download`, `list-sources` | geographic names (`geographic`): PRNG RP (PL), Geonames (CZ); Polish names of the world (`world`, PL) |
 | `maps` | `download`, `list-sources` | topographic maps (`topographic`): BDOT10k visualisations (PL), ZTM (CZ) |
 | `geodesy` | `download`, `list-sources` | geodetic control networks (`control`): PL (GUGiK) and CZ (Bodove pole); quasi-geoids (`geoid`): PL-geoid2021 and QGZU-2013 |
@@ -1298,7 +1299,8 @@ and `--format` in `boundaries`, `--format` and `--ku` in `cadastre`,
 `models3d` is for Poland only (`--country pl`); `boundaries` also has
 CZ boundaries (RUIAN) and CZ geomorphological units, `cadastre` — the CZ
 cadastral map, and the CZ water network — the `hydro` group (section 1.9; the CZ examples
-of this chapter are also there). The archive of BDOT10k annual editions is in the group
+of this chapter are also there; the PL product of that group, the water management plans of PGW, is
+in section 1.13). The archive of BDOT10k annual editions is in the group
 `landcover` (`--year`). 3D mesh and tree models (`models3d`) and control networks
 and quasi-geoids (group `geodesy`) are described in section 1.11.
 
@@ -1914,6 +1916,103 @@ layout by file names.
 
 The reasons of the errors above are listed in 8.3 and in the migration guide of the CHANGELOG.
 
+### 1.13 PGW water management plans: the geodatabase and the layers of an area (Poland)
+
+`hydro download --product pgw --country pl` downloads the spatial data of the second update of
+the river basin management plans (IIaPGW, cycle 2022–2027) that PGW Wody Polskie publishes on
+<https://apgw.gov.pl/pl/III-cykl-materialy-do-pobrania>: one File Geodatabase of 25 spatial layers
+in three feature datasets and 34 attribute tables (edition `2023-09-15`). `--country auto` narrows
+a `pgw` area to PL with an `Info:`, `--country cz` is an `Error:`. There are two results
+([ADR-059](decisions/0059-pgw-water-management-plan-data.md)):
+
+```bash
+# the national archive as published (ZIP, 142 MB; the size is a Warning: before the transfer)
+kartograf hydro download --product pgw --country pl --whole-country --root ~/kartograf-data
+#   Warning: pgw PL: plik krajowy https://wody.isok.gov.pl/api/repo-mdd/publ/download/file/bccfebcf31ac47799fe1de6294b73c29/geobaza-2apgw-ver-20230915-gdb-zip - 142048450 B (ok. 142 MB)
+#   -> hydro/pl_pgw_gdb/country/pl.zip (wersja 2023-09-15_<sha8>)
+
+# an area: one GeoPackage in EPSG:2180 with the whole features of the chosen layers that
+# intersect the rectangle (--layers: PGW_WP, JCWPd, SIG; not given: all 25 layers)
+kartograf hydro download --product pgw --country pl --layers PGW_WP --bbox 380000,540000,390000,550000 --root ~/kartograf-data
+#   Warning: pgw PL pl: duzy plik https://wody.isok.gov.pl/.../geobaza-2apgw-ver-20230915-gdb-zip - 142048450 B (ok. 142 MB)   (only when the archive is not in the store yet)
+#   Info: pgw: wynik obszaru bez 34 tabel atrybutow geobazy (charakterystyki, cele, presje, dzialania) - sa w archiwum krajowym: --whole-country --country pl
+#   -> hydro/pl_pgw_gdb/country/pl.zip                                  (the archive, the input)
+#   -> hydro/pl_pgw_pgw-wp/bbox/380000_540000_390000_550000.gpkg        (the GeoPackage)
+kartograf hydro download --product pgw --country pl --layers PGW_WP --bbox 380000,540000,390000,550000 --root ~/kartograf-data
+#   hydro/pl_pgw_gdb/country/pl.zip: lokalna wersja 2023-09-15 (bez sprawdzania; --check)
+#   hydro/pl_pgw_pgw-wp/bbox/380000_540000_390000_550000.gpkg: uzyta ponownie 2023-09-15
+kartograf hydro download --product pgw --country pl --layers PGW_WP --bbox 380000,540000,390000,550000 --check --root ~/kartograf-data
+#   hydro/pl_pgw_gdb/country/pl.zip: nie da sie sprawdzic bez pobrania (2023-09-15)
+#   hydro/pl_pgw_pgw-wp/bbox/380000_540000_390000_550000.gpkg: aktualne (2023-09-15)
+```
+
+```python
+from kartograf import BBox, download_collection
+
+# = hydro download --product pgw --country pl --layers PGW_WP --bbox 380000,540000,390000,550000
+report = download_collection(product="pgw", country="pl", layers=["PGW_WP"],
+                             bbox=BBox(380000, 540000, 390000, 550000, "EPSG:2180"),
+                             root=out)
+report.inputs  # the archive version the GeoPackage was read from
+report.files   # the GeoPackage
+# = hydro download --product pgw --country pl --whole-country
+download_collection(product="pgw", country="pl", whole_country=True, root=out)
+```
+
+**The area GeoPackage.** It is read from the national archive in the store: the local version, or
+one download into its slot when there is none (`DOWNLOAD_SIZE` before the 142 MB transfer, the
+area task as `extra.parent_request` of the archive). The archive is listed in `inputs` of the
+result (`kartograf-download/1`) and the GeoPackage in `files`; the CLI prints the archive first.
+A `--geometry` area is its envelope, as for every collection. A feature is kept when its
+geometry intersects the rectangle (the boundary included) and is written whole (no clipping, 2D,
+multi-geometries), in the order of `OBJECTID` (kept as a field), in **EPSG:2180** without a
+reprojection (the source CRS is the ESRI definition `PUWG_1992`, the same Transverse Mercator
+grid; the writer checks it and refuses another one). Every chosen layer is written, an empty one
+with its schema, under its name in lowercase ASCII (`zlewnie_jcwp_rzecznych`,
+`jednolite_czesci_wod_powierzchniowych_rzecznych`; the source name is the layer
+`DESCRIPTION`, `PGW_WP/Zlewnie_JCWP_rzecznych`). The 34 attribute tables are not in it: every
+area request says so with the `Info:` `area_omitted`; they are in the archive of
+`--whole-country`. An area without a feature in the chosen layers is `no_coverage` (`no_data`)
+and writes no file.
+
+| `--layers` | Layers | Content |
+|---|---|---|
+| `PGW_WP` | 16 | surface water bodies (river, lake, reservoir, transitional, coastal) and their catchments, river basin districts, water regions, ecoregions, regional water management authorities, main rivers |
+| `JCWPd` | 1 | groundwater bodies |
+| `SIG` | 8 | protected areas dependent on water, and the rivers and lakes protected for trout and eel |
+
+`--layers` takes the codes in any letter case; a choice is a separate segment of the store
+(`--layers SIG,PGW_WP` → `hydro/pl_pgw_pgw-wp-sig`; all layers → `hydro/pl_pgw`). An unknown or empty
+code, and `--layers` with `--whole-country` or `--product network`, is a `validation_error`
+before any request.
+
+**Versions and freshness.** The label of both files is the edition, `2023-09-15` (a date, so the
+labels order by date). The server sends neither `ETag` nor `Last-Modified`, so the channels have
+no freshness signal: a local version is used without a request, `--check` says `nie da sie
+sprawdzic bez pobrania` for the archive, `--force` downloads it again, and a new edition comes
+with a Kartograf release (its URL is in the registry). An archive of another edition behind the
+URL is a `download` failure, never a version. The GeoPackage sidecar names the archive it was
+written from (`extra.source_files`, its `sha256`): a GeoPackage written from an archive of the
+same checksum is reused (status `reused`), a different archive gives a new version on the next
+request of that area, and the old ones stay. `--check` reports `aktualne` for a GeoPackage
+written from the local archive and `do pobrania` otherwise (also for the archive that is not in the store).
+
+**Plain files (`-o DIR`).** `--whole-country` writes `DIR/pl.zip`; an area writes only
+`DIR/<coords>.gpkg`: the archive is fetched into the staging directory and removed with it, so
+every plain area request downloads 142 MB. Use the store to download it once.
+
+**Size.** The PGW server compresses its answers when the client accepts it. A size from
+`HEAD` is the length of the file only when the request asks for `Accept-Encoding: identity`:
+Kartograf's size probes (collections, the CZ availability report, the campaign providers of
+GUGiK) do, and an answer with a content coding is never taken as the length of a file.
+
+**Rights.** The portal names no licence; it reserves that the materials are auxiliary and that the
+legally binding plans are the regulations of the Minister of Infrastructure in Dziennik Ustaw. The
+sidecar carries that attribution (`license` id `PL-APGW`); whether the data may be redistributed is
+for the author of the project to decide (Kartograf stores, it does not redistribute).
+Out of scope: the plans in editable formats, the index of the files in Dziennik Ustaw, the set of
+measures and the water-body cards.
+
 ---
 
 ## 2. Python library
@@ -2011,8 +2110,9 @@ print([v.label for v in variants(product="nmt", vertical_crs="KRON86", format="A
 ```
 
 Collections (`boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`,
-`geodesy`; sections 1.8–1.11) — result `CollectionReport(files, failed, stale,
-notices, ok)`, the elements of `files` and `failed` as in `DataReport`:
+`geodesy`; sections 1.8–1.11 and 1.13) — result `CollectionReport(files, failed, stale,
+notices, ok)` and `inputs` (the files an area result was read from: the PGW archive, section 1.13;
+empty otherwise), the elements of `files`, `inputs` and `failed` as in `DataReport`:
 
 ```python
 from kartograf import BBox, check_collection, download_collection, download_landcover
@@ -2144,6 +2244,10 @@ download_collection(product="network", root=out, country="cz",
                     bbox=BBox(-470000, -1130000, -440000, -1100000, "EPSG:5514"))
 download_collection(product="network", root=out, country="cz",
                     whole_country=True, on_notice=show)  # HY-NET.gpkg in EPSG:3045
+# = hydro download --product pgw --country pl --layers PGW_WP --bbox ... (section 1.13)
+pgw = download_collection(product="pgw", country="pl", layers=["PGW_WP"], root=out,
+                          bbox=BBox(380000, 540000, 390000, 550000, "EPSG:2180"))
+# pgw.inputs = the national archive (downloaded once), pgw.files = the GeoPackage
 ```
 
 Lower level (tracks) — the same files and sidecars as `download_data`:
@@ -2449,7 +2553,7 @@ default pyproj. Cost, threads and layout variants: ARCHITECTURE 3.3.1.
 | `slow_source` | info | slow service: measured response time before the area query (OGC API PRNG) | `names download` |
 | `laz_superseded` | info | LAZ tiles skipped as covered by newer ones | `elevation download --product laz` |
 | `download_size`, `whole_country_size` | warning | unit file over 100 MiB or a country file: size before transfer | collections, `landcover --whole-country`, true orthophoto and oblique orthophoto sheets |
-| `area_omitted` | info | the area result deliberately omits source layers that are in the country file (PRG special boundaries, HY-NET, ZABAGED) | `boundaries`, `hydro`, `landcover download` |
+| `area_omitted` | info | the area result deliberately omits source layers that are in the country file (PRG special boundaries, HY-NET, ZABAGED, the 34 attribute tables of PGW) | `boundaries`, `hydro`, `landcover download` |
 | `classes_absent` | info | the package has no file for one of the `--layers` classes (no such objects) | `landcover --product bdoo` |
 | `corine_preview` | info | CORINE without CLMS credentials: WMS preview instead of data | `landcover --product corine` |
 | `cache_disabled` | warning | metadata cache not usable (e.g. read-only directory); the download continues | all |
@@ -2753,6 +2857,7 @@ query the sheet index for the file selection (sheet index records from the cache
 | BDOT10k, CORINE preview | none (`none`) | like cutouts; `--force` for BDOT10k also refreshes the PRG cache |
 | collections (`boundaries`, `cadastre`, `models3d`, `hydro`; plan track `collection`), area ZABAGED and the BDOT10k archive (`--year`) | none (`none`) | like cutouts; label = vintage/release year or download date (sections 1.8, 1.9) |
 | national RUIAN and HY-NET files | `ETag`/`Last-Modified` (`http`) | like SM5 sheets |
+| PGW geodatabase archive and the GeoPackage of an area (`hydro --product pgw`) | none (`none`) | label = edition (`2023-09-15`); a local version without a request; `--check` = `nie da sie sprawdzic bez pobrania` for the archive, `aktualne` for a GeoPackage written from the local archive; `--force` downloads the archive again (section 1.13) |
 | national ZABAGED file | release from the ATOM feed (`metadata`) | label = release date (`2026-10-04`); like CZ orthophoto |
 | PRNG/Geonames areas, PRNG country | none (`none`) | `--force` to check for new content; PRNG RP has two national packages |
 | Geonames country | ATOM feed release (`metadata`) | `--check` compares the release date without downloading the ZIP |
@@ -3016,6 +3121,10 @@ proxy).
   national file have different names than the area result; HY-NET: the area result has no
   stream crossings (only in the national file, EPSG:3045), layer fields
   depend on the content of the area (section 1.9).
+- PGW (`hydro --product pgw`): the first area request downloads the 142 MB archive (once into the
+  store, each time with `-o DIR`); the area GeoPackage has the 25 spatial layers only, not the 34
+  attribute tables; `--check` cannot see a newer edition (the source has no validators); the portal
+  names no licence (section 1.13).
 - GUGiK archives (`--format XYZ|ASCII-NMT|TBD|TIN|TTN|GRD|DXF|DGN`) are
   downloaded as source files without conversion (ZIP, `.ttn`, `.grd`,
   `.dxf`, `.dgn`): Kartograf does not unpack them, resample them to a
