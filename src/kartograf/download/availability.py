@@ -1744,9 +1744,7 @@ def _head(url: str, sessions: SessionPerThread, cache: MetadataCache | None) -> 
         if restored is not None:
             return restored
     try:
-        signal = head_signal(
-            sessions.get(), url, timeout=_CZ_TIMEOUT, identity=True
-        )
+        signal = head_signal(sessions.get(), url, timeout=_CZ_TIMEOUT, identity=True)
     except DownloadError as error:
         if error.status_code != 404:
             raise
