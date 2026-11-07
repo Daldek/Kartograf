@@ -105,7 +105,7 @@ class FakeImages:
             200, {"Content-Type": "application/octet-stream"}, _tif(stem.split("_")[-1])
         )
 
-    def head(self, url, timeout=None, allow_redirects=True):
+    def head(self, url, timeout=None, allow_redirects=True, **kwargs):
         self.heads.append(url)
         size = SIZES.get(url, 296853152 if "/TrueOrtho/" in url else 0)
         return FakeResponse(200, {"Content-Length": str(size)}, b"")
