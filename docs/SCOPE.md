@@ -774,6 +774,28 @@ from kartograf import (
 # GeoServer (HY-NET), ATOM, openzu, services.cuzk.gov.cz (cadastral map)
 ```
 
+### 2.14.1 PL water management plans: the IIaPGW geodatabase (PGW Wody Polskie, ADR-059) - IN SCOPE
+
+```text
+# `hydro` group, `download --product pgw --country pl` (pl.pgw.pgw); plan
+# docs/plans/2026-11-06-pgw-water-management-plan-data.md, PROGRESS item 27.
+- source: the one spatial file of https://apgw.gov.pl/pl/III-cykl-materialy-do-pobrania, the File
+  Geodatabase of the second update of the river basin management plans (IIaPGW, 2022-2027), edition
+  2023-09-15, ZIP of 142 MB: 25 spatial layers in the feature datasets PGW_WP (16), JCWPd (1) and SIG (8),
+  and 34 attribute tables; EPSG:2180 (ESRI definition PUWG_1992)
+- --whole-country -> hydro/pl_pgw_gdb/country/pl.zip, as published; label = edition, signal none
+- area (--bbox/--geometry, --layers PGW_WP,JCWPd,SIG; all layers when omitted)
+  -> hydro/pl_pgw[_<layers>]/bbox/<coords>.gpkg: the whole features of the chosen layers that intersect
+  the envelope of the area, EPSG:2180, read from the archive in the store (downloaded once);
+  the 34 attribute tables stay in the archive (Info area_omitted)
+- out of scope: the plans in editable formats, the index of the files in Dziennik Ustaw, the set of
+  measures, the water-body cards (karty.apgw.gov.pl)
+
+# Source: PGW Wody Polskie, KZGW; no licence named, the materials are auxiliary and the legally
+# binding plans are the regulations of the Minister of Infrastructure (licence id PL-APGW)
+# API: a file download (OpenData); the server gzips its answers, so a size probe asks for identity
+```
+
 ### 2.15 Geographic names and topographic maps (GUGiK, CUZK, ADR-043) - IN SCOPE
 
 ```text
@@ -1327,6 +1349,7 @@ pyogrio >= 0.10        # Vector GDAL: writing GPKG of collection area results (A
 | GUGiK PRNG and maps | Geographic names of Poland and the world, BDOT10k map visualisations | OGC API Features, WMS GetFeatureInfo (index), OpenData | None |
 | GUGiK control networks | Horizontal, vertical, gravimetric, magnetic control networks (with archives), PL-geoid2021 | WFS, OpenData | None |
 | CUZK | NMT, NMPT, LAZ, orthophoto, contours, ZABAGED, Data50, Data250, RUIAN, HY-NET, geomorphology, cadastral map, Geonames, ZTM, Bodove pole, QGZU-2013, CZ availability report | ArcGIS REST (query, exportImage), WFS 2.0 (HY-NET), ATOM, sheet index + openzu files and services.cuzk.gov.cz | None |
+| PGW Wody Polskie | IIaPGW geodatabase of the water management plans (national archive; layers of an area) | file download (ZIP) | None |
 | Copernicus CLMS | CORINE | REST API | OAuth2 RSA |
 | EEA Discomap | CORINE (preview) | WMS | None |
 | DLR | CORINE 1990 (preview, fallback) | WMS | None |
@@ -1370,7 +1393,8 @@ pyogrio >= 0.10        # Vector GDAL: writing GPKG of collection area results (A
 - Products of plans D and E (CZ orthophoto, PL orthophoto cutout, GUGiK
   images, CZ contours, NMT 100 m, BDOO, ZABAGED, Data50, Data250, RUIAN,
   HY-NET, geomorphology, CZ cadastral map, PRG addresses and special
-  boundaries, RCN, mesh, trees, names, maps, control networks, quasi-geoids) are downloaded
+  boundaries, RCN, mesh, trees, names, maps, control networks, quasi-geoids, the PGW water
+  management plan geodatabase) are downloaded
   from the CLI and library with versions and a sidecar; a collection area of more than 100
   files or 10 GB ends with an error before download
 - Integration with Hydrograf/Hydrolog works
