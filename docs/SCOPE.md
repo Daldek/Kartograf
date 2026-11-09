@@ -1,8 +1,8 @@
 # SCOPE.md - Scope of the Kartograf project
 **Tool for Downloading Spatial Data**
 
-**Version:** 3.28
-**Date:** 2026-10-17
+**Version:** 3.29
+**Date:** 2026-11-10
 **Status:** Release v0.8.0 (2026-10-17)
 
 ---
@@ -942,7 +942,7 @@ from kartograf import (
 - Slovakia (SK) — DMR 5.0, ZBGIS (note: WCS returns ellipsoidal heights)
 
 # Version 1.0+:
-- GUI: QGIS plugin and web GUI — roadmap in section 3.3
+- GUI: QGIS plugin (roadmap in section 3.3); the web GUI is the separate Archiwista project
 - PostGIS integration
 - REST API server
 ```
@@ -1151,12 +1151,12 @@ Archiwista (ADR-057); the details are settled by their ADRs, not by this section
 3. **Data manager** — a shared team store from which subsequent projects
    take data instead of downloading it again; Kartograf keeps the versioned store
    and its read API.
-4. **QGIS plugin** and **web GUI** as overlays on the library.
+4. **QGIS plugin** as an overlay on the library; the web GUI is the separate
+   Archiwista project (author's decision 2026-10-17).
 5. **English-only identifiers** in the API, CLI and sidecar (ADR-031).
 
-**Audience of the overlays:** first the user and their team (local
-installation, web GUI run on `localhost`), after testing —
-publication (QGIS plugin repository, public instance of the web GUI).
+**Audience of the QGIS plugin:** first the user and their team (local
+installation), after testing — publication (QGIS plugin repository).
 
 **Principles:**
 
@@ -1180,14 +1180,14 @@ publication (QGIS plugin repository, public instance of the web GUI).
 | 2 | Project manifest | moved to Archiwista (ADR-057, supersedes ADR-040): Archiwista keeps the projects and pins the stored versions of any producer; Kartograf keeps download, check, the versioned store and its read API | 1 |
 | 3 | GUGiK catalogue and ready-to-use data | done (0.8.0, plans A-E, user decision 2026-10-15): GUGiK and ČÚZK products from the catalogue, each versioned and with a sidecar, with a cutout where the service provides one (sections 2.1-2.16). A: `elevation` PL — variant registry, NMT/NMPT grids in all GUGiK resolutions, GUGiK archives as source files, WFS sheet index, availability report (ADR-041); B: `elevation` CZ — DMP OK/1G, TM33 ETRS89 tiles, ČÚZK LAZ, CZ report; C: BDOT10k archive, PRG, EGiB, 3D building models (ADR-042); D: CZ orthophoto, PL orthophoto cutout, ZABAGED, RUIAN, HY-NET (ADR-042 D12-D17); E: GUGiK images, CZ contours, NMT 100 m, names, maps, addresses and special PRG boundaries, RCN, BDOO, Data50/250, geomorphology, CZ cadastral map, 3D mesh, trees, control networks, quasi-geoids (ADR-043). Outside 0.8.0: VKM, archival CUZK orthophoto (section 3.1). Inventory: `docs/research/2026-10-13-katalog-produktow/raport.md`; spec: `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`; plans: `docs/superpowers/plans/2026-10-15-plan-{a,b,c,d,e}-*.md` | 1; CLI command groups (0.8.0) |
 | 4 | QGIS plugin | download from within QGIS for an area from the map or a layer; repository: this one or a separate one, to be decided in the spec | 2, partly 3 |
-| 5 | Web GUI | local data manager: browser for the store, information about newer data | 2 |
+| 5 | Web GUI | replaced by the separate Archiwista project (author's decision 2026-10-17): a local data manager over the store; Archiwista requires Kartograf, Obserwator is optional there | — |
 | — | ADR-031 (English identifiers) | API and CLI in English in 0.8.0 without aliases (erratum 1) | done (0.8.0) |
-| — | Publishing the overlays | after testing 4 and 5 locally | 4, 5 |
+| — | Publishing the QGIS plugin | after testing 4 locally | 4 |
 
 Live verification of plans B-E: `docs/research/2026-10-16-plan-b-e2e/`,
 `2026-10-15-plan-d-e2e/` and `2026-10-16-plan-e1-e2e/` to `2026-10-16-plan-e5-e2e/`
 (reports `raport.md`). Products outside plans A-E will go into subsequent releases
-and may proceed in parallel with 4 and 5.
+and may proceed in parallel with 4.
 
 ---
 
@@ -1450,9 +1450,10 @@ pyogrio >= 0.10        # Vector GDAL: writing GPKG of collection area results (A
 | 2026-10-16 | 3.26 | Plan D (ADR-042 D12-D17): CZ orthophoto and PL orthophoto cutout (2.4), CZ data ZABAGED, RUIAN, HY-NET and the `hydro` group (2.14), CLI and API (2.9, 2.10), limitations (3.1, 3.2), modules (4.1) |
 | 2026-10-16 | 3.27 | Plans B and E (ADR-041, ADR-043) and review before release 0.8.0: purpose (1), BDOO (2.6), PRG addresses and special boundaries, RCN, mesh, trees and area limit (2.13), CZ Data50/250, geomorphology and cadastral map (2.14), names and maps (2.15), control networks and quasi-geoids (2.16), CLI (2.9), collection layout (2.11), VKM and outdated tasks (3.1), checksums, 8-part sheet codes and collection limitations (3.2), roadmap (3.3), modules, sources and criteria (4-6); list blocks as `text` |
 | 2026-10-17 | 3.28 | Release v0.8.0: versioned store (ADR-036), project manifest (ADR-040), GUGiK/ČÚZK catalogue — plans A–E (ADR-041–043), CLI groups and unified API (ADR-039, ADR-044), status |
+| 2026-11-10 | 3.29 | Roadmap (3.3, 1.0+ list): subproject 5 (web GUI) replaced by the separate Archiwista project (author's decision 2026-10-17, recorded 2026-11-09) |
 
 ---
 
-**Document version:** 3.28
-**Last updated:** 2026-10-17
+**Document version:** 3.29
+**Last updated:** 2026-11-10
 **Status:** Release v0.8.0 (2026-10-17)

@@ -69,5 +69,7 @@ restrictive layer and no water table.
 - A profile request fetches 15 SoilGrids rasters instead of 3 (five times the transfers on the first call;
   later calls reuse the versions).
 - The groups of the rule are never milder than those of any of its layers, and a sand over loam is B, not A.
-- Open for the author: loam, silt loam and silt are B by the table of ADR-025 (b) but C by the NEH 630
-  > 100 cm limits applied to the Rawls (1982) Ksat; changing that is a change of the table for both calls.
+- Loam, silt loam and silt are B by the table of ADR-025 (b) but C by the NEH 630 > 100 cm limits
+  applied to the Rawls (1982) Ksat; changing that is a change of the table for both calls. Decided by
+  the coordinator on 2026-11-09: the ADR-025 table stays (consistency with the topsoil classification);
+  revisit with field data.
