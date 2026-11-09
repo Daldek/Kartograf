@@ -33,6 +33,16 @@ MESSAGES = {
         "Give exactly one selection: --sheet, --bbox or --geometry",
         "Podaj dokladnie jeden wybor: --sheet, --bbox albo --geometry",
     ),
+    "depth_with_depth_rule": Text(
+        "Give exactly one of --depth and --depth-rule: the rule reads the layers "
+        "of 0-100cm itself",
+        "Podaj dokladnie jedno z --depth i --depth-rule: regula sama czyta warstwy "
+        "0-100cm",
+    ),
+    "depth_rule_not_allowed": Text(
+        "Unknown --depth-rule '{value}'; allowed: {rules:join}",
+        "Nieznana --depth-rule '{value}'; dozwolone: {rules:join}",
+    ),
     "hsg_calculation": Text("HSG calculation", "obliczenie HSG"),
     "plan_requires_upgrade": Text(
         "The update plan requires update='upgrade'",

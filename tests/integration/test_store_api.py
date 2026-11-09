@@ -339,6 +339,12 @@ def test_missing_sidecar_raises_specific_kartograf_error(tmp_path):
             "clay",
         ),
         ("hsg/global_soilgrids_0-5cm_mean", "global.isric.soilgrids", "hsg", "0-5cm"),
+        (
+            "hsg/global_soilgrids_0-100cm_least-permeable_mean",
+            "global.isric.soilgrids",
+            "hsg",
+            "least-permeable",
+        ),
         ("maps/cz_ztm_10000_sjtsk_tiff", "cz.cuzk.ztm", "topographic", "10000"),
         ("cadastre/cz_cadastral-map_shp", "cz.cuzk.cadastral_map", "map", "shp"),
     ],
@@ -442,6 +448,7 @@ def _writer_segments() -> Iterator[tuple[str, str]]:
             yield d.key, template
     for depth in SoilGridsProvider.DEPTHS:
         yield "global.isric.soilgrids", hsg_segment(depth, "mean")
+    yield "global.isric.soilgrids", hsg_segment("0-100cm", "mean", "least-permeable")
 
 
 def test_every_segment_the_writers_produce_is_known_with_its_source():

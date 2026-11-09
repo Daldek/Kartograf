@@ -54,23 +54,45 @@ MESSAGES = {
         "Oblicz grupy hydrologiczne gleb (HSG) z uziarnienia",
     ),
     "soil_hsg_description": Text(
-        "Fetches the clay, sand and silt layers (statistic `mean`) of one depth for "
-        "an area and computes the groups A-D for the SCS-CN method. Inputs and the "
-        "HSG raster are stored as versions; the HSG is recomputed only when the "
-        "inputs change. With `output_dir` only the HSG raster is written, as a plain "
-        "file. For one SoilGrids layer use `soil download`.",
+        "Fetches the clay, sand and silt layers (statistic `mean`) of one depth, or "
+        "of 0-100 cm with `depth_rule`, for an area and computes "
+        "the groups A-D for the SCS-CN method. Inputs and the HSG raster are stored "
+        "as versions; the HSG is recomputed only when the inputs change. With "
+        "`output_dir` only the HSG raster is written, as a plain file. For one "
+        "SoilGrids layer use `soil download`.",
         "Pobierz clay (il), sand (piasek), silt (pyl) z SoilGrids dla wybranej "
-        "glebokosci; uzyj statystyki mean (srednia) i oblicz grupy hydrologiczne HSG "
-        "dla metody SCS-CN. Z --output-dir zapisuje tylko raster HSG, jako zwykly "
-        "plik.",
+        "glebokosci albo, z --depth-rule, dla pieciu warstw 0-100 cm; uzyj statystyki "
+        "mean (srednia) i oblicz grupy hydrologiczne HSG dla metody SCS-CN. Z "
+        "--output-dir zapisuje tylko raster HSG, jako zwykly plik.",
     ),
     "soil_hsg_rule": Text(
-        "Give `depth`; add `summary` for the share and area of each group.",
-        "Podaj `depth`; `summary` dodaje udzial i powierzchnie kazdej grupy.",
+        "Give `depth` or `depth_rule`; add `summary` for the share and area of each "
+        "group.",
+        "Podaj `depth` (jedna warstwa) albo `depth_rule` (profil 0-100 cm); "
+        "`summary` dodaje udzial i powierzchnie kazdej grupy.",
+    ),
+    "rule_give_exactly_one_depth_depth_rule": Text(
+        "Give exactly one of --depth and --depth-rule",
+        "Podaj dokladnie jedno z --depth i --depth-rule",
+    ),
+    "hsg_depth_description": Text(
+        "Depth interval of the one layer to classify; give it or "
+        "`depth_rule`.{depths:skip}",
+        "Jedna warstwa (albo --depth-rule): {depths}",
+    ),
+    "depth_rule_description": Text(
+        "Rule over the soil profile instead of one `depth`: per cell the group of "
+        "the least permeable SoilGrids layer of 0-100 cm (ADR-061).",
+        "Regula profilu zamiast jednej --depth: least-permeable = w kazdej komorce "
+        "grupa najmniej przepuszczalnej warstwy 0-100 cm (Ksat wg Rawls i in. 1982)",
     ),
     "example_hsg_rectangle_summary": Text(
         "HSG for a rectangle with the summary",
         "HSG dla prostokata z podsumowaniem",
+    ),
+    "example_hsg_profile_sheet": Text(
+        "HSG of the least permeable layer of 0-100 cm for a sheet",
+        "HSG najmniej przepuszczalnej warstwy 0-100 cm dla arkusza",
     ),
     "soil_list_layers_summary": Text(
         "List the SoilGrids properties, depths and statistics (offline)",

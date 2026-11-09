@@ -1161,3 +1161,158 @@ class TestCalculateHsgSummary:
 
         assert report.files == () and not report.ok
         assert report.summary is None
+
+
+def _texture(clay, sand, silt):
+    """Clay, sand and silt rasters (g/kg) of one texture, 5 x 5, nodata 0."""
+    return {
+        prop: (np.full((5, 5), value, np.float32), 0)
+        for prop, value in (("clay", clay), ("sand", sand), ("silt", silt))
+    }
+
+
+_SAND = _texture(50, 900, 50)  # sand -> A
+_LOAMY_SAND = _texture(50, 800, 150)  # loamy sand -> A
+
+
+class ProfileSoilGrids(RasterSoilGrids):
+    """SoilGrids per layer: ``layers[depth][property]`` = ``(array, nodata)``.
+
+    A depth not given is sand. ``downloads`` holds ``"<property> <depth>"``.
+    """
+
+    def __init__(self, layers):
+        super().__init__()
+        self.layers = layers
+
+    def download_by_bbox(
+        self, bbox, output_path, timeout=120, *, property, depth, **kwargs
+    ):
+        self.downloads.append(f"{property} {depth}")
+        data, nodata = self.layers.get(depth, _SAND)[property]
+        target = Path(output_path).with_suffix(".tif")
+        _create_test_raster(target, data, nodata=nodata)
+        return target
+
+
+def _sandy_topsoil_over_clay():
+    """Loamy sand at 0-5cm, sand below, except 30-60cm: clay in the columns 0-1
+    (D) and sandy clay loam in the columns 2-4 (C)."""
+    deep = {
+        prop: (np.empty((5, 5), np.float32), 0) for prop in ("clay", "sand", "silt")
+    }
+    for prop, clay_value, scl_value in (
+        ("clay", 600, 270),
+        ("sand", 200, 600),
+        ("silt", 200, 130),
+    ):
+        deep[prop][0][:, :2] = clay_value
+        deep[prop][0][:, 2:] = scl_value
+    return {"0-5cm": _LOAMY_SAND, "30-60cm": deep}
+
+
+PROFILE_SEG = "hsg/global_soilgrids_0-100cm_least-permeable_mean"
+
+
+class TestLeastPermeableProfile:
+    """``depth_rule="least-permeable"``: the group of the least permeable layer
+    of 0-100 cm (Rawls, Brakensiek & Saxton 1982 Ksat; ADR-061)."""
+
+    def test_sandy_topsoil_over_clay_takes_the_deep_layer(self, tmp_path):
+        provider = ProfileSoilGrids(_sandy_topsoil_over_clay())
+        result = HSGCalculator(provider, root=tmp_path).calculate_hsg(
+            bbox=BBOX, depth_rule="least-permeable"
+        )
+
+        hsg = _hsg(result.files[0].file.path)
+        assert np.all(hsg[:, :2] == 4)  # clay at 30-60cm -> D
+        assert np.all(hsg[:, 2:] == 3)  # sandy clay loam at 30-60cm -> C
+        assert sorted(provider.downloads) == sorted(
+            f"{prop} {depth}"
+            for depth in ("0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm")
+            for prop in ("clay", "sand", "silt")
+        )
+
+    def test_default_one_layer_is_unchanged(self, tmp_path):
+        provider = ProfileSoilGrids(_sandy_topsoil_over_clay())
+        result = HSGCalculator(provider, root=tmp_path).calculate_hsg(
+            bbox=BBOX, depth="0-5cm"
+        )
+
+        file = result.files[0].file
+        assert np.all(_hsg(file.path) == 1)  # loamy sand topsoil -> A
+        assert file.path == tmp_path / HSG_SEG / "bbox" / f"{COORDS}.tif"
+        assert provider.downloads == ["clay 0-5cm", "sand 0-5cm", "silt 0-5cm"]
+        assert "depth_rule" not in _meta(file)["extra"]
+
+    def test_store_segment_sidecar_and_reuse(self, tmp_path):
+        result = HSGCalculator(
+            ProfileSoilGrids(_sandy_topsoil_over_clay()), root=tmp_path
+        ).calculate_hsg(bbox=BBOX, depth_rule="least-permeable")
+
+        file = result.files[0].file
+        assert file.path == tmp_path / PROFILE_SEG / "bbox" / f"{COORDS}.tif"
+        assert [i.unit for i in result.inputs[:4]] == [
+            f"clay 0-5cm {COORDS}",
+            f"sand 0-5cm {COORDS}",
+            f"silt 0-5cm {COORDS}",
+            f"clay 5-15cm {COORDS}",
+        ]
+        extra = _meta(file)["extra"]
+        assert (extra["depth"], extra["depth_rule"]) == ("0-100cm", "least-permeable")
+        assert extra["depths"] == ["0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm"]
+        assert [
+            (f["name"], f["depth"], f["sha256"]) for f in extra["source_files"]
+        ] == [
+            (i.unit.split()[0], i.unit.split()[1], i.file.sha256) for i in result.inputs
+        ]
+        again = HSGCalculator(
+            ProfileSoilGrids(_sandy_topsoil_over_clay()), root=tmp_path
+        ).calculate_hsg(bbox=BBOX, depth_rule="least-permeable")
+        assert again.files[0].file.status == "reused"
+        assert again.files[0].file.version_path == file.version_path
+
+    def test_a_gap_in_any_layer_is_a_gap(self, tmp_path):
+        deep = _texture(600, 200, 200)
+        for prop in ("clay", "sand", "silt"):
+            deep[prop][0][1, 3] = 0  # SoilGrids gap at 60-100cm
+        result = HSGCalculator(
+            ProfileSoilGrids({"60-100cm": deep}), root=tmp_path
+        ).calculate_hsg(bbox=BBOX, depth_rule="least-permeable")
+
+        hsg = _hsg(result.files[0].file.path)
+        assert hsg[1, 3] == 0
+        assert np.all(np.delete(hsg.reshape(-1), 8) == 4)
+
+    def test_check_plans_every_layer(self, tmp_path):
+        plan = HSGCalculator(ProfileSoilGrids({}), root=tmp_path).check_hsg(
+            sheet="N-34-130-D", depth_rule="least-permeable"
+        )
+
+        assert [i.track for i in plan.items] == ["landcover"] * 15 + ["hsg"]
+        assert plan.items[-1].segment == PROFILE_SEG
+
+    def test_depth_with_rule_rejected(self, tmp_path):
+        calc = HSGCalculator(ProfileSoilGrids({}), root=tmp_path)
+        with pytest.raises(ValidationError) as caught:
+            calc.calculate_hsg(bbox=BBOX, depth="0-5cm", depth_rule="least-permeable")
+        assert caught.value.options == ("depth", "depth_rule")
+        assert list(tmp_path.iterdir()) == []
+
+    def test_unknown_rule_rejected(self, tmp_path):
+        with pytest.raises(ValidationError) as caught:
+            HSGCalculator(ProfileSoilGrids({}), root=tmp_path).check_hsg(
+                bbox=BBOX, depth_rule="saxton-rawls"
+            )
+        assert caught.value.option == "depth_rule"
+        assert list(caught.value.allowed or ()) == ["least-permeable"]
+
+    def test_lower_ksat_never_has_a_milder_group(self):
+        """The Rawls (1982) order and TEXTURE_TO_HSG agree: the least permeable
+        layer is also the strictest group, as the rule promises."""
+        from kartograf.hydrology.hsg import RAWLS_1982_KSAT_CM_H, TEXTURE_TO_HSG
+
+        by_ksat = sorted(RAWLS_1982_KSAT_CM_H, key=RAWLS_1982_KSAT_CM_H.__getitem__)
+        groups = [TEXTURE_TO_HSG[name] for name in by_ksat]
+        assert groups == sorted(groups, reverse=True)
+        assert set(RAWLS_1982_KSAT_CM_H) == set(TEXTURE_CLASSES)

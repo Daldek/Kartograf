@@ -2863,7 +2863,7 @@ query the sheet index for the file selection (sheet index records from the cache
 | Geonames country | ATOM feed release (`metadata`) | `--check` compares the release date without downloading the ZIP |
 | BDOT10k maps | `Stan bazy` date of the sheet index (`index`) | date separate per scale, without downloading TIFF/PDF; a sheet with a local version by default without GetFeatureInfo |
 | CZ ZTM | `ETag`/`Last-Modified` (`http`) | `--check`/`--upgrade`: one `HEAD` per sheet |
-| HSG (`soil hsg`) | sha256 of inputs | the same input content = `uzyta ponownie` (no computation); in the plan an `hsg` item next to three `landcover` items |
+| HSG (`soil hsg`) | sha256 of inputs | the same input content = `uzyta ponownie` (no computation); in the plan an `hsg` item next to three `landcover` items (15 with `--depth-rule`) |
 
 Under `--country auto` `--check --plan FILE` writes ONE plan
 with PL and CZ items (field `track`), and `--upgrade --plan FILE` executes
@@ -2981,6 +2981,21 @@ print(report.stale, report.files.get(godlo, ()))
   in `hsg/global_soilgrids_<depth>_mean/` with a sidecar
   (`extra.source_files`: version paths and sha256 of the inputs; PRD 3.8). The same
   inputs = version reused, without computation.
+- `--depth-rule least-permeable` (`calculate_hsg(depth_rule="least-permeable")`, instead of
+  `--depth`; [ADR-061](decisions/0061-hsg-from-the-least-permeable-layer.md)) gives the group
+  of the least permeable layer of the profile 0-100 cm, the layer that limits infiltration in
+  NEH 630 ch. 7: it takes the inputs of 0-5, 5-15, 15-30, 30-60 and 60-100 cm (15 SoilGrids
+  versions), classifies the texture of each layer and keeps per cell the layer with the lowest
+  saturated hydraulic conductivity of its USDA class (Rawls, Brakensiek & Saxton 1982); its
+  group follows the same texture table as one layer, so a sand over a loam is B, not A. A cell
+  without data in any layer is `0`. The raster is in
+  `hsg/global_soilgrids_0-100cm_least-permeable_mean/`, the sidecar has `extra.depth_rule`,
+  `extra.depths` and the `depth` of every `extra.source_files` entry. The water-table criterion
+  (wet soils as D or A/D, B/D, C/D) is outside SoilGrids.
+
+  ```bash
+  kartograf soil hsg --depth-rule least-permeable --bbox 626000,480000,628000,482000 --root ./data --summary
+  ```
 - `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`
   does the same from ready rasters (g/kg) on a grid with the given CRS
   and pixel, with no default values. Input nodata only from its tag,

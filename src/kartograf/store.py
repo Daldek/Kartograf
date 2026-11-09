@@ -804,11 +804,18 @@ def describe_segment(segment: str) -> SegmentInfo:
     """
     found = _registered_segments().get(segment)
     if found is None and segment.startswith("hsg/global_soilgrids_"):
+        from kartograf.hydrology.hsg import DEPTH_RULES, HSG_PROFILE
         from kartograf.providers.soilgrids import SoilGridsProvider
 
-        # HSG (no descriptor, landcover/store.py): always the mean texture.
+        # HSG (no descriptor, landcover/store.py): always the mean texture; one
+        # layer or a rule over the profile (ADR-061).
         tokens = segment.removeprefix("hsg/global_soilgrids_").split("_")
-        if tokens[1:] == ["mean"] and tokens[0] in SoilGridsProvider.DEPTHS:
+        if (tokens[1:] == ["mean"] and tokens[0] in SoilGridsProvider.DEPTHS) or (
+            len(tokens) == 3
+            and tokens[0] == HSG_PROFILE
+            and tokens[1] in DEPTH_RULES
+            and tokens[2] == "mean"
+        ):
             soil = get_source("global.isric.soilgrids")
             return SegmentInfo(
                 segment,

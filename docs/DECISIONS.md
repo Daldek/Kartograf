@@ -82,6 +82,7 @@ each relation is recorded on both sides.
 | [ADR-058](decisions/0058-geometry-requests-select-by-features.md) | A geometry request selects by its features, not their envelopes; GeoJSON area files | 2026-10-31 | Accepted; amends [ADR-015](#adr-015-pyshp--sqlite3-instead-of-fiona-for-reading-geometry) (feature geometry read and compared, not only envelopes; GeoJSON read by GDAL) |
 | [ADR-059](decisions/0059-pgw-water-management-plan-data.md) | PGW water management plan data: `hydro download --product pgw`, the national archive and the GeoPackage of an area | 2026-11-06 | Accepted; amends [ADR-042](#adr-042-channel-engines-unit_package-feature_bbox-atom_files-and-plan-cd-data) (D2: an area answered from the stored national archive; D6: the edition label of a product published as one file; D9: `--layers` of a collection product) |
 | [ADR-060](decisions/0060-grid-cell-size-against-the-index-record.md) | The cell size of a downloaded grid against its index record: a failed unit `resolution_mismatch` | 2026-11-09 | Accepted |
+| [ADR-061](decisions/0061-hsg-from-the-least-permeable-layer.md) | HSG from the least permeable SoilGrids layer of 0-100 cm: `depth_rule="least-permeable"` | 2026-11-09 | Accepted |
 
 ---
 

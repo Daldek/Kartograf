@@ -19,9 +19,14 @@ from kartograf.messages import message
 HSG_SEGMENT_PREFIX = "hsg/global_soilgrids"
 
 
-def hsg_segment(depth: str, stat: str) -> str:
-    """``hsg/global_soilgrids_<depth>_<stat>`` (lowercase)."""
-    return token_segment(HSG_SEGMENT_PREFIX, (depth, stat))
+def hsg_segment(depth: str, stat: str, rule: str | None = None) -> str:
+    """``hsg/global_soilgrids_<depth>_<stat>`` (lowercase).
+
+    A rule (``least-permeable``, ADR-061) goes between the depth of its profile
+    (``0-100cm``) and the statistic: ``..._0-100cm_least-permeable_mean``.
+    """
+    tokens = (depth, stat) if rule is None else (depth, rule, stat)
+    return token_segment(HSG_SEGMENT_PREFIX, tokens)
 
 
 def selection_unit(
