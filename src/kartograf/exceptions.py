@@ -406,6 +406,55 @@ class YearRangeError(DownloadError):
         self.hints = tuple(hints)
 
 
+class ResolutionMismatchError(DownloadError):
+    """The downloaded grid has another cell size than its index record declares.
+
+    Raised before the file enters the store or the output directory (ADR-060):
+    the ``.asc`` header (``cellsize``, or ``dx``/``dy``) or the GeoTIFF transform
+    gives the cell size, and it differs from ``resolution_m`` of the index record
+    by more than 1 mm (GUGiK serves 1 m grids under records of the NMT 5 m index).
+    Nothing is written for the flight: no version, no link, no sidecar, no plain
+    file. A data state of the source, so ``data_error``, not ``source_unavailable``:
+    retrying the same flight does not help, another flight (``--year``,
+    ``--max-year``) does.
+
+    Attributes
+    ----------
+    sheet : str
+        The sheet code of the file.
+    campaign : str or None
+        The flight as the store names it (``<date>_<id>``); ``None`` when the record
+        does not give it.
+    url : str
+        The URL of the file.
+    declared_m : float
+        ``resolution_m`` of the index record.
+    found_m : float
+        The cell size of the file that differs from it.
+    """
+
+    code = "data_error"
+    reason = "resolution_mismatch"
+    DETAIL_FIELDS = ("sheet", "campaign", "url", "declared_m", "found_m")
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        sheet: str,
+        campaign: str | None,
+        url: str,
+        declared_m: float,
+        found_m: float,
+        hint: str | None = None,
+    ):
+        super().__init__(message, sheet=sheet, hint=hint)
+        self.campaign = campaign
+        self.url = url
+        self.declared_m = declared_m
+        self.found_m = found_m
+
+
 class CacheError(KartografError):
     """
     The metadata cache cannot be used (``MetadataCache(strict=True)``).

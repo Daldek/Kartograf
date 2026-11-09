@@ -129,6 +129,31 @@ MESSAGES = {
         "sie z rama godla {sheet} ({min_x:.0f}, {min_y:.0f}, {max_x:.0f}, "
         "{max_y:.0f}, {crs})",
     ),
+    "cell_size_unreadable": Text(
+        "{name}: cannot read the cell size of the grid ({error}) - cannot check it "
+        "against the {declared_m:g} m of sheet {sheet}",
+        "{name}: nie mozna odczytac rozmiaru oczka siatki ({error}) - nie mozna "
+        "porownac go z {declared_m:g} m arkusza {sheet}",
+    ),
+    "resolution_mismatch": Text(
+        "{name}: the grid has cells of {found_m:g} m, the index record of sheet "
+        "{sheet} (flight {campaign}) declares {declared_m:g} m; nothing was written "
+        "({url})",
+        "{name}: siatka ma oczka {found_m:g} m, rekord skorowidza arkusza {sheet} "
+        "(nalot {campaign}) deklaruje {declared_m:g} m; nic nie zapisano ({url})",
+    ),
+    "resolution_mismatch_hint": Text(
+        "Choose another flight of the sheet with --year or --max-year; kartograf "
+        "elevation availability lists its flights",
+        "Wybierz inny nalot arkusza przez --year lub --max-year; kartograf "
+        "elevation availability wypisuje jego naloty",
+    ),
+    "resolution_mismatch_hint_years": Text(
+        "Choose another flight of the sheet with --year or --max-year: the index "
+        "lists it also in {years:join}",
+        "Wybierz inny nalot arkusza przez --year lub --max-year: skorowidz ma go "
+        "takze w latach {years:join}",
+    ),
     # ``download.manager``.
     "year_excludes_bounds": Text(
         "--year excludes --min-year/--max-year (--year Y is shorthand for --min-year "

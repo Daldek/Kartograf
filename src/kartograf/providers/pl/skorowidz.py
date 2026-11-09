@@ -525,6 +525,10 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     # ``DOWNLOAD_SIZE`` above 100 MiB, K9): image providers only - a list of
     # NMT sheets would pay ~0.5 s per sheet for files far below the limit.
     announces_size: bool = False
+    # The cell size of a downloaded grid checked against ``resolution_m`` of its
+    # record before it is written (``DownloadManager``, ``verify_cell_size``,
+    # ADR-060): the elevation grids (``GugikProvider``) only.
+    checks_cell_size: bool = False
 
     def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
         """Return the cache key, endpoint and product filter for a sheet.

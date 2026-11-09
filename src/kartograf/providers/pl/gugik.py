@@ -107,6 +107,10 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     # Product of the variant registry served by this class (NMPT overrides)
     PRODUCT = "nmt"
 
+    # A grid whose cell size differs from ``resolution_m`` of its index record is
+    # not written (ADR-060: GUGiK serves 1 m grids under NMT 5 m records).
+    checks_cell_size = True
+
     # Base URL for GUGiK services
     BASE_URL = "https://mapy.geoportal.gov.pl"
 

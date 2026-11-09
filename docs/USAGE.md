@@ -3054,6 +3054,15 @@ proxy).
 
 ## 7. Known issues and limitations
 
+- GUGiK serves 1 m grids under 81 records of the NMT 5 m index (campaigns 75114, 74964,
+  75108, 76742 and 76597, flights of 2021 and 2022). Kartograf compares the cell size of
+  every downloaded NMT/NMPT grid with `resolution_m` of its record before writing it
+  (ADR-060): such a sheet is a failed unit with code `data_error` and reason
+  `resolution_mismatch` (`details.declared_m`, `details.found_m`), nothing of the flight is
+  written, and the hint names `--year` and `--max-year`. A genuine 5 m grid of the sheet
+  is in another flight of the index (for the 20 sheets checked on 2026-11-08: 2020 and
+  2025; `elevation availability` lists the flights). Stores filled before this check keep
+  such grids.
 - Kartograf does not merge PL and CZ rasters into a single border-area surface
   (R6); the results are separate, linked by `extra.parent_request`.
 - Land cover and HSG (since 0.8.0): a data correction within the same
@@ -3436,6 +3445,7 @@ failed units; the result lists them (`items`) and no error document is written.
 | `store_unavailable` | - | `StoreUnavailableError` | 8 | the store root has the layout of a store but no kartograf-store.json (reason no_marker: kartograf store init verifies the layout and writes it) |
 | `data_error` | `invalid_sidecar` | `InvalidSidecarError` | 7 | the kartograf-meta/1 sidecar is missing, unreadable or of another schema, or a field command_for_file reads has a value of a wrong form |
 | `data_error` | `invalid_layout` | `InvalidLayoutError` | 7 | a root without a marker is not the layout of a Kartograf store, or the marker is not a kartograf-store/1 document (details.problems lists what is wrong) |
+| `data_error` | `resolution_mismatch` | `ResolutionMismatchError` | 7 | a downloaded grid has another cell size than its index record declares (details.declared_m, details.found_m): nothing is written; another flight of the sheet (--year, --max-year) may have the declared grid |
 | `conflict` | - | `ConflictError` | 4 | the target forbids the write (reasons: output_exists, duplicate_output_name, output_in_store, nested_store, not_empty): an output file that exists, two targets of one name, a plain directory in a store, a store in another store or a store root that is not empty |
 | `missing_dependency` | - | `MissingDependencyError` | 6 | an optional extra is not installed (kartograf[mcp] for the MCP server); the hint names the install command (uv add "kartograf[mcp]") |
 | `forbidden` | - | `ForbiddenError` | 12 | the MCP server refuses the call: a path outside its allowed directories (--allow-dir), or a write on a server that does not write (--allow-writes) |
@@ -3479,10 +3489,12 @@ it after the current calls).
 
 `failed[].kind` in `kartograf-download/1` uses the names of the data reasons: `no_coverage`
 (the source has no data: sheet, tiles, cutout), `year_out_of_range` (data exists but outside
-the year range), `download` (network, server) and `country` (part of `--country auto` failed
-for another reason). The same state of the data that the library reports as an exception
-(`NoCoverageError`, `YearRangeError`, for example in `check_data` or LAZ `--sheet`) is the
-`kind` of the unit in the download report.
+the year range), `resolution_mismatch` (the downloaded grid has another cell size than its
+index record declares; code `data_error`, nothing written, ADR-060), `download` (network,
+server) and `country` (part of `--country auto` failed for another reason). The same state
+of the data that the library reports as an exception (`NoCoverageError`, `YearRangeError`,
+`ResolutionMismatchError`, for example in `check_data` or LAZ `--sheet`) is the `kind` of the
+unit in the download report.
 
 The document `kartograf-error/1` has the keys `code`, `title`, `message`, `hint`, `details`,
 `exit_code` and `command` (AGI-4.3):

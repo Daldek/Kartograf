@@ -16,6 +16,20 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   `obserwator-store.json` instead of `imgw-store.json`, following the producer's rename in its
   v3.0.0 (author's decision of 2026-11-03, admitted by the freeze as an API break of a producer).
 
+### Fixed
+
+- A downloaded NMT/NMPT grid whose cell size differs from `resolution_m` of its index record is
+  no longer stored (ADR-060, PROGRESS item 28 (a)): GUGiK serves 1 m grids under 81 records of
+  the NMT 5 m index (campaigns 75114, 74964, 75108, 76742, 76597), and Kartograf stored them in
+  the 5 m segment. `verify_cell_size` reads the `.asc` header (`cellsize` of any case or
+  `dx`/`dy`, any float form) or the GeoTIFF transform before the file becomes a version or a
+  plain file and compares it within 1 mm. A mismatch is the new `ResolutionMismatchError`
+  (registry code `data_error`, exit code 7, reason `resolution_mismatch`, `details` `sheet`,
+  `campaign`, `url`, `declared_m`, `found_m`; exported from `kartograf`): a failed unit of the
+  sheet (`failed[].kind` `resolution_mismatch`) with no version, link, sidecar or plain file;
+  its hint names `--year`/`--max-year` and the other years of the sheet when known. Stores
+  filled before keep such grids. `verify_sheet_extent` reads `dx`/`dy` headers too.
+
 ### Windows and macOS portability
 
 The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the release.

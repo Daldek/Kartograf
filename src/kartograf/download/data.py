@@ -73,6 +73,7 @@ from kartograf.download.area import (
     resolve_geometry_layer,
 )
 from kartograf.download.arguments import option_error, require_workers
+from kartograf.download.campaigns import failure_text
 from kartograf.download.countries import (
     countries_for_bbox,
     country_bbox,
@@ -120,6 +121,7 @@ from kartograf.exceptions import (
     DownloadError,
     KartografError,
     NoCoverageError,
+    ResolutionMismatchError,
     ValidationError,
     YearRangeError,
 )
@@ -156,7 +158,12 @@ if TYPE_CHECKING:
     from kartograf.download.storage import FileStorage
 
 FailureKind = Literal[
-    "no_coverage", "year_out_of_range", "download", "country", "skipped_incomplete"
+    "no_coverage",
+    "year_out_of_range",
+    "download",
+    "country",
+    "skipped_incomplete",
+    "resolution_mismatch",
 ]
 MAX_HINT_LINES = 5
 
@@ -267,12 +274,14 @@ class WriteTarget:
 
 # The registry code (and ``details.reason``) a failed unit of each ``kind`` stands
 # for: the states of the data are ``no_data`` (the same names as the exception
-# classes ``NoCoverageError`` and ``YearRangeError``), a failed transfer or country
-# is ``source_unavailable`` (ERR §4).
+# classes ``NoCoverageError`` and ``YearRangeError``), a grid of another cell size
+# than its record declares is ``data_error`` (``ResolutionMismatchError``, ADR-060),
+# a failed transfer or country is ``source_unavailable`` (ERR §4).
 FAILURE_CODES: Mapping[FailureKind, tuple[str, str | None]] = {
     "no_coverage": ("no_data", "no_coverage"),
     "year_out_of_range": ("no_data", "year_out_of_range"),
     "skipped_incomplete": ("no_data", "skipped_incomplete"),
+    "resolution_mismatch": ("data_error", "resolution_mismatch"),
     "download": ("source_unavailable", None),
     "country": ("source_unavailable", None),
 }
@@ -284,8 +293,9 @@ class UnitFailure:
 
     ``kind``: ``no_coverage`` (no data at the source), ``year_out_of_range``
     (data, but none of the requested years - the code of ``YearRangeError``),
-    ``download`` (network, server) or ``country`` (the country part of the
-    request failed).
+    ``resolution_mismatch`` (the grid has another cell size than its index record
+    declares, nothing written - ``ResolutionMismatchError``), ``download``
+    (network, server) or ``country`` (the country part of the request failed).
     """
 
     unit: str
@@ -428,9 +438,11 @@ def failure_kind(
     """Return the failure kind of an error.
 
     The ``UnitFailure.kind`` of an error: the states of the data keep the
-    name of their error code (``no_coverage``, ``year_out_of_range``), any other
-    ``DownloadError`` gets ``default``.
+    name of their error code (``no_coverage``, ``year_out_of_range``,
+    ``resolution_mismatch``), any other ``DownloadError`` gets ``default``.
     """
+    if isinstance(error, ResolutionMismatchError):
+        return "resolution_mismatch"
     if isinstance(error, NoCoverageError):
         return (
             "skipped_incomplete"
@@ -1380,7 +1392,13 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
     rc = run.add_stale(report.stale)
     prefix = _prefix(manager)
     for sheet, failure in report.errors.items():
-        kind: FailureKind = "no_coverage" if sheet in report.no_coverage else "download"
+        kind: FailureKind = (
+            "no_coverage"
+            if sheet in report.no_coverage
+            else "resolution_mismatch"
+            if sheet in report.resolution_mismatch
+            else "download"
+        )
         run.fail(sheet, "PL", _prefixed(prefix, _cause_text(sheet, failure)), kind)
     return 1 if rc or report.failed else 0
 
@@ -1498,7 +1516,7 @@ def _download_pl_code(
         if failure_kind(e) == "skipped_incomplete" and e.sheet is not None:
             _skip_incomplete(run, {e.sheet: reason(e)}, prefix)
         return run.fail(
-            task.sheet, "PL", _prefixed(prefix, reason(e)), failure_kind(e), e
+            task.sheet, "PL", _prefixed(prefix, failure_text(e)), failure_kind(e), e
         )
     if expanded:
         return _finish_pl_sheets(task, run, result, prefix)
@@ -1819,8 +1837,10 @@ def _finish_pl_sheets(
     """Files, notices and exit code of a multi-sheet PL request (D2/D10, R5).
 
     All downloaded/local -> 0; >= 1 file and the rest without GUGiK data ->
-    ``NO_COVERAGE_SOME``, 0; >= 1 download failure -> failure, 1; no file at
-    all -> ``no_coverage`` failure, 1. ``prefix`` names the view direction
+    ``NO_COVERAGE_SOME``, 0; a sheet whose grid has another cell size than its
+    record declares -> a failed unit of that sheet (``resolution_mismatch``,
+    ADR-060), 1; >= 1 download failure -> failure, 1; no file at all and no such
+    sheet -> ``no_coverage`` failure, 1. ``prefix`` names the view direction
     of the result in its messages (``kierunek n: ``, oblique orthophotomap).
     """
     paths = _result_paths(result)
@@ -1844,7 +1864,20 @@ def _finish_pl_sheets(
     total = result.total
     hard = result.hard_failures
     missing = result.no_coverage
-    if missing and (paths or hard):
+    mismatched = result.resolution_mismatch
+    rc = max(
+        (
+            run.fail(
+                sheet,
+                "PL",
+                _prefixed(prefix, _cause_text(sheet, result.errors[sheet])),
+                "resolution_mismatch",
+            )
+            for sheet in mismatched
+        ),
+        default=0,
+    )
+    if missing and (paths or hard or mismatched):
         _no_coverage_warning(
             run,
             missing,
@@ -1868,11 +1901,13 @@ def _finish_pl_sheets(
             "download",
         )
     if not paths:
+        if mismatched:
+            return rc
         _coverage_hints(run, result.no_coverage_hints)
         return run.fail(
             "PL", "PL", _prefixed(prefix, no_coverage_text(total)), "no_coverage"
         )
-    return 0
+    return rc
 
 
 def _no_coverage_warning(

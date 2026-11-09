@@ -24,7 +24,12 @@ from typing import Any, Protocol
 from urllib.parse import urlparse
 
 from kartograf.core.sheet_parser import SheetParser
-from kartograf.exceptions import DownloadError, ValidationError, YearRangeError
+from kartograf.exceptions import (
+    DownloadError,
+    ResolutionMismatchError,
+    ValidationError,
+    YearRangeError,
+)
 from kartograf.messages import message, reason
 from kartograf.sources.sidecar import read_asc_header
 from kartograf.sources.variants import FORMATS
@@ -73,6 +78,10 @@ _ARCHIVE_ENDINGS = (".zip.zip", ".xyz.zip", "_asc.zip", "_tin.zip")
 # Share of the file extent that must lie inside the sheet frame (B4): a
 # partial sheet lies inside, a neighbour or a file of another place does not.
 MIN_FRAME_OVERLAP = 0.5
+
+# Largest difference between the cell size of a downloaded grid and the
+# ``resolution_m`` of its index record (ADR-060): the headers write 5, 5.0, 5.00.
+CELL_SIZE_TOLERANCE_M = 1e-3
 
 # Limit peak memory when counting pixels of large AAIGrid campaign files.
 _COVERAGE_CHUNK = 8 * 1024 * 1024
@@ -741,18 +750,19 @@ def verify_sheet_extent(path: Path, sheet: str, ext: str) -> None:
     frame. The frame is taken in the FILE's CRS (the rule of
     ``sidecar.pl_sheet_horizontal_crs``): x < 1e6 means EPSG:2180 - also a
     PL-2000 sheet that GUGiK published in EPSG:2180 (E17); otherwise the
-    native CRS of the sheet code (PL-2000 zone). Other extensions are not
-    checked; an unreadable or incomplete header raises DownloadError.
+    native CRS of the sheet code (PL-2000 zone). The cell size is ``cellsize`` or
+    ``dx``/``dy``. Other extensions are not checked; an unreadable or incomplete
+    header raises DownloadError.
     """
     if ext != ".asc":
         return
     h = read_asc_header(path)
     try:
-        cell = h["cellsize"]
-        half = cell / 2
-        x0 = h["xllcorner"] if "xllcorner" in h else h["xllcenter"] - half
-        y0 = h["yllcorner"] if "yllcorner" in h else h["yllcenter"] - half
-        x1, y1 = x0 + h["ncols"] * cell, y0 + h["nrows"] * cell
+        cx = h["dx"] if "dx" in h else h["cellsize"]
+        cy = h["dy"] if "dy" in h else h["cellsize"]
+        x0 = h["xllcorner"] if "xllcorner" in h else h["xllcenter"] - cx / 2
+        y0 = h["yllcorner"] if "yllcorner" in h else h["yllcenter"] - cy / 2
+        x1, y1 = x0 + h["ncols"] * cx, y0 + h["nrows"] * cy
     except KeyError as e:
         raise DownloadError(
             message(
@@ -786,3 +796,129 @@ def verify_sheet_extent(path: Path, sheet: str, ext: str) -> None:
             ),
             sheet=sheet,
         )
+
+
+def _cell_size(path: Path, ext: str) -> tuple[float, float]:
+    """Return the (x, y) cell size of a grid in metres.
+
+    ``.asc``: ``cellsize`` of the header (keys of any case, the value as any
+    float text: ``5``, ``5.0``, ``5.00``), or ``dx`` and ``dy``; ``.tif``:
+    ``abs(a)`` and ``abs(e)`` of the GeoTIFF transform.
+
+    Raises
+    ------
+    KeyError
+        The header has neither ``cellsize`` nor ``dx``/``dy``.
+    OSError, ValueError
+        The GeoTIFF cannot be read.
+    """
+    if ext == ".asc":
+        h = read_asc_header(path)
+        return (
+            h["dx"] if "dx" in h else h["cellsize"],
+            h["dy"] if "dy" in h else h["cellsize"],
+        )
+    import rasterio  # lazy: an ASC sheet does not need GDAL
+
+    with rasterio.open(path) as dataset:
+        transform = dataset.transform
+        return abs(transform.a), abs(transform.e)
+
+
+def failure_text(error: DownloadError) -> str:
+    """Return the text of a failed sheet: the error, with its hint for a mismatch.
+
+    A failed unit carries only a message, so the hint of a
+    ``ResolutionMismatchError`` (the flags and years of another flight) goes into
+    it; any other error is its ``reason``.
+    """
+    if isinstance(error, ResolutionMismatchError) and error.hint:
+        return message("download.error_remedy", text=reason(error), remedy=error.hint)
+    return reason(error)
+
+
+def verify_cell_size(
+    path: Path,
+    ext: str,
+    record: "IndexRecord",
+    *,
+    sheet: str,
+    campaign: str,
+    years: Sequence[int] | None = None,
+) -> None:
+    """Check the cell size of a downloaded grid against its index record (ADR-060).
+
+    A grid (``RASTER_EXTENSIONS``) of a record that declares ``resolution_m``
+    must have that cell size within ``CELL_SIZE_TOLERANCE_M`` on both axes
+    (``_cell_size``); GUGiK serves 1 m grids under records of the NMT 5 m index.
+    Neither the file size nor the flight date is a sign of it. Archives and
+    records without ``resolution_m`` are not checked.
+
+    Parameters
+    ----------
+    path : Path
+        The downloaded (staged) file.
+    ext : str
+        Its extension (``.asc``, ``.tif``; others are not checked).
+    record : IndexRecord
+        The index record of the file (``url``, ``resolution_m``).
+    sheet : str
+        The sheet code.
+    campaign : str
+        The flight as the store names it (``<date>_<id>``).
+    years : sequence of int, optional
+        Every year the index lists for the sheet, when known: the hint names
+        those other than the year of this flight.
+
+    Raises
+    ------
+    ResolutionMismatchError
+        The cell size differs from ``resolution_m``.
+    DownloadError
+        The cell size cannot be read.
+    """
+    declared = getattr(record, "resolution_m", None)
+    if declared is None or ext not in RASTER_EXTENSIONS:
+        return
+    try:
+        cell = _cell_size(path, ext)
+    except (KeyError, OSError, ValueError) as e:
+        raise DownloadError(
+            message(
+                "campaigns.cell_size_unreadable",
+                name=path.name,
+                error=reason(e),
+                declared_m=declared,
+                sheet=sheet,
+            ),
+            sheet=sheet,
+        ) from e
+    found = next(
+        (size for size in cell if abs(size - declared) > CELL_SIZE_TOLERANCE_M), None
+    )
+    if found is None:
+        return
+    flight_year = record_year(record)
+    others = sorted({y for y in years or () if y != flight_year})
+    hint = (
+        message("campaigns.resolution_mismatch_hint_years", years=others)
+        if others
+        else message("campaigns.resolution_mismatch_hint")
+    )
+    raise ResolutionMismatchError(
+        message(
+            "campaigns.resolution_mismatch",
+            name=path.name,
+            found_m=found,
+            sheet=sheet,
+            campaign=campaign,
+            declared_m=declared,
+            url=record.url,
+        ),
+        sheet=sheet,
+        campaign=campaign,
+        url=record.url,
+        declared_m=declared,
+        found_m=found,
+        hint=hint,
+    )
