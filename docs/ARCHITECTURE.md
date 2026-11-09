@@ -418,7 +418,9 @@ kartograf/
 │                        # ValidationError(.option, .options, .allowed) -> UsageError(.command),
 │                        # ParseError (code 2); DownloadError(.sheet, .status_code)
 │                        # -> NoCoverageError(DownloadError; .hints) — the source has no data for
-│                        # the sheet, .hints = hints (e.g. --scale 1:2000), YearRangeError;
+│                        # the sheet, .hints = hints (e.g. --scale 1:2000), YearRangeError,
+│                        # ResolutionMismatchError(.campaign, .url, .declared_m, .found_m;
+│                        # code data_error) — a grid of another cell size than its record;
 │                        # CacheError; InvalidSidecarError(.path, .field) — unreadable sidecar
 │                        # (read_sidecar) or a field of a wrong form (command_for_file);
 │                        # CommandNotRebuildableError(.family, .field) — no command selects a
@@ -614,7 +616,8 @@ kartograf/
 │   │                    # parent_request_for, `auto` clipping (Notice)
 │   ├── campaigns.py     # GUGiK campaigns (ADR-030): CampaignRef, format from the record,
 │   │                    # verify_file_format, verify_record_url/verify_sheet_extent (B4),
-│   │                    # verify_record_vertical_crs (vertical CRS of the record)
+│   │                    # verify_record_vertical_crs (vertical CRS of the record),
+│   │                    # verify_cell_size (grid cell size vs resolution_m, ADR-060)
 │   ├── countries.py     # Splitting an area by country: countries_for_bbox, split_bbox_by_country
 │   ├── links.py         # Linking the standard path to a version (hard link only, never backwards)
 │   ├── fetch.py         # Policy for files without a campaign: fetch_version, VersionedFile;
@@ -2301,13 +2304,19 @@ live and again after download). After download `verify_file_format`
 directory, TTN signature, Intergraph GRD/DGN header,
 `SECTION` DXF), then `verify_sheet_extent` (B4,
 only `.asc`): the extent from the ASC header (`xllcorner`/`xllcenter`,
-`yllcorner`/`yllcenter`, `ncols`, `nrows`, `cellsize`; the `*center` variant
+`yllcorner`/`yllcenter`, `ncols`, `nrows`, `cellsize` or `dx`/`dy`; the `*center` variant
 shifted by half a pixel) must lie at least 50 % of its area
 (`MIN_FRAME_OVERLAP`) within the sheet frame computed in the FILE's CRS:
 `x < 1e6` = EPSG:2180 (also a PL-2000 sheet published by GUGiK in
 EPSG:2180, E17), otherwise the native PL-2000 zone of the sheet. A partial sheet
 (`full_sheet=False`) lies within the frame and passes, a neighbouring sheet or one from
-another place does not; an unreadable or incomplete header = error. An unknown
+another place does not; an unreadable or incomplete header = error. Then, for an
+NMT/NMPT grid (provider attribute `checks_cell_size`), `verify_cell_size` (ADR-060): the
+cell size (`.asc` header `cellsize` of any case or `dx`/`dy`; `.tif` `abs(a)`, `abs(e)` of
+the transform) must equal `resolution_m` of the record within 1e-3 m on both axes, else
+`ResolutionMismatchError` (`data_error`, reason `resolution_mismatch`; GUGiK serves 1 m
+grids under 5 m records) - a failed unit of the sheet, also in a sheet list
+(`DownloadResult.resolution_mismatch`), and in plain mode no file. An unknown
 format or mismatched content = campaign `DownloadError` with the format name,
 an extent outside the frame = `DownloadError` with the file extent and the sheet frame;
 no version is created. The download error

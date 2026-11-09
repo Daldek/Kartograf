@@ -161,6 +161,15 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "is wrong)",
     ),
     ErrorCodeSpec(
+        "ResolutionMismatchError",
+        "data_error",
+        "resolution_mismatch",
+        7,
+        "a downloaded grid has another cell size than its index record declares "
+        "(details.declared_m, details.found_m): nothing is written; another flight "
+        "of the sheet (--year, --max-year) may have the declared grid",
+    ),
+    ErrorCodeSpec(
         "ConflictError",
         "conflict",
         None,

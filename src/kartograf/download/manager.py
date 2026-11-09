@@ -27,9 +27,11 @@ from kartograf.download.campaigns import (
     RASTER_EXTENSIONS,
     CampaignRef,
     campaign_extension,
+    failure_text,
     in_year_range,
     record_year,
     validate_year_bounds,
+    verify_cell_size,
     verify_file_format,
     verify_record_url,
     verify_record_vertical_crs,
@@ -76,6 +78,7 @@ from kartograf.download.versions import (
 from kartograf.exceptions import (
     DownloadError,
     NoCoverageError,
+    ResolutionMismatchError,
     ValidationError,
     YearRangeError,
 )
@@ -176,6 +179,10 @@ class DownloadResult:
     no_coverage : list[str]
         Subset of ``failed``: sheets the source has no data for
         (``NoCoverageError``) — as opposed to a transport/service failure.
+    resolution_mismatch : list[str]
+        Subset of ``failed``: sheets whose downloaded grid has another cell size
+        than its index record declares (``ResolutionMismatchError``, ADR-060);
+        nothing of that flight was written.
     campaign_files : dict[str, tuple[Path, ...]]
         Campaign flow (ADR-030): sheet -> version files of the campaigns
         selected by this run, downloaded and already local (for successful
@@ -251,6 +258,7 @@ class DownloadResult:
     stale: tuple[PlanItem, ...] = ()
     notices: tuple[Notice, ...] = ()
     errors: dict[str, str] = field(default_factory=dict)
+    resolution_mismatch: list[str] = field(default_factory=list)
 
     @property
     def total(self) -> int:
@@ -264,13 +272,14 @@ class DownloadResult:
 
     @property
     def hard_failures(self) -> list[str]:
-        """``failed`` minus ``no_coverage``: transport/service failures only.
+        """``failed`` minus ``no_coverage`` and ``resolution_mismatch``.
 
-        These are the sheets worth retrying — a sheet the source has no
-        data for stays missing no matter how often it is requested.
+        Transport/service failures only: the sheets worth retrying — a sheet
+        the source has no data for, or a grid of another cell size than its
+        record declares, stays so no matter how often it is requested.
         """
-        no_data = set(self.no_coverage)
-        return [g for g in self.failed if g not in no_data]
+        data_states = {*self.no_coverage, *self.resolution_mismatch}
+        return [g for g in self.failed if g not in data_states]
 
 
 @dataclass(frozen=True)
@@ -694,6 +703,11 @@ class DownloadManager:
         self._url_suffix = suffix if isinstance(suffix, str) else ""
         # HEAD before each transfer, DOWNLOAD_SIZE above LARGE_FILE_BYTES (K9).
         self._announces_size = getattr(self._provider, "announces_size", False) is True
+        # The cell size of a downloaded grid against ``resolution_m`` of its
+        # record (ADR-060): the elevation grids only.
+        self._checks_cell_size = (
+            getattr(self._provider, "checks_cell_size", False) is True
+        )
         # DOWNLOAD_SIZE notices of the current call (worker threads), drained
         # into ``DownloadResult.notices`` by ``_finish_result``.
         self._size_notices: list[Notice] = []
@@ -1399,7 +1413,9 @@ class DownloadManager:
                 )
             except DownloadError as error:
                 result.failed.append(sheet)
-                result.errors[sheet] = reason(error)
+                result.errors[sheet] = failure_text(error)
+                if isinstance(error, ResolutionMismatchError):
+                    result.resolution_mismatch.append(sheet)
                 self._emit(
                     on_progress,
                     result.total,
@@ -1434,7 +1450,7 @@ class DownloadManager:
         """
         if self._campaign_aware and self._is_plain():
             assert records is not None  # the plain check of the year range selected it
-            return self._fetch_plain(sheet, records, on_download)
+            return self._fetch_plain(sheet, records, on_download, available)
         if self._campaign_aware:
             return self._fetch_campaigns(
                 sheet,
@@ -1475,13 +1491,15 @@ class DownloadManager:
         sheet: str,
         records: tuple[SkorowidzRecord, ...],
         on_download: Callable[[], None] | None,
+        available: tuple[int, ...] | None = None,
     ) -> SheetFetch:
         """Write the one flight the plain survey selected as the file of the sheet.
 
         The record is checked before the network like the store does (``verify_record_
         url``, the datum, the extension), the file goes through the staging directory
-        (``verify_file_format``, ``verify_sheet_extent``) and is moved into place with
-        its name in the store; there is no sidecar, no version and no link.
+        (``verify_file_format``, ``verify_sheet_extent``, ``verify_cell_size``) and is
+        moved into place with its name in the store; there is no sidecar, no version
+        and no link.
         """
         (record,) = records
         ref = CampaignRef.from_record(record)
@@ -1506,6 +1524,15 @@ class DownloadManager:
             self._campaign_provider.download_record(record, staged)
             verify_file_format(staged, ext)
             verify_sheet_extent(staged, sheet, ext)
+            if self._checks_cell_size:
+                verify_cell_size(
+                    staged,
+                    ext,
+                    record,
+                    sheet=sheet,
+                    campaign=ref.dirname,
+                    years=available,
+                )
         except BaseException:
             discard_staging(staged, slot)
             raise
@@ -1600,8 +1627,9 @@ class DownloadManager:
         An image provider (``announces_size``) is asked for the file size
         first (``HEAD``): a file over ``LARGE_FILE_BYTES`` is announced by
         ``DOWNLOAD_SIZE`` before its transfer (K9). ``download_record`` writes
-        into a private staging directory, then ``verify_file_format`` and
-        ``verify_sheet_extent`` (B4); one read gives sha256 and — for a flight
+        into a private staging directory, then ``verify_file_format``,
+        ``verify_sheet_extent`` (B4) and, for an elevation grid, ``verify_cell_size``
+        (ADR-060); one read gives sha256 and — for a flight
         not declared full — ``extra.coverage`` (D13, D20); the mandatory
         version sidecar is written exclusively. Any failure leaves no version
         and no staged file.
@@ -1616,6 +1644,15 @@ class DownloadManager:
             self._campaign_provider.download_record(record, staged)
             verify_file_format(staged, ext)
             verify_sheet_extent(staged, sheet, ext)
+            if self._checks_cell_size:
+                verify_cell_size(
+                    staged,
+                    ext,
+                    record,
+                    sheet=sheet,
+                    campaign=ref.dirname,
+                    years=available,
+                )
             prepare_store(self._storage.root)
             # coverage only for rasters: archives are source files (ADR-041)
             measure = ref.full_sheet is not True and ext in RASTER_EXTENSIONS
@@ -1943,6 +1980,15 @@ class DownloadManager:
                 full_link_error = e
         else:
             full_target = linked_version(full)  # existing link stays untouched
+        # A resolution mismatch alone is the failure of the sheet, with its code
+        # (data_error) and facts (ADR-060).
+        if (
+            len(errors) == 1
+            and isinstance(errors[0][1], ResolutionMismatchError)
+            and link_error is None
+            and full_link_error is None
+        ):
+            raise errors[0][1]
         # Q10: full failure list
         if errors or link_error is not None or full_link_error is not None:
             problems: list[str] = []
@@ -2117,7 +2163,8 @@ class DownloadManager:
         -------
         tuple[str, SheetFetch | None, str, str, tuple[str, ...]]
             (sheet, fetch_or_none, status, message, hints)
-            status is one of: "skipped", "completed", "failed", "no_coverage"
+            status is one of: "skipped", "completed", "failed", "no_coverage",
+            "resolution_mismatch" (``ResolutionMismatchError``, ADR-060)
         """
         try:
             if check is not None and sheet in check.no_data:
@@ -2144,6 +2191,9 @@ class DownloadManager:
         except NoCoverageError as e:
             logger.debug("No data for %s: %s", sheet, e)
             return (sheet, None, "no_coverage", reason(e), e.hints)
+        except ResolutionMismatchError as e:
+            logger.debug("Grid of another cell size for %s: %s", sheet, e)
+            return (sheet, None, "resolution_mismatch", failure_text(e), ())
         except DownloadError as e:
             logger.debug("Failed to download %s: %s", sheet, e)
             return (sheet, None, "failed", reason(e), ())
@@ -2188,9 +2238,11 @@ class DownloadManager:
                 result.files[sheet] = fetch.files
         elif status == "incomplete":
             result.incomplete[sheet] = message
-        elif status in ("failed", "no_coverage"):
+        elif status in ("failed", "no_coverage", "resolution_mismatch"):
             result.failed.append(sheet)
             result.errors[sheet] = message
+            if status == "resolution_mismatch":
+                result.resolution_mismatch.append(sheet)
             if status == "no_coverage":
                 result.no_coverage.append(sheet)
                 if hints:
@@ -2247,14 +2299,18 @@ class DownloadManager:
         status: str,
         message: str = "",
     ) -> None:
-        """Build ``DownloadProgress`` for both modes (the single place)."""
+        """Build ``DownloadProgress`` for both modes (the single place).
+
+        A sheet of a grid of another cell size than its record declares is
+        ``failed`` to the progress (its own kind is in the result).
+        """
         if on_progress:
             on_progress(
                 DownloadProgress(
                     current=current,
                     total=total,
                     sheet=sheet,
-                    status=status,
+                    status="failed" if status == "resolution_mismatch" else status,
                     message=message,
                 )
             )
