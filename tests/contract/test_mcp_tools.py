@@ -368,7 +368,7 @@ def test_every_argument_has_a_kind_and_the_data_tools_know_their_data_options():
 
         assert set(spec.data_options) == set(DATA_COMMANDS[command.id].options)
         assert "root" in spec.input_schema["properties"]
-        assert "root" not in spec.input_schema["required"]  # the default store
+        assert "root" not in spec.input_schema.get("required", ())  # default store
         assert not {"quiet", "json", "upgrade", "force"} & set(spec.kinds)
     assert all(
         not s.data_options

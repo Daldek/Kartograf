@@ -866,7 +866,7 @@ def test_every_data_tool_runs_its_own_command(tmp_path, spec):
     properties = spec.input_schema["properties"]
     if "product" in properties:
         arguments["product"] = properties["product"]["enum"][0]
-    if "depth" in spec.input_schema["required"]:
+    if "depth" in spec.input_schema.get("required", ()):
         arguments["depth"] = properties["depth"]["enum"][0]
 
     run = error_of(call(spec.name, arguments, **writing(tmp_path)))

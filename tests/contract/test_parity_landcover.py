@@ -3,7 +3,7 @@ and ``soil hsg``: same store bytes, statuses, plan and notices, frozen clock.
 
 Scenarios: BDOT10k ``teryt``, BDOT10k area of several powiats (one failing),
 BDOT10k archive ``--year``, CORINE CLMS and WMS preview, SoilGrids, ZABAGED
-area (recorded CUZK REST answers), HSG ``bbox`` and ``geometry``,
+area (recorded CUZK REST answers), HSG ``bbox``, ``geometry`` and ``--depth-rule``,
 ``--check --plan`` + ``--upgrade --plan``.
 """
 
@@ -268,6 +268,22 @@ def test_hsg_geometry(tmp_path):
         run = _hsg(tmp_path, ["--geometry", str(gpkg)], geometry=gpkg)
     _same(run, run.api_result.notices, run.api_result.ok)
     assert run.api_result.notices  # GEOMETRY_LAYER_DEFAULT on both sides
+
+
+def test_hsg_depth_rule(tmp_path):
+    with _providers(soilgrids=RasterSoilGrids):
+        run = run_both(
+            ["soil", "hsg", "--depth-rule", "least-permeable", "-q"]
+            + ["--bbox", BBOX_ARG],
+            lambda out: calculate_hsg(
+                root=out, depth_rule="least-permeable", bbox=BBOX
+            ),
+            tmp_path,
+        )
+    _same(run, run.api_result.notices, run.api_result.ok)
+    assert run.api_result.files[0].file.path.parent.parent.name == (
+        "global_soilgrids_0-100cm_least-permeable_mean"
+    )
 
 
 def test_check_plan_upgrade(tmp_path):

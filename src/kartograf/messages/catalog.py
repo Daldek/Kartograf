@@ -272,6 +272,7 @@ MESSAGES = {
     "metavar_units": Text("UNITS", "JEDNOSTKI"),
     "metavar_epsg_code": Text("EPSG:CODE", "EPSG:KOD"),
     "metavar_depth": Text("DEPTH", "GLEBOKOSC"),
+    "metavar_depth_rule": Text("RULE", "REGULA"),
     "metavar_property": Text("PROPERTY", "WLASCIWOSC"),
     "metavar_stat": Text("STAT", "STATYSTYKA"),
     "metavar_lang": Text("LANG", "JEZYK"),

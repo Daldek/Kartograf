@@ -204,6 +204,13 @@ MEANINGS: Final[Mapping[str, Mapping[str, str]]] = {
             "unitless."
         ),
     },
+    "depth_rule": {
+        "least-permeable": (
+            "Classify the SoilGrids layers 0-5cm to 60-100cm and take, per cell, the "
+            "group of the layer with the lowest saturated hydraulic conductivity of "
+            "its USDA texture class (Rawls, Brakensiek & Saxton 1982)."
+        ),
+    },
     "update": {
         "upgrade": "Fetch newer content when the source signals it.",
         "force": "Fetch every file again; nothing is overwritten.",

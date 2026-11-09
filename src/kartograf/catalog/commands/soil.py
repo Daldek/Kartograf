@@ -12,7 +12,7 @@ from kartograf.catalog.shared import (
 )
 from kartograf.catalog.spec import Command, Constraint, Example, Group, Param
 from kartograf.download.options import store_files
-from kartograf.hydrology.hsg import HSG_OUTPUT_FILES
+from kartograf.hydrology.hsg import DEPTH_RULES, HSG_OUTPUT_FILES
 from kartograf.landcover.manager import soil_choices
 from kartograf.messages import message
 from kartograf.providers.soilgrids import SoilGridsProvider
@@ -68,7 +68,9 @@ def _depth_help() -> str:
 
 
 def _hsg_depth_help() -> str:
-    return message("catalog_soil.depth_description", depths=_depths(standard_only=True))
+    return message(
+        "catalog_soil.hsg_depth_description", depths=_depths(standard_only=True)
+    )
 
 
 def _stat_help() -> str:
@@ -135,7 +137,15 @@ _DOWNLOAD_PARAMS = (
 )
 
 _HSG_PARAMS = (
-    _depth(standard_only=True),
+    replace(_depth(standard_only=True), required=False),
+    Param(
+        "depth_rule",
+        "str",
+        message("catalog_soil.depth_rule_description"),
+        metavar=message("catalog.metavar_depth_rule"),
+        allowed=DEPTH_RULES,
+        section=SELECTION_TITLE,
+    ),
     *shared.area(sheet=SHEET_AREA_HELP, accepts=PL_SHEETS),
     *shared.target(lambda: HSG_OUTPUT_FILES),
     *shared.update_params(
@@ -209,7 +219,16 @@ COMMANDS = (
         effects=("network", "store_write"),
         check_function="check_hsg",
         check_result_schema="kartograf-plan/1",
-        constraints=(_AREA_RULE, *shared.target_constraints()),
+        constraints=(
+            _AREA_RULE,
+            Constraint(
+                "one_of",
+                ("depth", "depth_rule"),
+                message("catalog_soil.rule_give_exactly_one_depth_depth_rule"),
+                group="depth",
+            ),
+            *shared.target_constraints(),
+        ),
         examples=(
             Example(
                 {
@@ -219,6 +238,10 @@ COMMANDS = (
                 },
                 title=message("catalog_soil.example_hsg_rectangle_summary"),
                 run={"summary": True},
+            ),
+            Example(
+                {"depth_rule": "least-permeable", "sheet": "N-34-130-D"},
+                title=message("catalog_soil.example_hsg_profile_sheet"),
             ),
         ),
         rules=(message("catalog_soil.soil_hsg_rule"),),

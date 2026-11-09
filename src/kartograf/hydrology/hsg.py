@@ -8,7 +8,9 @@ This module provides functions to:
 
 Texture -> HSG mapping (TEXTURE_TO_HSG) deliberately deviates from the TR-55
 table for sandy_loam (B, not A) and clay_loam / silty_clay_loam (C, not D) -
-see docs/DECISIONS.md ADR-025.
+see docs/DECISIONS.md ADR-025. ``depth_rule="least-permeable"`` classifies the
+SoilGrids layers of 0-100 cm and takes per cell the layer with the lowest
+saturated hydraulic conductivity (Rawls, Brakensiek & Saxton 1982) - ADR-061.
 
 Reference:
 - USDA-NRCS National Engineering Handbook, Part 630, Chapter 7
@@ -117,6 +119,35 @@ TEXTURE_TO_HSG = {
     "silty_clay": "D",
     "clay": "D",
 }
+
+# Saturated hydraulic conductivity of the USDA texture classes, cm/h: Rawls,
+# Brakensiek & Saxton (1982), "Estimation of soil water properties", Trans.
+# ASAE 25(5), Table 2 (``depth_rule="least-permeable"``, ADR-061). The table has
+# no ``silt`` class; it takes the value of ``silt_loam``, its neighbour of the same
+# group. The order of the values agrees with TEXTURE_TO_HSG: a lower Ksat never has
+# a milder group, so the least permeable layer has the strictest group.
+RAWLS_1982_KSAT_CM_H = {
+    "sand": 21.0,
+    "loamy_sand": 6.11,
+    "sandy_loam": 2.59,
+    "loam": 1.32,
+    "silt_loam": 0.68,
+    "silt": 0.68,
+    "sandy_clay_loam": 0.43,
+    "clay_loam": 0.23,
+    "silty_clay_loam": 0.15,
+    "sandy_clay": 0.12,
+    "silty_clay": 0.09,
+    "clay": 0.06,
+}
+# Sidecar ``extra.ksat`` of an HSG of a ``depth_rule``.
+_KSAT_SOURCE = "Rawls, Brakensiek & Saxton (1982), Ksat of the USDA texture classes"
+
+# ``depth_rule`` of ``calculate_hsg``: the HSG of the least permeable layer of
+# the profile ``HSG_PROFILE`` (the SoilGrids layers ``HSG_PROFILE_DEPTHS``).
+DEPTH_RULES = ("least-permeable",)
+HSG_PROFILE = "0-100cm"
+HSG_PROFILE_DEPTHS = ("0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm")
 
 
 # Canonical USDA texture triangle (Soil Survey Manual) - the SINGLE source of
@@ -389,6 +420,38 @@ def _classify_hsg(
     return hsg
 
 
+def _least_permeable_hsg(
+    layers: "list[tuple[np.ndarray, np.ndarray, np.ndarray]]",
+    nodata: "list[tuple[float | None, float | None, float | None]]",
+) -> np.ndarray:
+    """HSG (uint8, 0 = nodata) of the least permeable of several layers.
+
+    Every layer is classified like ``_classify_hsg`` (USDA texture from the raw
+    g/kg); per cell the layer with the lowest ``RAWLS_1982_KSAT_CM_H`` gives the
+    texture and its group (``TEXTURE_TO_HSG``; the first, i.e. shallowest, of
+    equal values). A cell without data in any layer is a gap: the limiting layer
+    is unknown there.
+    """
+    ksat_of = np.array(
+        [np.inf] + [RAWLS_1982_KSAT_CM_H[TEXTURE_NAMES[c]] for c in range(1, 13)]
+    )
+    textures, gaps = [], []
+    for (clay, sand, silt), tags in zip(layers, nodata, strict=True):
+        textures.append(classify_usda_texture_array(clay, sand, silt))
+        gap = (
+            _nodata_mask(clay, tags[0])
+            | _nodata_mask(sand, tags[1])
+            | _nodata_mask(silt, tags[2])
+        )
+        gaps.append(gap | ((clay == 0) & (sand == 0) & (silt == 0)))
+    texture = np.stack(textures)
+    limiting = np.argmin(ksat_of[texture], axis=0)
+    chosen = np.take_along_axis(texture, limiting[None], axis=0)[0]
+    hsg = texture_to_hsg_array(chosen)
+    hsg[np.any(np.stack(gaps), axis=0)] = 0
+    return hsg
+
+
 def _write_hsg_geotiff(
     output_path: Path, hsg: np.ndarray, profile: dict[str, Any]
 ) -> None:
@@ -432,6 +495,69 @@ HSG_OUTPUT_FILES = message("hydrology.hsg_output_files")
 
 
 @dataclass(frozen=True)
+class _Layers:
+    """The SoilGrids layers of one HSG request: one ``depth`` or a ``depth_rule``.
+
+    One layer keeps the store segment ``hsg/global_soilgrids_<depth>_mean``, the
+    units ``<property> <unit>`` of the inputs and the sidecar of before; a rule
+    reads the layers ``HSG_PROFILE_DEPTHS`` (segment
+    ``hsg/global_soilgrids_0-100cm_<rule>_mean``, input units
+    ``<property> <depth> <unit>``).
+    """
+
+    depths: tuple[str, ...]
+    rule: str | None = None
+
+    @property
+    def depth(self) -> str:
+        """Return the depth of the result: the layer or ``HSG_PROFILE``."""
+        return self.depths[0] if self.rule is None else HSG_PROFILE
+
+    @property
+    def inputs(self) -> tuple[tuple[str, str], ...]:
+        """Return ``(property, depth)`` of every input, layer by layer."""
+        return tuple((prop, depth) for depth in self.depths for prop in HSG_INPUTS)
+
+    def unit(self, prop: str, depth: str, unit: str) -> str:
+        """Return the report unit of one input."""
+        return f"{prop} {unit}" if self.rule is None else f"{prop} {depth} {unit}"
+
+    def segment(self, stat: str) -> str:
+        """Return the store segment of the HSG raster."""
+        from kartograf.landcover.store import hsg_segment
+
+        return hsg_segment(self.depth, stat, self.rule)
+
+
+def _layers(depth: str | None, depth_rule: str | None) -> "_Layers | None":
+    """Return the layers of a ``depth_rule``; ``None`` for one ``depth``.
+
+    Raises
+    ------
+    ValidationError
+        ``depth`` together with ``depth_rule``, or an unknown rule.
+    """
+    if depth_rule is None:
+        return None
+    if depth is not None:
+        raise ValidationError(
+            message("hydrology.depth_with_depth_rule"),
+            options=("depth", "depth_rule"),
+        )
+    if depth_rule not in DEPTH_RULES:
+        raise ValidationError(
+            message(
+                "hydrology.depth_rule_not_allowed",
+                value=depth_rule,
+                rules=list(DEPTH_RULES),
+            ),
+            option="depth_rule",
+            allowed=DEPTH_RULES,
+        )
+    return _Layers(HSG_PROFILE_DEPTHS, depth_rule)
+
+
+@dataclass(frozen=True)
 class HsgReport(WriteTarget, Document):
     """Outcome of ``calculate_hsg`` (``soil hsg``; ``kartograf-download/1``).
 
@@ -441,7 +567,9 @@ class HsgReport(WriteTarget, Document):
     set exists, ``local`` for a position left out of a plan; none when an
     input failed, or out of a plan without a local version). ``inputs``:
     clay, sand and silt in the store (``unit`` = ``"<property> <unit>"``,
-    e.g. ``"clay N-34-130-D"``). ``failed``: an input that failed (its unit
+    e.g. ``"clay N-34-130-D"``; with a ``depth_rule``
+    ``"<property> <depth> <unit>"``, e.g. ``"clay 30-60cm N-34-130-D"``).
+    ``failed``: an input that failed (its unit
     as in ``inputs``; no HSG is computed) or the store failure of the HSG.
     ``stale``: planned positions whose source changed since the plan.
     ``notices``: data messages (e.g. the geometry layer choice). ``ok``: no
@@ -476,9 +604,10 @@ class HSGCalculator:
     The inputs are SoilGrids ``mean`` versions of ``root``
     (``soil/global_soilgrids_{clay,sand,silt}_<depth>_mean/``, labelled by
     the SoilGrids edition, D33); the HSG raster is a version of
-    ``hsg/global_soilgrids_<depth>_mean/`` with the same selection
+    ``hsg/global_soilgrids_<depth>_mean/`` (with a ``depth_rule``
+    ``hsg/global_soilgrids_0-100cm_<rule>_mean/``) with the same selection
     hierarchy (``bbox/<coords>`` or the sheet hierarchy). A version whose
-    ``extra.source_files`` has the same three input sha256 is used again
+    ``extra.source_files`` has the same input sha256 is used again
     (``reused``, nothing computed). Rasters outside the store:
     ``hsg_from_rasters``.
     """
@@ -558,7 +687,8 @@ class HSGCalculator:
         bbox: "BBox | None" = None,
         geometry: str | Path | None = None,
         layer: str | None = None,
-        depth: str | None,
+        depth: str | None = None,
+        depth_rule: str | None = None,
         update: "UpdateMode | None" = None,
         plan: "UpdatePlan | None" = None,
         on_notice: "Callable[[Notice], None] | None" = None,
@@ -568,13 +698,14 @@ class HSGCalculator:
         Raises
         ------
         ValidationError
-            Not exactly one selection, a missing or invalid depth, bad mode,
-            a plan of another store or without ``update="upgrade"``.
+            Not exactly one selection, a missing or invalid depth or rule, bad
+            mode, a plan of another store or without ``update="upgrade"``.
         """
         sink = NoticeSink(on_notice)
-        selection = self._validated(sheet, bbox, geometry, layer, depth, sink)
-        assert depth is not None  # checked with the selection
-        report = self._calculate(selection, depth, _HSG_STAT, update, plan, sink)
+        selection, layers = self._validated(
+            sheet, bbox, geometry, layer, depth, depth_rule, sink
+        )
+        report = self._calculate(selection, layers, _HSG_STAT, update, plan, sink)
         return replace(report, notices=sink.notices)
 
     @plans
@@ -585,19 +716,21 @@ class HSGCalculator:
         bbox: "BBox | None" = None,
         geometry: str | Path | None = None,
         layer: str | None = None,
-        depth: str | None,
+        depth: str | None = None,
+        depth_rule: str | None = None,
         force: bool = False,
         on_notice: "Callable[[Notice], None] | None" = None,
     ) -> "UpdatePlan":
         """Return the plan of ``calculate_hsg`` without downloading or computing.
 
         Plan of ``calculate_hsg`` with the same selection, WITHOUT
-        downloading or computing: 3 x ``landcover`` + 1 x ``hsg``.
+        downloading or computing: 3 x ``landcover`` per layer + 1 x ``hsg``.
         """
         sink = NoticeSink(on_notice)
-        selection = self._validated(sheet, bbox, geometry, layer, depth, sink)
-        assert depth is not None  # checked with the selection
-        plan = self._check(selection, depth, _HSG_STAT, sink)
+        selection, layers = self._validated(
+            sheet, bbox, geometry, layer, depth, depth_rule, sink
+        )
+        plan = self._check(selection, layers, _HSG_STAT, sink)
         return replace(plan, notices=sink.notices)
 
     def validate_request(
@@ -607,21 +740,24 @@ class HSGCalculator:
         bbox: "BBox | None" = None,
         geometry: str | Path | None = None,
         layer: str | None = None,
-        depth: str | None,
+        depth: str | None = None,
+        depth_rule: str | None = None,
     ) -> None:
         """Check the request of ``calculate_hsg`` before the first network access.
 
         Every check of ``calculate_hsg``/``check_hsg`` before the first
-        request: one selection and the input depth (no network, nothing
+        request: one selection and the input depth or rule (no network, nothing
         written; a ``geometry`` file is read for its envelope) - the same
         exception type and text as ``calculate_hsg`` (``validate_command``).
 
         Raises
         ------
         ValidationError
-            Not exactly one selection, an invalid sheet code or depth.
+            Not exactly one selection, an invalid sheet code, depth or rule.
         """
-        self._validated(sheet, bbox, geometry, layer, depth, NoticeSink(None))
+        self._validated(
+            sheet, bbox, geometry, layer, depth, depth_rule, NoticeSink(None)
+        )
 
     def _validated(
         self,
@@ -630,14 +766,25 @@ class HSGCalculator:
         geometry: str | Path | None,
         layer: str | None,
         depth: str | None,
+        depth_rule: str | None,
         sink: NoticeSink,
-    ) -> dict[str, Any]:
-        """Check the selection, then the depth by the input manager's own checks."""
+    ) -> tuple[dict[str, Any], _Layers]:
+        """Check the selection, the rule, then the depth by the input manager's checks.
+
+        Without a rule a missing ``depth`` is the manager's error, as before the rule.
+        """
         selection = self._selection(sheet, bbox, geometry, layer, sink)
+        layers = _layers(depth, depth_rule)
         self._manager().validate_request(
-            **_where(selection), property=HSG_INPUTS[0], depth=depth, stat=_HSG_STAT
+            **_where(selection),
+            property=HSG_INPUTS[0],
+            depth=depth if layers is None else layers.depths[0],
+            stat=_HSG_STAT,
         )
-        return selection
+        if layers is None:
+            assert depth is not None  # the manager refuses a missing depth
+            return selection, _Layers((depth,))
+        return selection, layers
 
     @staticmethod
     def _selection(
@@ -682,20 +829,25 @@ class HSGCalculator:
             return LandCoverManager("soilgrids", cache=self._cache, root=where)
         return LandCoverManager(self._provider, root=where)
 
-    def _slot(self, selection: dict[str, Any], depth: str, stat: str) -> "FileSlot":
+    def _slot(
+        self, selection: dict[str, Any], layers: _Layers, stat: str
+    ) -> "FileSlot":
         from kartograf.download.storage import unit_slot
-        from kartograf.landcover.store import hsg_segment
 
         return unit_slot(
             self._root,
-            hsg_segment(depth, stat),
+            layers.segment(stat),
             ".tif",
             bbox=selection.get("bbox_obj"),
             sheet=selection.get("sheet"),
         )
 
     def _check(
-        self, selection: dict[str, Any], depth: str, stat: str, sink: "NoticeSink"
+        self,
+        selection: dict[str, Any],
+        layers: _Layers,
+        stat: str,
+        sink: "NoticeSink",
     ) -> "UpdatePlan":
         from kartograf.download.fetch import inspect_version
         from kartograf.download.plan import new_plan
@@ -705,29 +857,37 @@ class HSGCalculator:
             unit = selection_unit(
                 bbox=selection.get("bbox_obj"), sheet=selection.get("sheet")
             )
-            slot = self._slot(selection, depth, stat)
+            slot = self._slot(selection, layers, stat)
             item = inspect_version(slot, track=_HSG_TRACK, unit=unit, signal="none")
             return new_plan(self._root, [item])
-        inputs = self._input_items(selection, depth, stat, sink)
+        inputs = self._input_items(selection, layers, stat, sink)
         return new_plan(
-            self._root, [*inputs, self._hsg_item(selection, depth, stat, inputs)]
+            self._root, [*inputs, self._hsg_item(selection, layers, stat, inputs)]
         )
 
     def _input_items(
-        self, selection: dict[str, Any], depth: str, stat: str, sink: "NoticeSink"
+        self,
+        selection: dict[str, Any],
+        layers: _Layers,
+        stat: str,
+        sink: "NoticeSink",
     ) -> list[Any]:
         manager = self._manager()
         where = _where(selection)
         return [
             item
-            for prop in HSG_INPUTS
+            for prop, depth in layers.inputs
             for item in manager.check(
                 **where, property=prop, depth=depth, stat=stat, on_notice=sink.add
             ).items
         ]
 
     def _hsg_item(
-        self, selection: dict[str, Any], depth: str, stat: str, inputs: list[Any]
+        self,
+        selection: dict[str, Any],
+        layers: _Layers,
+        stat: str,
+        inputs: list[Any],
     ) -> "PlanItem":
         """Return the plan position of the HSG.
 
@@ -739,7 +899,7 @@ class HSGCalculator:
         from kartograf.download.plan import PlanItem
         from kartograf.landcover.store import selection_unit
 
-        slot = self._slot(selection, depth, stat)
+        slot = self._slot(selection, layers, stat)
         labels = [i.available_label for i in inputs]
         label = "+".join(sorted(set(labels))) if all(labels) else None
         failed = [i for i in inputs if i.status == "check_failed"]
@@ -772,7 +932,7 @@ class HSGCalculator:
     def _calculate(
         self,
         selection: dict[str, Any],
-        depth: str,
+        layers: _Layers,
         stat: str,
         update: "UpdateMode | None",
         plan: "UpdatePlan | None",
@@ -792,14 +952,14 @@ class HSGCalculator:
         from kartograf.sources.registry import get_source
 
         validate_update(update, check="check_hsg")
-        slot = self._slot(selection, depth, stat)
+        slot = self._slot(selection, layers, stat)
         unit = selection_unit(
             bbox=selection.get("bbox_obj"), sheet=selection.get("sheet")
         )
         write = plain_of(self._root)
         if write is not None:
             return self._calculate_plain(
-                write, slot, unit, selection, depth, update, sink
+                write, slot, unit, selection, layers, update, sink
             )
         planned_hsg = True
         stale: list[Any] = []
@@ -813,9 +973,9 @@ class HSGCalculator:
             # The HSG position is checked BEFORE the inputs change.
             fresh = self._hsg_item(
                 selection,
-                depth,
+                layers,
                 stat,
-                self._input_items(selection, depth, stat, sink),
+                self._input_items(selection, layers, stat, sink),
             )
             todo, skipped = select_planned(plan, [fresh], _HSG_TRACK)
             planned_hsg, stale = bool(todo), list(skipped)
@@ -824,7 +984,7 @@ class HSGCalculator:
         where = _where(selection)
         inputs: list[UnitFile] = []
         failed: list[UnitFailure] = []
-        for prop in HSG_INPUTS:
+        for prop, depth in layers.inputs:
             report = manager.download(
                 **where,
                 update=update,
@@ -835,19 +995,23 @@ class HSGCalculator:
                 on_notice=sink.add,
             )
             # one raster per input (a plan may leave it without a file); its
-            # unit names the property (``<property> <unit>``)
-            inputs += [replace(i, unit=f"{prop} {i.unit}") for i in report.files]
-            failed += [replace(i, unit=f"{prop} {i.unit}") for i in report.failed]
+            # unit names the property (``<property> [<depth> ]<unit>``)
+            inputs += [
+                replace(i, unit=layers.unit(prop, depth, i.unit)) for i in report.files
+            ]
+            failed += [
+                replace(i, unit=layers.unit(prop, depth, i.unit)) for i in report.failed
+            ]
             stale.extend(report.stale)
         country = get_source(_SOILGRIDS).country
         hsg: VersionedFile | None = None
         if not failed:  # no HSG of an incomplete input set
-            if not planned_hsg or len(inputs) != len(HSG_INPUTS):
+            if not planned_hsg or len(inputs) != len(layers.inputs):
                 hsg = _local_only(slot)
             else:
                 try:
                     hsg = self._reuse_or_compute(
-                        slot, selection, depth, stat, [i.file for i in inputs], sink
+                        slot, selection, layers, stat, [i.file for i in inputs], sink
                     )
                 except DownloadError as e:  # the store: a failure of the HSG
                     logger.debug("HSG %s: %s", unit, e)
@@ -871,7 +1035,7 @@ class HSGCalculator:
         slot: "FileSlot",
         unit: str,
         selection: dict[str, Any],
-        depth: str,
+        layers: _Layers,
         update: "UpdateMode | None",
         sink: "NoticeSink",
     ) -> HsgReport:
@@ -890,7 +1054,7 @@ class HSGCalculator:
         failed: list[UnitFailure] = []
         hsg: VersionedFile | None = None
         with contextlib.ExitStack() as stack:
-            for prop in HSG_INPUTS:
+            for prop, depth in layers.inputs:
                 inputs = stack.enter_context(write.scratch())
                 report = self._manager(inputs.handle).download(
                     **_where(selection),
@@ -901,10 +1065,13 @@ class HSGCalculator:
                     on_notice=sink.add,
                 )
                 files += [i.file for i in report.files]
-                failed += [replace(i, unit=f"{prop} {i.unit}") for i in report.failed]
-            if not failed and len(files) == len(HSG_INPUTS):
+                failed += [
+                    replace(i, unit=layers.unit(prop, depth, i.unit))
+                    for i in report.failed
+                ]
+            if not failed and len(files) == len(layers.inputs):
                 try:
-                    hsg = self._compute_plain(slot, files, sink)
+                    hsg = self._compute_plain(slot, layers, files, sink)
                 except DownloadError as e:
                     logger.debug("HSG %s: %s", unit, e)
                     failed.append(UnitFailure(unit, country, reason(e), "download"))
@@ -919,7 +1086,11 @@ class HSGCalculator:
         )
 
     def _compute_plain(
-        self, slot: "FileSlot", files: "list[VersionedFile]", sink: "NoticeSink"
+        self,
+        slot: "FileSlot",
+        layers: _Layers,
+        files: "list[VersionedFile]",
+        sink: "NoticeSink",
     ) -> "VersionedFile":
         """Compute the HSG of the staged inputs and move it into the output folder."""
         from kartograf.download.fetch import (
@@ -930,7 +1101,7 @@ class HSGCalculator:
 
         staged = new_staging(slot)
         try:
-            _, empty = _classify_files(files, staged)
+            _, empty = _classify_files(files, layers, staged)
         except BaseException:
             discard_staging(staged, slot)
             raise
@@ -943,7 +1114,7 @@ class HSGCalculator:
         self,
         slot: "FileSlot",
         selection: dict[str, Any],
-        depth: str,
+        layers: _Layers,
         stat: str,
         files: "list[VersionedFile]",
         sink: "NoticeSink",
@@ -952,7 +1123,9 @@ class HSGCalculator:
 
         The HSG version of these inputs: reused, or computed and stored (a
         computed HSG without a single class - every input cell is a gap -
-        gets ``extra.all_nodata`` and the ``ALL_NODATA`` warning).
+        gets ``extra.all_nodata`` and the ``ALL_NODATA`` warning). A rule
+        records ``depth_rule``, ``depths``, ``ksat`` and the ``depth`` of every
+        source file.
         """
         from kartograf.download.fetch import (
             discard_staging,
@@ -974,7 +1147,7 @@ class HSGCalculator:
         label = "+".join(sorted({f.label for f in files}))
         staged = new_staging(slot)
         try:
-            profile, empty = _classify_files(files, staged)
+            profile, empty = _classify_files(files, layers, staged)
         except BaseException:
             discard_staging(staged, slot)
             raise
@@ -982,20 +1155,25 @@ class HSGCalculator:
         request = {k: v for k, v in selection.items() if k != "bbox_obj"}
         extra: dict[str, object] = {
             "derived": "hsg",
-            "depth": depth,
+            "depth": layers.depth,
             "stat": stat,
             "classes": _HSG_CLASSES,
             "source_layers": list(HSG_INPUTS),
             "source_files": [
                 {
                     "name": name,
+                    **({} if layers.rule is None else {"depth": depth}),
                     "file": f.version_path.relative_to(self._root).as_posix(),
                     "sha256": f.sha256,
                     "label": f.label,
                 }
-                for name, f in zip(HSG_INPUTS, files, strict=True)
+                for (name, depth), f in zip(layers.inputs, files, strict=True)
             ],
         }
+        if layers.rule is not None:
+            extra["depth_rule"] = layers.rule
+            extra["depths"] = list(layers.depths)
+            extra["ksat"] = _KSAT_SOURCE
         if empty:
             extra["all_nodata"] = True
 
@@ -1050,6 +1228,7 @@ def calculate_hsg(
     geometry: str | Path | None = None,
     layer: str | None = None,
     depth: str | None = None,
+    depth_rule: str | None = None,
     update: "UpdateMode | None" = None,
     plan: "UpdatePlan | None" = None,
     summary: bool = False,
@@ -1064,12 +1243,17 @@ def calculate_hsg(
     Parameter names and values are the flags of the command in
     ``snake_case``. One area: ``sheet`` (canonical code, sheet hierarchy),
     ``bbox`` (any supported CRS; ``bbox/<coords>`` of its EPSG:2180
-    envelope) or ``geometry`` (SHP/GPKG, ``layer`` of a GPKG); ``depth``
-    (required): 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm or 100-200cm, the
-    statistic is always ``mean``. The inputs are the SoilGrids clay, sand and
+    envelope) or ``geometry`` (SHP/GPKG, ``layer`` of a GPKG); exactly one of
+    ``depth``: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm or 100-200cm (one
+    layer) and ``depth_rule``: ``"least-permeable"`` (the profile 0-100cm: the
+    layers 0-5cm to 60-100cm, per cell the group of the layer with the lowest
+    saturated hydraulic conductivity of its USDA texture class by Rawls,
+    Brakensiek & Saxton 1982; a cell without data in any layer is 0; ADR-061);
+    the statistic is always ``mean``. The inputs are the SoilGrids clay, sand and
     silt of the area in the store
     (``soil/global_soilgrids_<property>_<depth>_mean/``, downloaded when
-    missing); the HSG raster ``hsg/global_soilgrids_<depth>_mean/`` (uint8,
+    missing); the HSG raster ``hsg/global_soilgrids_<depth>_mean/`` (a rule:
+    ``hsg/global_soilgrids_0-100cm_least-permeable_mean/``; uint8,
     1=A, 2=B, 3=C, 4=D, 0 = no data) is computed only for a new input set,
     a version of the same inputs is used again (``reused``). ``update`` is
     the mode of the INPUTS (spec 4.2); ``plan`` from ``check_hsg`` with
@@ -1100,8 +1284,9 @@ def calculate_hsg(
     ValidationError
         Missing store (or a ``.tif`` path - a file outside the store is
         ``hsg_from_rasters``), not exactly one selection, a missing or
-        invalid depth, bad mode, a plan of another store or without
-        ``update="upgrade"`` - before any request.
+        invalid depth, ``depth`` with ``depth_rule``, an unknown rule, bad mode,
+        a plan of another store or without ``update="upgrade"`` - before any
+        request.
 
     Examples
     --------
@@ -1118,6 +1303,7 @@ def calculate_hsg(
         geometry=geometry,
         layer=layer,
         depth=depth,
+        depth_rule=depth_rule,
         update=update,
         plan=plan,
         on_notice=on_notice,
@@ -1136,6 +1322,7 @@ def check_hsg(
     geometry: str | Path | None = None,
     layer: str | None = None,
     depth: str | None = None,
+    depth_rule: str | None = None,
     force: bool = False,
     cache: "MetadataCache | bool" = True,
     on_notice: "Callable[[Notice], None] | None" = None,
@@ -1143,9 +1330,9 @@ def check_hsg(
     """Return the update plan of ``calculate_hsg`` without downloading.
 
     Update plan of ``calculate_hsg`` with the same choice, WITHOUT
-    downloading or computing: the three inputs (track ``landcover``,
-    compared with the SoilGrids edition) and the HSG (track ``hsg``:
-    ``current`` when a version of the current inputs exists, else
+    downloading or computing: the three inputs of every layer (track
+    ``landcover``, compared with the SoilGrids edition) and the HSG (track
+    ``hsg``: ``current`` when a version of the current inputs exists, else
     ``missing``).
 
     Raises
@@ -1159,6 +1346,7 @@ def check_hsg(
         geometry=geometry,
         layer=layer,
         depth=depth,
+        depth_rule=depth_rule,
         force=force,
         on_notice=on_notice,
     )
@@ -1172,11 +1360,12 @@ def validate_hsg_request(
     geometry: str | Path | None = None,
     layer: str | None = None,
     depth: str | None = None,
+    depth_rule: str | None = None,
 ) -> None:
     """Check the request of ``calculate_hsg`` before the first network access.
 
     Every check of ``calculate_hsg``/``check_hsg`` before the first
-    request: the store, one selection and the input depth (no network,
+    request: the store, one selection and the input depth or rule (no network,
     nothing written; a ``geometry`` file is read for its envelope) - the
     same exception type and text as ``calculate_hsg`` (``validate_command``).
 
@@ -1186,7 +1375,12 @@ def validate_hsg_request(
         Invalid or missing choice.
     """
     _calculator(root, False).validate_request(
-        sheet=sheet, bbox=bbox, geometry=geometry, layer=layer, depth=depth
+        sheet=sheet,
+        bbox=bbox,
+        geometry=geometry,
+        layer=layer,
+        depth=depth,
+        depth_rule=depth_rule,
     )
 
 
@@ -1514,12 +1708,13 @@ def _local_only(slot: "FileSlot") -> "VersionedFile | None":
 
 
 def _classify_files(
-    files: "list[VersionedFile]", staged: Path
+    files: "list[VersionedFile]", layers: _Layers, staged: Path
 ) -> tuple[dict[str, Any], bool]:
     """Write the HSG of the clay, sand and silt rasters to ``staged``.
 
-    Returns the profile of the clay raster (the grid of the result) and whether the
-    result has no class at all (every input cell is a gap).
+    ``files`` are clay, sand and silt of every layer of ``layers``, layer by layer.
+    Returns the profile of the first clay raster (the grid of the result) and
+    whether the result has no class at all (every input cell is a gap).
     """
     import rasterio
 
@@ -1532,9 +1727,21 @@ def _classify_files(
             if len(arrays) == 1:  # grid of clay = grid of the result
                 profile = src.profile.copy()
     logger.info("Classifying HSG...")
-    hsg = _classify_hsg(
-        arrays[0], arrays[1], arrays[2], (nodatas[0], nodatas[1], nodatas[2])
-    )
+    if layers.rule is None:
+        hsg = _classify_hsg(
+            arrays[0], arrays[1], arrays[2], (nodatas[0], nodatas[1], nodatas[2])
+        )
+    else:
+        hsg = _least_permeable_hsg(
+            [
+                (arrays[i], arrays[i + 1], arrays[i + 2])
+                for i in range(0, len(files), 3)
+            ],
+            [
+                (nodatas[i], nodatas[i + 1], nodatas[i + 2])
+                for i in range(0, len(files), 3)
+            ],
+        )
     _write_hsg_geotiff(staged, hsg, profile)
     return profile, not hsg.any()
 

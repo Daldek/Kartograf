@@ -10,6 +10,21 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Everything below ships in 0.8.0: the release pull request renames this heading to
 `[0.8.0] - <date>` (REL-2.1).
 
+### Added
+
+- `soil hsg --depth-rule least-permeable` (`calculate_hsg`/`check_hsg(depth_rule=...)`; ADR-061,
+  PROGRESS item 29, Hydrograf's request; admitted during the freeze by the author's approval):
+  the HSG of the least permeable SoilGrids layer of 0-100 cm instead of one `--depth`. It reads
+  clay, sand and silt at 0-5, 5-15, 15-30, 30-60 and 60-100 cm, classifies each layer's USDA
+  texture and takes per cell the layer with the lowest saturated hydraulic conductivity of its
+  class by Rawls, Brakensiek & Saxton (1982); the group is that layer's by the texture table
+  (ADR-025). A cell without data in any layer is 0. The raster is a version of
+  `hsg/global_soilgrids_0-100cm_least-permeable_mean/`; its sidecar records `depth` `0-100cm`,
+  `depth_rule`, `depths`, `ksat` and the `depth` of every source file; the input units are
+  `<property> <depth> <unit>`. Exactly one of `--depth` and `--depth-rule` (catalog `one_of`
+  group `depth`; `--depth` is no longer `required` in the catalog). Without the rule the
+  results, segments and sidecars do not change.
+
 ### Changed
 
 - `marker.STORE_MARKERS` recognises the store of Obserwator (formerly IMGWTools) by
