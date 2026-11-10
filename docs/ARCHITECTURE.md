@@ -1396,7 +1396,8 @@ data/
    by rule 10 (`download/storage.py::content_segment`):
    BDOT10k `gpkg[_<layers>]`/`gpkg_zip`/`shp` (archive of annual editions -
    rule 9), CORINE `<year>[_preview]`, SoilGrids
-   `<property>_<depth>_<stat>`, HSG `<depth>_<stat>`.
+   `<property>_<depth>_<stat>`, HSG `<depth>_<stat>` (with a depth rule
+   `<depth>_<rule>_<stat>`, `0-100cm_least-permeable_mean`, ADR-061).
    Under the segment (`download/storage.py::unit_slot`): `teryt/<T><ext>`
    (BDOT10k, also when selected by bbox/sheet), `bbox/<coords><ext>`
    (EPSG:2180, `.10g`, like cutouts) or the sheet code hierarchy (`path_parts`,
@@ -3379,7 +3380,7 @@ a TERYT code change) = `NoCoverageError`. Identical annual editions of the same
 county and format take up space once (D7: `relabeled`, hardlink; live
 2026-10-15: SHP 2023 of county 1261 = 2022).
 
-`calculate_hsg(root=..., sheet=|bbox=|geometry=, layer=, depth=,
+`calculate_hsg(root=..., sheet=|bbox=|geometry=, layer=, depth=|depth_rule=,
 update=, plan=, on_notice=)` and `check_hsg(...)` (`hydrology/hsg.py`,
 ADR-044 D5; the statistic is always `mean`) compute soil groups from the
 SoilGrids versions `clay`/`sand`/`silt` in the same store (internal
@@ -3398,6 +3399,13 @@ product=)`; the inputs have `soil`), `capability="bbox_raster"`, `request`
 = the selection (`bbox`+`bbox_crs` or `sheet`), `horizontal_crs` = the raster CRS,
 `nodata: 0`, `extra` = `{derived: "hsg", depth, stat, classes, source_layers,
 source_files: [{name, file (path of the input version), sha256, label}]}`.
+With `depth_rule="least-permeable"` (ADR-061; exactly one of `depth` and `depth_rule`) the
+inputs are clay/sand/silt of the five layers `HSG_PROFILE_DEPTHS` (0-5 to 60-100 cm, 15
+versions); per cell the layer with the lowest Rawls (1982) class Ksat
+(`RAWLS_1982_KSAT_CM_H`) gives the texture and its group by `TEXTURE_TO_HSG`, a cell without
+data in any layer is 0. The segment is `hsg/global_soilgrids_0-100cm_least-permeable_mean/`,
+reuse compares the 15 input sha256 values, and `extra` adds `depth` `0-100cm`, `depth_rule`,
+`depths`, `ksat` and the `depth` of every `source_files` entry.
 `hsg_statistics(path)` (`soil hsg --summary`) computes the `request` area of the
 sidecar (bbox or sheet frame; without it the whole raster): the outline of the area
 converted to the raster CRS is rasterised on a grid 10 x denser, so a
@@ -3405,7 +3413,7 @@ SoilGrids cell at the edge counts by its share in the area (cell areas
 geodesic for EPSG:4326); groups `A`-`D` and `nodata` sum to the
 area, `percent` of the groups = share of the area with data, `nodata.percent` =
 share of the area; group descriptions in Polish (`HSG_DESCRIPTIONS`).
-`check_hsg(...)` = 3 `landcover` entries + an `hsg` entry
+`check_hsg(...)` = 3 `landcover` entries (15 with `depth_rule`) + an `hsg` entry
 (`current` when an HSG version exists with the sha256 of the current local inputs and each
 input is `current`; an input `check_failed` = `check_failed`; otherwise
 `missing`; never `newer`). Limitation: an HSG with identical content from other

@@ -1,7 +1,7 @@
 # SCOPE.md - Scope of the Kartograf project
 **Tool for Downloading Spatial Data**
 
-**Version:** 3.29
+**Version:** 3.30
 **Date:** 2026-11-10
 **Status:** Release v0.8.0 (2026-10-17)
 
@@ -347,6 +347,10 @@ and ZTM (2.15), Bodove pole and QGZU-2013 (2.16).
 - Coverage statistics for each group
 - Output format: GeoTIFF (values 1-4, 0 = nodata) in
   hsg/global_soilgrids_<depth>_<stat>/
+- One layer (--depth) or the profile rule --depth-rule least-permeable
+  (ADR-061): clay/sand/silt at 0-5 ... 60-100 cm, per cell the layer with the
+  lowest Rawls (1982) class Ksat and its group by the texture table, in
+  hsg/global_soilgrids_0-100cm_least-permeable_mean/; exactly one of the two
 - Selection: --sheet, --bbox, --geometry
 - Version sidecar <file>.meta.json (extra.derived = "hsg", source layers,
   depth, statistic, class codes, source_files with sha256 of the inputs)
@@ -403,7 +407,7 @@ kartograf landcover download --product corine --sheet <sheet> --root ./data --ye
 kartograf soil download --property <param> --root ./data --depth 0-5cm --stat mean # --sheet/--bbox (without --teryt)
 kartograf landcover list-sources
 kartograf landcover list-layers --product <produkt>
-kartograf soil hsg --sheet <sheet> --root ./data --depth 0-5cm # compute HSG from a SoilGrids version
+kartograf soil hsg --sheet <sheet> --root ./data --depth 0-5cm # compute HSG from a SoilGrids version; --depth-rule least-permeable instead of --depth: the least permeable layer of 0-100 cm (ADR-061)
 kartograf boundaries download --product admin --country pl --level gmina --bbox ... --root ./data # PRG boundaries of the area (GPKG from WFS); --teryt 12 / --whole-country --country pl
 kartograf boundaries list-sources
 kartograf cadastre download --product map --teryt 1261 --root ./data # EGiB of the county (GPKG); area: --country pl --bbox/--sheet/--geometry
@@ -599,7 +603,9 @@ from kartograf import (
   requires --cutout (ADR-038), which rejects these flags - PL sheets: --country pl
 - Verification of the campaign file content (AAIGrid header / TIFF signature;
   ADR-041 archives: complete ZIP, TTN signature, Intergraph header,
-  DXF), format from the record's `format` field; campaign sidecar mandatory
+  DXF), format from the record's `format` field; campaign sidecar mandatory;
+  the cell size of an NMT/NMPT grid equals `resolution_m` of its record, else
+  a failed unit `resolution_mismatch` with nothing written (ADR-060)
 - GUGiK sheet index unavailable (transport error) in default mode (without
   --upgrade/--force): sheet from the local version + Warning:, code unchanged —
   without year flags for every strategy (also --all-campaigns), when the standard
@@ -955,6 +961,7 @@ from kartograf import (
   of a download is checked only for format (verify_file_format: AAIGrid
   header / TIFF signature, ADR-030; GUGiK archives: ZIP/TTN/Intergraph/DXF,
   ADR-041; collection packages: ZIP directory and required members, ADR-042)
+  and, for NMT/NMPT grids, for the cell size of the index record (ADR-060)
 - Default timeouts: 30 s for NMT/NMPT (GUGiK) and for WFS discovery in LAZ,
   60 s for Orthophoto, LAZ tile downloads, CORINE (bbox/sheet code), CUZK and
   SoilGrids by sheet code, 120 s for BDOT10k (all modes) and SoilGrids
@@ -1451,9 +1458,10 @@ pyogrio >= 0.10        # Vector GDAL: writing GPKG of collection area results (A
 | 2026-10-16 | 3.27 | Plans B and E (ADR-041, ADR-043) and review before release 0.8.0: purpose (1), BDOO (2.6), PRG addresses and special boundaries, RCN, mesh, trees and area limit (2.13), CZ Data50/250, geomorphology and cadastral map (2.14), names and maps (2.15), control networks and quasi-geoids (2.16), CLI (2.9), collection layout (2.11), VKM and outdated tasks (3.1), checksums, 8-part sheet codes and collection limitations (3.2), roadmap (3.3), modules, sources and criteria (4-6); list blocks as `text` |
 | 2026-10-17 | 3.28 | Release v0.8.0: versioned store (ADR-036), project manifest (ADR-040), GUGiK/ČÚZK catalogue — plans A–E (ADR-041–043), CLI groups and unified API (ADR-039, ADR-044), status |
 | 2026-11-10 | 3.29 | Roadmap (3.3, 1.0+ list): subproject 5 (web GUI) replaced by the separate Archiwista project (author's decision 2026-10-17, recorded 2026-11-09) |
+| 2026-11-10 | 3.30 | The cell size of an NMT/NMPT grid checked against its index record (2.12, 3.2; ADR-060); HSG of the least permeable layer of 0-100 cm, `--depth-rule least-permeable` (2.8; ADR-061) |
 
 ---
 
-**Document version:** 3.29
+**Document version:** 3.30
 **Last updated:** 2026-11-10
 **Status:** Release v0.8.0 (2026-10-17)

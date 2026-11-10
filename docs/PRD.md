@@ -1,8 +1,8 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Tool for Downloading Spatial Data**
 
-**Version:** 4.8
-**Date:** 2026-10-18
+**Version:** 4.9
+**Date:** 2026-11-10
 **Product Owner:** Piotr
 **Status:** Release v0.8.0 (2026-10-17)
 
@@ -544,7 +544,10 @@ kartograf soil list-layers
 Calculation of hydrologic soil groups (HSG) for the SCS-CN method based on SoilGrids
 texture data — the clay/sand/silt inputs are SoilGrids versions in the same
 store, the result is a version in `hsg/global_soilgrids_<depth>_<stat>/`
-(the same inputs = version reused, ADR-036 D33).
+(the same inputs = version reused, ADR-036 D33). Instead of one `depth`, the rule
+`depth_rule="least-permeable"` (ADR-061) classifies the five layers of 0-100 cm and
+takes per cell the layer with the lowest Rawls (1982) class Ksat, i.e. the group of
+the least permeable layer, in `hsg/global_soilgrids_0-100cm_least-permeable_mean/`.
 
 #### Capabilities
 ```python
@@ -587,6 +590,7 @@ kartograf soil hsg --sheet N-34-130-D --summary --root ./data --depth 0-5cm
 kartograf soil hsg --bbox 450000,550000,460000,560000 --root ./data --depth 0-5cm
 kartograf soil hsg --geometry area.gpkg --layer catchments --root ./data --depth 0-5cm
 kartograf soil hsg --sheet N-34-130-D --root ./data --depth 0-5cm --check --plan plan.json
+kartograf soil hsg --bbox 450000,550000,460000,560000 --root ./data --depth-rule least-permeable
 ```
 
 ---
@@ -1862,6 +1866,6 @@ HYDROGRAF (main application)
 
 ---
 
-**Document version:** 4.8
-**Last update date:** 2026-10-18
+**Document version:** 4.9
+**Last update date:** 2026-11-10
 **Status:** Release v0.8.0 (2026-10-17)
