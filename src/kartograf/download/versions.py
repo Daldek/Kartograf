@@ -47,6 +47,7 @@ CommitStatus = Literal["new", "unchanged", "relabeled"]
 
 _READ_CHUNK = 1_048_576
 _MKDIR_ATTEMPTS = 5
+_MKDIR_PAUSE_S = 0.005  # before the second attempt of ensure_dir, then doubled
 _VERSION_DIR = re.compile(r".+_([0-9a-f]{8})")
 _LABEL_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 # os.link failures meaning "this file system cannot hardlink" (D22).
@@ -169,19 +170,24 @@ def ensure_dir(path: Path, *, exist_ok: bool = True) -> None:
     A failed first download removes the empty ``versions/.incoming`` tree
     up to the output directory (``fetch.py``); another worker creating a
     directory below the same parents may see a parent vanish between two
-    ``mkdir`` calls (``FileNotFoundError``). The creation is retried — the
-    cleanup only removes EMPTY directories, so it cannot win twice in a row
-    against a writer that just created a child.
+    ``mkdir`` calls (``FileNotFoundError``) or, on Windows, find it still being
+    removed: a directory stays "delete pending" until its last handle closes, and
+    creating it or a directory in it is denied meanwhile (``PermissionError``).
+    The creation is retried after a pause that doubles each time (5 to 40 ms) —
+    the cleanup only removes EMPTY directories, so it cannot win twice in a row
+    against a writer that just created a child. A denial that lasts is raised by
+    the last attempt.
     """
     for attempt in range(_MKDIR_ATTEMPTS):
         try:
             path.mkdir(parents=True, exist_ok=exist_ok)
             return
-        except (FileNotFoundError, FileExistsError):
+        except (FileNotFoundError, FileExistsError, PermissionError):
             # FileExistsError: pathlib saw a parent created by another worker
             # and removed by the cleanup before its is_dir() check
             if attempt == _MKDIR_ATTEMPTS - 1:
                 raise
+            time.sleep(_MKDIR_PAUSE_S * 2**attempt)
 
 
 def new_incoming_dir(versions_root: Path) -> Path:
