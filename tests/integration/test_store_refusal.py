@@ -516,8 +516,8 @@ def test_the_cli_check_in_words_says_why_the_root_is_a_conflict(
 
     assert (code, err) == (0, "")
     assert out == (
-        f"{root.resolve()}: conflict: the store root is in, holds or has another "
-        "store (a store does not nest)\n"
+        f"{root.resolve().as_posix()}: conflict: the store root is in, holds or has "
+        "another store (a store does not nest)\n"
     )
 
 
