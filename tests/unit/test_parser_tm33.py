@@ -2,14 +2,9 @@
 
 import pytest
 
-from kartograf.core.parser_tm33 import (
-    TILE_SIZE_M,
-    TM33_CRS,
-    ParserTM33,
-    find_tiles_tm33_for_bbox,
-)
+from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import ParseError, ValidationError
+from kartograf.exceptions import ParseError
 
 
 class TestParserTM33Parsing:
@@ -61,42 +56,3 @@ class TestTileFor:
 
     def test_next_tile_at_east_edge(self):
         assert ParserTM33.tile_for(304_000.0, 5_550_000.0) == "304_5550"
-
-
-class TestFindTilesTM33ForBBox:
-    def test_single_tile(self):
-        bbox = BBox(302_500, 5_550_500, 303_500, 5_551_500, "EPSG:3045")
-        assert find_tiles_tm33_for_bbox(bbox) == ["302_5550"]
-
-    def test_two_by_two(self):
-        bbox = BBox(301_000, 5_549_000, 305_000, 5_553_000, "EPSG:3045")
-        assert find_tiles_tm33_for_bbox(bbox) == [
-            "300_5548",
-            "302_5548",
-            "304_5548",
-            "300_5550",
-            "302_5550",
-            "304_5550",
-            "300_5552",
-            "302_5552",
-            "304_5552",
-        ]
-
-    def test_touching_edge_excluded(self):
-        """max exactly on the tile edge - the tile past the edge is NOT included."""
-        bbox = BBox(302_000, 5_550_000, 304_000, 5_552_000, "EPSG:3045")
-        assert find_tiles_tm33_for_bbox(bbox) == ["302_5550"]
-
-    def test_wrong_crs_raises(self):
-        with pytest.raises(ValidationError, match="EPSG:3045"):
-            find_tiles_tm33_for_bbox(BBox(0, 0, 1, 1, "EPSG:2180"))
-
-    def test_degenerate_bbox_raises(self):
-        with pytest.raises(ValidationError):
-            find_tiles_tm33_for_bbox(
-                BBox(302_000, 5_550_000, 302_000, 5_552_000, "EPSG:3045")
-            )
-
-    def test_constants(self):
-        assert TM33_CRS == "EPSG:3045"
-        assert TILE_SIZE_M == 2000

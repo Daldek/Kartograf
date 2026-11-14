@@ -377,11 +377,6 @@ def _built(allow_writes: bool) -> tuple[tuple[ToolSpec, ...], dict[str, _Hidden]
     return tuple(specs), hidden
 
 
-def clear_caches() -> None:
-    """Forget the tools built so far (for tests that swap the declarations)."""
-    _built.cache_clear()
-
-
 def tool_specs(
     families: Sequence[str] | None = None, *, allow_writes: bool
 ) -> tuple[ToolSpec, ...]:

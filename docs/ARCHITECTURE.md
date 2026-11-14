@@ -459,7 +459,7 @@ kartograf/
 │   └── coverage.py         # Convex polygons: intersection, difference, buffer (LAZ tile selection)
 ├── sources/             # Source descriptors as data (zero IO on import)
 │   ├── descriptor.py    # SourceDescriptor (+ resolve_subdir, variants), AccessChannel,
-│   │                    # TransportKind, TileScheme, LicenseInfo, CountryProfile;
+│   │                    # TransportKind, LicenseInfo, CountryProfile;
 │   │                    # collection channel parameters (AccessChannel.params, ADR-042):
 │   │                    # UnitPackageParams/PackageVariant, FeatureBBoxParams/FeatureLayer,
 │   │                    # AtomFilesParams (CUZK ATOM feed), WcsCutoutParams (orthophoto cutout)
@@ -504,8 +504,8 @@ kartograf/
 │   ├── feature_bbox.py  # Area feature engine (ADR-042 D3/D4): WFS 2.0 and ArcGIS REST —
 │   │                    # fresh metadata, feature count, pages by position, completeness;
 │   │                    # count_features, fetch_features -> FeaturePages (pages on disk)
-│   ├── atom.py          # atom_files engine (ADR-042 D12): atom_index (service feed index
-│   │                    # in cache with ETag), resolve_atom_file (dataset feed -> file, release
+│   ├── atom.py          # atom_files engine (ADR-042 D12): the service feed index (in
+│   │                    # cache with ETag), resolve_atom_file (dataset feed -> file, release
 │   │                    # from updated), check_atom_crs, atom_segment_tokens, fetch_atom_file
 │   │                    # (size = feed length), unpack_members (ZIP members 1:1)
 │   └── index_records.py # File index records (ADR-043): IndexRecord, gfi_records/
@@ -645,7 +645,6 @@ kartograf/
 │   │                    # campaigns (year=, all_campaigns=, min_year=, max_year=),
 │   │                    # update/plan, check_sheets, DownloadResult (return value)
 │   ├── storage.py       # FileStorage — segments from registry templates (ADR-026), versions/;
-│   │                    # prune_empty_dirs — cleaning up empty bbox/ after a failure;
 │   │                    # content_segment (prefix + content tokens), unit_slot (teryt/bbox/
 │   │                    # sheet code/country, related slots D7 — ADR-042 D8)
 │   ├── collections.py   # Collections (ADR-042): download_collection/check_collection =
@@ -692,7 +691,7 @@ kartograf/
 
 `SourceDescriptor` (`src/kartograf/sources/descriptor.py`) carries: `key`,
 `country`, `product`, `name`, `provider_name`, a tuple of `channels`
-(`AccessChannel`), `tile_scheme`, `storage_subdir`, `default_extension`,
+(`AccessChannel`), `storage_subdir`, `default_extension`,
 `license`, `resolution`, `auth` and (since 0.8.0, ADR-041) a tuple of `variants`
 (`ProductVariant`, the variant registry — below). `product` = the value of
 `--product` selecting the source (`nmt`, `admin`, `bdot10k`, `zabaged`;
@@ -3850,7 +3849,7 @@ files (`rel="alternate"` with `length`, CRS category
 `http://www.opengis.net/def/crs/EPSG/0/<code>`). File names carry the year
 or release date (`WRTO24.<year>.<sheet>.zip`,
 `ZABAGED-5514-gpkg-<date>.zip`), so the URL exists only in the feed.
-`atom_index` reads the service feed in a streaming manner (`iterparse`, entries
+The service feed is read in a streaming manner (`iterparse`, entries
 removed from the tree) into `key -> AtomEntry`: `entry_pattern` is searched in the id
 of the dataset feed, group `sheet` = key (without it the feed has one dataset,
 key `""`). The index lies in `MetadataCache` (`atom_cache`) with the `ETag`
@@ -4199,8 +4198,8 @@ Checklist using DE (Brandenburg, DGM1) as an example:
    in the path code**. If the country introduces a new vertical CRS, add it to
    `_VERTICAL_CRS_CODES` (and, for a family/realisation, also to
    `_VERTICAL_FAMILY`).
-2. **`CountryProfile`** in `_COUNTRIES`: code, name, `extent_wgs84`
-   and `dataset_keys`. `countries_for_bbox` reads countries from the registry via
+2. **`CountryProfile`** in `_COUNTRIES`: code, name and `extent_wgs84`.
+   `countries_for_bbox` reads countries from the registry via
    `all_countries()`, so the `--country auto` dispatch starts to see the new
    country without CLI changes. Remember that the envelope is a rectangle (section 4.6).
 3. **Sheet/tile parser** in `core/` (if the country has its own sheet system):

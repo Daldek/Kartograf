@@ -41,9 +41,7 @@ from kartograf.download.fetch import (
     WriteSidecar,
     discard_staging,
     inspect_version,
-    link_version,
-    local_file,
-    local_version,
+    local_only,
     new_staging,
     refreshes_cache,
     store_file,
@@ -261,15 +259,6 @@ def _inspect(
     ]
 
 
-def _local_file(slot: FileSlot) -> VersionedFile | None:
-    """Return the local version of a file outside the plan, linked; no request."""
-    local = local_version(slot)
-    if local is None:
-        return None
-    link_version(slot.std, local, refresh=False)
-    return local_file(slot.std, local)
-
-
 def _sheet_extra(
     session: requests.Session,
     metadata: MetadataCache | None,
@@ -432,7 +421,7 @@ def _run(
             plan,
             items=tuple(item for item in plan.items_for(_TRACK) if item.unit == sheet),
         )
-        outcome = {suffix: _local_file(slot) for suffix, slot in slots.items()}
+        outcome = {suffix: local_only(slot) for suffix, slot in slots.items()}
         if not any(item.status in TODO_STATUSES for item in scoped.items):
             return CzOrtoResult(_present(outcome))
         fresh = _inspect(slots, sheet, edition)

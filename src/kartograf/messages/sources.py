@@ -56,16 +56,6 @@ MESSAGES = {
         "TM33 2x2 km tiles (ETRS89, EVRF2007 heights); file 1:1 from ZIP",
         "kafle TM33 2x2 km (ETRS89, wysokosci EVRF2007); plik 1:1 z ZIP",
     ),
-    "cz_tm33_scheme": Text(
-        "TM33 {{E_km}}_{{N_km}}, SW corner",
-        "TM33 {{E_km}}_{{N_km}}, naroznik SW",
-    ),
-    "cz_sm5_scheme": Text(
-        "SM5: 2 or 4 city letters + 2 digits (KladyMapovychListu index, layer 24); "
-        "TM33 tiles {{E_km}}_{{N_km}} (layer 26)",
-        "SM5: 2 albo 4 litery miasta + 2 cyfry (indeks KladyMapovychListu w. 24); "
-        "kafle TM33 {{E_km}}_{{N_km}} (w. 26)",
-    ),
     "cz_image_notes": Text(
         "The server supports imageSR, but ADR-024 forbids it - content reprojection "
         "is local only, a pinned operation",
@@ -202,11 +192,6 @@ MESSAGES = {
         "scope); JPEG with JGW files in S-JTSK, TM33N and TM34N",
         "aktualny rocznik arkusza (archiwalne ortofoto CUZK sa platne - poza "
         "zakresem); JPEG z plikami JGW w S-JTSK, TM33N i TM34N",
-    ),
-    "cz_orto_sheet_scheme": Text(
-        "SM5: 2 or 4 letters of the city + 2 digits; KladyMapovychListu index, layer "
-        "24",
-        "SM5: 2 albo 4 litery miasta + 2 cyfry; indeks KladyMapovychListu w. 24",
     ),
     "nmt100_vertical_crs_note": Text(
         "GUGiK does not declare the vertical CRS of NMT 100 m (ATOM feed and CSW "

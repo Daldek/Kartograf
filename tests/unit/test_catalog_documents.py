@@ -11,7 +11,6 @@ from kartograf import messages
 from kartograf.catalog import build
 from kartograf.catalog.build import (
     build_entries,
-    build_list,
     command_schema,
     declared_options,
     effects,
@@ -233,9 +232,15 @@ def synthetic(monkeypatch):
     """``list_commands`` and ``command_schema`` over the synthetic declarations, with
     the caches cleared before and after (the process builds the documents once)."""
     monkeypatch.setattr(build, "declared", lambda: Declared(_commands(), _groups()))
-    build.clear_caches()
+    _forget_documents()
     yield
-    build.clear_caches()
+    _forget_documents()
+
+
+def _forget_documents():
+    """Drop the documents the process built once (``functools.cache``)."""
+    build._entries.cache_clear()
+    build._list.cache_clear()
 
 
 def _entry(name: str):
@@ -649,10 +654,4 @@ def test_constraints_and_examples_must_reference_declared_params(fields):
 
 def test_declarations_of_a_group_without_commands_are_refused():
     with pytest.raises(ValueError, match="cache"):
-        build_list(_commands()[:1], (_groups()[0], _groups()[2]), "0")
-
-
-def test_the_list_of_other_declarations_has_their_version():
-    document = build_list(_commands(), _groups(), "9.9")
-
-    assert document.version == "9.9"
+        build_entries(_commands()[:1], (_groups()[0], _groups()[2]))

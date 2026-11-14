@@ -945,7 +945,7 @@ class HSGCalculator:
         a plan without the HSG position keeps its local version.
         """
         from kartograf.download.data import UnitFailure, UnitFile
-        from kartograf.download.fetch import validate_update
+        from kartograf.download.fetch import local_only, validate_update
         from kartograf.download.plan import require_store, select_planned, store_id
         from kartograf.exceptions import DownloadError, ValidationError
         from kartograf.landcover.store import selection_unit
@@ -1007,7 +1007,7 @@ class HSGCalculator:
         hsg: VersionedFile | None = None
         if not failed:  # no HSG of an incomplete input set
             if not planned_hsg or len(inputs) != len(layers.inputs):
-                hsg = _local_only(slot)
+                hsg = local_only(slot)
             else:
                 try:
                     hsg = self._reuse_or_compute(
@@ -1694,17 +1694,6 @@ def _matching_version(slot: "FileSlot", shas: tuple[str, ...]) -> "LocalVersion 
     return newest_version(
         v for v in list_versions(slot.versions_root, slot.name) if inputs_of(v) == shas
     )
-
-
-def _local_only(slot: "FileSlot") -> "VersionedFile | None":
-    """Return the local version of a position left out of the plan."""
-    from kartograf.download.fetch import link_version, local_file, local_version
-
-    local = local_version(slot)
-    if local is None:
-        return None
-    link_version(slot.std, local, refresh=False)
-    return local_file(slot.std, local)
 
 
 def _classify_files(

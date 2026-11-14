@@ -496,10 +496,6 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             self._resolve_sheet(sheet, timeout), Path(output_path), timeout
         )
 
-    def _get_opendata_url(self, sheet: str, timeout: int = DEFAULT_TIMEOUT) -> str:
-        """Return the URL of the newest index record of the request."""
-        return self._resolve_sheet(sheet, timeout).url
-
     def _layers(self, endpoint: str, timeout: float | None = None) -> list[str]:
         """Return the index layers.
 

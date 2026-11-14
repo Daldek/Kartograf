@@ -37,9 +37,7 @@ from kartograf.download.fetch import (
     VersionedFile,
     fetch_version,
     inspect_version,
-    link_version,
-    local_file,
-    local_version,
+    local_only,
     refreshes_cache,
     validate_update,
 )
@@ -214,15 +212,6 @@ def _inspect(
         signal=_SIGNAL,
         probe=_probe(session, _url(source, sheet)),
     )
-
-
-def _local_file(slot: FileSlot) -> VersionedFile | None:
-    """Return the local version of a sheet outside the plan, linked; no request."""
-    local = local_version(slot)
-    if local is None:
-        return None
-    link_version(slot.std, local, refresh=False)
-    return local_file(slot.std, local)
 
 
 def _members(path: Path, url: str, fmt: str) -> list[str]:
@@ -409,7 +398,7 @@ def _run(
             ),
         )
         if not any(item.status in TODO_STATUSES for item in scoped.items):
-            return CzContoursResult(_local_file(slot))
+            return CzContoursResult(local_only(slot))
         fresh = _inspect(session, source, sheet, slot)
         if fresh.status == "check_failed":
             raise DownloadError(
@@ -418,7 +407,7 @@ def _run(
         todo, rejected = select_planned(scoped, [fresh], _TRACK)
         stale = tuple(rejected)
         if not todo:
-            return CzContoursResult(_local_file(slot), stale)
+            return CzContoursResult(local_only(slot), stale)
         planned = todo[0].available_signal or {}
     file = _fetch(
         session,

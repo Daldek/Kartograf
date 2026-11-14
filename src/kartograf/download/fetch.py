@@ -248,6 +248,27 @@ def local_version(slot: FileSlot) -> LocalVersion | None:
     return newest_version(list_versions(slot.versions_root, slot.name))
 
 
+def local_only(
+    slot: FileSlot, *, unverified: str | None = None
+) -> VersionedFile | None:
+    """Return the newest local version of the slot, linked; never a request.
+
+    The outcome of a file that keeps its local version without asking the
+    source: a position left out of the plan, or (``unverified="unchecked"``) a
+    unit the default mode did not ask. ``None``: the slot has no local version.
+
+    Raises
+    ------
+    DownloadError
+        Link failure.
+    """
+    local = local_version(slot)
+    if local is None:
+        return None
+    link_version(slot.std, local, refresh=False)
+    return local_file(slot.std, local, unverified=unverified)
+
+
 def _prune_empty(start: Path, stop: Path) -> None:
     """Remove ``start`` and its parents while empty, never ``stop``.
 

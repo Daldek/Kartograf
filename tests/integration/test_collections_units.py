@@ -180,7 +180,6 @@ def source(
         name=f"test {product}",
         provider_name="GUGiK" if country == "PL" else "CUZK",
         channels=channels,
-        tile_scheme=None,
         storage_subdir=subdir,
         default_extension=".zip",
         license=registry._GUGIK_LICENSE if country == "PL" else registry._CUZK_LICENSE,

@@ -292,12 +292,6 @@ class TestLandCoverManager:
         manager.set_provider(Bdot10kProvider())
         assert manager.provider_name == "BDOT10k"
 
-    def test_get_available_providers(self):
-        """Test getting available providers."""
-        providers = LandCoverManager.get_available_providers()
-        assert "bdot10k" in providers
-        assert "corine" in providers
-
     def test_download_no_selection(self):
         """Test download with no selection method."""
         manager = LandCoverManager(root="data", provider="bdot10k")

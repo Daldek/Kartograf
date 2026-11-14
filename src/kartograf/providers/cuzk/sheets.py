@@ -18,10 +18,9 @@ OVER-SELECTION FILTER (reconnaissance Task 1, step 3b) —
    TM33 tile returned 9 tiles.
 Therefore every bbox method filters the result ON THE CLIENT SIDE: only
 sheets whose extent intersects the envelope with its INTERIOR remain (an edge
-touch does not count — the convention of `find_tiles_tm33_for_bbox` /
-`find_sheets_for_bbox`). The comparison is always in one CRS: the envelope
-must be in the layer's native CRS, in which the service returns geometry
-(otherwise `ValidationError`).
+touch does not count — the convention of `find_sheets_for_bbox`). The
+comparison is always in one CRS: the envelope must be in the layer's native
+CRS, in which the service returns geometry (otherwise `ValidationError`).
 
 IN_CZ (layer 26) has only one value — "CZ" for all 20,308 tiles — so it is
 NOT a border discriminator; the indicator of "how much of the sheet lies in
@@ -35,7 +34,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.bbox import BBox
+from kartograf.core.bbox import BBox, validate_extent
 from kartograf.core.parser_registry import CZ_SM5_PATTERN
 from kartograf.core.parser_tm33 import TM33_CRS
 from kartograf.exceptions import ParseError, ValidationError
@@ -159,7 +158,7 @@ class SheetIndex:
         ``bbox.crs`` must be the native CRS of the layer (the service is asked
         and answers in it). Sorted by MAPNOM; ``[]`` for a valid empty answer.
         """
-        _validate_extent(bbox)
+        validate_extent(bbox)
         return self._bbox_sheets(
             layer, bbox, _LAYER_FIELDS, bbox.crs, lambda f: _layer_info(f, bbox.crs)
         )
@@ -244,20 +243,7 @@ def _validate_request_bbox(bbox: BBox, expected_crs: str, method: str) -> None:
                 crs=bbox.crs,
             )
         )
-    _validate_extent(bbox)
-
-
-def _validate_extent(bbox: BBox) -> None:
-    if bbox.min_x >= bbox.max_x or bbox.min_y >= bbox.max_y:
-        raise ValidationError(
-            message(
-                "core.invalid_bbox",
-                min_x=bbox.min_x,
-                min_y=bbox.min_y,
-                max_x=bbox.max_x,
-                max_y=bbox.max_y,
-            )
-        )
+    validate_extent(bbox)
 
 
 def _overlaps_interior(sheet: BBox, request: BBox) -> bool:

@@ -82,8 +82,7 @@ from kartograf.download.fetch import (
     discard_staging,
     emit_file_notices,
     inspect_version,
-    link_version,
-    local_file,
+    local_only,
     local_version,
     memoized_edition,
     new_staging,
@@ -324,14 +323,6 @@ def bdoo_year_choices() -> str:
     params = _archive_channel(COLLECTION_SOURCES["bdoo"]).params
     assert isinstance(params, UnitPackageParams)
     return _spans({int(dict(variant.choice)["year"]) for variant in params.variants})
-
-
-def corine_year_choices() -> str:
-    """Return the CORINE releases, e.g. ``2018, 2012, 2006, 2000, 1990``.
-
-    Used by ``--year``, ``--help`` and ``list-sources``.
-    """
-    return ", ".join(str(year) for year in CorineProvider.AVAILABLE_YEARS)
 
 
 def soil_choices() -> dict[str, dict[str, str]]:
@@ -1779,18 +1770,6 @@ class LandCoverManager:
         todo, stale = select_planned(plan, inspect(), _TRACK)
         return {(i.segment, i.hierarchy, i.name) for i in todo}, tuple(stale)
 
-    @staticmethod
-    def _local_only(slot: FileSlot) -> VersionedFile | None:
-        """Return the local version of a position left out of the plan.
-
-        It is never a download.
-        """
-        local = local_version(slot)
-        if local is None:
-            return None
-        link_version(slot.std, local, refresh=False)
-        return local_file(slot.std, local)
-
     def _run(
         self,
         jobs: list[_Job],
@@ -1814,7 +1793,7 @@ class LandCoverManager:
         in_scope: list[bool] = []
         for job in jobs:
             if planned is not None and job.key not in planned:
-                outcome.append(self._local_only(job.slot))
+                outcome.append(local_only(job.slot))
                 in_scope.append(False)
             else:
                 outcome.append(
@@ -2040,11 +2019,6 @@ class LandCoverManager:
     # =========================================================================
     # Info methods
     # =========================================================================
-
-    @staticmethod
-    def get_available_providers() -> list[str]:
-        """Return list of available provider (source) names."""
-        return [*PROVIDERS, *COLLECTION_SOURCES]
 
     def get_available_layers(self) -> list[str]:
         """Return available layers from current provider.

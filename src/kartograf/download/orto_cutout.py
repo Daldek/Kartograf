@@ -65,9 +65,7 @@ from kartograf.download.fetch import (
     VersionedFile,
     fetch_version,
     inspect_version,
-    link_version,
-    local_file,
-    local_version,
+    local_only,
     validate_update,
 )
 from kartograf.download.plan import (
@@ -501,14 +499,7 @@ def _run(
         todo, excluded = select_planned(plan, [current], _TRACK)
         stale = tuple(excluded)
         if not todo:
-            local = local_version(slot)
-            if local is None:
-                return ImageCutoutResult(None, stale=stale)
-            link_version(slot.std, local, refresh=False)
-            return ImageCutoutResult(
-                local_file(slot.std, local),
-                stale=stale,
-            )
+            return ImageCutoutResult(local_only(slot), stale=stale)
 
     provider: GugikImageProvider | None = None
 

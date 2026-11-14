@@ -209,13 +209,13 @@ class TestGugikOrtoProviderSelection:
         """A raw GUGiK response (CIR before RGB) -> the RGB URL, not the first one."""
         provider, session = self.provider_with(sample("orto_2024.html"))
 
-        assert provider._get_opendata_url(SHEET) == RGB_2024
+        assert provider._resolve_sheet(SHEET).url == RGB_2024
         assert session.get.call_count == 1
 
     def test_source_info_carries_color_and_campaign(self):
         """extra.source (D5): url, layer, acquisition date, pixel and file colour."""
         provider, _ = self.provider_with(sample("orto_2024.html"))
-        provider._get_opendata_url(SHEET)
+        provider._resolve_sheet(SHEET)
 
         source = provider.source_info(SHEET)
         assert source["url"] == RGB_2024
@@ -233,7 +233,7 @@ class TestGugikOrtoProviderSelection:
             empty, empty, empty, sample("orto_starsze.html")
         )
 
-        url = provider._get_opendata_url(SHEET)
+        url = provider._resolve_sheet(SHEET).url
 
         assert url.endswith("76530_1087101_M-34-76-A-a-1-1.tif")
         assert queried_layers(session) == LAYERS
@@ -248,7 +248,7 @@ class TestGugikOrtoProviderSelection:
             sample("orto_starsze.html"),
         )
 
-        url = provider._get_opendata_url("7.124.07.24")
+        url = provider._resolve_sheet("7.124.07.24").url
 
         assert url.endswith("64878_364829_7.124.07.24.tif")
         assert provider.source_info("7.124.07.24")["declared_crs"] == "PL-2000:S7"
@@ -273,7 +273,7 @@ class TestGugikOrtoProviderSelection:
         provider, _ = self.provider_with(*[body] * 4)
 
         with pytest.raises(NoCoverageError) as exc:
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
 
         message = str(exc.value)
         assert "No RGB orthophoto for M-34-76-A-a-1-1" in message
@@ -290,7 +290,7 @@ class TestGugikOrtoProviderSelection:
         provider, _ = self.provider_with(*[body] * 4)
 
         with pytest.raises(NoCoverageError, match="Available variants") as exc:
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
 
         message = str(exc.value)
         assert "B/W 2003-01-01, CIR 2024-06-21" in message
@@ -303,7 +303,7 @@ class TestGugikOrtoProviderSelection:
 
         provider = GugikOrtoProvider(session=session, color="CIR")
 
-        assert provider._get_opendata_url(SHEET) == CIR_2024
+        assert provider._resolve_sheet(SHEET).url == CIR_2024
         assert provider.source_info(SHEET)["color"] == "CIR"
 
     def test_stops_at_first_layer_with_matching_variant(self):
@@ -313,7 +313,7 @@ class TestGugikOrtoProviderSelection:
             orto_body([orto_record(aktualnosc="2025-07-02")]),
         )
 
-        provider._get_opendata_url(SHEET)
+        provider._resolve_sheet(SHEET)
 
         assert queried_layers(session) == LAYERS[:2]
 
@@ -325,7 +325,7 @@ class TestGugikOrtoProviderSelection:
             orto_body([rgb_2025]),
         )
 
-        assert provider._get_opendata_url(SHEET) == rgb_2025["url"]
+        assert provider._resolve_sheet(SHEET).url == rgb_2025["url"]
         assert queried_layers(session) == LAYERS[:2]
 
     def test_all_layers_empty_is_no_coverage(self):
@@ -333,7 +333,7 @@ class TestGugikOrtoProviderSelection:
         provider, session = self.provider_with(*[orto_body([])] * 4)
 
         with pytest.raises(NoCoverageError, match="No RGB orthophoto"):
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
 
         assert queried_layers(session) == LAYERS
 
@@ -347,7 +347,7 @@ class TestGugikOrtoProviderSelection:
         provider = GugikOrtoProvider(session=session, color="RGB")
 
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as exc:
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
 
         assert not isinstance(exc.value, NoCoverageError)
         assert "SkorowidzeOrtofotomapy2026" in str(exc.value)
@@ -359,7 +359,7 @@ class TestGugikOrtoProviderSelection:
         provider, session = self.provider_with(sample("ogc_exception.body"))
 
         with pytest.raises(DownloadError) as exc:
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
 
         assert not isinstance(exc.value, NoCoverageError)
         assert session.get.call_count == 1
@@ -380,7 +380,7 @@ class TestGugikOrtoProviderCache:
             session=Mock(get=Mock(return_value=gfi_response(sample("orto_2024.html")))),
             color="RGB",
         )
-        provider._get_opendata_url(SHEET)
+        provider._resolve_sheet(SHEET)
         return provider.source_info(SHEET)
 
     def test_cache_hit_source_skips_network(self, cache, source):
@@ -389,7 +389,7 @@ class TestGugikOrtoProviderCache:
         session = Mock(spec=requests.Session)
         provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
-        assert provider._get_opendata_url(SHEET) == RGB_2024
+        assert provider._resolve_sheet(SHEET).url == RGB_2024
         session.get.assert_not_called()
         assert provider.source_info(SHEET) == source
 
@@ -399,7 +399,7 @@ class TestGugikOrtoProviderCache:
         provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
         with pytest.raises(NoCoverageError, match=SHEET):
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
         session.get.assert_not_called()
 
     @pytest.mark.parametrize(
@@ -423,7 +423,7 @@ class TestGugikOrtoProviderCache:
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
         provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
-        assert provider._get_opendata_url(SHEET) == RGB_2024
+        assert provider._resolve_sheet(SHEET).url == RGB_2024
         session.get.assert_called()
         assert cache.get_record("orto", "RGB", "none", SHEET)["source"]["url"] == (
             RGB_2024
@@ -438,10 +438,10 @@ class TestGugikOrtoProviderCache:
         provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
         with pytest.raises(NoCoverageError) as first:
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
         calls = session.get.call_count
         with pytest.raises(NoCoverageError) as cached:
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
         assert session.get.call_count == calls
         assert str(cached.value) == str(first.value)
         assert "CIR 2024-06-21" in str(cached.value)
@@ -451,7 +451,7 @@ class TestGugikOrtoProviderCache:
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
         provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
-        assert provider._get_opendata_url(SHEET) == RGB_2024
+        assert provider._resolve_sheet(SHEET).url == RGB_2024
 
         cached = cache.get_record("orto", "RGB", "none", SHEET)
         assert cached["source"]["url"] == RGB_2024
@@ -466,7 +466,7 @@ class TestGugikOrtoProviderCache:
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
         provider = GugikOrtoProvider(session=session, cache=cache, color="CIR")
 
-        assert provider._get_opendata_url(SHEET) == CIR_2024
+        assert provider._resolve_sheet(SHEET).url == CIR_2024
 
         assert session.get.call_count == 1
         assert cache.get_record("orto", "CIR", "none", SHEET)["source"]["url"] == (
@@ -480,7 +480,7 @@ class TestGugikOrtoProviderCache:
         provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
         with pytest.raises(NoCoverageError) as exc:
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
 
         assert cache.get_record("orto", "RGB", "none", SHEET) == {
             "no_coverage": True,
@@ -494,7 +494,7 @@ class TestGugikOrtoProviderCache:
         provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
         with patch("time.sleep"), pytest.raises(DownloadError):
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
 
         assert cache.get_record("orto", "RGB", "none", SHEET) is None
 
@@ -504,7 +504,7 @@ class TestGugikOrtoProviderCache:
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
 
         assert (
-            GugikOrtoProvider(session=session, color="RGB")._get_opendata_url(SHEET)
+            GugikOrtoProvider(session=session, color="RGB")._resolve_sheet(SHEET).url
             == RGB_2024
         )
 
@@ -555,14 +555,14 @@ class TestGugikOrtoLayerDiscovery:
         with pytest.raises(DownloadError, match="does not publish sheet index layers"):
             GugikOrtoProvider(session=session, color="RGB")._fetch_wms_layers(ENDPOINT)
 
-    def test_get_opendata_url_fails_before_get_feature_info(self):
+    def test_resolve_sheet_fails_before_get_feature_info(self):
         """GetCapabilities fails after 3 attempts = DownloadError, no GetFeatureInfo."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=requests.ConnectionError("reset"))
         provider = GugikOrtoProvider(session=session, color="RGB")
 
         with patch("time.sleep"), pytest.raises(DownloadError) as exc:
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
 
         assert not isinstance(exc.value, NoCoverageError)
         assert session.get.call_count == 3
@@ -608,8 +608,8 @@ class TestGugikOrtoProviderSession:
 
         with patch(SESSION_FACTORY, return_value=session) as factory:
             provider = GugikOrtoProvider(color="RGB")
-            provider._get_opendata_url(SHEET)
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
+            provider._resolve_sheet(SHEET)
 
         factory.assert_called_once()
         assert session.get.call_count == 2
@@ -630,7 +630,7 @@ class TestGugikOrtoProviderSession:
 
             def worker():
                 try:
-                    results.append(provider._get_opendata_url(SHEET))
+                    results.append(provider._resolve_sheet(SHEET).url)
                 except Exception as exc:  # noqa: BLE001 — collected for the assertion
                     errors.append(exc)
 

@@ -297,10 +297,6 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         verify_record_vertical_crs(record, self._vertical_crs, sheet)
         return self.download_record(record, Path(output_path), timeout)
 
-    def _get_opendata_url(self, sheet: str, timeout: int = DEFAULT_TIMEOUT) -> str:
-        """Return the URL of the strictly matching, newest index record."""
-        return self._resolve_sheet(sheet, timeout).url
-
     def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
         """Cache key, WFS endpoint and hard filter of the variant."""
         variant = self.variant

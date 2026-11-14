@@ -11,7 +11,7 @@ release (``WRTO24.<rok>.<arkusz>.zip``, ``ZABAGED-5514-gpkg-<data>.zip``),
 so the URL of a file exists only in the feeds - a URL template would have
 to guess the year.
 
-``atom_index`` reads the service feed into ``key -> AtomEntry``:
+The service feed is read into an index ``key -> AtomEntry``:
 ``AtomFilesParams.entry_pattern`` is searched in the dataset feed id of each
 entry (entries it does not match are not data of the channel); its named
 group ``sheet`` (or ``woj``: a voivodeship TERYT code) is the key, without
@@ -342,7 +342,19 @@ def _index(
     refresh: bool,
     timeout: float,
 ) -> tuple[dict[str, AtomEntry], bool]:
-    """Return the index and whether the service confirmed it in this call."""
+    """Return the datasets of the service feed by key and whether it was confirmed.
+
+    ``cache``: the index store (``None``: the feed is read on every call);
+    ``refresh``: revalidate a stored index even within its TTL. The flag is true when
+    the service confirmed the index in this call (a 200 or a 304).
+
+    Raises
+    ------
+    DownloadError
+        HTTP/network failure, a document that is not an ATOM feed, no
+        matching dataset, two datasets of one key, an entry without exactly
+        one dataset feed link or without ``updated``.
+    """
     key = _cache_key(params)
     stored = cache.get_atom_entries(key) if cache is not None else None
     if stored is not None and stored[2] and not refresh:
@@ -374,29 +386,6 @@ def _index(
         )
     logger.info(f"{context}: {len(index)} datasets")
     return index, True
-
-
-def atom_index(
-    session: requests.Session,
-    params: AtomFilesParams,
-    *,
-    cache: MetadataCache | None,
-    refresh: bool = False,
-    timeout: float = SERVICE_FEED_TIMEOUT,
-) -> dict[str, AtomEntry]:
-    """Datasets of the service feed by key (module docstring).
-
-    ``cache``: the index store (``None``: the feed is read on every call);
-    ``refresh``: revalidate a stored index even within its TTL.
-
-    Raises
-    ------
-    DownloadError
-        HTTP/network failure, a document that is not an ATOM feed, no
-        matching dataset, two datasets of one key, an entry without exactly
-        one dataset feed link or without ``updated``.
-    """
-    return _index(session, params, cache=cache, refresh=refresh, timeout=timeout)[0]
 
 
 def _dataset_entries(
@@ -481,7 +470,7 @@ def resolve_atom_file(
 ) -> AtomFile:
     """Return the file of dataset ``key`` in ``crs`` (``""``: the only dataset).
 
-    The index comes from ``atom_index`` (cache, ``refresh``); the dataset
+    The index of the service feed is read through the cache (``refresh``); the dataset
     feed is always read. A key missing from a cached index or a dataset
     feed answering 404 refreshes the index once. ``force_https``: the
     dataset feed and the file are asked over ``https``.
@@ -494,7 +483,7 @@ def resolve_atom_file(
         No dataset ``key`` in the service feed (e.g. a sheet without
         orthophoto).
     DownloadError
-        Feed failures (``atom_index``), a dataset feed that is not a feed,
+        Failures of the service feed, a dataset feed that is not a feed,
         no file in ``crs``, several files without a choice, an entry without
         exactly one file link.
     """

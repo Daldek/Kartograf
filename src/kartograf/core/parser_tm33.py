@@ -10,7 +10,7 @@ import math
 
 from kartograf.core.bbox import BBox
 from kartograf.core.parser_registry import CZ_TM33_PATTERN
-from kartograf.exceptions import ParseError, ValidationError
+from kartograf.exceptions import ParseError
 from kartograf.messages import message
 
 TM33_CRS = "EPSG:3045"
@@ -61,38 +61,3 @@ class ParserTM33:
     def __repr__(self) -> str:
         """Return the constructor-like text of the parser."""
         return f"ParserTM33('{self.sheet}')"
-
-
-def find_tiles_tm33_for_bbox(bbox: BBox) -> list[str]:
-    """Sheet codes of TM33 tiles intersecting the bbox (EPSG:3045).
-
-    Touching edges do NOT count as an intersection (a tile is included when
-    its interior intersects the bbox). Order: rows S->N, columns W->E.
-    """
-    if bbox.crs != TM33_CRS:
-        raise ValidationError(
-            message(
-                "core.find_tiles_tm33_bbox_needs_bbox", tm33_crs=TM33_CRS, crs=bbox.crs
-            )
-        )
-    if bbox.min_x >= bbox.max_x or bbox.min_y >= bbox.max_y:
-        raise ValidationError(
-            message(
-                "core.invalid_bbox",
-                min_x=bbox.min_x,
-                min_y=bbox.min_y,
-                max_x=bbox.max_x,
-                max_y=bbox.max_y,
-            )
-        )
-    e_start = int(math.floor(bbox.min_x / TILE_SIZE_M)) * TILE_SIZE_M
-    n_start = int(math.floor(bbox.min_y / TILE_SIZE_M)) * TILE_SIZE_M
-    tiles: list[str] = []
-    north = n_start
-    while north < bbox.max_y:
-        east = e_start
-        while east < bbox.max_x:
-            tiles.append(f"{east // 1000:03d}_{north // 1000:04d}")
-            east += TILE_SIZE_M
-        north += TILE_SIZE_M
-    return tiles

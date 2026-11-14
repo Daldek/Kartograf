@@ -106,6 +106,7 @@ from kartograf.download.fetch import (
     inspect_version,
     link_version,
     local_file,
+    local_only,
     local_version,
     new_staging,
     refreshes_cache,
@@ -3242,20 +3243,6 @@ def _layers_item(job: UnitJob, archive: PlanItem | None, track: Track) -> PlanIt
     )
 
 
-def _local_only(slot: FileSlot, unverified: str | None = None) -> VersionedFile | None:
-    """Return the local version of a position left out of the plan.
-
-    A position left out of the plan (``unverified=None``) or a unit the
-    default mode did not ask (``"unchecked"``): its local version, never a
-    download.
-    """
-    local = local_version(slot)
-    if local is None:
-        return None
-    link_version(slot.std, local, refresh=False)
-    return local_file(slot.std, local, unverified=unverified)
-
-
 @dataclass
 class _Source:
     """``extra.source`` of the file being downloaded (set by the fetch)."""
@@ -3537,9 +3524,9 @@ def run_job(
         Download, response, edition, version or link failure.
     """
     if planned is not None and job.key not in planned:
-        return _local_only(job.slot)
+        return local_only(job.slot)
     if job.unchecked:
-        found = _local_only(job.slot, "unchecked")
+        found = local_only(job.slot, unverified="unchecked")
         if found is None:
             raise DownloadError(
                 message("collections.local_version_removed", unit=job.unit)
@@ -3669,7 +3656,7 @@ def run_layers_job(
         CRS, or the version, sidecar or link failed.
     """
     if planned is not None and job.key not in planned:
-        return _local_only(job.slot)
+        return local_only(job.slot)
     assert job.archive is not None and job.bbox is not None
     params = job.channel.params
     assert isinstance(params, ArchiveLayersParams)

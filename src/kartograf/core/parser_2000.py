@@ -29,7 +29,7 @@ from kartograf.core.sheet_parser import (
     _EDGE_TOL,
     _MIN_SHARE,
     SheetOutline,
-    _axis_overlaps,
+    _bboxes_intersect,
     _expand_degenerate,
     frames_meeting,
     shape_parts,
@@ -39,15 +39,6 @@ from kartograf.messages import message
 
 # PL-2000 scale hierarchy (from coarsest to finest)
 SCALE_HIERARCHY_2000 = ["1:10000", "1:5000", "1:2000", "1:1000", "1:500"]
-
-# Sheet dimensions in metres (height N-S, width E-W)
-SHEET_DIMENSIONS_2000 = {
-    "1:10000": (5000, 8000),
-    "1:5000": (2500, 4000),
-    "1:2000": (1000, 1600),
-    "1:1000": (500, 800),
-    "1:500": (250, 400),
-}
 
 # Zone to EPSG mapping
 ZONE_EPSG = {
@@ -357,7 +348,7 @@ class Parser2000:
         # 1:5000 subdivision (2x2 in 10k)
         if self._scale == "1:5000":
             q = int(self._components["ark_5k"])
-            return self._apply_quadrant(south, north, west, east, q, 2500, 4000)
+            return self._apply_quadrant(north, west, q, 2500, 4000)
 
         # 1:2000 subdivision (5x5 in 10k)
         ark_2k = int(self._components["ark_2k"])
@@ -374,7 +365,7 @@ class Parser2000:
         # 1:1000 subdivision (2x2 in 2k)
         q_1k = int(self._components["ark_1k"])
         south_1k, north_1k, west_1k, east_1k = self._apply_quadrant(
-            south_2k, north_2k, west_2k, east_2k, q_1k, 500, 800
+            north_2k, west_2k, q_1k, 500, 800
         )
 
         if self._scale == "1:1000":
@@ -382,16 +373,12 @@ class Parser2000:
 
         # 1:500 subdivision (2x2 in 1k)
         q_500 = int(self._components["ark_500"])
-        return self._apply_quadrant(
-            south_1k, north_1k, west_1k, east_1k, q_500, 250, 400
-        )
+        return self._apply_quadrant(north_1k, west_1k, q_500, 250, 400)
 
     def _apply_quadrant(
         self,
-        south: float,
         north: float,
         west: float,
-        east: float,
         quadrant: int,
         height: float,
         width: float,
@@ -401,8 +388,8 @@ class Parser2000:
 
         Parameters
         ----------
-        south, north, west, east : float
-            Parent bbox
+        north, west : float
+            North-west corner of the parent sheet
         quadrant : int
             Quadrant number (1-4)
         height : float
@@ -626,32 +613,6 @@ type _Drawn = tuple[dict[str, Any], BBox]
 
 # metres (~1 mm) - PL-2000 zones are metric, not degrees
 _DEGENERATE_EPS_M = 1e-3
-
-
-def _bboxes_intersect_2000(a: BBox, b: BBox) -> bool:
-    """
-    Positive-area intersection (same convention as PL-1992).
-
-    Touching at an edge or corner does NOT count as an intersection
-    (audit 0.7.0, A1-7). The helpers (`_axis_overlaps`, `_expand_degenerate`)
-    are shared with `sheet_parser.py`; only the threshold for expanding a
-    degenerate bbox in metres (`_DEGENERATE_EPS_M`) is separate - P-12.
-
-    Parameters
-    ----------
-    a, b : BBox
-        Bounding boxes to check (should be in the same CRS).
-        `a` is the query bbox - its degenerate axis (a point) is resolved
-        by containment in the half-open interval of `b`.
-
-    Returns
-    -------
-    bool
-        True if the intersection area is positive
-    """
-    return _axis_overlaps(a.min_x, a.max_x, b.min_x, b.max_x) and _axis_overlaps(
-        a.min_y, a.max_y, b.min_y, b.max_y
-    )
 
 
 def find_sheets_2000_for_bbox(
@@ -892,7 +853,7 @@ def _grid_candidates(zone: int, zone_bbox: BBox, target_scale: str) -> list[Pars
             except (ParseError, ValidationError):
                 continue
 
-            if _bboxes_intersect_2000(zone_bbox, p.get_bbox()):
+            if _bboxes_intersect(zone_bbox, p.get_bbox()):
                 if target_scale == "1:10000":
                     found[p.sheet] = p
                 else:
@@ -930,7 +891,7 @@ def _drill_down(
     for child in children:
         child_bbox = child.get_bbox()
 
-        if not _bboxes_intersect_2000(zone_bbox, child_bbox):
+        if not _bboxes_intersect(zone_bbox, child_bbox):
             continue
 
         if child.scale == target_scale:

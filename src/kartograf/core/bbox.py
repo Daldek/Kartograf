@@ -123,6 +123,27 @@ def validate_bbox(bbox: BBox, *, crs: str | None = None) -> None:
         )
 
 
+def validate_extent(bbox: BBox) -> None:
+    """
+    Reject a bbox without a positive area (a point, a line or an inverted bbox).
+
+    Raises
+    ------
+    ValidationError
+        ``min >= max`` on either axis.
+    """
+    if bbox.min_x >= bbox.max_x or bbox.min_y >= bbox.max_y:
+        raise ValidationError(
+            message(
+                "core.invalid_bbox",
+                min_x=bbox.min_x,
+                min_y=bbox.min_y,
+                max_x=bbox.max_x,
+                max_y=bbox.max_y,
+            )
+        )
+
+
 def transform_bbox(bbox: BBox, target_crs: str, *, transformer: Any = None) -> BBox:
     """
     Envelope of a bbox in the target CRS, always from densified edges.

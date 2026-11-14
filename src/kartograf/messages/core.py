@@ -152,10 +152,6 @@ MESSAGES = {
         "Niepoprawne godlo TM33: '{sheet}' (kafle co 2 km - kilometry musza byc "
         "parzyste)",
     ),
-    "find_tiles_tm33_bbox_needs_bbox": Text(
-        "find_tiles_tm33_for_bbox needs a bbox in {tm33_crs}, got: {crs}",
-        "find_tiles_tm33_for_bbox wymaga bbox w {tm33_crs}, otrzymano: {crs}",
-    ),
     "invalid_bbox": Text(
         "Invalid bbox: ({min_x}, {min_y}, {max_x}, {max_y})",
         "Niepoprawny bbox: ({min_x}, {min_y}, {max_x}, {max_y})",

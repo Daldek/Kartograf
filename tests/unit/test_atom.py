@@ -19,7 +19,8 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.sources.descriptor import AtomFilesParams
 from kartograf.transport.atom import (
-    atom_index,
+    SERVICE_FEED_TIMEOUT,
+    _index,
     atom_segment_tokens,
     fetch_atom_file,
     resolve_atom_file,
@@ -62,6 +63,13 @@ ROUTES: dict[str, Any] = {
 
 def answer(name: str, *, body: bytes | None = None):
     return recorded_response(FIXTURES / name, body=body)
+
+
+def atom_index(session, params, *, cache, refresh=False):
+    """The datasets of the service feed by key (the index, without its flag)."""
+    return _index(
+        session, params, cache=cache, refresh=refresh, timeout=SERVICE_FEED_TIMEOUT
+    )[0]
 
 
 def not_modified():
