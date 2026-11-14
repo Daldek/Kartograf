@@ -181,7 +181,10 @@ def test_store_init_writes_the_marker_and_check_plans_it_without_writing(tmp_pat
         "ok",
     )
     assert isinstance(planned.result, UpdatePlan)
-    assert (planned.result.mode, planned.result.root) == ("store", str(root))
+    assert (planned.result.mode, planned.result.root) == (
+        "store",
+        root.resolve().as_posix(),
+    )
     (item,) = planned.result.items
     assert (item.track, item.name, item.status, item.action) == (
         "store",

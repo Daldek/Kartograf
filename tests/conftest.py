@@ -58,7 +58,7 @@ def _is_local_address(address: object) -> bool:
     except ValueError:
         return False
 
-    if ip.version == 6 and ip.ipv4_mapped is not None:
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
         ip = ip.ipv4_mapped
     return ip.is_loopback or ip.is_unspecified
 
