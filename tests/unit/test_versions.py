@@ -1,5 +1,6 @@
 """Versioned store core (spec 3, 3.1; D17-D23)."""
 
+import errno
 import hashlib
 import json
 import os
@@ -373,10 +374,16 @@ def test_same_http_signal_rules(local, remote, expected):
     assert v.same_http_signal(local, remote) is expected
 
 
-@pytest.mark.parametrize("variant", ["removed_after_create", "exists_but_gone"])
+@pytest.mark.parametrize(
+    "variant", ["removed_after_create", "exists_but_gone", "delete_pending"]
+)
 def test_new_incoming_dir_survives_concurrent_cleanup(tmp_path, monkeypatch, variant):
     """A failed download of another worker removes the empty ``.incoming``
-    tree while we create it; staging must still be created."""
+    tree while we create it; staging must still be created.
+
+    On Windows a directory being removed is "delete pending" until its last handle
+    closes: creating it, or a directory in it, is denied (``PermissionError``).
+    """
     real_mkdir = os.mkdir
     raced = []
 
@@ -386,6 +393,8 @@ def test_new_incoming_dir_survives_concurrent_cleanup(tmp_path, monkeypatch, var
             if variant == "exists_but_gone":
                 # another worker created it, the cleanup removed it again
                 raise FileExistsError(path)
+            if variant == "delete_pending":
+                raise PermissionError(errno.EACCES, "Access is denied", path)
             real_mkdir(path, mode)
             os.rmdir(path)
             return
