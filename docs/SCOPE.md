@@ -1,9 +1,9 @@
 # SCOPE.md - Scope of the Kartograf project
 **Tool for Downloading Spatial Data**
 
-**Version:** 3.30
-**Date:** 2026-11-10
-**Status:** Release v0.8.0 (2026-10-17)
+**Version:** 3.31
+**Date:** 2026-11-14
+**Status:** v0.8.0 (unreleased; `docs/CHANGELOG.md` [Unreleased])
 
 ---
 
@@ -255,10 +255,11 @@ and ZTM (2.15), Bodove pole and QGZU-2013 (2.16).
   download_laz_area (bbox in any CRS; selection + download + sidecars,
   result LazDownloadResult: files/failed/superseded/stale/notices) and
   check_laz_area (plan without downloading)
-- Failure of even one tile = Error: with the full list, code 1 (downloaded ones are kept)
+- Failure of even one tile = Error: with the full list, status partial, exit code 10
+  (failed, 11, when no tile came; downloaded ones are kept)
 - CZ (plan B, section 2.2): download_cz_laz/check_cz_laz (model=, sheet code
   or bbox; CzLazResult: sheets/files/failed/stale/notices); a file
-  failure = Error: for the sheet, code 1 (the rest are kept)
+  failure = Error: for the sheet, exit code 10 (11 when no file came; the rest are kept)
 
 # Source: GUGiK (CZ: CUZK, section 2.2)
 # API: WFS (GetCapabilities + GetFeature), OpenData (CZ: KladyMapovychListu + openzu)
@@ -364,6 +365,7 @@ and ZTM (2.15), Bodove pole and QGZU-2013 (2.16).
 # Commands:
 kartograf sheet parse <sheet_code>                    # info about the sheet code (PL-1992 or PL-2000)
 kartograf sheet parse 6.179.12.20               # PL-2000 auto-detection
+kartograf sheet find --bbox ... --sheet-system 1992 --scale 1:10000 # sheet codes of an area (also --geometry)
 kartograf elevation download --sheet <sheet_code> --product nmt --resolution 1m --vertical-crs EVRF2007 --root ./data # download NMT
 kartograf elevation download --sheet <sheet_code> --product nmpt --resolution 1m --vertical-crs EVRF2007 --root ./data # download NMPT (--resolution required since 0.8.0)
 kartograf imagery download --sheet <sheet_code> --product orto --root ./data # download orthophoto
@@ -404,7 +406,7 @@ kartograf elevation download --bbox ... --product laz --all-campaigns --country 
 kartograf landcover download --product bdot10k --teryt <code> --root ./data  # area: --bbox [--bbox-crs] / --sheet / --geometry; --layers, --keep-raw, --workers, -q
 kartograf landcover download --product bdot10k --teryt 1261 --year 2024 --format SHP --root ./data # BDOT10k yearly archives (2014-2025, GML|SHP, ZIP 1:1)
 kartograf landcover download --product corine --sheet <sheet> --root ./data --year 2018
-kartograf soil download --property <param> --root ./data --depth 0-5cm --stat mean # --sheet/--bbox (without --teryt)
+kartograf soil download --property <param> --root ./data --depth 0-5cm --stat mean # --sheet/--bbox/--geometry (without --teryt)
 kartograf landcover list-sources
 kartograf landcover list-layers --product <produkt>
 kartograf soil hsg --sheet <sheet> --root ./data --depth 0-5cm # compute HSG from a SoilGrids version; --depth-rule least-permeable instead of --depth: the least permeable layer of 0-100 cm (ADR-061)
@@ -433,9 +435,12 @@ kartograf geodesy download --product control --country pl --network vertical --b
 kartograf geodesy download --product geoid --country pl --whole-country --root ./data # PL-geoid2021 (CZ: QGZU-2013)
 kartograf geodesy list-sources
 kartograf cache stats|clear|path           # metadata cache (SQLite)
+kartograf store overview|entries --root ./data # read the store without writing (ADR-045); `store sidecar --path <file>`: sidecar of one file; `store init --root ./data` writes the store marker kartograf-store.json
+kartograf config show                      # settings in force (nogat.toml, variables) and where each comes from
 kartograf commands list --json                   # command catalog (groups, commands, ...); `commands schema --command "<group> <command>"`: options, allowed values, examples (ADR-052)
+kartograf commands guide --format agents|llms|agents-md-block # guide for AI agents (AGENTS.md, llms.txt) generated from the catalog
 kartograf elevation availability --product nmt --sheet <sheet_code> --json # --json in every command: one kartograf-result/1 envelope, error kartograf-error/1 on stderr, exit codes of the Nogat registry (USAGE 8.3)
-kartograf-mcp                              # MCP server (stdio; extra `kartograf[mcp]`): 34 tools 1:1 with commands, read only and plans by default; `--allow-writes --allow-dir DIR` allows writing (USAGE 8.6)
+kartograf-mcp                              # MCP server (stdio; extra `kartograf[mcp]`): 34 tools, one per command except `commands guide`, `cache` and `config show`; read only and plans by default; `--allow-writes --allow-dir DIR` allows writing (USAGE 8.6)
 # Full list of options: kartograf <group> <command> --help
 ```
 
@@ -451,8 +456,8 @@ from kartograf import (
     Notice,
     # Core
     SheetParser, Parser2000, ParserTM33, BBox, find_sheets_for_bbox,
-    find_sheets_2000_for_bbox, find_sheets_for_geometry, get_overall_bbox,
-    transform_bbox, parent_request_for,
+    find_sheets_2000_for_bbox, find_sheets_for_geometry, find_sheet_outlines,
+    SheetOutline, get_overall_bbox, transform_bbox, parent_request_for,
     # Download (command level: `kartograf elevation download` / `imagery download`, spec 4.1)
     download_data, check_data, DataReport, UnitFile, UnitFailure,
     # Download (collections: `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download`, ADR-042)
@@ -497,19 +502,24 @@ from kartograf import (
     list_segments, list_partitions, iter_store, StoreEntry, read_sidecar, Sidecar,
     describe_segment, SegmentInfo, file_footprint, Footprint, link_target,
     pinned_transform, PinnedTransform,
+    # Store marker (`kartograf store init`, ADR-054)
+    init_store, check_store, StoreInit, store_state,
+    # User settings (`kartograf config show`)
+    get_config, Config, store_root, StoreRoot,
     command_for_file,  # the command of a stored file (KB-6, ADR-057)
     # Command catalog, command layer and JSON documents (agent interface, ADR-046, USAGE 8)
-    list_commands, command_schema, CommandList, CommandCatalog,
+    list_commands, command_schema, CommandList, CommandCatalog, agent_guide, AgentGuide,
     parse_command, validate_command, format_command, run_command, check_command,
-    CommandCall, describe_sheet, SheetInfo, find_sheets, SheetList,
+    CommandCall, CommandResult, ResultItem, describe_sheet, SheetInfo, find_sheets, SheetList,
     list_sources, SourceList, list_layers, LayerList,
     get_cache_info, get_cache_path, clear_cache, CacheInfo,
     describe_store, StoreOverview, list_store_entries, StoreEntries,
     read_store_sidecar, StoreSidecar, ErrorReport, error_report,
     # Exceptions
-    KartografError, ParseError, ValidationError, DownloadError, NoCoverageError,
-    YearRangeError, CacheError, InvalidSidecarError, UsageError, ForbiddenError,
-    MissingDependencyError, CommandNotRebuildableError,
+    KartografError, ParseError, ValidationError, UsageError, ConfigError, DownloadError,
+    NoCoverageError, YearRangeError, ResolutionMismatchError, CacheError,
+    InvalidSidecarError, InvalidLayoutError, StoreUnavailableError, ConflictError,
+    ForbiddenError, MissingDependencyError, CommandNotRebuildableError,
     # Version
     __version__,
 )
@@ -872,14 +882,15 @@ from kartograf import (
 
 ```text
 # The same result in three ways (ADR-046; guide: USAGE 8):
-# - CLI: `--json` in every command (38 leaf commands) — stdout is a single `kartograf-result/1`
-#   envelope around a `kartograf-<kind>/1` document (17 documents), an error is `kartograf-error/1`
+# - CLI: `--json` in every command (39 leaf commands) — stdout is a single `kartograf-result/1`
+#   envelope around a `kartograf-<kind>/1` document (16 documents), an error is `kartograf-error/1`
 #   on the last line of stderr with a stable `code`, `hint` and the exit code of the Nogat
 #   registry (0; 10 and 11 for a partial or failed batch; input error = 2);
 # - library: `to_dict()`/`to_json()` of every report, exceptions with a stable `code`,
 #   `exit_code` and `hint` (`ValidationError.option`/`allowed`), `error_report`;
 # - MCP server `kartograf-mcp` (stdio; optional extra `kartograf[mcp]`, `mcp>=2.3.0,<3`):
-#   34 tools 1:1 with the commands (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope
+#   34 tools, one per command except `commands guide`, `cache stats|clear|path` and `config show`
+#   (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope
 #   with `outputSchema`, `is_error` only for an error, progress via MCP notifications, absolute paths,
 #   `--tools`, `--allow-dir`, `--allow-writes` (without it only plans), no default values
 #   affecting the data.
@@ -1054,9 +1065,10 @@ from kartograf import (
 - PL sheet list (--bbox/--geometry without --cutout and sheet code
   hierarchy) tries all sheets regardless of --workers. R5:
   NoCoverageError -> skip, Warning: and status no_coverage;
-  >= 1 file, no hard failure = code 0; all sheets without data
-  or any failure other than no coverage = code 1 (list of all
-  failures). A single sheet without data = code 1
+  >= 1 file, no hard failure = code 0; all sheets without data = status
+  failed, exit code 11; any failure other than no coverage = status partial,
+  exit code 10 (failed, 11, when no file came; list of all failures).
+  A single sheet without data = exit code 11
 - Raster --bbox mode is explicit (ADR-038): PL without --cutout returns a list of sheets
   (many files), with --cutout one file; the CZ raster has only a cutout (exportImage,
   downloaded natively in 5514 and reprojected locally when another
@@ -1202,7 +1214,7 @@ and may proceed in parallel with 4.
 
 ### 4.1 Modules
 
-The tree corresponds to the `kartograf/` directory (source of truth: the directory itself); detailed
+The tree corresponds to the `src/kartograf/` directory (source of truth: the directory itself); detailed
 description — `docs/ARCHITECTURE.md`.
 
 ```
@@ -1210,10 +1222,21 @@ kartograf/
 ├── __init__.py           # Public API exports
 ├── _clock.py             # now() — single time source for results (frozen in conformance tests)
 ├── _version.py           # build_version() — version identifier
+├── _errors.py            # Nogat error registry (codes, exit codes), generated by scripts/generate_errors.py
+├── _output_schema.py     # outputSchema of every MCP tool (kartograf-result/1), generated
+├── _data/                # package data: agent guide templates (agents/), PL-2000 zone areas, PGW geodatabase schema
 ├── __main__.py           # `python -m kartograf` = `kartograf` script
 ├── py.typed              # PEP 561 marker (types for the consumer's mypy)
 ├── serialization.py      # Document (to_dict/to_json, schema as first key), encoder, SCHEMAS registry (ADR-046)
 ├── error_report.py       # ErrorReport, error_report, ERROR_CODES/EXIT_CODES (kartograf-error/1)
+├── envelope.py           # CommandResult, ResultItem — the kartograf-result/1 envelope, outcome and exit code (0/10/11) of a document
+├── guide.py              # agent_guide, AgentGuide — AGENTS.md, llms.txt and the agents-md-block generated from the catalog (kartograf-guide/1)
+├── config.py             # get_config, Config, store_root, StoreRoot — nogat.toml, KARTOGRAF_*/NOGAT_* variables, user directories (kartograf-config/1)
+├── marker.py             # init_store, check_store, StoreInit, store_state — the store marker kartograf-store.json (ADR-054)
+├── output.py             # plain output (--output-dir): ordinary files without metadata (ADR-054)
+├── interrupt.py          # SIGTERM like Ctrl-C, stop of the threads of a pool (run_parallel)
+├── testing.py            # offline fixtures of the store and sidecars for consumers (build_fixture_store, build_pgw_store)
+├── messages/             # message catalog: English default and Polish variant of every text for a person
 ├── commands.py           # command layer: parse_command, validate_command, format_command, run_command, check_command
 ├── data_commands.py      # DATA_COMMANDS: the 12 data commands as library calls (call options, validation without network, download, check_*)
 ├── stored_command.py     # command_for_file: the command that selects a stored file again (KB-6, ADR-057)
@@ -1224,7 +1247,7 @@ kartograf/
 ├── mcp_server.py         # kartograf-mcp MCP server (stdio; optional `mcp` extra)
 ├── catalog/              # Command catalog: declarations (commands/), list_commands, command_schema, CLI parser, MCP tools (tools.py)
 ├── notices.py            # Notice, NoticeSink, data notice codes (ADR-037)
-├── exceptions.py         # KartografError (code, exit_code, hint), ValidationError (option, allowed) -> UsageError/ParseError, DownloadError -> NoCoverageError/YearRangeError, CacheError, InvalidSidecarError, ForbiddenError, MissingDependencyError (MCP server)
+├── exceptions.py         # KartografError (code, exit_code, hint), ValidationError (option, allowed) -> UsageError/ParseError/ConfigError, DownloadError -> NoCoverageError/YearRangeError/ResolutionMismatchError, CacheError, InvalidSidecarError, InvalidLayoutError, StoreUnavailableError, ConflictError, ForbiddenError, MissingDependencyError (MCP server), CommandNotRebuildableError
 ├── store.py              # Store read without writing (ADR-045): list_segments, list_partitions, iter_store, read_sidecar, describe_segment, link_target
 ├── store_geometry.py     # file_footprint (native and WGS84 outline), pinned_transform (pinned operation, per thread)
 ├── core/                 # Core logic
@@ -1233,6 +1256,7 @@ kartograf/
 │   ├── parser_2000.py       # Parser2000 — PL-2000 sheet code parser
 │   ├── parser_tm33.py       # ParserTM33 — computable CZ 2x2 km tile grid (EPSG:3045)
 │   ├── parser_registry.py   # Sheet system registry (pl1992, pl2000, cz_tm33, cz_sm5)
+│   ├── pl2000_zones.py      # PL-2000 zone areas: nominal strips with the powiat exceptions (ADR-055)
 │   ├── geometry.py          # SHP/GPKG/GeoJSON reading, find_sheets_for_geometry, get_overall_bbox
 │   └── coverage.py          # Convex polygons (intersection/difference/buffer) — LAZ tile selection (ADR-029)
 ├── sources/               # Source descriptors as data (zero IO on import)
@@ -1317,7 +1341,8 @@ kartograf/
     ├── _handlers.py           # HANDLERS: command id -> handler
     ├── _args.py               # library_arguments: flags -> library function arguments (via the catalog)
     ├── _json.py               # --json mode: document on stdout, exit codes
-    ├── parse_cmd.py           # `kartograf sheet parse` -> describe_sheet
+    ├── _language.py           # language of the human-readable output (--lang, KARTOGRAF_LANG; machine output English)
+    ├── parse_cmd.py           # `kartograf sheet parse` -> describe_sheet; `sheet find` -> find_sheets
     ├── download_cmd.py        # `elevation download` / `imagery download` -> download_data/check_data
     ├── availability_cmd.py    # `elevation availability` -> check_availability (table, --details, --json)
     ├── landcover_cmd.py       # `landcover download` -> download_landcover/check_landcover
@@ -1326,8 +1351,10 @@ kartograf/
     ├── collection_cmd.py      # `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download` -> download_collection/check_collection
     ├── soil_cmd.py            # `soil download` -> download_soil/check_soil; `soil hsg` -> calculate_hsg/check_hsg
     ├── cache_cmd.py           # `kartograf cache` -> get_cache_info/get_cache_path/clear_cache
-    ├── catalog_cmd.py         # `kartograf commands list|schema` -> list_commands, command_schema
-    └── commands.py            # Compatibility facade — `main` entry point (errors -> error_report, codes 0/1/2/130/143)
+    ├── catalog_cmd.py         # `kartograf commands list|schema|guide` -> list_commands, command_schema, agent_guide
+    ├── store_cmd.py           # `kartograf store overview|entries|sidecar|init` -> describe_store, list_store_entries, read_store_sidecar, init_store/check_store
+    ├── config_cmd.py          # `kartograf config show` -> get_config
+    └── commands.py            # `main` entry point and facade of the CLI public names (errors -> error_report, exit codes of the Nogat registry)
 ```
 
 ### 4.2 Dependencies
@@ -1341,6 +1368,9 @@ rasterio >= 1.3.0      # GeoTIFF processing (HSG, CZ exportImage/openzu)
 numpy >= 1.24.0        # Array operations (HSG, CZ per-pixel vertical transformation)
 pyshp >= 2.3.0         # Shapefile reading
 pyogrio >= 0.10        # Vector GDAL: writing GPKG of collection area results (ADR-042)
+platformdirs >= 4      # user data, cache and config directories (config.py)
+shapely >= 2.1         # geometry: geometry files, sheet outlines, PL-2000 zone areas
+mcp >= 2.3.0, < 3      # optional extra `kartograf[mcp]`: MCP server (ADR-046)
 ```
 
 ---
@@ -1414,7 +1444,7 @@ pyogrio >= 0.10        # Vector GDAL: writing GPKG of collection area results (A
   with the `live` marker require a network and are not part of the offline gate
 - Coverage not lower than the `fail_under` threshold in `pyproject.toml`
 - Code compliant with ruff (`ruff check .` and `ruff format --check .` clean),
-  `mypy kartograf/ tests/` without errors
+  `mypy src tests` without errors
 - Documentation consistent with the code; behaviour changes towards GUGiK/CUZK services
   verified live before release (reports in `docs/research/`)
 ```
@@ -1459,9 +1489,10 @@ pyogrio >= 0.10        # Vector GDAL: writing GPKG of collection area results (A
 | 2026-10-17 | 3.28 | Release v0.8.0: versioned store (ADR-036), project manifest (ADR-040), GUGiK/ČÚZK catalogue — plans A–E (ADR-041–043), CLI groups and unified API (ADR-039, ADR-044), status |
 | 2026-11-10 | 3.29 | Roadmap (3.3, 1.0+ list): subproject 5 (web GUI) replaced by the separate Archiwista project (author's decision 2026-10-17, recorded 2026-11-09) |
 | 2026-11-10 | 3.30 | The cell size of an NMT/NMPT grid checked against its index record (2.12, 3.2; ADR-060); HSG of the least permeable layer of 0-100 cm, `--depth-rule least-permeable` (2.8; ADR-061) |
+| 2026-11-14 | 3.31 | Docs audit against the `develop` code: status (0.8.0 unreleased), exit codes 10/11 of failed units (2.5, 3.2), missing commands `sheet find`, `store`, `config show`, `commands guide` (2.9), Python API equal to `__all__` (2.10), counts of commands, documents and MCP tools (2.9, 2.17), module tree (4.1), dependencies `platformdirs`, `shapely`, `mcp` (4.2), `mypy src tests` (6.2) |
 
 ---
 
-**Document version:** 3.30
-**Last updated:** 2026-11-10
-**Status:** Release v0.8.0 (2026-10-17)
+**Document version:** 3.31
+**Last updated:** 2026-11-14
+**Status:** v0.8.0 (unreleased; `docs/CHANGELOG.md` [Unreleased])
