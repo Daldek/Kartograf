@@ -66,6 +66,13 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
 - `scripts/generate_errors.py` pipes UTF-8 to ruff: subprocess text mode used the locale
   encoding, and cp1252 of Windows wrote the section sign of the module as a byte ruff refuses
   (exit 2).
+- `ensure_dir` (`download/versions.py`) retries a directory that a cleanup is still removing on
+  Windows: such a directory is "delete pending" until its last handle closes, and creating it
+  or a directory in it raises `PermissionError`, which only `FileNotFoundError` and
+  `FileExistsError` were retried for. The five attempts now pause 5 to 40 ms (doubling); a
+  denial that lasts is raised by the last attempt.
+- The lock moves `opentelemetry-api` (a dependency of the `mcp` extra) from 1.45.1 to 1.45.2,
+  which fixes CVE-2026-126360; the dependency audit of CI (`pip-audit --strict`) failed on it.
 
 **Changed**
 
@@ -75,6 +82,12 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
   platform-dependent sha256 of a ZIP (the frozen clock moves 1 s in `test_collections`),
   `shlex.quote`, `url2pathname` (`test_rcn`), `errno.EOPNOTSUPP` (`test_links`) and a TOML root
   as a POSIX path are accounted for; the chmod cases of the cache are skipped on Windows.
+- Tests: the two plan tests of CI run 41689249157 (Windows 3.12) expect the POSIX store root
+  the plan gives since `store_id` (`test_store_init_writes_the_marker_and_check_plans_it_without_writing`,
+  `test_the_cli_check_in_words_says_why_the_root_is_a_conflict`), and the network guard of
+  `tests/conftest.py` tells an IPv6 address by `isinstance(ip, IPv6Address)` instead of
+  `ip.version == 6`, which mypy of the Python 3.15 jobs does not narrow (`union-attr` on
+  `ipv4_mapped`).
 - Tests: a smoke of the CLI as a process of its own (ADR-054 step 9,
   `tests/integration/test_cli_plain_subprocess.py`). The plain write runs the real
   `kartograf` main in a child process with only `_create_provider_and_storage` patched to
