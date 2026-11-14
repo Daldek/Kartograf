@@ -30,6 +30,16 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - `marker.STORE_MARKERS` recognises the store of Obserwator (formerly IMGWTools) by
   `obserwator-store.json` instead of `imgw-store.json`, following the producer's rename in its
   v3.0.0 (author's decision of 2026-11-03, admitted by the freeze as an API break of a producer).
+- Documentation: audit against the code of `develop` of 2026-11-14 (the author's approval
+  despite the freeze). `CLAUDE.md`, `.env.example`, `docs/ARCHITECTURE.md`,
+  `docs/USAGE.md`, `docs/SCOPE.md`, `docs/PRD.md` and `docs/PROGRESS.md` no longer name removed
+  or moved code, flags, files or counts as current (39 leaf commands, 34 MCP tools, 16
+  documents; the Python API lists equal `kartograf.__all__`; exit codes 10 and 11 of failed
+  units); `KARTOGRAF_ROOT` is the store of a command without a target; the branches of PGW,
+  the CI fixes and the dead-code cleanup are merged. `CLAUDE.md` lists the deviations from
+  Nogat DEV-12.2, DEV-12.4 to DEV-12.9 (no `nogat-log/1` files) and DEV-20 (no provider lines
+  G, SG, Z). `docs/DECISIONS.md`: ADR-020 erratum 5 (the removed `_get_opendata_url`), ADR-059
+  erratum 1 (Nogat 1.0), index rows of ADR-037, ADR-040 and ADR-052 completed.
 
 ### Fixed
 

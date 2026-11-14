@@ -1,10 +1,10 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Tool for Downloading Spatial Data**
 
-**Version:** 4.9
-**Date:** 2026-11-10
+**Version:** 4.10
+**Date:** 2026-11-14
 **Product Owner:** Piotr
-**Status:** Release v0.8.0 (2026-10-17)
+**Status:** v0.8.0 (unreleased; `docs/CHANGELOG.md` [Unreleased])
 
 > The document describes the product requirements as implemented in the code
 > of release v0.8.0, including the versioned store ADR-036 and CLI/API consistency ADR-037.
@@ -51,7 +51,7 @@ The following are added in the target state (v1.0.0, section 8):
 | Persona | Needs | Usage |
 |---------|----------|--------|
 | **QGIS user** | GUGiK data for an area from the map or a layer, ready for analysis | QGIS plugin |
-| **Project team / company** | Shared data store, reuse of downloaded data in subsequent projects | Web GUI + CLI |
+| **Project team / company** | Shared data store, reuse of downloaded data in subsequent projects | Archiwista (separate project) + CLI |
 
 ---
 
@@ -484,9 +484,9 @@ Downloading global soil data from ISRIC SoilGrids (250m resolution).
 ```python
 from kartograf import download_soil
 
-# Downloading organic carbon (sheet code or bbox; TERYT = ValidationError)
+# Downloading organic carbon (sheet code, bbox or geometry; no TERYT selection)
 # -> soil/global_soilgrids_soc_0-5cm_mean/N-34/130/D/N-34-130-D.tif,
-#    wersja z etykieta wydania SoilGrids (np. 2.0)
+#    version with the SoilGrids release label (e.g. 2.0)
 report = download_soil(
     root="./data", sheet="N-34-130-D",
     property="soc", depth="0-5cm", stat="mean",
@@ -558,7 +558,7 @@ report = calculate_hsg(root="./data", sheet="N-34-130-D", depth="0-5cm")
 if report.ok and report.files:
     stats = hsg_statistics(report.files[0].file.path)
     for group, data in stats.items():
-        print(f"Grupa {group}: {data['percent']:.1f}%")
+        print(f"Group {group}: {data['percent']:.1f}%")
 else:
     print(report.failed)
 ```
@@ -651,7 +651,7 @@ Geonames and ZTM (3.25), Bodove pole and QGZU-2013 (3.26).
 - Report `elevation availability --country cz|auto` / `check_availability`:
   index sheets and one `HEAD` per file (publication date, size), without
   flight years and without downloading files; `404` = sheet without a file, any other failure
-  = error; an unchecked `auto` part = `ok=False` (code 1).
+  = error; an unchecked `auto` part = `ok=False` (status `partial`, exit code 10).
 
 #### Capabilities
 ```python
@@ -1183,7 +1183,7 @@ kartograf hydro download --product network --country cz --whole-country --root .
 ### 3.21.1 Feature: PGW water management plans (`hydro --product pgw`, ADR-059)
 
 **Priority:** P1 (High)
-**Status:** Implemented on branch `feature/pgw` (not merged into `develop`)
+**Status:** Production (0.8.0)
 
 #### Description
 The spatial data of the second update of the river basin management plans (IIaPGW, 2022-2027)
@@ -1384,7 +1384,7 @@ fix an error without parsing text.
 #### Requirements
 - `--json` in every CLI command: stdout is one `kartograf-result/1` envelope (`status`, `result`
   with the `kartograf-<kind>/1` document of the command, `items`, `notices`; first key `schema`;
-  17 documents of the library), with no progress bar and no status lines
+  16 documents of the library), with no progress bar and no status lines
   (notices go in `notices`); an error is `kartograf-error/1` (`code`, `title`, `message`, `hint`,
   `details`, `exit_code`, `command`) on the last line of stderr, with nothing on stdout. The
   documents are returned by the library (`to_dict()`/`to_json()`), and the CLI and MCP only print them.
@@ -1400,8 +1400,9 @@ fix an error without parsing text.
   options of a data command call and MCP tool schemas are generated from the declarations. Command layer:
   `parse_command`, `validate_command`, `format_command`, `run_command`,
   `check_command` (KB-1..KB-5 of the Archiwista).
-- MCP server `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 34 tools 1:1
-  with the commands (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope (`outputSchema`),
+- MCP server `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 34 tools, one per command except
+  `commands guide`, `cache stats|clear|path` and `config show` (`kartograf_<group>_<command>`),
+  result = the `kartograf-result/1` envelope (`outputSchema`),
   `is_error` only for an error, with no default values affecting data (a given `root`
   absolute, one left out the default store inside `--allow-dir`, `bbox` with `bbox_crs`),
   progress through MCP notifications,
@@ -1515,6 +1516,8 @@ from kartograf import (
     find_sheets_for_bbox,
     find_sheets_2000_for_bbox,
     find_sheets_for_geometry,
+    find_sheet_outlines,
+    SheetOutline,
     get_overall_bbox,
     transform_bbox,
     parent_request_for,
@@ -1649,17 +1652,34 @@ from kartograf import (
     pinned_transform,
     PinnedTransform,
 
+    # Store marker (`kartograf store init`, ADR-054)
+    init_store,
+    check_store,
+    StoreInit,
+    store_state,
+
+    # User settings (`kartograf config show`)
+    get_config,
+    Config,
+    store_root,
+    StoreRoot,
+
     # Command catalog, command layer and JSON documents (agent interface, ADR-046)
     list_commands,
     command_schema,
     CommandList,
     CommandCatalog,
+    agent_guide,
+    AgentGuide,
     parse_command,
     validate_command,
     format_command,
     run_command,
     check_command,
+    command_for_file,           # the command of a stored file (KB-6, ADR-057)
     CommandCall,
+    CommandResult,
+    ResultItem,
     describe_sheet,
     SheetInfo,
     find_sheets,
@@ -1685,15 +1705,23 @@ from kartograf import (
     KartografError,
     ParseError,
     ValidationError,
+    UsageError,
+    ConfigError,
     DownloadError,
     NoCoverageError,
     YearRangeError,
+    ResolutionMismatchError,
     CacheError,
     InvalidSidecarError,
-    UsageError,
+    InvalidLayoutError,
+    StoreUnavailableError,
+    ConflictError,
+    ForbiddenError,
+    MissingDependencyError,
+    CommandNotRebuildableError,
 
     # Version
-    __version__,            # "0.8.0"
+    __version__,            # "0.8.0.dev0" until the release
 )
 ```
 
@@ -1729,18 +1757,22 @@ rasterio >= 1.3.0      # GeoTIFF processing
 numpy >= 1.24.0        # Array operations
 pyshp >= 2.3.0         # Shapefile reading
 pyogrio >= 0.10        # GDAL vector: GPKG of collection area results (ADR-042)
+platformdirs >= 4      # user data, cache and config directories
+shapely >= 2.1         # geometry: geometry files, sheet outlines, PL-2000 zone areas
 mcp >= 2.3.0, < 3      # optional extra `kartograf[mcp]`: MCP server (ADR-046)
 ```
 
-### 6.2 Development Dependencies
+### 6.2 Development Dependencies (`dev` dependency group)
 
 ```
 pytest >= 8.0          # Testing
 pytest-cov >= 5.0      # Coverage
 ruff >= 0.8            # Linting + Formatting
 mypy >= 1.13           # Type checking
-mcp >= 2.3.0, < 3      # MCP server tests (in the `dev` extra)
+jsonschema >= 4.18     # JSON Schema validation in tests
 ```
+
+MCP server tests need the `mcp` extra (`uv sync --all-extras`, as `scripts/gate.sh` does).
 
 ---
 
@@ -1832,9 +1864,9 @@ describe the result, not the solution.
       the remaining products as 1:1 source files.
 - [ ] **QGIS plugin:** downloading from within QGIS through the library's
       public API, without its own download logic.
-- [ ] **Web GUI:** a local data manager — a browser of the store
-      with information about newer data; publication
-      after local testing.
+- **Web GUI:** replaced by the separate Archiwista project (author's decision
+      2026-10-17): a local data manager over the store; Archiwista requires
+      Kartograf (`docs/SCOPE.md` 3.3, subproject 5).
 - [x] **English-only identifiers** in the API, CLI and sidecar (ADR-031;
       API/CLI in 0.8.0, erratum 1).
 
@@ -1866,6 +1898,6 @@ HYDROGRAF (main application)
 
 ---
 
-**Document version:** 4.9
-**Last update date:** 2026-11-10
-**Status:** Release v0.8.0 (2026-10-17)
+**Document version:** 4.10
+**Last update date:** 2026-11-14
+**Status:** v0.8.0 (unreleased; `docs/CHANGELOG.md` [Unreleased])

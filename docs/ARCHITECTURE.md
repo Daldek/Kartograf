@@ -22,7 +22,7 @@ or a spec. Where the code deviates from the spec, the document describes the cod
 **Descriptors as data.** Every dataset (digital terrain model (NMT) 1 m from GUGiK, DMR 5G from CUZK,
 CORINE, SoilGrids...) is described by one `SourceDescriptor` in
 `src/kartograf/sources/registry.py`: access channels, horizontal and vertical CRSs,
-licence, tile scheme, directory template, default file extension. The `sources/`
+licence, directory template, default file extension. The `sources/`
 module does no IO on import — it is pure data and a few lookup
 functions. The registry is the source of truth for the storage subdirectory
 (`storage_subdir`), the extension (`default_extension`), the licence in the sidecar
@@ -33,7 +33,8 @@ in `registry.py`). Execution logic stays in the providers —
 the descriptor says WHAT the source can do and where the result should land, not HOW to download it.
 The exception is the collection channels (ADR-042): typed channel parameters
 (`AccessChannel.params`) configure the generic engines for unit packages,
-area objects and CUZK ATOM feed files, so such a product has no
+area objects, CUZK ATOM feed files and the area layers of a stored national archive
+(ADR-059), so such a product has no
 provider (section 4.10); the CZ orthophoto uses the ATOM engine in its own track
 (section 4.4), and the WCS channels of the PL orthophoto cutout (`WcsCutoutParams`)
 configure `GugikOrtoProvider` (section 4.3).
@@ -45,11 +46,11 @@ transformations performed. Sidecars are written by the **managing layers** —
 `DownloadManager`, `LandCoverManager`, the PL cutout in the library
 (`download/cutout.py::write_pl_wcs_cutout_sidecar`), PL LAZ tiles in the library
 (`download/laz.py::write_laz_sidecar`, ADR-029), CZ LAZ files
-(`download/cz_laz.py`), the HSG result
+(`download/cz_laz.py`), CZ contours (`download/cz_contours.py`), the HSG result
 (`HSGCalculator._reuse_or_compute`, section 4.8), CZ rasters (below),
 CZ orthophoto (`download/cz_orto.py`, section 4.4), the PL orthophoto cutout
 (`download/orto_cutout.py`, section 4.3) and collection files
-(`download/collections.py::run_job`, section 4.10)
+(`download/collections.py::run_job`/`run_layers_job`, section 4.10)
 — never the providers; a provider returns a `Path`, and the metadata is assembled one level up,
 where the task context is known. It follows that a direct call of a
 provider from the library (e.g. `GugikProvider.download`,
@@ -159,48 +160,64 @@ kartograf ──> core, download, providers, landcover, hydrology, cache,
         sources, transport, notices, store, store_geometry,
         transform, catalog, commands, error_report, sheet_info,
         source_info, cache_info, store_documents,
-        stored_command                               # re-export of the public API
+        stored_command, config, marker, envelope, guide  # re-export of the public API
 __main__ ──> cli
 cli ──> catalog, error_report, sheet_info, source_info, cache_info,
-        download, landcover, hydrology, notices, sources, interrupt
-mcp_server ──> catalog, commands, error_report, download, cache, kartograf
-        # SDK `mcp`, `anyio`, `jsonschema`: lazily only, in create_server
-commands ──> catalog, data_commands, download, cache, notices
+        store_documents, download, landcover, hydrology, notices, sources,
+        interrupt, config, marker, output, envelope, guide
+mcp_server ──> catalog, commands, error_report, download, cache, config,
+        envelope, kartograf
+        # SDK `mcp`, `anyio`, `jsonschema`: lazily only, inside functions
+        # (create_server, _serve and their helpers)
+commands ──> catalog, data_commands, download, cache, notices, envelope,
+        output, kartograf (l)
 catalog ──> sources, download, landcover, hydrology, providers, core,
-        error_report, _version, kartograf (l)
-error_report ──> transform, interrupt, catalog (l)
+        _version, _output_schema, error_report (l), guide (l), kartograf (l)
+error_report ──> transform, interrupt, _errors, catalog (l)
+envelope ──> download, landcover, hydrology, notices, _errors, kartograf (l)
+guide ──> catalog, commands, error_report, kartograf (l)
 sheet_info ──> catalog, core
 source_info ──> download, landcover, providers, sources
 cache_info ──> cache, notices
-store_documents ──> download, store
+store_documents ──> download, store, config
 data_commands ──> catalog, download, landcover, hydrology, cache, notices
 stored_command ──> catalog, commands, download, sources, store
+config ──> marker, kartograf (l, __version__)
+marker ──> kartograf (_clock), _version, download (TYPE_CHECKING; at runtime
+        lazy), config (l), sources (l)
+output ──> config, marker, interrupt
 download ──> providers, sources, transform, core, cache, notices,
-        _version, kartograf (_clock), transport, interrupt
+        _version, kartograf (_clock), transport, interrupt, config, marker,
+        output
 landcover ──> providers, download, core, cache, sources, notices, transport,
-        interrupt
-hydrology ──> core, download, landcover, cache (TYPE_CHECKING), notices,
-        providers (l), sources (l), transform (l)
-providers ──> sources, transform, transport, core, cache, notices,
-        auth (l), download (l), interrupt
-sources ──> core, kartograf (_clock), _version
+        interrupt, config, output
+hydrology ──> download, notices, config, output, core, landcover, cache,
+        providers (the last four under TYPE_CHECKING), sources (l), transform (l)
+providers ──> sources, transform, transport, core, cache,
+        auth (TYPE_CHECKING; at runtime lazy), download (l), interrupt
+sources ──> core, kartograf (_clock), _version, transform (TYPE_CHECKING)
 transport ──> transform, core, sources, cache, notices, providers,
         interrupt, kartograf (l, __version__)
 transform ──> core, sources (TYPE_CHECKING), transport (TYPE_CHECKING)
-cache ──> core (TYPE_CHECKING), notices
+cache ──> config, core (TYPE_CHECKING), notices
 _version ──> kartograf (l, __version__)
-store ──> core, download, sources, providers (l)
+store ──> core, download, sources, _version, providers (l), hydrology (l)
 store_geometry ──> core, transform, store (types under TYPE_CHECKING; at runtime
         also a lazy import of `read_sidecar`), providers (l),
         transport (l)
-_clock, notices, auth, interrupt ──> (nothing internal)
-core ──> (nothing except exceptions and serialization)
-exceptions ──> serialization (encoder for `details()`; edges TO it
-        omitted above — it is imported by kartograf, cli, core, sources,
-        transform, transport, providers, download, landcover, hydrology,
-        cache, store, store_geometry, error_report, catalog)
+testing ──> core, download, providers, sources, notices, marker,
+        kartograf (_clock), transform (l)
+_clock, notices, auth, interrupt, _errors, _output_schema ──> (nothing internal
+        except messages)
+core ──> (nothing except exceptions, messages and serialization)
+exceptions ──> serialization (encoder for `details()`), _errors (registry codes);
+        edges TO it omitted above — every package imports it except __main__,
+        _clock, _version, _errors, _output_schema, auth, data_commands, envelope,
+        interrupt, messages, notices and serialization
 serialization ──> (leaf, nothing internal; edges TO it omitted, as
         for exceptions — it is imported by the result types: Document, EncodeContext)
+messages ──> (leaf, nothing internal; edges TO it omitted, as for exceptions —
+        the message catalog of every text for a person)
 ```
 
 **How to reconstruct the graph.** The code uses only absolute internal
@@ -224,16 +241,18 @@ Notes that are easy to overlook:
   they use the write rules of `download` (`links.linked_version`, the constants
   `versions`) and the `sources` registry, without `DownloadManager`; no download
   module imports `store`.
-- `core` imports nothing outside `core` and `exceptions` — also lazily.
+- `core` imports nothing outside `core`, `exceptions`, `messages` and `serialization` — also lazily.
   The direction is the opposite: `providers.cuzk.sheets`
   and `core.parser_tm33` import the CZ sheet system patterns from `core.parser_registry`.
   The pinned operation (ADR-024) enters `core.bbox.transform_bbox`
   through duck typing (`transformer=`), without importing `transform`.
 - `download` reaches for `transform` in `download/cutout.py` (PL cutout,
-  section 4.3) and lazily in `download/collections.py` (writing the GPKG of the area
-  result, section 4.10). It reaches for `transport` lazily in
+  section 4.3), in `download/availability.py` (`transform.crs`: CZ sheet frames in the CRS
+  of the area, section 4.9) and lazily in `download/collections.py` (writing the GPKG of the
+  area result, section 4.10). It reaches for `transport` lazily in
   `download/cutout.py` and `download/cz_cutout.py` and at module level
-  in `download/cz_sheets.py` and `download/cz_laz.py` (`response_signal`).
+  in `download/cz_sheets.py` and `download/cz_laz.py` (`response_signal`) and
+  `download/cz_contours.py` (`transport.http`).
   `cutout.py` imports at
   module level `transform.crs` (`PinnedTransform`, `CONTENT_POLICY`,
   `WARP_MARGIN_PX`), lazily `build_pinned_transform`, `transform.raster`
@@ -251,13 +270,15 @@ Notes that are easy to overlook:
   `GugikOrtoProvider`).
 - `download/collections.py` (collections, ADR-042, section 4.10) imports at
   module level `transport.http` (`SessionPerThread`, `head_signal`),
-  `transport.unit_package` (unit packages) and `transport.atom` (the
-  country file from the ATOM feed), and lazily - only for the
-  area result - `transport.feature_bbox.fetch_features`
-  and `transform.gpkg.write_gpkg`: vector GDAL (`pyogrio`) is loaded
-  only when the task downloads service features. From `providers` it takes
+  `transport.unit_package` (unit packages), `transport.atom` (the
+  country file from the ATOM feed) and `transport.index_records` (file index records),
+  and lazily - only for the area result - `transport.feature_bbox.fetch_features`
+  and `transform.gpkg.write_gpkg`/`write_archive_gpkg`: vector GDAL (`pyogrio`) is loaded
+  only when the task writes the features of an area. From `providers` it takes
   `providers.pl.prg.discover_teryts_for_bbox` (counties (Polish powiaty) of the area)
-  and `WOJEWODZTWO_NAMES`, and lazily `providers.cuzk.raster.bbox_to_crs`.
+  and `WOJEWODZTWO_NAMES`, and lazily `providers.cuzk.raster.bbox_to_crs`,
+  `providers.cuzk.sheets.SheetIndex` (CZ sheet grid) and `providers.cuzk.ruian` (the
+  cadastral areas of an area).
 - `cli` only translates flags into command-level function arguments
   and prints the result (Z1, Z8; ADR-037, ADR-046): it builds the parser from the catalog
   declaration (`catalog.cliparser`; `cli/_parser.py::create_parser` is a facade),
@@ -267,35 +288,41 @@ Notes that are easy to overlook:
   `download.data` (`download_data`/`check_data`), `download.availability`
   (`check_availability`, ADR-041), `download.collections`
   (`download_collection`/`check_collection`), `landcover.manager`
-  and `hydrology`; `sheet`, `list-sources`, `list-layers`, `cache`, `store` and `commands`
-  go through `sheet_info`, `source_info`, `cache_info`, `store_documents` and `catalog.build` (`list_commands`,
-  `command_schema`). It prints the result: the `--json` mode
+  and `hydrology`; `sheet`, `list-sources`, `list-layers`, `cache`, `store`, `config` and
+  `commands` go through `sheet_info`, `source_info`, `cache_info`, `store_documents` (`store
+  init`: `marker.init_store`/`check_store`), `config.get_config` and `catalog.build`
+  (`list_commands`, `command_schema`; `commands guide`: `guide.agent_guide`). It prints the
+  result: the `--json` mode
   (`cli/_json.py`) is the `kartograf-result/1` envelope around `Document.to_json()`, the text mode renders the same
   documents (tables, status lines, a progress bar from
   `download.manager.DownloadProgress`), and `main` turns exceptions into
   `error_report` and the exit codes of the registry (ADR-049, ADR-051). From `download` it also takes
   `download.plan`/`fetch` (plan file, `UpdateMode`, `VersionedFile`) and
-  `download.options` (`output_required`, `require_product`), from `sources.variants`
+  `download.options` (`require_product`, the product lists), from `output` `store_only`
+  (`--plan` beside `--output-dir`), from `sources.variants`
   the variant tables, from `notices` the messages.
   It does not import `providers`, `transport`, `transform`, `core` or the sheet
   selection (`tests/contract/test_cli_translation.py::test_cli_imports_no_data_logic`
-  allows only `catalog` and `serialization` beyond that).
+  refuses an import of `providers`, of the sheet selection, of the country split, of the
+  geometry envelope and of `DownloadManager`).
 - The variant registry `sources/variants.py` (ADR-041) is pure data:
-  it imports only `exceptions`, `sources.descriptor` and
+  it imports only `exceptions`, `messages`, `sources.descriptor` and
   `core.parser_registry.detect_system` (CZ sheet system: `sm5`/`tm33`),
   and `sources.registry` lazily (the registry builds descriptors from the types of this
   module). It is read by `download/options.py` (validation), `download/area.py`
   (`pl_only_flags`), `download/storage.py`, `download/cutout.py` (variant
   with a WCS channel), `download/data.py`, `download/cz_sheets.py`,
-  `download/cz_laz.py`, `download/availability.py`, the PL providers
-  (variant, `IndexRef`) and CZ (`find_cz_variant`, `find_cz_laz_variant`)
-  and `cli`.
+  `download/cz_laz.py`, `download/cz_contours.py`, `download/campaigns.py`,
+  `download/orto_cutout.py`, `download/availability.py`, the PL providers
+  (variant, `IndexRef`) and CZ (`find_cz_variant`, `find_cz_laz_variant`), the
+  catalog declarations (`elevation`, `imagery`), `store` and `cli`.
 - `download/availability.py` (report, section 4.9) imports at module
   level `providers.pl.skorowidz_wfs` (the same client and record parser
   as the sheet download), `providers.pl.prg` (land mask),
   `providers.pl.gugik_laz.laz_tile` (LAZ tile parser),
   `providers.cuzk.sheets.SheetIndex` and `providers.cuzk.raster.bbox_to_crs`
-  (CZ sheets, plan B) and `transport.http` (`SessionPerThread`,
+  (CZ sheets, plan B), `transform.crs` (`build_pinned_transform`: CZ sheet frames in the
+  CRS of the area) and `transport.http` (`SessionPerThread`,
   `head_signal`); it does not import `DownloadManager` or the store.
 - `data_commands` (`DATA_COMMANDS`) maps each of the 12 data commands to the
   `download`/`landcover`/`hydrology` library functions (validation without network,
@@ -307,21 +334,26 @@ Notes that are easy to overlook:
   `core.bbox` imports only `EncodeContext` (the `BBox.__json__` hook).
 - `catalog` (section 4.11) describes the commands: declarations in `catalog/commands/*` read the
   source registry and validator constants (`sources`, `providers`, `download`, `landcover`,
-  `hydrology`) and `core` (sheet codes, bbox), and `catalog.build` takes the code tables from
-  `error_report` (`ERROR_CODES`, `EXIT_CODES`). The only back edge is the lazy import of
-  `catalog.hints` in `error_report` (a command example in the error hint). The library,
-  including `catalog`, does not import `cli` or `mcp` (a test in a clean process).
+  `hydrology`) and `core` (sheet codes, bbox), and `catalog.tools` takes the `outputSchema`
+  of the MCP tools from `_output_schema`. `catalog` and `error_report` reach for each other
+  only lazily: `catalog.cliparser` prints the error line of a usage error
+  (`error_report.error_line`), and `error_report` imports `catalog.hints` (a command example
+  in the error hint); `catalog/commands/misc.py` reads `guide.GUIDE_FORMATS` lazily. The
+  library, including `catalog`, does not import `cli` or `mcp` (a test in a clean process).
 - `commands` (KB-2..KB-5) joins `catalog` (declarations, `convert_arguments`,
-  `parsed_options`), `data_commands` (validation and execution of a data command:
-  `DATA_COMMANDS`) and `download` (`UpdateMode`, `UpdatePlan`, `DownloadProgress`).
+  `parsed_options`, `check_call`), `data_commands` (validation and execution of a data
+  command: `DATA_COMMANDS`), `download` (`UpdateMode`, `UpdatePlan`, `DownloadProgress`),
+  `envelope` (`wrap`: the `kartograf-result/1` envelope) and `output` (`resolve_target`).
 - `sheet_info`, `source_info`, `cache_info` and `store_documents` are reports with logic
   moved from the CLI (Z1): `describe_sheet`/`find_sheets` (`core`, `catalog`:
   `SheetInfo.commands` with `Param.accepts`), `list_sources`/`list_layers`
   (`sources`, `providers`, `landcover`, `download`), `get_cache_info`/
   `get_cache_path`/`clear_cache` (`cache`, `notices`), `describe_store`/
-  `list_store_entries`/`read_store_sidecar` (`store`, `download`); none imports `cli`.
+  `list_store_entries`/`read_store_sidecar` (`store`, `download`, `config`: the default
+  root); none imports `cli`.
 - `mcp_server` is the only module that touches the `mcp` SDK (and `anyio` and
-  `jsonschema`), always lazily in `create_server`: `import kartograf` and `import
+  `jsonschema`), always lazily, inside functions (`create_server`, `_serve` and their
+  helpers): `import kartograf` and `import
   kartograf.mcp_server` work without `mcp`. Tools as data are provided by
   `catalog.tools` (without `mcp`), execution by `commands`, errors by `error_report`.
 - `transport ──> transform`: `transport/mosaic.py` wraps the mosaic sources
@@ -339,27 +371,32 @@ Notes that are easy to overlook:
   import `transport`.
 - `transport ──> cache`: `transport/atom.py` keeps the index of the ATOM service
   feed in `MetadataCache` (the `atom_cache` table with the feed `ETag`, ADR-042
-  D12); `cache` does not import `transport`.
+  D12), and `transport/index_records.py` the records of a WFS tile index of an area
+  (`index_area_cache`); `cache` does not import `transport`.
 - `transport ──> notices`: `transport/unit_package.py` takes `cli_flag` from `notices`
   (the flag of a parameter in a message); `notices` imports only `messages`.
 - `transport ──> providers`: the only edge is `transport/index_records.py`
   (file index records, ADR-043), which imports at module level
   `providers.pl.skorowidz_wfs` (`WfsIndex` and the WFS query constants). The
   reverse edge `providers ──> transport` goes to `transport.http`, and
-  `transport.index_records` imports only `download.collections`, so there is
+  `transport.index_records` is imported only by `download.collections`, so there is
   no module cycle.
 - `providers ──> download` is lazy and MUST stay that way (the `download`
   package imports `providers` at import time): validation of years and campaign selection
   from `download.campaigns` in
   `SkorowidzLayersMixin.resolve_campaigns` (`providers/pl/skorowidz.py`)
-  and in `GugikLazProvider.select_tiles` (`providers/pl/gugik_laz.py`) and
+  and in `GugikLazProvider.select_tiles` (`providers/pl/gugik_laz.py`), the vertical CRS
+  of a record and the years of the index sheets from `download.campaigns` in
+  `GugikProvider.download`/`index_sheets` (`providers/pl/gugik.py`) and
   the conversion of the area to EPSG:2180 `download.area.bbox_to_2180`
   in `providers/pl/prg.py` (one rule for the PL cutout and TERYT discovery).
 - `cache ──> core` exists only under `if TYPE_CHECKING:` (the `BBox`
   annotation in `MetadataCache.get_teryts_for_bbox`/`set_teryts_for_bbox`);
-  at runtime `cache.defaults` imports `notices`, not `core`.
+  at runtime `cache.defaults` imports `config` (the cache directory) and `notices`, not
+  `core`.
 - `landcover ──> cache`: `LandCoverManager(cache=MetadataCache | bool)`
-  (`True` = shared cache in cwd, `cache/defaults.py::open_cache`) imports
+  (`True` = the shared cache `<cache_dir>/kartograf/metadata.db`,
+  `cache/defaults.py::open_cache`) imports
   `MetadataCache` at module level (annotation) and passes it to the
   providers created by name (`Bdot10kProvider(cache=)` — PRG
   responses, `SoilGridsProvider(cache=)`); CORINE has no cache.
@@ -374,29 +411,32 @@ Notes that are easy to overlook:
   variant (`--year`, `--format`) through
   `transport.unit_package.select_variant` — without network, the same rule as
   the package engine.
-- `hydrology ──> core, download, landcover, cache` exists at module level
-  only under `if TYPE_CHECKING:` (annotations `BBox`, `VersionedFile`,
-  `PlanItem`, `MetadataCache`...; by the graph rule this is a module-level
-  import); `notices` is imported normally.
-  At runtime the rest is lazy: `landcover.manager` (clay/sand/silt
+- `hydrology` imports `download` (`download.data`: the report fields, `download.plan.plans`),
+  `config`, `output` and `notices` at module level; `core`, `landcover`, `cache` and
+  `providers` only under `if TYPE_CHECKING:` (annotations `BBox`, `LandCoverManager`,
+  `MetadataCache`, `SoilGridsProvider`...; by the graph rule this is a module-level
+  import). At runtime the rest is lazy: `landcover.manager` (clay/sand/silt
   inputs as versions), `download.fetch`/`plan`/`versions`
   (HSG version), `providers.soilgrids`, `core.sheet_parser`, `core.bbox`
   (`transform_bbox`), `transform` (pinned reprojection of the `hsg_from_rasters`
   inputs) and `sources.sidecar` (`emit_sidecar`, `file_digest`).
-- `sources/sidecar.py` and `download/versions.py` import `_clock` through the
-  main package at module import, and `sources/sidecar.py` and
-  `download/plan.py` import `_version.build_version`. Only
-  `build_version()` reaches lazily for `kartograf.__version__`;
-  `transport/http.py` does so lazily for the `User-Agent` header.
+- `sources/sidecar.py`, `download/versions.py`, `download/plan.py`,
+  `download/availability.py` and `marker.py` import `_clock` through the
+  main package at module import, and `sources/sidecar.py`, `download/plan.py`, `marker.py`
+  and `catalog/cliparser.py` import `_version.build_version`. `build_version()`,
+  `catalog.build` (the version of the catalog documents) and `config.get_config` reach
+  lazily for `kartograf.__version__`; `transport/http.py` does so lazily for the
+  `User-Agent` header.
 - The edge `download ──> providers` also reaches the CZ track:
-  `download/cutout.py` and `download/area.py` lazily import the generic
+  `download/cutout.py`, `download/area.py`, `download/countries.py` and
+  `download/collections.py` lazily import the generic
   `bbox_to_crs` from `providers/cuzk/raster.py` (ADR-024); moving it to
   `transform/` stays in the backlog (plan B only renamed `dmr.py`
   to `raster.py`).
 
 ### Modules
 
-The tree lists every `.py` module of the package (`auth/` and `cli/` collectively,
+The tree lists every `.py` module of the package (`auth/`, `cli/` and `messages/` collectively,
 the `__init__.py` of subpackages only when they carry their own logic). Source of truth:
 the `.py` files under `kartograf/`; Public API: `src/kartograf/__init__.py` (`__all__`).
 
@@ -416,12 +456,16 @@ kartograf/
 │                        # __json__ hook), SCHEMAS (registry of kartograf-*/1 schemas); leaf
 ├── exceptions.py        # KartografError(.code, .exit_code, .hint, DETAIL_FIELDS, .details());
 │                        # ValidationError(.option, .options, .allowed) -> UsageError(.command),
-│                        # ParseError (code 2); DownloadError(.sheet, .status_code)
+│                        # ParseError (code 2), ConfigError(.path, .value; unusable settings,
+│                        # check_config); DownloadError(.sheet, .status_code)
 │                        # -> NoCoverageError(DownloadError; .hints) — the source has no data for
 │                        # the sheet, .hints = hints (e.g. --scale 1:2000), YearRangeError,
 │                        # ResolutionMismatchError(.campaign, .url, .declared_m, .found_m;
 │                        # code data_error) — a grid of another cell size than its record;
-│                        # CacheError; InvalidSidecarError(.path, .field) — unreadable sidecar
+│                        # CacheError; ConflictError(.path, .paths; code conflict) — the target
+│                        # forbids the write; StoreUnavailableError(.path) — a store layout without
+│                        # its marker; InvalidLayoutError(.path, .problems; code data_error) — not
+│                        # the layout of a store (store init); InvalidSidecarError(.path, .field) — unreadable sidecar
 │                        # (read_sidecar) or a field of a wrong form (command_for_file);
 │                        # CommandNotRebuildableError(.family, .field) — no command selects a
 │                        # stored file again (command_for_file, code unsupported);
@@ -430,7 +474,15 @@ kartograf/
 │                        # error codes and exit codes: USAGE 8.3
 ├── error_report.py      # ErrorReport (kartograf-error/1), error_report(exc, command=):
 │                        # exception as data (io_error, cancelled, terminated, internal_error
-│                        # are built here), ERROR_CODES/EXIT_CODES - the only source of the USAGE 8.3 tables and the catalog
+│                        # are built here), ERROR_CODES/EXIT_CODES - the only source of the USAGE 8.3 tables
+│                        # and of the error table of the agent guide (guide.py)
+├── _errors.py           # Generated (scripts/generate_errors.py, schemas/nogat/error_registry.json):
+│                        # the Nogat error registry (ERR-3) — CODES/BY_CODE (code, exit code, title),
+│                        # OUTCOMES (ok 0, partial 10, failed 11, cancelled 130), STANDARD_VERSION
+├── envelope.py          # The result envelope kartograf-result/1 (AGI-4.2, ADR-051): wrap -> CommandResult
+│                        # (result, status ok/partial/failed, items, notices), outcome_of, exit_code_of
+├── _output_schema.py    # Generated (scripts/generate_output_schema.py): OUTPUT_SCHEMA, the outputSchema
+│                        # of every MCP tool (kartograf-result/1 made self-contained)
 ├── interrupt.py         # Interruption: run_parallel (pool with queue cancellation and a stop flag for
 │                        # running units), check_stop, Stopped/Terminated, sigterm_interrupts
 ├── marker.py            # The store marker kartograf-store.json (ADR-054): prepare_store, lenient_store,
@@ -441,7 +493,8 @@ kartograf/
 │                        # (.kartograf-incoming/<host>_<pid>_<token>/), FileResult, digest_of; guard_store,
 │                        # directory_refusal (the target is refused before any request), writing, writes
 ├── core/                # Base logic, no network IO
-│   ├── bbox.py             # BBox, validate_bbox, transform_bbox (dense envelope: _DENSIFY
+│   ├── bbox.py             # BBox, validate_bbox, validate_extent (positive area: CUZK sheet
+│   │                       # index, RUIAN), transform_bbox (dense envelope: _DENSIFY
 │   │                       # points per edge, transformer cache, operation pinned
 │   │                       # via duck typing `transformer=`), is_czech_crs
 │   ├── sheet_parser.py     # SheetParser (PL-1992), find_sheets_for_bbox (BBox from core/bbox.py),
@@ -462,7 +515,9 @@ kartograf/
 │   │                    # TransportKind, LicenseInfo, CountryProfile;
 │   │                    # collection channel parameters (AccessChannel.params, ADR-042):
 │   │                    # UnitPackageParams/PackageVariant, FeatureBBoxParams/FeatureLayer,
-│   │                    # AtomFilesParams (CUZK ATOM feed), WcsCutoutParams (orthophoto cutout)
+│   │                    # AtomFilesParams (CUZK ATOM feed), ArchiveLayersParams (area layers of a
+│   │                    # stored archive, ADR-059); WcsCutoutParams (orthophoto cutout),
+│   │                    # SheetIndexParams (WMS sheet index of a GUGiK image product)
 │   ├── registry.py      # PL/CZ/EU/GLOBAL registry: get_source, sources_for, get_country,
 │   │                    # all_countries, vertical_crs_code, resolve_vertical_crs (family ->
 │   │                    # realisation), parse_pl_system, horizontal_crs_for_sheet/_for_system;
@@ -484,7 +539,8 @@ kartograf/
 │   ├── raster.py        # warp_to_grid — local warp onto a grid, FORCED operation (PL
 │   │                    # and CZ routes); vrt_xml/VRT_TYPES for transport/mosaic.py
 │   └── gpkg.py          # write_gpkg — deterministic GPKG of the feature_bbox result (pyogrio:
-│                        # dedupe and sort by id, drop_fields to the sidecar; ADR-042 D5), GpkgSummary
+│                        # dedupe and sort by id, drop_fields to the sidecar; ADR-042 D5), GpkgSummary;
+│                        # write_archive_gpkg (the layers of a stored archive in an area, ADR-059)
 ├── transport/           # Shared transport
 │   ├── http.py          # download_to (files of ALL providers; atomic write os.replace)
 │   │                    # and get_with_retry (queries: WMS/WFS sheet index, WFS LAZ, WFS PRG,
@@ -501,8 +557,9 @@ kartograf/
 │   ├── unit_package.py  # Unit package engine (ADR-042 D1-D2): select_variant (no network),
 │   │                    # package_url ({teryt}, {woj}, {sheet}, {ku}, {theme}), fetch_package (Content-Length, ZIP
 │   │                    # directory, required members, extraction of one member; 404 = NoCoverageError)
-│   ├── feature_bbox.py  # Area feature engine (ADR-042 D3/D4): WFS 2.0 and ArcGIS REST —
-│   │                    # fresh metadata, feature count, pages by position, completeness;
+│   ├── feature_bbox.py  # Area feature engine (ADR-042 D3/D4): WFS 2.0, ArcGIS REST and OGC API
+│   │                    # Features — fresh metadata, feature count, pages by position (OGC API:
+│   │                    # `next` links), completeness;
 │   │                    # count_features, fetch_features -> FeaturePages (pages on disk)
 │   ├── atom.py          # atom_files engine (ADR-042 D12): the service feed index (in
 │   │                    # cache with ETag), resolve_atom_file (dataset feed -> file, release
@@ -549,6 +606,9 @@ kartograf/
 ├── _clock.py            # now() — single source of result time (sidecar, version labels,
 │                        # plan); compatibility tests freeze it (frozen_clock)
 ├── notices.py           # Notice(level, code, message), NoticeSink, notice codes (Z3, ADR-037)
+├── messages/            # Message catalog (AGI-9.2, DEV-2.3): every text for a person as a Text (English
+│                        # default and Polish variant), one module per area (MESSAGES); message ->
+│                        # Message (rendered again in the caller's language by localize), reason
 ├── sheet_info.py        # describe_sheet -> SheetInfo, find_sheets -> SheetList
 │                        # (kartograf-sheet/1, -sheets/1; `parse` logic moved from the CLI)
 ├── source_info.py       # list_sources -> SourceList, list_layers -> LayerList
@@ -569,6 +629,9 @@ kartograf/
 │                        # main, build_instructions, INSTRUCTIONS; the only module touching the SDK
 ├── guide.py             # guide for agents from the catalog (AGI 8): agent_guide -> AgentGuide
 │                        # (kartograf-guide/1), inject_block; templates in _data/agents/*.md
+├── testing.py           # Offline fixtures of the written formats for consumers: build_fixture_store
+│                        # (FixtureStore), make_sidecar, build_pgw_archive/build_pgw_store (PgwFixture);
+│                        # built by the real writers under a fixed clock
 ├── catalog/             # Command catalog - the single source of truth (section 4.11), no cli/mcp import
 │   ├── spec.py          # Command, Param, Constraint, Example, Group (data; value providers from the registry)
 │   ├── model.py         # documents kartograf-command-list/1 and kartograf-commands/1: CommandList, GroupRow,
@@ -582,9 +645,13 @@ kartograf/
 │   ├── formatting.py    # canonical command line (format_command_line)
 │   ├── hints.py         # example_for, usage_hint (example in the error hint)
 │   ├── tools.py         # MCP tools as data: tool_specs, hidden_tools, parse_families, FAMILIES
+│   ├── arguments.py     # check_call: a call in its JSON form against the declaration (names, kinds,
+│   │                    # required, allowed values, bounds, Constraint); check_constraints
+│   ├── excerpts.py      # EXCERPTS: the result excerpt of the catalog examples per document schema
+│   ├── meanings.py      # MEANINGS, meaning(): the one-line meaning of every allowed value of an option
 │   └── commands/        # declarations, one module = one group (elevation, imagery, landcover, soil, boundaries,
-│                        # cadastre, models3d, hydro, names, maps, geodesy, misc: parse, catalog,
-│                        # cache and API-only commands); _collection.py = shape of the collection groups
+│                        # cadastre, models3d, hydro, names, maps, geodesy, config, misc: sheet,
+│                        # commands, cache and store); _collection.py = shape of the collection groups
 ├── store.py             # Read-only store access (ADR-045, 3.3.1): list_segments,
 │                        # list_partitions, iter_store -> StoreEntry (units, partition,
 │                        # skip_versions), read_sidecar -> Sidecar, describe_segment
@@ -620,7 +687,9 @@ kartograf/
 │   │                    # verify_cell_size (grid cell size vs resolution_m, ADR-060)
 │   ├── countries.py     # Splitting an area by country: countries_for_bbox, split_bbox_by_country
 │   ├── links.py         # Linking the standard path to a version (hard link only, never backwards)
-│   ├── fetch.py         # Policy for files without a campaign: fetch_version, VersionedFile;
+│   ├── fetch.py         # Policy for files without a campaign: fetch_version (use_local + download +
+│   │                    # store_file), inspect_version, VersionedFile; local_only (the linked local
+│   │                    # version of a position left out of a plan, never a request);
 │   │                    # FileSlot.related_roots (D23 between releases, ADR-042 D7)
 │   ├── plan.py          # Update plan: UpdatePlan = kartograf-plan/1 document (PlanItem.track/unit,
 │   │                    # notices, ok, from_dict)
@@ -651,7 +720,8 @@ kartograf/
 │   │                    # boundaries/cadastre/models3d/hydro/names/maps/
 │   │                    # geodesy download commands, validate_collection_request (no network),
 │   │                    # CollectionReport, unit tasks (package_job/run_job/
-│   │                    # inspect_job; collection plan route), area limit (100 files,
+│   │                    # inspect_job; collection plan route), run_layers_job (an area GeoPackage
+│   │                    # from the stored national archive, ADR-059), area limit (100 files,
 │   │                    # 10 GB), landcover_request/run_request/plan_request (ZABAGED,
 │   │                    # BDOO, Data50, Data250)
 │   ├── updates.py       # Internal PL plan items (kartograf-plan/1, ADR-036)
@@ -665,7 +735,8 @@ kartograf/
 ├── landcover/store.py   # hsg_segment, HSG_SEGMENT_PREFIX, selection_unit (spec 3.4)
 ├── hydrology/hsg.py     # Public calculate_hsg/check_hsg (HsgReport),
 │                        # hsg_statistics; internal HSGCalculator from the versions
-│                        # clay/sand/silt (D33, reused), USDA classification -> HSG,
+│                        # clay/sand/silt (D33, reused; one depth or the least permeable layer
+│                        # of 0-100 cm, ADR-061), USDA classification -> HSG,
 │                        # hsg_from_rasters
 ├── auth/                # proxy.py (subprocess isolating CLMS credentials), client.py
 │                        # (AuthProxyClient — singleton, starts the proxy itself)
@@ -673,13 +744,16 @@ kartograf/
                          # _parser.py (create_parser: facade over catalog.cliparser - parser from the catalog
                          # declarations, ADR-039), _handlers.py (HANDLERS: command id -> handler),
                          # _args.py (library_arguments: flags -> function arguments via the catalog),
-                         # _json.py (--json mode: json_mode, emit_document, UTF-8),
+                         # _json.py (--json mode: json_mode, emit_result/emit_error, UTF-8),
+                         # _language.py (language of the human output: --lang, set_language/language, localized),
                          # download_cmd.py (download_data/check_data),
                          # availability_cmd.py (check_availability: PL and CZ tables, --details, --json),
                          # collection_cmd.py (download_collection/check_collection),
                          # landcover_cmd.py, soil_cmd.py (SoilGrids + HSG), layers_cmd.py (list-layers),
                          # sources_cmd.py (list-sources), parse_cmd.py (describe_sheet),
-                         # cache_cmd.py (cache_info), catalog_cmd.py (list_commands, command_schema),
+                         # cache_cmd.py (cache_info), catalog_cmd.py (list_commands, command_schema,
+                         # agent_guide), config_cmd.py (config show: get_config), store_cmd.py (store
+                         # overview/entries/sidecar/init: store_documents, marker),
                          # commands.py (main entry point: exceptions -> error_report, the exit codes of the registry)
 ```
 
@@ -741,6 +815,13 @@ are subject to the naming convention (section 3.3, rule 10; ADR-044 D7).
 | `cz.cuzk.control` | `geodesy/cz_control` (prefix + network token) | `.gpkg` |
 | `cz.cuzk.qgzu2013` | `geodesy/cz_qgzu2013` (prefix + token `bpv`) | `.zip` |
 | `cz.cuzk.cadastral_map` | `cadastre/cz_cadastral-map` (prefix + format token, rule 9); slot `ku/<code>` | `.zip` |
+| `pl.gugik.prg_addresses`, `pl.gugik.prg_special` | `boundaries/pl_prg_addresses`, `boundaries/pl_prg_special` (prefix + tokens, rule 9) | `.gpkg` (ZIP packages and national files `.zip`) |
+| `pl.gugik.rcn` | `cadastre/pl_rcn` (prefix, rule 9) | `.gpkg` |
+| `pl.gugik.prng`, `pl.gugik.prng_world` | `names/pl_prng`, `names/pl_prng_world` (prefix + tokens, rule 9) | `.gpkg` (national file `.zip`) |
+| `pl.gugik.bdot10k_maps` | `maps/pl_bdot10k` (prefix + scale and format tokens, rule 9) | `.tif` (PDF `.pdf`) |
+| `cz.cuzk.geomorphology` | `boundaries/cz_geomorphology` (prefix + tokens, rule 9) | `.gpkg` |
+| `cz.cuzk.geonames` | `names/cz_geonames` (prefix + tokens, rule 9) | `.gpkg` (national file `.zip`) |
+| `cz.cuzk.ztm` | `maps/cz_ztm` (prefix + scale, sheet system and format tokens, rule 9) | `.zip` (PDF `.pdf`) |
 
 The sheet channel of every PL NMT/NMPT descriptor is `WFS` (`sheet_files`,
 signal `index`; the GUGiK WFS sheet index (Polish skorowidz), since 0.8.0 instead of `WMS_SHEET_INDEX`,
@@ -799,7 +880,7 @@ TM33 tile grid). The CZ cutout is not a registry row, but the
 `ARCGIS_IMAGE` channel of the descriptor.
 
 Functions (no IO): `variants(*, product, country, vertical_crs,
-resolution, system, format)` — variants in registry order;
+resolution, system, format, model)` — variants in registry order;
 `resolution_label(Decimal)` -> `0.15m`/`0.5m`/`10m` (`format(value.normalize(),
 "f") + "m"`) and the inverse `parse_resolution(label)` (exact label
 only; `0,5m`, `50cm`, `0.50m` = `None`); `source_format(format, url)`
@@ -819,8 +900,9 @@ the cutout (`download/cutout.py::wcs_variant` — variant with a WCS channel),
 the PL providers (variant, sheet index services) and CZ (route, model), the CZ paths
 (`download/cz_sheets.py`, `download/cz_laz.py`) and the availability report
 (4.9). No other module holds a list of resolutions, vertical
-CRSs or formats. The remaining descriptors (orthophoto, land cover)
-have an empty `variants` tuple.
+CRSs or formats. NMT 100 m (`XYZ`, no vertical CRS) and the CZ contours (`SHP`/`DGN`, Bpv,
+`sm5`) have one variant each; the remaining descriptors (orthophoto, land cover,
+collections) have an empty `variants` tuple.
 
 `storage_subdir` is always a string (since 0.8.0). Land cover and collection sources
 have a prefix without placeholders, which `download/storage.py::content_segment`
@@ -834,20 +916,23 @@ immutable engine configuration - data without IO:
 
 | Type | Fields | Engine |
 |---|---|---|
-| `UnitPackageParams` | `unit` (`powiat`/`woj`/`country`), `variants` (`PackageVariant`), `unpack` (suffix of ONE member saved instead of the ZIP; `None` = ZIP 1:1), `class_pattern` (plan E4: expression searched for in the file name of each ZIP member, group `code` = class of the member; a package without a class file is not data, and a selection of `layers` classes writes a new ZIP of the files of those classes - each member byte for byte, with the name, date and compression of the source, in source order) | `transport/unit_package.py` |
-| `PackageVariant` | `choice` (API/CLI options selecting the variant, e.g. `(("format", "SHP"), ("year", "2024"))`; `()` = the only variant), `url_template` (tokens only `{teryt}`, `{woj}` = first 2 digits of TERYT), `edition` (version label), `segment_tokens`, `members` (required suffixes of ZIP members), `vertical_crs` (vertical CRS declared in the 3D data), `classes` (plan E4: class codes of the release for selection by `layers`; `()` = no class selection) | as above |
-| `FeatureBBoxParams` | `protocol` (`wfs`/`arcgis`, consistent with the `transport` of the `WFS`/`ARCGIS_QUERY` channel), `native_crs`, `axis_order` (`yx` = northing first in BBOX), `page_size`, `layers` (`FeatureLayer`), `selection` (`level` = one layer by `--level`, `all` = every one), `order_field` (ArcGIS `orderByFields`), `drop_fields` | `transport/feature_bbox.py` + `transform/gpkg.py` |
-| `FeatureLayer` | `code` (value of `--level` or a fixed code), `source` (WFS type `ms:A03_Granice_gmin` or ArcGIS layer id), `name` (GPKG layer), `id_field` (stable feature identifier: dedupe and ordering) | as above |
-| `AtomFilesParams` (plan D) | `service_feed` (ATOM service feed), `entry_pattern` (expression on the dataset feed id; group `sheet` = index key, `year` = release year in the file name; without `sheet` the feed has one dataset), `crs` (EPSG codes of the CRS category of the dataset files; `()` = one file), `members` (pairs of ZIP member suffix -> save suffix; `()` = ZIP 1:1), `segment_tokens` (+ EPSG code, when `crs` has several CRSs) | `transport/atom.py` |
-| `WcsCutoutParams` (plan D) | `variant` (`--coverage`: `standard`/`high`), `coverage_id`, `native_step` (coverage step, 0.1 m), `resolutions` (result pixels: 0.1, 0.25, 0.5, 1; labels K2), `max_native_pixels` (request budget in coverage pixels, 4 Mpx) | `GugikOrtoProvider` + `download/orto_cutout.py` |
+| `UnitPackageParams` | `unit` (`powiat`/`woj`/`country`/`sheet`/`tile`/`ku`), `variants` (`PackageVariant`), `unpack` (suffix of ONE member saved instead of the ZIP; `None` = ZIP 1:1), `themes` (one national file per theme, URL token `{theme}`), `index` (`IndexSource` of `sheet`/`tile` units), `ku_layer` (RUIAN layer of the CZ cadastral areas), `unpack_layers` (layers the unpacked GeoPackage must hold), `class_pattern` (plan E4: expression searched for in the file name of each ZIP member, group `code` = class of the member; a package without a class file is not data, and a selection of `layers` classes writes a new ZIP of the files of those classes - each member byte for byte, with the name, date and compression of the source, in source order) | `transport/unit_package.py` |
+| `PackageVariant` | `choice` (API/CLI options selecting the variant, e.g. `(("format", "SHP"), ("year", "2024"))`; `()` = the only variant), `url_template` (tokens `{teryt}`, `{woj}` = first 2 digits of TERYT, `{sheet}`, `{ku}`, `{theme}`; `None` = the URL of the unit's index record), `edition` (version label), `segment_tokens`, `members` (required suffixes of ZIP members), `vertical_crs` (vertical CRS declared in the 3D data), `sheet_grid` (`SheetGrid` of the sheets of an area), `index_layer`, `file_kind` (`zip`/`tiff`/`pdf`/`txt`: a file other than a ZIP is checked by its content), `classes` (plan E4: class codes of the release for selection by `layers`; `()` = no class selection) | as above |
+| `IndexSource` | `kind` (`wms_gfi`: GetFeatureInfo at the centre of each sheet, read by `parser` `map_links`; `wfs`: the features of an area, one per tile), `endpoint`, `unit_field`, `url_field`, `label_fields` (version label), `year_field`, `zone_field` | `transport/index_records.py` |
+| `SheetGrid` | `system` (`1992`: PL-1992 sheets of `parts` members; `cuzk`: the sheets of `layer` of the CUZK index `KladyMapovychListu` in `crs`) | `download/collections.py` |
+| `FeatureBBoxParams` | `protocol` (`wfs`/`arcgis`/`ogcapi`, consistent with the `transport` of the `WFS`/`ARCGIS_QUERY`/`OGC_API_FEATURES` channel), `native_crs`, `axis_order` (`yx` = northing first in BBOX), `page_size`, `layers` (`FeatureLayer`), `selection` (`level` = the layers of one code of the option `selection_key`, `--level` by default, `network` for the CZ control; `all` = every one), `order_field` (ArcGIS `orderByFields`), `drop_fields`, `choice` (option values selecting the channel when a product has one service per value), `timeout`, `area_omitted` and `response_note` (texts of the `Info` of an area request) | `transport/feature_bbox.py` + `transform/gpkg.py` |
+| `FeatureLayer` | `code` (value of `--level`/`--layers` or a fixed code), `source` (WFS type `ms:A03_Granice_gmin`, ArcGIS layer id or the layer of a geodatabase), `name` (GPKG layer), `id_field` (stable feature identifier: dedupe and ordering) | as above |
+| `ArchiveLayersParams` (ADR-059) | `native_crs` (the CRS written to the GeoPackage; nothing is reprojected), `layers` (`FeatureLayer`: `code` = the group `--layers` chooses), `area_omitted` | `download/collections.py::run_layers_job` + `transform/gpkg.py::write_archive_gpkg` |
+| `AtomFilesParams` (plan D) | `service_feed` (ATOM service feed), `entry_pattern` (expression on the dataset feed id; group `sheet` = index key, `woj` = TERYT of a voivodeship, `year` = release year in the file name; without `sheet`/`woj` the feed has one dataset), `crs` (EPSG codes of the CRS category of the dataset files; `()` = one file), `members` (pairs of ZIP member suffix -> save suffix; `()` = ZIP 1:1), `segment_tokens` (+ EPSG code, when `crs` has several CRSs), `choice` (option values selecting the feed), `force_https` | `transport/atom.py` |
+| `WcsCutoutParams` (plan D) | `variant` (`--coverage`: `standard`/`high`; true orthophoto: `true`), `coverage_id`, `native_step` (coverage step, 0.1 m; true orthophoto 0.05 m), `resolutions` (result pixels: 0.1, 0.25, 0.5, 1, true orthophoto also 0.05; labels K2), `max_native_pixels` (request budget in coverage pixels, 4 Mpx) | `GugikImageProvider` (`GugikOrtoProvider` for the orthophoto) + `download/orto_cutout.py` |
 
 The registry tests (`tests/unit/test_sources_registry.py`) enforce: template tokens,
 the same `choice` keys in the variants of a channel, keys, directories
 and `edition`/`segment_tokens` per the naming convention (section 3.3, rule 10),
 protocol consistent with the transport, `page_size > 0` and a collection channel capability
-unique within a descriptor (`archive_unit_files`, `country_files`,
-`bbox_vector`, `admin_unit_files`) - after which `build_metadata(capability=)`
-selects the sidecar channel. PL collection channels:
+that is unique within a descriptor or shared only by channels of one kind with the same CRSs
+(ADR-043: one WFS service per network) - after which `build_metadata(capability=)`
+selects the sidecar channel (the first channel of the capability). PL collection channels:
 
 | Descriptor (`--product`) | Channel, capability | Parameters |
 |---|---|---|
@@ -855,8 +940,14 @@ selects the sidecar channel. PL collection channels:
 | `pl.gugik.prg` (`admin`) | `WFS` `AdministrativeBoundaries`, `bbox_vector` | `wfs`, EPSG:2180, `yx`, page 1000, `selection="level"`: `wojewodztwo`=A01, `powiat`=A02, `gmina`=A03, `jednostka-ewidencyjna`=A05, `obreb`=A06, id `IIP_IDENTY` |
 | as above | `DIRECT_FILES`, `admin_unit_files` | voivodeship; `prg/granice/{woj}_GraniceAdministracyjne.zip`, member `.gml`, token `gml` |
 | as above | `DIRECT_FILES`, `country_files` | country; `prg/granice/00_jednostki_administracyjne.zip` (approx. 377 MB), member `.shp`, token `shp` |
+| `pl.gugik.prg_addresses` (`addresses`) | `WFS` `KrajowaIntegracjaNumeracjiAdresowej`, `bbox_vector` | `wfs`, EPSG:2180, `yx`, page 1000, `selection="all"`: `punkty_adresowe` (`adresyUlice:A07_Punkty_adresowe`), `ulice` (`adresyUlice:A08_Ulice`), id `gml_id` |
+| as above | `DIRECT_FILES`, `admin_unit_files` | county; `prg/adresy/PunktyAdresowe/{woj}/{teryt}.zip`, member `.shp`, token `shp` |
+| as above | `DIRECT_FILES`, `country_files` | country; `format` variants `SHP` (`prg/adresy/PunktyAdresowe/POLSKA.zip`) and `GML` (`prg/adresy/PRG-punkty_adresowe.zip`) |
+| `pl.gugik.prg_special` (`special`) | `OGC_API_FEATURES` `PRG/apiFeatures`, `bbox_vector` | `ogcapi`, `OGC:CRS84`, `xy`, page 10000, `selection="all"`: 44 collections, id `id`, timeout 120 s, `area_omitted` (census enumeration districts: national file only) |
+| as above | `DIRECT_FILES`, `country_files` | country; `format` variants `SHP`/`GML`: `prg/granice/00_granice_specjalne_shp.zip`/`_xml.zip` |
 | `pl.gugik.egib` (`map`) | `DIRECT_FILES`, `admin_unit_files` | county; `InneDane/latest_exports/eziudp_wfs/GPKG/{teryt}.gpkg.zip`, `unpack=".gpkg"`, token `gpkg` |
 | as above | `WFS` `UslugaZbiorcza`, `bbox_vector` | `wfs`, EPSG:2180, `yx`, page 1000, `selection="all"`: `dzialki`, `budynki`, id `gml_id`, `drop_fields=("DATA",)` |
+| `pl.gugik.rcn` (`cadastre --product prices`) | 2 x `DIRECT_FILES`, `admin_unit_files` | county and voivodeship (`unit` `powiat`/`woj`); `InneDane/latest_exports/rcn_transakcje_ceny/GPKG/{teryt}_transakcje_ceny.gpkg.zip`, `unpack=".gpkg"`, `unpack_layers` `transakcje_dzialki`, `transakcje_budynki`, `transakcje_lokale` |
 | `pl.gugik.buildings` (`buildings`) | `DIRECT_FILES`, `admin_unit_files` | county; variants `(lod, year)`: LoD1 2019 (`.../LOD1/2019/{woj}/{teryt}_gml.zip`, EPSG:9650), LoD1 2021/2022/2024 (`.../LOD1/<R>/{woj}/{teryt}.zip`, EPSG:9651), LoD2 2017 (`.../LOD2/{teryt}_gml.zip`, EPSG:9650); member `.gml`, `edition` = year |
 | `pl.gugik.bdoo` (`landcover --product bdoo`, plan E4) | `DIRECT_FILES`, `admin_unit_files` | voivodeship; 7 `year` variants (2015, 2021-2026): `opendata/bdoo/<R>/PL.PZGiK.201.{woj}.zip`, member `.xml` (up to 2023) or `.gml` (from 2024), `edition` = year; `classes` = sum of the classes of the 16 packages of a vintage (2015: 44, 2021-2023: 37, 2024-2026: 26), `class_pattern` `__OT_(?P<code>[A-Z]{4})_[A-Z]\.`; EPSG:2180; no country-wide file |
 | `pl.gugik.mesh` (`models3d --product mesh`, plan E5) | `DIRECT_FILES`, `area_files` | area tiles from WFS records `NMT/WFS/ModeleSiatkowe3D` (type `gugik:SkorowidzModeleSiatkowe3D`, `next` pages); `IndexSource(unit_field=None)`: tile = record file (`URL_do_pobrania`; the `modul` field repeats across several works and cities), label `Aktualnosc_Numer_zgloszenia_pracy`, year `akt_rok` (`--year` filter), zone `uklad_xy` (slot directory `1992` or `2000/<zone>` and the sidecar CRS); member `.obj`, `vertical_crs` EPSG:9651; `index` |
@@ -865,9 +956,12 @@ selects the sidecar channel. PL collection channels:
 | as above | `DIRECT_FILES`, `admin_unit_files` | county; `network` variants `horizontal`/`vertical`: `bdpog/Pozioma/{teryt}_PodstawowaOsnowaPozioma.zip` (`Wysokosciowa`), member `.xls` (coordinate lists; JPG descriptions), tokens `<network>`, `xls` |
 | as above | `DIRECT_FILES`, `sheet_files` | 1:100 000 sheet (`SheetGrid(system="1992", parts=3)`); `network` variants `archive-1942`, `archive-kronsztadt60`: `bdpog/MaterialyArchiwalne/Katalogi_<Kartoteki1942\|Kronsztadt60>/{sheet}.zip` (sheet code without the leading zero), member `.pdf` (catalogue scans; the CRS in the sidecar = the sheet grid CRS) |
 | `pl.gugik.geoid2021` (`geodesy --product geoid --country pl`, plan E5) | `DIRECT_FILES`, `country_files` | country; `InneDane/ModeleQuasiGeoidy/PL-geoid2021/Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt` (42 MB, grid 0.01 deg.), `file_kind="txt"`, token `evrf2007`, EPSG:9702 (ETRF2000-PL), no `vertical_crs` (the model is not heights) |
+| `pl.gugik.prng` (`names --product geographic --country pl`), `pl.gugik.prng_world` (`names --product world`) | `OGC_API_FEATURES` `PRNG/apiFeatures`, `bbox_vector` | `ogcapi`, `OGC:CRS84`, `xy`, page 10000, `selection="all"`: `NazwaGeograficznaRP` (world: `PolskaNazwaGeograficznaSwiata`), id `id`, timeout 180 s; `response_note` (PL: the measured answer time) |
+| as above | `DIRECT_FILES`, `country_files` | country; `themes` `MIEJSCOWOSCI`, `OBIEKTY_FIZJOGRAFICZNE` (world: `SWIAT`), `format` variants `GML`/`SHP`/`XLSX`: `prng/PRNG_{theme}_<format>.zip` |
+| `pl.gugik.bdot10k_maps` (`maps --product topographic --country pl`) | `DIRECT_FILES`, `sheet_files` | PL-1992 sheets of the scale (`SheetGrid(system="1992")`, 6/5/4/3 parts = 1:10 000/25 000/50 000/100 000); `(scale, format)` variants `TIFF`/`PDF` (`file_kind` `tiff`/`pdf`); URL and label `stan_bazy` from the WMS record (`IndexSource(kind="wms_gfi", parser="map_links")`, `BDOT/WMS/PobieranieArkuszeMapBDOT10k`, layers `Mapy10k`-`Mapy100k`); `index` |
 
-Each of these channels apart from the 3D mesh tiles (`index`: index
-record label) has the signal `none` (GUGiK provides neither `ETag` nor `Last-Modified`;
+Each of these channels apart from the 3D mesh tiles and the BDOT10k map sheets (`index`:
+index record label) has the signal `none` (GUGiK provides neither `ETag` nor `Last-Modified`;
 the WFS result is a snapshot). CZ channels (plan D, ADR-042 D13-D17; the CZ area
 is always in EPSG:5514 = the DefaultCRS of the services):
 
@@ -879,6 +973,11 @@ is always in EPSG:5514 = the DefaultCRS of the services):
 | as above | `DIRECT_FILES` + `UnitPackageParams`, `country_files` | country; `services.cuzk.gov.cz/shp/stat/epsg-5514/1.zip` (approx. 253 MB), member `.shp`, token `shp`; `http` |
 | `cz.cuzk.hynet` (`network`) | `WFS` `geoserver/hy-n/wfs`, `bbox_vector` | `wfs`, EPSG:5514, `xy`, page 1000, `selection="all"`: `hy-n:WatercourseLink`, `hy-n:HydroNode` (GPKG layers without prefix), id `gml_id`; `none` |
 | as above | `DIRECT_FILES` + `UnitPackageParams`, `country_files` | country; `openzu.cuzk.gov.cz/opendata/HY-NET/HY-NET.zip` (approx. 194 MB, EPSG:3045), member `.gpkg`, token `gpkg`; `http` |
+| `cz.cuzk.geomorphology` (`boundaries --product geomorphology`) | `ARCGIS_QUERY` `GeomorfologickeJednotky/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, page 1000, `selection="level"`: `subprovincie`=33, `oblast`=34, `celek`=39, `podcelek`=35, `okrsek`=36, `podokrsek`=37, `cast`=38, `order_field="OBJECTID"`, id `OBJECTID`; `none` |
+| `cz.cuzk.cadastral_map` (`cadastre --product map --country cz`) | `DIRECT_FILES` + `UnitPackageParams(unit="ku")`, `admin_unit_files` | cadastral areas (KU) of the area from RUIAN layer 7 (`ku_layer`); `format` variants `SHP`/`DXF`/`DGN`/`VFK`: `services.cuzk.gov.cz/<format>/.../{ku}.zip`; `http` |
+| `cz.cuzk.geonames` (`names --product geographic --country cz`) | `ARCGIS_QUERY` `GEONAMES/Geonames/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, page 1000, `selection="all"`: 25 layers (`registry.py::_GEONAMES_NAMES`), `order_field="OBJECTID"`, id `OBJECTID`; `none` |
+| as above | 2 x `DIRECT_FILES` + `AtomFilesParams`, `country_files` | `format` `GPKG`/`FGDB` (`choice`): feeds `atom.cuzk.gov.cz/GEONAMES-GPKG/GEONAMES-GPKG.xml` and `GEONAMES-FGDB/GEONAMES-FGDB.xml` (one dataset), `crs` EPSG:5514 and EPSG:3045, ZIP 1:1, token `gpkg`/`fgdb` + EPSG code; `metadata` |
+| `cz.cuzk.ztm` (`maps --product topographic --country cz`) | `DIRECT_FILES` + `UnitPackageParams(unit="sheet")`, `sheet_files` | the sheets of the area in the CUZK index `KladyMapovychListu` (`SheetGrid(system="cuzk")`: a layer per scale and sheet system); 36 variants `(scale, sheet_system, format)`: 1:5000-1:250 000 x `sjtsk` (EPSG:5514)/`etrs89` (EPSG:3045) x `TIFF`/`PDF`/`DGN`/`SHP`, `openzu.cuzk.gov.cz/opendata/ZTM<scale>-<system>-<format>/{sheet}.zip` (PDF: `.pdf`); `http` |
 | `cz.cuzk.data50`, `cz.cuzk.data250` (`landcover --product data50\|data250`, plan E4) | `ARCGIS_QUERY` `DATA50/MapServer`, `DATA250/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, page 2000, `selection="all"`: 69 and 116 feature layers (`registry.py::_DATA50_LAYERS`, `_DATA250_LAYERS`, code = ASCII layer name as for ZABAGED; relief rasters 5 and 6 of DATA250 omitted), `order_field="OBJECTID"`, id `OBJECTID`; `none` |
 | as above | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/Data50/Data50.xml` (`Data250/Data250.xml`; one dataset), `crs` EPSG:5514 and EPSG:3045, SHP ZIP 1:1 (Data50 516/757 MB, Data250 230/320 MB), token `shp` + EPSG code; `metadata` |
 | `cz.cuzk.control` (`geodesy --product control --country cz`, plan E5) | `ARCGIS_QUERY` `BodovaPole/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, page 1000, `selection="level"`, `selection_key="network"`: `gnss`=0, `horizontal`=18, 20, 2, 4, 6, 8, `densification`=38, 40, 22, 24, 26, 28, `horizontal-detailed`=42, `vertical`=44, `vertical-detailed`=46, `gravity`=48 (network = sum of layers: points determined in ETRS89 are not a subset of the main layers; abolished 10-17, 30-37 and labels omitted), GPKG layer = ASCII CUZK name (`bod_zvbp`), id `OBJECTID`; `none` |
@@ -959,20 +1058,21 @@ Every successful download through the CLI or the library management layer
 (`download_data`, `DownloadManager`, `download_landcover`, `download_soil`,
 `download_pl_cutout`, `download_laz_area`, `download_cz_cutout`,
 `download_cz_sheet`, `download_cz_laz`, `download_cz_orto_sheet`,
-`download_image_cutout`, `download_collection`, `calculate_hsg`) writes the data
+`download_cz_contours_sheet`, `download_image_cutout`, `download_collection`, `calculate_hsg`)
+writes the data
 and `<file>.meta.json`: the version sidecar in the store is mandatory,
 the standard path sidecar is best-effort (section 1). Outside the store
 `hsg_from_rasters` writes a best-effort sidecar. A direct call to a
 provider does not write a sidecar (section 1).
 
-| Pole | Znaczenie |
+| Field | Meaning |
 |---|---|
 | `dataset` | source descriptor key (e.g. `pl.gugik.nmt_1m`) |
 | `country`, `product`, `provider` | country, product and provider name from the descriptor; `product` = the value of the file's `--product` (`nmt`, `true-orto`, `admin`, `bdot10k`, `zabaged`, ...), in a group without `--product` the name of the command and directory: `soil download` - `soil`, raster `soil hsg` - `hsg` (`build_metadata(product=)`, derived product) |
-| `horizontal_crs` | actual horizontal CRS of the file: PL-1992 sheet `EPSG:2180`, PL-2000 sheet `EPSG:2176`–`EPSG:2179` according to the sheet code zone, CZ natively `EPSG:5514`, TM33 tile `EPSG:3045`; `--cutout` cutout in the `--horizontal-crs` CRS (PL orthophoto only `EPSG:2180`); CZ orthophoto: JPEG and `.jgw` `EPSG:5514`, `.TM33N.jgw` `EPSG:3045`, `.TM34N.jgw` `EPSG:3046` (each file its own CRS); collections: area result in the service CRS (PL `EPSG:2180`, CZ `EPSG:5514`), national file in the file CRS (HY-NET `EPSG:3045`, ZABAGED the selected `--horizontal-crs`). For a PL sheet the CRS from the sheet code is CHECKED against the file coordinates (`sources/sidecar.py::pl_sheet_horizontal_crs`): a file published by GUGiK in a CRS other than the one indicated by the sheet code (E17, e.g. PL-2000 zone 7 sheets such as `7.125.11.19` in EPSG:2180) gets the CRS of the FILE, the declaration of the sheet index record stays in `extra.source.declared_crs`, the `kartograf.sources.sidecar` logger warns, and the CLI prints `Warning: N arkuszy GUGiK opublikowano w innym ukladzie niz wskazuje godlo: ...` (code unchanged; the directory segment still follows the sheet code, ADR-026) |
-| `vertical_crs` | code of the vertical CRS realisation: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007); `null` when the product has no vertical component (orthophoto) |
+| `horizontal_crs` | actual horizontal CRS of the file: PL-1992 sheet `EPSG:2180`, PL-2000 sheet `EPSG:2176`–`EPSG:2179` according to the sheet code zone, CZ natively `EPSG:5514`, TM33 tile `EPSG:3045`; `--cutout` cutout in the `--horizontal-crs` CRS (PL orthophoto only `EPSG:2180`); CZ orthophoto: JPEG and `.jgw` `EPSG:5514`, `.TM33N.jgw` `EPSG:3045`, `.TM34N.jgw` `EPSG:3046` (each file its own CRS); collections: area result in the service CRS (PL `EPSG:2180`, CZ `EPSG:5514`, OGC API Features `OGC:CRS84`), national file in the file CRS (HY-NET `EPSG:3045`, ZABAGED the selected `--horizontal-crs`). For a PL sheet the CRS from the sheet code is CHECKED against the file coordinates (`sources/sidecar.py::pl_sheet_horizontal_crs`): a file published by GUGiK in a CRS other than the one indicated by the sheet code (E17, e.g. PL-2000 zone 7 sheets such as `7.125.11.19` in EPSG:2180) gets the CRS of the FILE, the declaration of the sheet index record stays in `extra.source.declared_crs`, and the download result carries the warning notice `sheet_crs_mismatch` (the CLI prints `Warning: N GUGiK sheets were published in a different CRS than the sheet code indicates: ...`; the `kartograf.sources.sidecar` logger records it at debug level only) (code unchanged; the directory segment still follows the sheet code, ADR-026) |
+| `vertical_crs` | code of the vertical CRS realisation: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007); `null` when the product has no vertical component (orthophoto) or it is unknown (NMT 100 m, P1) |
 | `vertical_source` | `native` / `ellipsoidal` / `server` (from `AccessChannel`) |
-| `resolution` | resolution from the descriptor: registry K2 label (`0.15m`, `0.5m`, `1m`, `10m`, archives up to `50m`; CZ `0.5m`/`2m`/`5m`) or `null` (PL and CZ orthophoto - the pixel of an orthophoto cutout carries `request.resolution`; PL and CZ LAZ, TIN/TTN archives, collections) |
+| `resolution` | resolution from the descriptor: registry K2 label (`0.15m`, `0.5m`, `1m`, `10m`, archives up to `50m`, NMT 100 m `100m`; CZ `0.5m`/`2m`/`5m`) or `null` (PL and CZ orthophoto - the pixel of an orthophoto cutout carries `request.resolution`; PL and CZ LAZ, TIN/TTN archives, collections) |
 | `nodata` | empty pixel value: for `.asc` read automatically from the header (`read_asc_nodata`), in the CZ path from the GeoTIFF tag (`download/cz_cutout.py::read_tif_nodata`; in bbox mode with the `CUZK_NODATA` fallback), for the PL cutout the constant `-9999.0`, for the HSG result `0`, for CORINE/SoilGrids GeoTIFFs from `LandCoverManager` from the file tag (section 4.8); `null` when none of these paths applies (e.g. orthophoto) |
 | `request` | the task that produced THIS file: `sheet` (sheet code), `bbox` + `bbox_crs` in the result CRS or `teryt`; for PL campaigns `campaigns` (resolved `newest`/`all`, always), `min_year`/`max_year` (when given) and `year` (when the bounds are equal); LAZ: `year`/`min_year`/`max_year`/`min_density` when given, `campaigns` only for `all`; land cover: content parameters with default values — SoilGrids `property`/`depth`/`stat`, CORINE `year`, BDOT10k `format` (4.8); orthophoto cutout: `bbox`/`bbox_crs` of the result grid, `coverage` and `resolution`; CZ orthophoto: `sheet`; collections: `teryt`, `bbox`/`bbox_crs` in the service CRS or `whole_country: true` and the given variants (`level`, `lod`, `year`, `horizontal_crs`). `request` describes the original DOWNLOAD of the file, not the latest use; `extra.parent_request(s)` does not carry year flags (3.4) |
 | `license` | `{id, attribution, url}` from the descriptor |
@@ -988,7 +1088,7 @@ a proper name from the registry. Values (sheet codes, layer names, dates, messag
 stay in their source form. Sidecars written before ADR-031 (Polish
 keys, e.g. `request.godlo`, `extra.source.aktualnosc`) are not
 migrated: the code reading sidecars treats a missing new key as missing
-information (section "Stare sidecary" below).
+information (paragraph "Old sidecars and cache entries" below).
 
 `extra.source` — origin of the PL sheet from the GUGiK sheet index record
 (`SkorowidzRecord.to_source`; the same dictionary goes into `record_cache`
@@ -1084,7 +1184,8 @@ and `extra.parent_request` (area). The JPEG sidecar additionally has
 label = edition `<year>_<updated>` (`label_source="edition"`).
 
 **Collections (ADR-042) in the sidecar.** `download/collections.py::run_job`
-selects the channel by its capability (unique in the descriptor) and writes:
+selects the channel by its capability (one no other channel of the descriptor has, else the
+first channel of a shared one, ADR-043) and writes:
 `request` = the user's choice in this unit (`teryt`, `ku` (CZ cadastral map,
 with `format`), `tile` (mesh tile: `<crs>/<module>`, e.g.
 `2000/7/78944_6777_74230_55482`), `sheet`, `bbox` +
@@ -1325,8 +1426,8 @@ data/
    `true-orto/pl_1992_0.05m/`.
 
 6. **Versions (ADR-036; formerly `kampanie/`, ADR-030).** The actual
-   NMT/NMPT/orthophoto PL files live ONLY in `<segment>/versions/<hierarchia
-   godla>/<label>_<sha8>/<sheet_code>.<ext>` (+ the version's `.meta.json`);
+   NMT/NMPT/orthophoto PL files live ONLY in `<segment>/versions/<sheet code
+   hierarchy>/<label>_<sha8>/<sheet_code>.<ext>` (+ the version's `.meta.json`);
    the standard path `<segment>/<hierarchy>/<sheet_code>.<ext>` is a
    hard link to the newest LOCAL version of the task. The campaign label =
    `<date>_<id>`: `<date>` = the `aktualnosc` of the record (YYYY-MM-DD), `<id>` =
@@ -1400,8 +1501,8 @@ data/
    Under the segment (`download/storage.py::unit_slot`): `teryt/<T><ext>`
    (BDOT10k, also when selected by bbox/sheet), `bbox/<coords><ext>`
    (EPSG:2180, `.10g`, like cutouts) or the sheet code hierarchy (`path_parts`,
-   canonical sheet code). Versions as in rule 6 (`versions/<ta sama
-   hierarchia>/`).
+   canonical sheet code). Versions as in rule 6 (`versions/<the same
+   hierarchy>/`).
 
 9. **Collections (ADR-042 D8; extension of rule 8).**
    `<group>/<country>_<source>[_<tokens>]/{teryt/<T>|bbox/<coords>|country/<code>|ku/<code>|<sheet code hierarchy>|<crs>[/<zone>]/<file>}<ext>`:
@@ -1410,8 +1511,8 @@ data/
    or voivodeship (Polish województwo) - also when the area was split into counties from PRG; BDOO:
    the voivodeships of those counties), `bbox/<coords>` (area result; coordinates
    in the service's NATIVE CRS, `.10g`, `_`) or `country/<code>` (nationwide
-   file, `pl`/`cz`); versions in `<segment>/versions/<ta sama
-   hierarchia>/`. Tokens = content variant: level (`pl_prg_gmina`), LoD
+   file, `pl`/`cz`); versions in `<segment>/versions/<the same
+   hierarchy>/`. Tokens = content variant: level (`pl_prg_gmina`), LoD
    and year (`pl_buildings_lod1_2024`), format and archive annual edition
    (`pl_bdot10k_shp_2024`), annual edition and selected BDOO classes
    (`pl_bdoo_2023_kuik-ptwp`, codes sorted). An area result (always GPKG
@@ -1458,7 +1559,7 @@ data/
     before the release (no migration). It is enforced by the registry test
     `tests/unit/test_sources_registry.py::TestNamingConvention`.
     - **Source key** = `<country>.<provider>.<name>`: descriptor country (`pl`,
-      `cz`, `eu`, `global`), provider (`gugik`, `cuzk`, `clms`, `isric`),
+      `cz`, `eu`, `global`), provider (`gugik`, `cuzk`, `pgw`, `clms`, `isric`),
       `<name>` - words `[a-z0-9]` joined by `_` (no `-` or dot in the key:
       `0.5m` -> `0_5m`), composed of whole words of the `data/` path:
       the dataset name from the segment (`hynet`, `geoid2021`, `cadastral-map` ->
@@ -1508,7 +1609,7 @@ data/
       `Sidecar.dataset_key` gives the descriptor's current key, and a key
       unknown to the registry gives `dataset_key=None`, not an error (3.3.1).
       The provider is in the sidecar's `provider` field (`provider_name`
-      of the descriptor: `GUGiK`, `CUZK`, `Copernicus CLMS`, `ISRIC`), the country in the
+      of the descriptor: `GUGiK`, `CUZK`, `PGW Wody Polskie`, `Copernicus CLMS`, `ISRIC`), the country in the
       `country` field; the middle part of the key is not a provider identifier,
       and the consumer compares the key as a whole and does not derive from it
       the product, variant, provider or country (it takes them from the sidecar
@@ -1585,7 +1686,7 @@ locally by the caller. Public records:
 
 | Record | Fields and semantics |
 |---|---|
-| `StoreEntry` | `kind`: `version`, `link` (standard path), `full_sheet`, `problem`; `segment` (`produkt/wariant`), `hierarchy` (the slot directory relative to the segment, and for a version and `full_sheet` - relative to `versions/` and `full_sheet/`; `""` for a segment problem), `name`, `path` (built from `root` in the given form), `version_path` (the version pointed to by the link's `extra.link_target`, checked lexically: it lies in the slot of this link; for a version its own path; `None` = unknown), `label` and `sha8` (from the directory name `<label>_<sha8>`; for a link without a known version - from the sidecar), `sidecar` (`Sidecar` or `None`), `problem` (`missing_sidecar`, `invalid_sidecar`, `unknown_segment`, `legacy_campaigns`, `stale_incoming`) and `skipped` (`True` = a version from `skip_versions`, sidecar not read). |
+| `StoreEntry` | `kind`: `version`, `link` (standard path), `full_sheet`, `problem`; `segment` (`<product>/<variant>`), `hierarchy` (the slot directory relative to the segment, and for a version and `full_sheet` - relative to `versions/` and `full_sheet/`; `""` for a segment problem), `name`, `path` (built from `root` in the given form), `version_path` (the version pointed to by the link's `extra.link_target`, checked lexically: it lies in the slot of this link; for a version its own path; `None` = unknown), `label` and `sha8` (from the directory name `<label>_<sha8>`; for a link without a known version - from the sidecar), `sidecar` (`Sidecar` or `None`), `problem` (`missing_sidecar`, `invalid_sidecar`, `unknown_segment`, `legacy_campaigns`, `stale_incoming`) and `skipped` (`True` = a version from `skip_versions`, sidecar not read). |
 | `Sidecar` | Typed fields from 3.2 (`schema`, `producer`, `producer_version`, raw `dataset`, `dataset_key` from the registry or `None`, `country`, `product`, `provider`, `horizontal_crs`, `vertical_crs`, `vertical_source`, `resolution`, `nodata`, `request`, `license`, `downloaded_at`, `kartograf_version`, `transform`, `extra`, `sha256`, `size_bytes`) and the computed fields `data_year`, `data_date`, `campaign`, `survey_work_id`, `edition`, `full_sheet`, `coverage`, `unit`, `raw`. A missing value or a value of an unexpected type is `None`, and the original JSON (`raw`) remains unchanged; `producer` and `producer_version` of a sidecar that has neither are derived (`kartograf` and `kartograf_version`). |
 | `SegmentInfo` | `segment`, `product`, `country`, `dataset_key`, `name`, `known`. The name is human-readable: descriptor name + variant (CRS, vertical CRS, format, vintage, LoD, level); no match in the registry = `known=False`, never a presumed descriptor. |
 | `Footprint` | `native: BBox`, `wgs84: BBox` (EPSG:4326, longitude/latitude), `source`: `request`, `sheet`, `header`, `unit`. No verified footprint = `None` (including country-wide packages). |
@@ -1882,11 +1983,12 @@ Document rules (source: `docs/superpowers/specs/2026-10-18-agent-interface-desig
 section 5; usage: USAGE 8.1):
 
 - one schema `kartograf-download/1` for five result types of the data commands with a fixed
-  set of keys (`raw`, `inputs`, `superseded`, `summary` empty when the class does not have them:
-  `JSON_FILL`), so the consumer cannot distinguish the type by the keys;
+  set of keys (`raw`, `inputs`, `skipped`, `superseded`, `summary` empty when the class does
+  not have them: `JSON_FILL`), so the consumer cannot distinguish the type by the keys;
 - `AvailabilityReport` and `UpdatePlan` have no `schema` field (the constant `SCHEMA`
   and the property `schema`): they are not built with `schema=`, and an unknown schema is rejected by
-  `UpdatePlan.from_dict`; plans written by 0.8.0-dev still load;
+  `UpdatePlan.from_dict`; a plan of 0.8.0-dev without `notices` and `ok` still loads (one with
+  the key `store` does not, 3.6);
 - paths in documents are absolute (exception: `request.geometry` of the availability report);
 - the key is always present (no value `null`, no elements `[]`), lists are not
   silently truncated (`kartograf-store-entries/1` carries `limit` and `truncated`);
@@ -1914,7 +2016,7 @@ makes the choice (`Target(mode, path)`); the default root comes from `kartograf.
 
 `src/kartograf/output.py` is the one engine of plain mode, used by every track:
 
-- `plan_plain(directory, relative_names, force=)` checks the full target list before the first
+- `plan_plain(directory, relative, force=)` checks the full target list before the first
   byte and returns one `PlanEntry(path, action, reason)` per target: `write`, `replace` (an
   existing target with `force`) or `conflict`. The conflicts are, in this order,
   `duplicate_output_name` (two targets of one name, every occurrence), `output_in_store` (the
@@ -1944,7 +2046,7 @@ makes the choice (`Target(mode, path)`); the default root comes from `kartograf.
   `not_empty`, `path` the root, `status` `unverifiable`) and the plan is `ok`, so `--check`
   exits 0 and makes no request; a root without its marker fails the plan with
   `store_unavailable`, as it fails the run (ADR-054 decision 8).
-- `Staging(directory, force=)` is the context manager of one run: it creates
+- `Staging(directory, force=)` is the context manager of one run: at the first transfer it creates
   `<directory>/.kartograf-incoming/<host>_<pid>_<token>/` (and the directory, when it is missing),
   removes leftovers older than 24 hours, and lets SIGTERM interrupt like Ctrl-C
   (`interrupt.sigterm_interrupts`). A download writes to `stage_path(name)`, a private path of the
@@ -2021,7 +2123,7 @@ from the code; area: `--country`, `auto` with clipping, section 4.6), selects th
 (PL sheets 4.1/4.2, PL cutout - NMT/NMPT and orthophoto - 4.3, CZ 4.4/4.5
 with CZ orthophoto in 4.4, PL and CZ LAZ 4.7), builds
 `parent_request` (`download/area.py`) and collects the result
-`DataReport(files, failed, stale, superseded, notices, ok)`: `files` =
+`DataReport(files, failed, stale, superseded, notices, ok, root, output_dir, skipped)`: `files` =
 `UnitFile(unit, country, file: VersionedFile)` (`unit` = sheet code, LAZ file
 name or cutout grid coordinates `<coords>`, like the area units
 of a collection), `failed` =
@@ -2031,7 +2133,7 @@ of a collection), `failed` =
 passed through `on_notice` when they arise and returned in `notices`;
 the CLI prints them as `Info:`/`Warning:` on stderr (also with `-q`), the header of the
 sheet list (`SHEET_LIST`) on stdout. `check_data` (the same arguments
-without `update`, `plan`, `workers`, `on_progress`) returns one plan
+without `update`, `plan`, `workers`, `on_progress`, plus `force`) returns one plan
 `kartograf-plan/1` (under `auto` with PL and CZ items). The tracks are public
 (`download_pl_cutout`, `download_image_cutout`, `download_cz_cutout`,
 `download_cz_sheet`, `download_cz_orto_sheet`, `download_laz_area`,
@@ -2091,7 +2193,7 @@ handles ONE registry variant (section 3.1: product, format,
 resolution, vertical CRS) and reads records from the WFS sheet index of that
 variant (`IndexRef`; `providers/pl/skorowidz_wfs.py`,
 `WfsSkorowidzLayersMixin`): the annual types of the service from GetCapabilities
-(`WfsIndex.feature_types`: pattern `^(?:gugik:)?<prefix><year>$`,
+(`WfsIndex.feature_types`: pattern `^(?:\w+:)?<prefix><year>$`,
 newest first, a family type outside the pattern = `logger.warning`, no
 types = `DownloadError`) and ONE `GetFeature` with all types
 (`TYPENAMES`), `SRSNAME` and `BBOX` in URN `EPSG::2180` with axes (N,E),
@@ -2187,15 +2289,15 @@ removes the unreadable file together with `-wal`/`-shm`.
 carries no CRS (rasterio: `crs=None`), so the only carrier of the CRS is the
 sidecar. A rerun resolves the newest record of the sheet (cache 7 d;
 after it expires, a query to the sheet index) and applies the `update` mode
-(below, "Tryby i plan aktualizacji"). `--cutout` in sheet code mode is
+(below, "Modes and update plan"). `--cutout` in sheet code mode is
 **rejected** (`ValidationError`, code 2) — a PL sheet code delivers a native 1:1 sheet.
 
 **Incomplete newest campaign (E13).** A record with `full_sheet: false`
 (the sheet index declares the sheet not completely filled) still wins when
 it is the newest (ADR-028 without a preference for the full sheet); the fact goes to
-`extra.source.full_sheet`, and the CLI reads it from the result sidecars and prints
-one `Warning: najnowsza kampania GUGiK jest niepelna dla N arkuszy ...`
-on stderr in the sheet code, list and hierarchy tracks — also for sheets skipped
+`extra.source.full_sheet`, and `download_data` reads it from the result sidecars and emits
+one `warning` `incomplete_campaign` (CLI: `Warning: najnowsza kampania GUGiK jest niepelna dla
+N arkuszy ...` on stderr) in the sheet code, list and hierarchy tracks — also for sheets skipped
 as existing (code unchanged). The warning divides sheets (ADR-033): "full
 flight in <segment>/full_sheet/" (`DownloadResult.full_links`), "no full
 flight in the sheet index" (`DownloadResult.without_full`; with `all` every sheet
@@ -2204,8 +2306,7 @@ range") and "full flight not downloaded — use --full-sheet".
 Meaning of the flag: YES = full coverage within the borders of Poland (measurement
 `docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`:
 nodata beyond the border in border sheets is normal), NO does not say
-anything about the scale of the gap (0.9-98.9 %). Cutout: section 4.3 (`partial_sheets`),
-the mosaic still from standard paths.
+anything about the scale of the gap (0.9-98.9 %).
 In plain mode the rule is the opposite (ADR-054 decision 5): a file without a sidecar cannot
 say it is partial, so `check_year_range(plain=True)` selects ONE flight per sheet, the newest
 one with `full_sheet is True` within the year range (the bounds are optional then). A sheet
@@ -2278,12 +2379,12 @@ return `DownloadResult`: `succeeded`, `failed`, `skipped`, `no_coverage`
 `NoCoverageError.hints`), `campaign_files`, `reused_campaign_files`
 (versions already local per sheet), lists `new`/`relabeled`/`unchanged`/`local`,
 `newer` (sheet code -> newer campaign not downloaded), `unverified`, `stale`
-and `notices`. `files[godlo]` contains `VersionedFile` for each selected
+and `notices`. `files[<sheet_code>]` contains `VersionedFile` for each selected
 flight, with status, label and version path. The result of a single sheet
 has the same shape as a list result. Full list of fields: the docstring of
 `DownloadResult` in `download/manager.py`. The origin of a sheet
 with campaigns: `provider.source_info()` fills in the single-record flow
-(`download`, `get_download_url`, `resolve_campaigns` in `newest` mode), and with
+(`download` and `resolve_campaigns` in `newest` mode), and with
 `all` it stays `None` — the source of origin is then the sidecar
 (`extra.source`, `extra.campaign`); the sidecar of the standard path describes
 the version the link points to, and it may be older than the newest
@@ -2355,9 +2456,9 @@ store and an unknown schema before the network, reads the signal again and downl
 only `newer`/`missing` items with an unchanged signal; a changed
 signal = item `result.stale` (error, no download). The plan types are in
 `download/plan.py` (`PlanItem.track` = `pl_sheet`/`laz_tile`/`cz_sheet`/
-`cz_laz`/`pl_cutout`/`cz_cutout`, `unit` = task unit; `UpdatePlan.merge`,
-`select_planned`, `new_plan`); the remaining tracks get `plan=` in their
-`run_*`.
+`cz_laz`/`pl_cutout`/`cz_cutout`/`landcover`/`hsg`/`collection`/`cz_orto`/`store`,
+`unit` = task unit; `UpdatePlan.merge`, `select_planned`, `new_plan`); the public
+functions of the other tracks take `plan=` too.
 With `output_dir` (3.6) there is no local version: every selected flight is downloaded, an
 existing file is `conflict` (`output_exists`) unless `update="force"` replaces it, `upgrade`
 and `plan` are `store_only_option`, and a position of `check_sheets` has `action` (`write`,
@@ -2366,7 +2467,7 @@ and `plan` are `store_only_option`, and a position of `check_sheets` has `action
 **Data states in checking (0.8.0, E2E P2-3).** `check_sheets(sheets,
 on_no_coverage=)` reproduces the download result, not only the items: a sheet without
 data (`NoCoverageError`) is neither a plan item nor a checking failure —
-`on_no_coverage(brakujace, liczba_arkuszy)` receives those sheets
+`on_no_coverage(no_data, total)` receives those sheets
 (`download/data.py` turns them into `NO_COVERAGE_SOME` and `NO_COVERAGE_HINT`,
 with the download text, `_no_coverage_warning`/`_coverage_hints`), and when no
 sheet has data, it raises `NoCoverageError` (single sheet: its
@@ -2376,7 +2477,8 @@ ONE `YearRangeError` (`year_range_error`, like `_checked_range`), and
 of the first failure (`_Run.causes`): the exception class is the error (`NoCoverageError` and
 `YearRangeError` are `no_data`, exit code 14, with the reasons `no_coverage` and
 `year_out_of_range`), and in the download report the same name is `UnitFailure.kind`
-(`_failure_kind`; `download` and `country` for the rest).
+(`failure_kind`, which also names `resolution_mismatch` and `skipped_incomplete`; `download` and
+`country` for the rest).
 
 **Tracks without campaigns (plan 2/3; LAZ CZ: plan B).** LAZ (`download/laz.py`),
 LAZ CZ (`download/cz_laz.py`), CZ sheets
@@ -2399,7 +2501,7 @@ download, failed `HEAD` = error), `--check` = `inspect_version`.
 The label of an index record (`index` + `edition`) is known from the file selection,
 so the comparison remains in every mode. A TM33 tile from ImageServer and
 cutouts `none` (local, `unverified="none"`). Result: `VersionedFile(path, status, label, sha256,
-version_path, newer, unverified)`; `LazDownloadResult.files`,
+size_bytes, version_path, newer, unverified, same_as)`; `LazDownloadResult.files`,
 `CzLazResult.files`, `CzSheetResult`/`CzCutoutResult`/`PlCutoutResult.file`
 (`None` only with `plan=`, when the plan does not perform the file and there is no local
 version) and `stale`. The fields of a local version result (`all_nodata`, `masked_pixels`,
@@ -2467,8 +2569,8 @@ When `--geometry` points to a GPKG with several layers and `--layer` is not give
 the library selects the first `gpkg_contents` layer and emits ONCE before
 the work a `Notice` `GEOMETRY_LAYER_DEFAULT` with its name, the remaining layers
 and the hint `--layer NAZWA` (CLI: `Info:`, also with `-q`). It also applies to
-`download_landcover`, `download_soil` and `calculate_hsg`; SHP
-and a single-layer GPKG give no message.
+`download_landcover`, `download_soil`, `calculate_hsg`, `download_collection` and
+`check_availability`; SHP, GeoJSON and a single-layer GPKG give no message.
 
 With `--sheet-system 2000` a zone is an area, not a longitude range (ADR-055): its nominal
 strip with the powiat exceptions of § 22 (`core/pl2000_zones.py`, data
@@ -2608,7 +2710,7 @@ mosaic sheets (the orthophoto has its own cutout track — end of the section).
 The mode is explicit: `--horizontal-crs` is required
 with `--cutout`, without `--cutout` it is an `Error:`, `--cutout` with `--sheet` too.
 Library: `download_pl_cutout(*, bbox, horizontal_crs,
-root, vertical_crs, product="nmt"|"nmpt", update, plan,
+root, output_dir, vertical_crs, product="nmt"|"nmpt", update, plan,
 parent_request, cache, on_notice)` -> `PlCutoutResult`;
 `check_pl_cutout(...)` with the same selection returns a plan without downloading.
 Preparation (validation without network) and execution are internal steps
@@ -2692,7 +2794,7 @@ files are produced with a shared `extra.parent_request`.
 EPSG:2180 --coverage standard|high --resolution 0.1m|0.25m|0.5m|1m` =
 `download_data(product="orto", cutout=True, horizontal_crs="EPSG:2180",
 coverage=..., resolution=...)` -> `download/orto_cutout.py::
-download_image_cutout(*, product, bbox, horizontal_crs, root,
+download_image_cutout(*, product, bbox, horizontal_crs, root, output_dir,
 resolution, coverage=None, update, plan, parent_request, cache, on_notice)` ->
 `ImageCutoutResult(file, stale, notices)` (ADR-044 D3: one pair for
 `product="orto"` and `"true-orto"`); `check_image_cutout(...)` with the
@@ -2787,7 +2889,8 @@ a TM33 tile requires it. The sidecar is written by the library (`download/cz_she
 and the file's `extra.http`.
 
 A TM33 DMR 4G EVRF2007 tile downloaded before plan B (warp, version without
-`extra.http`) stays in default mode a local version
+`extra.http`) stays a local version: in default mode without a request
+(`unverified="unchecked"`), with `--upgrade` the `HEAD` signal is not comparable
 (`unverified="none"`, `Notice` `unverified_local`: unverified, CUZK
 file via `--force`); `--force` downloads the CUZK file as a new version
 and repoints the hard link (decision 12 of plan B).
@@ -2811,16 +2914,16 @@ orto --country cz` (SM5 sheet code - the country also from the sheet code - or a
 via `cz_orto_sheet` (TM33 tile = error with an SM5 hint), an area ->
 SM5 sheets from the `KladyMapovychListu` index (`cz_orto_area_sheets`; bbox
 converted to EPSG:5514 with the pinned operation; `Notice` `sheet_list`),
-each sheet `download_cz_orto_sheet(*, sheet, root, update, plan,
+each sheet `download_cz_orto_sheet(*, sheet, root, output_dir, update, plan,
 parent_request, cache, on_notice, on_download)` -> `CzOrtoResult(files,
 stale, notices)`; `check_cz_orto_sheet` gives four plan items of the track
 `cz_orto` (unit = sheet code). The release comes from the ORTOFOTO ATOM feed
 (engine `atom_files`, section 4.10): one `resolve_atom_file` per sheet
-(result and failure remembered for the four files, `check_failed` once
-per sheet), label `<year>_<updated>` (e.g. `2024_2025-02-06`), signal
-`metadata`: by default local versions are compared with the release (a newer
-vintage = a note `dostepna nowsza ... (--upgrade)`), `--upgrade` downloads
-the new vintage (old versions stay in `versions/`), `--force` downloads
+(result and failure remembered for the four files), label `<year>_<updated>`
+(e.g. `2024_2025-02-06`), signal `metadata`: by default the local files are used
+without asking the feed (`unverified="unchecked"`, erratum 3 of ADR-036; `--check`
+compares them with the release: a newer vintage = `newer`), `--upgrade` asks and
+downloads the new vintage (old versions stay in `versions/`), `--force` downloads
 again. Download: one ZIP (16-64 MB; read limit 120 s; size =
 feed `length` and `Content-Length`) to `versions/.incoming/`, members
 `.jpg`, `.jgw`, `.TM33N.jgw`, `.TM34N.jgw` copied 1:1 (without pixel
@@ -2828,8 +2931,9 @@ conversion) and written in the order `.jgw`, `.TM33N.jgw`, `.TM34N.jgw`,
 `.jpg` as `orto/cz_sjtsk/<hierarchy SM5>/<sheet_code><suffix>` (the JPEG version
 always has JGW files). Only the current vintage of a sheet (archival
 CUZK orthophotos are paid): year and campaign flags, `--full-sheet`,
-`--sheet-system`, `--scale`, `--vertical-crs`, `--format` and `--resolution`
-with `--country cz` = error, `--cutout` with CZ = error. JGW does not carry a CRS -
+`--sheet-system`, `--scale` and `--resolution` with `--country cz` = error (so are
+`vertical_crs` and `format` of `download_data`; `imagery download` has no such flags),
+`--cutout` with CZ = error. JGW does not carry a CRS -
 the CRS of each file is given by its sidecar (JPEG: `extra.world_files`,
 section 3.2). The sheet pixel follows from JGW (samples 2026-10-16: 0.125 m).
 A plain write (`output_dir`) stages the ZIP in one private directory of its staging directory
@@ -2877,7 +2981,7 @@ by <= 0.5 px (the file name and `request.bbox` carry the bbox from before the sn
 A cutout entirely of nodata gives `Warning:` and code 0, not apparent silence.
 
 The CZ bbox track is in the library (`download/cz_cutout.py`):
-`download_cz_cutout(*, bbox, root, product, horizontal_crs,
+`download_cz_cutout(*, bbox, root, output_dir, product, horizontal_crs,
 vertical_crs, resolution, update, plan, parent_request, cache, on_notice,
 on_download)` builds the provider (`create_cz_raster_provider(product,
 resolution, ...)`; route `route()` with operations before the network), normalises the
@@ -2886,7 +2990,7 @@ bbox, determines the version slot (`bbox_slot`), downloads (`fetch_version`, sig
 with the same selection gives the plan. The execution step (`_run_cz_cutout`) is internal. The result grid starts from the requested bbox
 converted to the result CRS, exactly as in the CLI before 0.7.1;
 there is no alignment to the PL grid (a separate spec together with R6). The result
-`CzCutoutResult(file, all_nodata, stale)`: a raster without a single
+`CzCutoutResult(file, all_nodata, stale, notices)`: a raster without a single
 valid pixel is created, has `all_nodata=True`, `extra.all_nodata: true`
 in the sidecar (with data `false` — the key is always present) and `Notice`
 `ALL_NODATA` (CLI: `Warning:`). The check is best-effort: an unreadable file gives
@@ -2966,11 +3070,12 @@ clipped and reported. An explicit
 `ValidationError` (CLI `Error:`, code 2) without network access. Outside the CZ envelope, at the borders with
 DE/SK/UA/BY/LT/RU, `auto` queries only PL; inside the CZ rectangle
 CUZK is added even over Poland/Saxony, because the envelope is not
-a boundary polygon. An entirely nodata result (CZ or a PL cutout
-with downloaded sheets) gives a `Warning:` and code 0. A partial success of
+a boundary polygon. An entirely nodata result (CZ or a PL cutout) gives a
+`Warning:` and code 0. A partial success of
 PL or CZ under `auto` gives `DataReport.ok = True` (code 0), the failure of the other
 part in `failed` and a `Notice` `AUTO_PARTIAL_SUCCESS`; `--resolution 1m`
-resolves to PL. The vertical CRS and resolution are required (0.8.0, no
+resolves to PL. The vertical CRS and, where the product offers a choice, the
+resolution are required (0.8.0, no
 defaults); one value applies to every country of the task and must be available for
 it, different values: `pl=..,cz=..` (library: dictionary
 `{"pl": ..., "cz": ...}`); each country is validated before the first
@@ -2980,9 +3085,9 @@ area only in PL or narrowed to PL) = `ValidationError`.
 
 Campaign options and year flags (ADR-030/032; errata Q9, N-3) apply
 only to PL sheets and PL LAZ tiles; `download_data` checks all inputs: a task without PL (CZ sheet code under `cz`/`auto`, explicit
-`--country cz`, an area entirely in CZ under `auto`) with `--all-campaigns` or any
-year flag = `ValidationError` (`CZ (CUZK) nie ma kampanii -
---all-campaigns/--min-year/--max-year/--year dotycza tylko PL`; CZ orthophoto:
+`--country cz`, an area entirely in CZ under `auto`) with `--all-campaigns`,
+`--full-sheet` or any year flag = `ValidationError` (`CZ (CUZK) nie ma kampanii -
+--all-campaigns/--min-year/--max-year/--year/--full-sheet dotycza tylko PL`; CZ orthophoto:
 `--year dotyczy tylko PL - CUZK publikuje tylko aktualny rocznik
 arkusza ortofoto CZ ...`), code 2 without network access (CZ LAZ with `--min-density`:
 `--min-density dotyczy tylko LAZ PL`). An NMT/NMPT raster area PL+CZ under
@@ -3056,7 +3161,7 @@ each covering frame enlarged by 1 m (`COVERAGE_TOLERANCE_M`); a tile
 contributing an uncovered piece is kept (whole — LAZ is not clipped).
 Thanks to this PL-1992 and PL-2000 of the same place do not duplicate (in w2:
 2025/PL-1992 instead of 2025 + 2022/PL-2000:S7). Within a year range this
-rule operates on the selected tiles (explicit `newest` allowed).
+rule operates on the selected tiles.
 Only a full tile covers (`czy_ark_wypelniony` !=
 `NIE`) and only by frame or by the same sheet code, never by envelope. A tile whose
 frame does not intersect the area (only the envelope does) is skipped.
@@ -3134,10 +3239,10 @@ of the sidecar above are not kept, and `--all-campaigns` is a store option
 (`store_only_option`).
 
 **LAZ CZ (plan B, `download/cz_laz.py`).** `download_cz_laz(*, model,
-vertical_crs, root, sheet=None, bbox=None, update=None, plan=None,
+vertical_crs, root=None, output_dir=None, sheet=None, bbox=None, update=None, plan=None,
 parent_request=None, workers=4, cache=True, on_notice=None,
 on_progress=None) -> CzLazResult(sheets, files, failed, stale, notices)`
-(`ok` = no `failed`) and `check_cz_laz(*, model, vertical_crs, root,
+(`ok` = no `failed`) and `check_cz_laz(*, model, vertical_crs, root=None, output_dir=None,
 sheet=None, bbox=None, cache=True, on_notice=None) -> UpdatePlan` are the command-level
 path; `download_data` calls it for a CZ sheet code and for the CZ part of an area.
 One call = one model (`dmr5g`, `dmr4g`, `dmp1g`, `dmpok`, the variant
@@ -3188,7 +3293,7 @@ Signal per channel (`AccessChannel.update_signal`):
 
 | Source / channel | Signal | Version label | Segment |
 |---|---|---|---|
-| SoilGrids WCS | `metadata`: `SoilGridsProvider.edition(property)` — the first `ows:Title` of the GetCapabilities of the property map (`SoilGrids250m 2.0 - ...` -> `2.0`); the `ocd` map does not give the edition in its title (state 2026-10-19), so its edition is the edition of the `clay` map (`extra.edition.url`/`title` point to it, and `extra.edition.source_property` = `clay` states this in machine-readable form) | edition | `soil/global_soilgrids_<wl>_<gl>_<stat>` |
+| SoilGrids WCS | `metadata`: `SoilGridsProvider.edition(property)` — the first `ows:Title` of the GetCapabilities of the property map (`SoilGrids250m 2.0 - ...` -> `2.0`); the `ocd` map does not give the edition in its title (state 2026-10-19), so its edition is the edition of the `clay` map (`extra.edition.url`/`title` point to it, and `extra.edition.source_property` = `clay` states this in machine-readable form) | edition | `soil/global_soilgrids_<property>_<depth>_<stat>` |
 | CORINE CLMS (`uses_clms(year)`: token and year in `CLMS_YEARS`) | `metadata`: `CorineProvider.edition(year)` — `characteristics_release_major_version` from `@search?UID=<uid>&fullobjects=1` (without a token) | edition (`V2020_20u1`) | `landcover/eu_corine_<year>` |
 | CORINE WMS preview (without credentials; 1990 always) | `none` | download date | `landcover/eu_corine_<year>_preview` (`.png`) |
 | BDOT10k county package | `none` | download date | `landcover/pl_bdot10k_gpkg[_<layers>]`, `_shp`, `_gpkg_zip` |
@@ -3201,11 +3306,13 @@ Signal per channel (`AccessChannel.update_signal`):
 
 `metadata` (decision table 2 of plan 3/3): the edition is queried once per file
 (`memoized_edition`) BEFORE the download — without an edition no version is created
-(a file error, D30). A local version with an edition label: equal = local,
-different = by default `newer=<edition>` (CLI: `dostepna nowsza ... (--upgrade)`),
-`upgrade` downloads; edition unavailable = by default `unverified="check_failed:
-..."` (CLI `Warning:`), `upgrade`/`force` = error. A version not from an edition is
-not comparable (`unverified="none"`). The same content under a new edition
+(a file error, D30). A local version is used by default without a query
+(`unverified="unchecked"`, erratum 3 of ADR-036); `--check` compares its edition
+label with the edition (equal = `current`, different = `newer`, edition unavailable =
+`check_failed`), `upgrade` likewise (equal = local, different = download, edition
+unavailable = error); `force` downloads (edition unavailable = error). A version not
+from an edition is not comparable (with `upgrade` `unverified="none"`, in the plan
+`unverifiable`). The same content under a new edition
 = `relabeled` (D23). `none`: the local version is not checked; HTTP headers
 go to `extra.http`, but are not a signal (the same content on another day =
 `unchanged`). `check_landcover(...)`/`check_soil(...)` build a plan
@@ -3221,7 +3328,7 @@ selection (`teryt` / `bbox`+`bbox_crs` / canonical `sheet`); the GeoTIFF `nodata
 is read from the file (`null` when the tag is missing). The SoilGrids/CORINE CLMS version sidecar
 has `extra.edition` (`id`, `url`, `title` / `dataset_uid`). The CORINE
 preview: `horizontal_crs` of the WMS service (EPSG:3857, 1990 EPSG:4326),
-`extra.fallback = "wms_png"`, `extra.note = "podglad WMS, nie dane"`. The raster
+`extra.fallback = "wms_png"`, `extra.note = "WMS preview, not data"`. The raster
 layer of the EEA service for the given year (`Corine Land Cover <year> raster`; the name is `12`
 only in CLC2018, in other years `Corine_Land_Cover_<year>_raster<number>`)
 is read by `CorineProvider._eea_raster_layer` from GetCapabilities once per provider;
@@ -3250,8 +3357,8 @@ intersecting the area; classes are NOT converted to BDOT10k codes.
 feed 1:1 (5.8/6.7 GB, member `ZABAGED_RESULTS.gpkg` with the layers of the full database
 under CUZK names, e.g. `VodniPlocha_c`), the size from the feed in the `Notice`
 `whole_country_size` before the transfer. `teryt`, `format`, `layers`,
-`keep_raw`, `year` = `ValidationError` with the source name, `sheet` = error,
-`horizontal_crs` with an area = error (the result is always EPSG:5514). One file
+`keep_raw`, `year` = `ValidationError` naming the products that take the option, `sheet` = error,
+`horizontal_crs` other than `EPSG:5514` with an area = error (the result is always EPSG:5514). One file
 per request: a download error goes to `LandCoverReport.failed` (`ok=False`).
 The internal `get_available_layers()` returns the 22 layer names of the area result,
 `get_supported_formats()` - `["GPKG"]`.
@@ -3311,8 +3418,8 @@ downloads the package of EVERY county intersecting the area, in code order.
 `ok=False`. The low-level `Bdot10kProvider.download_by_bbox`/
 `download_by_sheet` (file outside the store) download ONE county
 (`_single_teryt`): an area of several counties is a `ValidationError` with a list of
-codes and a hint to `download_landcover`. The provider applies its own download
-and PRG query timeout, not the explicit `timeout` of the command. An area prints
+codes and a hint to `download_landcover`. The command takes no `timeout`: the provider
+applies its own download and PRG query timeouts. An area prints
 `Info` `unit_list` (counties from PRG) and is subject to the collection limit
 (`download.collections.within_volume`: > 100 packages to download or > 10 GB
 according to `HEAD` = `ValidationError` before the first transfer; also the archive
@@ -3379,14 +3486,14 @@ a TERYT code change) = `NoCoverageError`. Identical annual editions of the same
 county and format take up space once (D7: `relabeled`, hardlink; live
 2026-10-15: SHP 2023 of county 1261 = 2022).
 
-`calculate_hsg(root=..., sheet=|bbox=|geometry=, layer=, depth=|depth_rule=,
-update=, plan=, on_notice=)` and `check_hsg(...)` (`hydrology/hsg.py`,
+`calculate_hsg(root=..., output_dir=..., sheet=|bbox=|geometry=, layer=, depth=|depth_rule=,
+update=, plan=, summary=, on_notice=)` and `check_hsg(...)` (`hydrology/hsg.py`,
 ADR-044 D5; the statistic is always `mean`) compute soil groups from the
 SoilGrids versions `clay`/`sand`/`silt` in the same store (internal
 `HSGCalculator`; input errors are `ValidationError`, failures of individual
 files go to `HsgReport.failed` and no HSG is produced) according to the canonical
 USDA triangle (ADR-025). Result `HsgReport(files, inputs, failed, stale,
-notices, ok)` in `hsg/global_soilgrids_<gl>_mean/` (`bbox/<coords>` or
+notices, ok, summary)` in `hsg/global_soilgrids_<depth>_mean/` (`bbox/<coords>` or
 the sheet code hierarchy). The HSG raster is in `files[0].file`, the downloaded clay/sand/silt versions
 in `inputs`. An HSG version whose `extra.source_files` has the same
 three input sha256 values (order clay, sand, silt) is reused
@@ -3411,7 +3518,7 @@ converted to the raster CRS is rasterised on a grid 10 x denser, so a
 SoilGrids cell at the edge counts by its share in the area (cell areas
 geodesic for EPSG:4326); groups `A`-`D` and `nodata` sum to the
 area, `percent` of the groups = share of the area with data, `nodata.percent` =
-share of the area; group descriptions in Polish (`HSG_DESCRIPTIONS`).
+share of the area; group descriptions `HSG_DESCRIPTIONS` (English; the CLI prints them in its language).
 `check_hsg(...)` = 3 `landcover` entries (15 with `depth_rule`) + an `hsg` entry
 (`current` when an HSG version exists with the sha256 of the current local inputs and each
 input is `current`; an input `check_failed` = `check_failed`; otherwise
@@ -3446,7 +3553,7 @@ crs, ...)` the county code of a point (`None` = no county: sea, abroad;
 a point on the border of two counties = the lower code). Source: WFS PRG GUGiK
 (WFS 2.0.0, MapServer), layer `ms:A02_Granice_powiatow`, attribute
 `JPT_KOD_JE`. An area in any supported CRS is converted to
-EPSG:2180 by the same rule as the PL cutout (`download.cutout.bbox_to_2180`),
+EPSG:2180 by the same rule as the PL cutout (`download.area.bbox_to_2180`),
 and `BBOX` goes in axis order (N,E) with `urn:ogc:def:crs:EPSG::2180`,
 expanded outwards to whole millimetres (since 0.7.2).
 The filter works on the county GEOMETRY, not on its envelope (verified
@@ -3483,9 +3590,9 @@ and a CZ table (columns `MODEL`, `UKLAD`, `ROZDZ.`, `WYSOKOSCI`, `FORMAT`,
 (sheet codes of incomplete sheets — CZ: without a file —, land without sheets, commands
 for each combination), a footer with the newest complete PL combination and
 with the complete CZ combinations (at most `MAX_HINT_LINES`
-= 5 commands per combination and the count of the remaining ones), `--json` = exactly
-`AvailabilityReport.to_json()` (messages only in the `notices` field, without
-duplication on stderr). `ok=False` (a part of `auto` not checked)
+= 5 commands per combination and the count of the remaining ones), `--json` = the report
+in the envelope `kartograf-result/1` (`cli/_json.py::emit_result`, section 3.5; messages only in
+the `notices` field, without duplication on stderr). `ok=False` (a part of `auto` not checked)
 = the report is printed and the exit code is 10 or 11. The report is not a data command
 (kind `query` in the catalog, no entry in `DATA_COMMANDS`). Live examples and printouts:
 USAGE 1.7.
@@ -3563,11 +3670,12 @@ or a CZ sheet code = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    Order: year
    descending, CRS, resolution, vertical CRS, format (order of
    `FORMATS`). `AvailabilityReport(request, checked_at, areas, combinations,
-   notices, ok)` (`Document`: the schema `kartograf-availability/1` is a class constant,
+   failed, notices, ok)` (`Document`: the schema `kartograf-availability/1` is a class constant,
    the first key of the document; no `schema` field); `areas` =
    `AvailabilityArea(country, crs, bounds, area_m2, land_m2)`;
    `checked_at` from `kartograf._clock`; `ok` = `False` only when parts of the
-   task could not be checked (plan B, `auto`) — in PL always `True`.
+   task could not be checked (plan B, `auto`; each such country is a `UnitFailure` in
+   `failed`) — in PL always `True`.
    `to_json()` from the `Document` mixin (section 3.5): 2-space indentation, trailing `\n`.
 8. **Records to download and campaigns (KD-1, ADR-047):** `sheet_records` =
    `AvailabilityRecord(sheet, campaign, acquisition_date, published, full_sheet,
@@ -3643,7 +3751,8 @@ or a CZ sheet code = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    only when the CZ part has at least one sheet of the index (the `auto` part in PL
    inside the CZ rectangle — without `Info:`). LAZ has files of all models.
 7. **`auto`:** a country that could not be checked (`DownloadError`), with the
-   other one checked = `Notice("warning", CHECK_FAILED, ...)` and `ok=False`
+   other one checked = `Notice("warning", CHECK_FAILED, ...)`, its `UnitFailure` in `failed`
+   and `ok=False`
    (the report of the other country is kept; CLI exit code 10 or 11); failure of both = an exception
    (the first error), like a single-country task.
 
@@ -3665,7 +3774,9 @@ the descendants of the sheet code; one selection per system and scale, `functool
 subset of the sheets of the combination; otherwise one `--sheet` command per sheet
 with a record (`_grid_areas`, PL-2000 separately for each scale) — a grid
 sheet without a record (beyond the border, sea, no record of the year or
-resolution) would give `Brak danych` (`check_failed`, exit code 10 or 11). Archives
+resolution) would be skipped with a `no_coverage_some` warning or, when it has records of other
+years only, fail the whole PL request (`YearRangeError`: `failed[].kind` `year_out_of_range`,
+exit code 10 or 11). Archives
 (`source_file`) and LAZ: always the area or sheet code of the task (the download
 plans only records of the sheet index). LAZ: area + `--vertical-crs` +
 `--year`. The command selects exactly the sheets of the combination (tests
@@ -3708,8 +3819,8 @@ other checked = `CHECK_FAILED` and `ok=False` (point 7 above). The report
 does not request any data file
 (`test_availability_never_downloads`: the session stub rejects every URL
 outside the sheet index and PRG; CZ: `test_cz_availability_never_gets_files`).
-CLI = API consistency: `--json` gives the same text
-as `check_availability(...).to_json()` with the same cache.
+CLI = API consistency: the `result` of the `--json` envelope is
+`check_availability(...).to_dict()` with the same cache.
 
 ### 4.10 Collections: unit packages, area objects and ATOM feed files (ADR-042)
 
@@ -3728,7 +3839,8 @@ and `validate_command` through `DATA_COMMANDS` call it): bbox coordinates, exact
 country (`pl`/`cz`/`auto` required with an area; `whole_country` only
 `pl`/`cz`; with `sheet` from the sheet code), channel for the kind of selection, variant
 (`lod`, `year`, `format`, `scale`, `sheet_system`, `network`) and level (`level`,
-with `auto` per country), `horizontal_crs` equal to the CRS of the file. The error gives the CLI
+with `auto` per country), `horizontal_crs` equal to the CRS of the file, `layers` (the layer
+groups of an area read from a national archive: PGW). The error gives the CLI
 flags and the selections that the product has (e.g. `--teryt 1261: admin nie ma paczek
 powiatow; dostepne: ...`). An option value that no channel
 of the given selection has, but a channel of another selection has, names that selection (`--network
@@ -3747,8 +3859,9 @@ of one dataset (QGZU; `atom.single_dataset`); sheet and voivodeship feeds
 |---|---|---|---|
 | `teryt` (2 digits = voivodeship, 4 = county; PL) | `unit_package` of that unit | `[teryt]` | `teryt/<T>` |
 | `ku` (6 digits; CZ) | `unit_package` KU | `[ku]` | `ku/<code>` |
-| `sheet` or sheets intersecting the area | `unit_package` of sheets with the PL or CUZK index | `[godlo]`/sheets of the area | sheet code hierarchy (`<MAPNOM>` CUZK: `cuzk_map_path_parts`) in the variant segment |
+| `sheet` or sheets intersecting the area | `unit_package` of sheets with the PL or CUZK index | `[sheet]`/sheets of the area | sheet code hierarchy (`<MAPNOM>` CUZK: `cuzk_map_path_parts`) in the variant segment |
 | area of a product with a `feature_bbox` channel | `feature_bbox` | one area in the native CRS of the service | `bbox/<coords>.gpkg` |
+| area of a product read from its national archive (`ArchiveLayersParams`, PGW, ADR-059) | the archive of the `unit_package` channel `unit="country"` (local version or one download), then its layers of the area (`write_archive_gpkg`) | one area in the native CRS of the layers; the stored archive in `inputs` | `bbox/<coords>.gpkg` |
 | area of a product with a tile channel (`unit="tile"`) | `unit_package` of tiles from WFS index records | area records (`next` pages), `year` = record filter (`Notice` `unit_list`) | `<crs>[/<zone>]/<tile>` |
 | area of a product without `feature_bbox` (county) | `unit_package` of the county | counties from PRG (`discover_teryts_for_bbox`, metadata cache; `Notice` `unit_list`) | `teryt/<T>` of each county |
 | `whole_country` | `unit_package` of the unit `country` or `atom_files` (file from the ATOM feed of CUZK; `horizontal_crs` required when the file has several CRSs) | `pl` or `cz` (PRNG: topics) | `country/<code>` (PRNG: `pl_<topic>`) |
@@ -3780,7 +3893,8 @@ goes to `CollectionReport.failed` as `UnitFailure(unit, country, error,
 kind)` (`no_coverage` for `NoCoverageError`, `download` for
 `DownloadError`), the remaining units keep running (`workers` =
 `ThreadPoolExecutor`, HTTP session per thread). Result: `CollectionReport(files,
-failed, stale, notices, ok)`, `ok` = no errors and no stale plan
+inputs, failed, stale, notices, ok)` (`inputs`: the national archive an area result was read
+from, PGW), `ok` = no errors and no stale plan
 items, except `--country auto` in PL and CZ (rule of `download_data`,
 section 4.6): a country with errors alongside a country without errors is a partial success -
 `ok = True` (code 0), `Notice` `auto_partial_success`
@@ -3802,7 +3916,7 @@ most 10 units, the rest is counted (`notices.names_text`). Timeouts:
 in 0.2-90 s, approx. 3.5 s per GB of 3D tree packages).
 `LandCoverManager` uses the same `package_job`/`run_job`/
 `inspect_job` for the BDOT10k archive and `landcover_request`/`run_request`/
-`plan_request` for ZABAGED (lane `landcover`, section 4.8).
+`plan_request` for ZABAGED, BDOO, Data50 and Data250 (lane `landcover`, section 4.8).
 A plain write (`output_dir`) keeps none of the store policy: a unit is one file
 `<unit><ext>` in the output directory (`1261.gpkg`, `0208.zip`, `<coords>.gpkg`,
 `pl_miejscowosci.zip`), every run downloads it (no signal, label or related slot), and
@@ -3812,7 +3926,7 @@ first transfer.
 **Area limit (ADR-043 erratum 3).** An area task (`bbox`, `sheet`,
 `geometry`) that would download more than `VOLUME_FILES` = 100 files or
 more than `VOLUME_BYTES` = 10 GB ends with a `ValidationError` BEFORE the
-first transfer (`run_request` -> `_within_volume`, a single place for
+first transfer (`run_request` -> `within_volume`, a single place for
 collections, `LandCoverManager` and NMT 100 m): the file count, the size (sum of
 `HEAD`/`length` of the ATOM feed; up to 100 files each file is measured, so the
 10 GB limit is exact, above 100 the refusal is decided by the count, and the size
@@ -4039,7 +4153,7 @@ rationale: ADR-046.
 **Command catalog (`src/kartograf/catalog/`).** The declarations (`catalog/spec.py`: `Command`, `Param`,
 `Constraint`, `Example`, `Group`) live in `catalog/commands/<module>.py`, one module per
 CLI group (`MODULE_ORDER`: elevation, imagery, landcover, soil, boundaries, cadastre,
-models3d, hydro, names, maps, geodesy, misc); `declared()` finds the modules by
+models3d, hydro, names, maps, geodesy, misc, config); `declared()` finds the modules by
 name, so a new group is one new file. `Param` carries the name, kind (`str`, `int`,
 `flag`, `bbox`, `bbox_crs`, `path`, `per_country`, `str_list`, `plan`), the CLI flag,
 the API argument name (`argument`), whether it is required, `allowed`
@@ -4077,24 +4191,27 @@ clean process).
 (`catalog/formatting.py`), `run_command`/`check_command` (conversion, validation, then the command
 function: `download_data`, `download_collection`, ... or `check_*`). `options` is the JSON form of
 the options of the call, `run` - the remaining flags of the line under the parameter
-names (`root`, `upgrade`, `force`, `check`, `plan`, `workers`,
-`quiet`, `json`, `summary`; there is no `update` key: `run_command` takes the mode as
+names (`output_dir`, `root`, `upgrade`, `force`, `check`, `plan`, `workers`,
+`quiet`, `json`, `lang`, `summary`; there is no `update` key: `run_command` takes the mode as
 `update="upgrade"|"force"`, and `check` is `check_command`, so the mapping is done by the
 caller). The functions without network (`parse_command`, `validate_command`,
 `format_command`) have a test with a transport stub rejecting every request. Projects (task lists
 with pinned versions) are kept by Archiwista (ADR-057).
 
-**Errors.** Every `KartografError` class has its own `code` in `__dict__` (snake_case, unique;
-`tests/integration/test_errors.py`), `exit_code`, `DETAIL_FIELDS` and an optional `hint`; the library validators
+**Errors.** Every `KartografError` class has its own `code` in `__dict__` (a code of the Nogat
+error registry; classes that share a code differ by `reason`: `tests/integration/test_errors.py`),
+the registry's `exit_code` of that code, `DETAIL_FIELDS` and an optional `hint`; the library validators
 set `ValidationError.option`/`options`/`allowed` (the API argument name, not the flag).
 `error_report(exc, command=)` turns any exception into an `ErrorReport` (the codes `io_error` for
-`OSError`, `interrupted`, `terminated` and `internal_error` are built here, not by the hierarchy classes); `hint` is composed
+`OSError`, `cancelled` for Ctrl-C, `terminated` and `internal_error` are built here, not by the hierarchy classes); `hint` is composed
 deterministically from `exc.hint`, `DEFAULT_HINT`, `hints`/`remedy` or `Allowed values of ...` and
 `Example: ...` from the catalog (English, `kartograf.messages.errors`; up to 400 characters). `main` (`cli/commands.py`) detects JSON mode before
-parsing (`cli/_json.py::json_mode`), builds the parser with `usage_errors=True` (a syntax error
-is a `UsageError`, with `command` when the line named a known command) and turns every exception into a
-`kartograf-error/1` document on stdout (stderr empty) and the exit code `e.exit_code`
-(0/1/2), 130 for Ctrl-C, 143 for SIGTERM; `KARTOGRAF_DEBUG=1` re-raises the exception. The records of the `kartograf` logger
+parsing (`cli/_json.py::json_mode`), with `--json` builds the parser with `usage_errors=True` (a syntax
+error is a `UsageError`, with `command` when the line named a known command; without `--json` argparse
+prints the usage, the error document and exits with 2) and turns every exception into the
+`kartograf-error/1` document on the last line of stderr (`cli/_json.py::emit_error`; stdout stays
+empty, the text mode prints an `Error:` line before it) and the exit code of its registry code,
+130 for Ctrl-C, 143 for SIGTERM; `KARTOGRAF_DEBUG=1` re-raises the exception. The records of the `kartograf` logger
 (level WARNING and above) `main` turns into `Warning:`/`Error:` lines on stderr
 (`_StderrLines`; without a handler Python prints them without a prefix); with `--json` only
 `kartograf.transport.http` records (retries) pass through, and with `KARTOGRAF_DEBUG` all of them. The tables of exit codes
@@ -4126,7 +4243,7 @@ command of the catalog that has a family (34), named by the `operation_id` (`kar
 examples, `dependentRequired` `bbox` -> `bbox_crs`, JSON Schema 2020-12 with
 `additionalProperties: false`; `anyOf` for a value per country) and from the mode of the server:
 `tool_specs(allow_writes=)` gives, with writes, the commands as declared, and without writes the commands that have a
-plan (the 12 data commands) in a plan-only variant (without the run options `update`, `plan`,
+plan (the 12 data commands and `store init`) in a plan-only variant (without the run options `update`, `plan`,
 `workers`, `summary`; `check` fixed to `true`; `readOnlyHint: true`); a command that wrote without a
 plan would vanish from the list (`hidden_tools`: a call is `forbidden`), and no declared command does.
 `_output_schema.py` is the `outputSchema` of all tools: the schema `result-1` from `schemas/nogat/`
@@ -4138,9 +4255,10 @@ same verdicts as the Nogat schema). Without `mcp` (the module does not import th
 is_error=<error>)`, errors as `kartograf-error/1` (`forbidden` for a path outside `--allow-dir`, for a
 hidden tool and for a run option in the plan-only variant; `missing_dependency` without the SDK),
 the order of the checks: refusal of a write, the input schema (`jsonschema`), the absolute paths rule
-(`--allow-dir`), the run options next to `check`,
+(`--allow-dir`; also the default store of a call that names neither `root` nor `output_dir`), the
+run options next to `check`,
 `validate_command`; progress through `report_progress`, at most 4 concurrent network calls (those with
-`openWorldHint`) and a server cache in the user cache directory. The `mcp` SDK is an optional dependency
+`openWorldHint`) and the metadata cache of the CLI (`default_cache_file()`; `--cache-file`, `--no-cache`). The `mcp` SDK is an optional dependency
 (extra `mcp`), and only `mcp_server.py` touches it, lazily. The server instructions (in English, up to 4096
 characters) are built by `build_instructions` from the tool names of the catalog and the state of the server. Context
 budget: `tools/list` is about 187,000 characters (83,000 without `outputSchema`; `--tools core` 66,000 and 35,000), because
@@ -4166,7 +4284,8 @@ tests enforce this (`tests/contract/test_mcp_tools.py`, the AGI-5.13 gate test i
    with `option` and `allowed`.
 3. **CLI handler** in `cli/_handlers.py::HANDLERS` (a collection group: its name in
    `COLLECTION_GROUPS`): `library_arguments(args)` turns the flags into arguments, the handler
-   calls the function and prints the result (`--json`: `to_json()`; text: the rendering of
+   calls the function and prints the result (`--json`: `cli/_json.py::emit_result`, the document
+   in the envelope `kartograf-result/1`; text: the rendering of
    the document).
 4. **Data command:** a command of kind `data` needs an entry in
    `data_commands.py::DATA_COMMANDS`: validation without network shared with the download, and
@@ -4189,7 +4308,7 @@ tests enforce this (`tests/contract/test_mcp_tools.py`, the AGI-5.13 gate test i
 Checklist using DE (Brandenburg, DGM1) as an example:
 
 1. **Descriptor** in `src/kartograf/sources/registry.py`: `key="de.lgb.dgm1"`,
-   `country="DE"`, `product="nmt"`, `provider_name="LGB"`, channels
+   `country="DE"`, `product="nmt"`, `name`, `provider_name="LGB"`, channels
    (`AccessChannel` with transport, CRSs, `capabilities`, `endpoint`),
    licence, `storage_subdir="nmt/de_bb_dgm1_{vcrs}"`, `default_extension`;
    the key and directory follow the naming convention (section 3.3, rule 10; enforced by
@@ -4237,8 +4356,8 @@ nominal `KNOWN_PATHS` accuracy: the Slovak operation has a misleading
 should preserve the exact pixel and the pinned operation in the sidecar.
 
 **A new resolution or format of an existing PL product (NMT/NMPT)** is a
-registry entry, not code: one line `_pl_sheet_source(produkt, etykieta,
-uklady_wysokosci, format=...)` in `registry.py::_PL_SHEET_SOURCES` (ADR-041,
+registry entry, not code: one line `_pl_sheet_source(product, resolution,
+vertical_crs, format=...)` in `registry.py::_PL_SHEET_SOURCES` (ADR-041,
 section 3.1). The descriptor key, segment, extension, validation of
 `--resolution`/`--vertical-crs`/`--format`, the `--help` texts,
 `list-sources`, the hard filter of the sheet index record, P10 hints
@@ -4275,7 +4394,7 @@ for PL-2000, and tests of the hierarchy (`get_parent`, `get_children`, `get_all_
 in `tests/unit/test_sheet_parser.py`, `test_parser_2000.py` and `test_parser_registry.py`.
 
 **A new collection product (ADR-042).** A unit package (county,
-voivodeship, national file), area objects from WFS 2.0 / ArcGIS REST or
+voivodeship, national file), area objects from WFS 2.0 / ArcGIS REST / OGC API Features or
 a file from the CUZK ATOM feed is a descriptor entry with `AccessChannel.params`
 (`UnitPackageParams`, `FeatureBBoxParams` or `AtomFilesParams`, section
 3.1) - without a provider and without engine code:
@@ -4288,7 +4407,7 @@ responses. CLI: a new group = a module `catalog/commands/<group>.py` with `colle
 and `collection_group` (`catalog/commands/_collection.py`), the group name in `COLLECTION_GROUPS`
 (`cli/_handlers.py`) and a `DATA_COMMANDS` entry (the paragraph above); a new
 product of an existing group = only a new `--product` choice from the registry. A new
-protocol (e.g. OGC API Features) extends `FeatureBBoxParams.protocol`
+protocol extends `FeatureBBoxParams.protocol` (now `wfs`, `arcgis`, `ogcapi`)
 together with the first product.
 
 Checklist: (1) the `SourceDescriptor` in `sources/registry.py` (key and `storage_subdir` by
@@ -4299,7 +4418,7 @@ channel of an existing descriptor (the BDOT10k archive). (2) The parameters of t
 the same keys in `choice` (for example `("lod", "year")`) and different values; `file_kind`
 (`zip`, `tiff`, `pdf`, `txt`) is checked by the first bytes; the protocol agrees with the
 transport of the channel (WFS: `wfs`, ARCGIS_QUERY: `arcgis`, OGC_API_FEATURES: `ogcapi`,
-DIRECT_FILES: `UnitPackageParams` or `AtomFilesParams`); `url_template` and `endpoint` start
+DIRECT_FILES: `UnitPackageParams`, `AtomFilesParams` or `ArchiveLayersParams`); `url_template` and `endpoint` start
 with `https://`; `page_size` is not larger than the page limit of the service
 (`CountDefault` or `maxRecordCount`, checked at the download). (3) The channels of one
 capability may share a kind (for example a WFS per network) when they declare the same
@@ -4308,7 +4427,7 @@ channel and the variant select the values of the options in `choice` (ADR-043 D5
 `update_signal` follows the signal of the source (`none` for GUGiK packages and WFS results,
 `index` for a channel with an `IndexSource`). (4) The inventory of signals in
 `tests/unit/test_sources_registry.py` (`CHANNEL_SIGNALS`). (5) Small fixtures from real
-answers under `tests/fixtures/` (`feature_bbox/` with `*.headers.json`). (6) A group needs
+answers under `tests/fixtures/pl/` and `tests/fixtures/cz/` (`feature_bbox/` with `*.headers.json`). (6) A group needs
 its `catalog/commands` module, its name in `COLLECTION_GROUPS` and an entry of
 `data_commands.py::DATA_COMMANDS`.
 

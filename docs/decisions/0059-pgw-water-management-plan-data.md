@@ -232,3 +232,6 @@ and the store (ADR-054) and `extra.parent_request` (ARCHITECTURE 3.4). The group
 - Out of scope (Nogat plan D1): the plans in editable formats, the table of contents of the files in Dziennik
   Ustaw, the set of measures and the water-body cards (`karty.apgw.gov.pl`); the 34 attribute tables reach a
   user only through the archive.
+
+**Erratum 1 (2026-11-14, documentation audit):** the `**Standard:**` line names "Nogat 2.1"; the standard
+is Nogat 1.0 (its drafts 2.0/2.1 were renumbered on 2026-11-03; `_errors.STANDARD_VERSION` is `"1.0"`).

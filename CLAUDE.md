@@ -117,8 +117,11 @@ The place of Kartograf in the ecosystem, its dependencies and consumers: https:/
 ## Deviations
 
 - DEV-7.3: mypy checks `tests/` with an override that allows unannotated test functions (`[[tool.mypy.overrides]]` for `tests.*` in `pyproject.toml`).
-- AGI-3.8, AGI-5.1: no `kartograf mcp`; the console script `kartograf-mcp` starts the server (ADR-052, decision 10; PROGRESS, Next 2).
-- AGI-4.1: the domain JSON Schemas are not published in `src/kartograf/schemas` (PROGRESS, Next 2).
+- AGI-3.8, AGI-5.1: no `kartograf mcp`; the console script `kartograf-mcp` starts the server (ADR-052, decision 10; PROGRESS, Next 6).
+- AGI-4.1: the domain JSON Schemas are not published in `src/kartograf/schemas` (PROGRESS, Next 6).
+- DEV-12.2: no `--verbose` and no `KARTOGRAF_LOG_LEVEL`; `--quiet`/`-q` drops the progress bar and the status lines of stdout, and `KARTOGRAF_DEBUG=1` lets every library record through and prints the traceback of an unexpected error.
+- DEV-12.4 to DEV-12.9: no command answers HTTP (`kartograf-mcp` is stdio), so nothing writes `nogat-log/1` files under `<state_dir>/kartograf/logs`; the CLMS Auth Proxy (`python -m kartograf.auth.proxy`, started by `kartograf.auth.AuthProxyClient` for a CORINE GeoTIFF download on 127.0.0.1) logs plain text to its stderr (`logging.basicConfig`), with the client address in its request lines.
+- DEV-20: files and documents do not carry the provider lines G, SG and Z. The sidecar `license.attribution` holds Kartograf's own text per source (`sources/registry.py`, `messages/legal.py`), the JSON documents have no `attribution` or `terms_notice` and a plain directory has no `ATTRIBUTION.txt`.
 - DEV-2.1, ECO-005: `docs/research` and `docs/superpowers` are Polish records (PROGRESS, Next 26).
 - DEV-13.7, DEV-16.2, DEV-3.6, DEV-4.2: `SECURITY.md`, `CONTRIBUTING.md`, `docs/CLA.md`, `CONTRIBUTORS.md`, the GitHub rulesets and the single author identity of the history are the author's steps (PROGRESS, Next 3).
 - REL: the distribution is `kartograf`, not `nogat-kartograf`; no `server.json` yet (PROGRESS, Next 5).
