@@ -12,8 +12,8 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.bbox import BBox
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.core.bbox import BBox, validate_extent
+from kartograf.exceptions import DownloadError
 from kartograf.messages import message
 from kartograf.providers.cuzk.client import CuzkClient
 
@@ -51,16 +51,7 @@ def cadastral_areas_for_bbox(
     endpoint, _, layer = layer_url.rstrip("/").rpartition("/")
     if not endpoint or not layer.isdigit():
         raise ValueError(f"RUIAN layer URL without a layer number: {layer_url!r}")
-    if bbox.min_x >= bbox.max_x or bbox.min_y >= bbox.max_y:
-        raise ValidationError(
-            message(
-                "core.invalid_bbox",
-                min_x=bbox.min_x,
-                min_y=bbox.min_y,
-                max_x=bbox.max_x,
-                max_y=bbox.max_y,
-            )
-        )
+    validate_extent(bbox)
     key = _cache_key(layer_url, bbox)
     if cache is not None:
         restored = _restore(cache.get_index_area(key))

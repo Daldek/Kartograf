@@ -786,8 +786,8 @@ class TestGugikProviderRetry:
         assert sleep_times == [2, 4]
 
 
-class TestGugikProviderGetOpendataUrl:
-    """Tests of _get_opendata_url (feature types from the conftest stub)."""
+class TestGugikProviderResolveSheet:
+    """Tests of _resolve_sheet (feature types from the conftest stub)."""
 
     SHEET = "N-34-130-D-d-2-4"
     URL = f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{SHEET}.asc"
@@ -802,14 +802,16 @@ class TestGugikProviderGetOpendataUrl:
         """Valid empty answer (sea, abroad)."""
         return wfs_response(_EMPTY)
 
-    def test_get_opendata_url_success(self, record_response):
+    def test_resolve_sheet_success(self, record_response):
         """The URL of the record, from one query."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=record_response)
 
-        url = GugikProvider(
-            session=session, vertical_crs="EVRF2007", resolution="1m"
-        )._get_opendata_url(self.SHEET)
+        url = (
+            GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m")
+            ._resolve_sheet(self.SHEET)
+            .url
+        )
 
         assert url == self.URL
         assert session.get.call_count == 1
@@ -822,9 +824,11 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=wfs_response(render_wfs_body([record])))
 
-        url = GugikProvider(
-            session=session, vertical_crs="EVRF2007", resolution="1m"
-        )._get_opendata_url(self.SHEET)
+        url = (
+            GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m")
+            ._resolve_sheet(self.SHEET)
+            .url
+        )
 
         assert url == self.URL
         assert session.get.call_count == 1
@@ -839,7 +843,7 @@ class TestGugikProviderGetOpendataUrl:
         )
         assert crs == "urn:ogc:def:crs:EPSG::2180"
 
-    def test_get_opendata_url_not_found(self, empty_response):
+    def test_resolve_sheet_not_found(self, empty_response):
         """A valid empty answer = NoCoverageError describing the request; the
         variant's service is asked once, the other height system once (P10)."""
         session = Mock(spec=requests.Session)
@@ -848,7 +852,7 @@ class TestGugikProviderGetOpendataUrl:
         with pytest.raises(NoCoverageError) as exc_info:
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url(self.SHEET)
+            )._resolve_sheet(self.SHEET)
 
         assert str(exc_info.value) == (
             f"No NMT 1m data for {self.SHEET} (PL-1992 system, EVRF2007)"
@@ -865,9 +869,11 @@ class TestGugikProviderGetOpendataUrl:
         )
 
         with patch("time.sleep") as sleep:
-            url = GugikProvider(
-                session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url(self.SHEET)
+            url = (
+                GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m")
+                ._resolve_sheet(self.SHEET)
+                .url
+            )
 
         assert url == self.URL
         first, second = (call.args[0] for call in session.get.call_args_list)
@@ -887,7 +893,7 @@ class TestGugikProviderGetOpendataUrl:
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as exc_info:
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url(self.SHEET)
+            )._resolve_sheet(self.SHEET)
 
         assert not isinstance(exc_info.value, NoCoverageError)
         assert exc_info.value.sheet == self.SHEET
@@ -912,7 +918,7 @@ class TestGugikProviderGetOpendataUrl:
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as exc_info:
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url(self.SHEET)
+            )._resolve_sheet(self.SHEET)
 
         assert not isinstance(exc_info.value, NoCoverageError)
         assert shown in str(exc_info.value)
@@ -936,7 +942,7 @@ class TestGugikProviderGetOpendataUrl:
         with pytest.raises(DownloadError) as exc_info:
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url(self.SHEET)
+            )._resolve_sheet(self.SHEET)
 
         assert not isinstance(exc_info.value, NoCoverageError)
         assert session.get.call_count == 1
@@ -954,9 +960,11 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=wfs_response(render_wfs_body(records)))
 
-        url = GugikProvider(
-            session=session, vertical_crs="EVRF2007", resolution="1m"
-        )._get_opendata_url(self.SHEET)
+        url = (
+            GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m")
+            ._resolve_sheet(self.SHEET)
+            .url
+        )
 
         assert url == "https://x/new.asc"
 
@@ -969,9 +977,11 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=wfs_response(render_wfs_body(records)))
 
-        url = GugikProvider(
-            session=session, vertical_crs="EVRF2007", resolution="1m"
-        )._get_opendata_url(self.SHEET)
+        url = (
+            GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m")
+            ._resolve_sheet(self.SHEET)
+            .url
+        )
 
         assert url == "https://x/later.asc"
 
@@ -993,7 +1003,7 @@ class TestGugikProviderGetOpendataUrl:
         with pytest.raises(NoCoverageError) as exc_info:
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url(self.SHEET)
+            )._resolve_sheet(self.SHEET)
 
         assert exc_info.value.hints == (
             (
@@ -1022,7 +1032,7 @@ class TestGugikProviderGetOpendataUrl:
                     cache=cache,
                     vertical_crs="EVRF2007",
                     resolution="1m",
-                )._get_opendata_url(self.SHEET)
+                )._resolve_sheet(self.SHEET)
             calls = session.get.call_count
             with pytest.raises(NoCoverageError) as cached:
                 GugikProvider(
@@ -1030,7 +1040,7 @@ class TestGugikProviderGetOpendataUrl:
                     cache=cache,
                     vertical_crs="EVRF2007",
                     resolution="1m",
-                )._get_opendata_url(self.SHEET)
+                )._resolve_sheet(self.SHEET)
             assert session.get.call_count == calls
             assert str(cached.value) == str(first.value)
             assert cached.value.hints == first.value.hints
@@ -1050,7 +1060,7 @@ class TestGugikProviderGetOpendataUrl:
         with pytest.raises(NoCoverageError) as exc_info:
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url(sheet)
+            )._resolve_sheet(sheet)
 
         assert exc_info.value.hints == (
             (
@@ -1082,9 +1092,13 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=wfs_response(render_wfs_body([record])))
 
-        url = GugikProvider(
-            session=session, resolution=resolution, vertical_crs=vertical_crs
-        )._get_opendata_url(self.SHEET)
+        url = (
+            GugikProvider(
+                session=session, resolution=resolution, vertical_crs=vertical_crs
+            )
+            ._resolve_sheet(self.SHEET)
+            .url
+        )
 
         assert url == self.URL
         assert session.get.call_count == 1
@@ -1129,8 +1143,8 @@ class TestGugikProviderSession:
 
         with patch(SESSION_FACTORY, return_value=session) as factory:
             provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
-            provider._get_opendata_url(self.SHEET)
-            provider._get_opendata_url(self.SHEET)
+            provider._resolve_sheet(self.SHEET)
+            provider._resolve_sheet(self.SHEET)
 
         factory.assert_called_once()
         assert session.get.call_count == 2
@@ -1152,7 +1166,7 @@ class TestGugikProviderSession:
 
             def worker():
                 try:
-                    results.append(provider._get_opendata_url(self.SHEET))
+                    results.append(provider._resolve_sheet(self.SHEET).url)
                 except Exception as exc:
                     errors.append(exc)
 
@@ -1211,9 +1225,11 @@ class TestGugikProviderSession:
         )
 
         with patch(SESSION_FACTORY, return_value=session) as factory:
-            url = GugikProvider(
-                vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url(self.SHEET)
+            url = (
+                GugikProvider(vertical_crs="EVRF2007", resolution="1m")
+                ._resolve_sheet(self.SHEET)
+                .url
+            )
 
         factory.assert_called_once()
         assert url == wfs_record(self.SHEET)["url_do_pobrania"]
@@ -1276,9 +1292,13 @@ class TestSkorowidzRegression:
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(recorded)
 
-        url = GugikProvider(
-            session=session, vertical_crs=vertical_crs, resolution=resolution
-        )._get_opendata_url(sheet)
+        url = (
+            GugikProvider(
+                session=session, vertical_crs=vertical_crs, resolution=resolution
+            )
+            ._resolve_sheet(sheet)
+            .url
+        )
 
         assert url.rsplit("/", 1)[-1] == f"{expected}_{sheet}.asc"
 
@@ -1291,7 +1311,7 @@ class TestSkorowidzRegression:
         with pytest.raises(NoCoverageError, match="--scale 1:2000"):
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url("5.167.25")
+            )._resolve_sheet("5.167.25")
 
     def test_no_other_system_fallback(self):
         """PL-2000 sheet 6.125.25 (recorded answer) has 5m and 10m records, the
@@ -1304,7 +1324,7 @@ class TestSkorowidzRegression:
         with pytest.raises(NoCoverageError) as exc_info:
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url("6.125.25")
+            )._resolve_sheet("6.125.25")
 
         assert exc_info.value.hints == (
             (
@@ -1332,9 +1352,11 @@ class TestSkorowidzRegression:
         )
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(render_wfs_body([record]))
-        url = GugikProvider(
-            session=session, resolution="5m", vertical_crs="EVRF2007"
-        )._get_opendata_url("N-33-126-C-c-3-2")
+        url = (
+            GugikProvider(session=session, resolution="5m", vertical_crs="EVRF2007")
+            ._resolve_sheet("N-33-126-C-c-3-2")
+            .url
+        )
         assert url.endswith("76969_1298029_N-33-126-C-c-3-2.ASC")
 
     def test_no_coverage_leaves_no_directory(self, tmp_path):
@@ -1366,8 +1388,8 @@ class TestSkorowidzRegression:
         )
         try:
             with patch("time.sleep"), pytest.raises(DownloadError):
-                provider._get_opendata_url(sheet)
-            url = provider._get_opendata_url(sheet)
+                provider._resolve_sheet(sheet)
+            url = provider._resolve_sheet(sheet).url
         finally:
             cache.close()
         assert url.endswith(f"76036_1189924_{sheet}.asc")
@@ -1379,7 +1401,7 @@ class TestSkorowidzRegression:
         with pytest.raises(NoCoverageError, match="use --resolution 5m"):
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url("N-33-90-C-c-2-4")
+            )._resolve_sheet("N-33-90-C-c-2-4")
 
     def test_5m_accepts_5m_record(self):
         record = wfs_record("N-33-90-C-c-2-4", resolution="5.00 m")
@@ -1389,7 +1411,7 @@ class TestSkorowidzRegression:
             session=session, resolution="5m", vertical_crs="EVRF2007"
         )
         assert (
-            provider._get_opendata_url("N-33-90-C-c-2-4") == record["url_do_pobrania"]
+            provider._resolve_sheet("N-33-90-C-c-2-4").url == record["url_do_pobrania"]
         )
 
     def test_pl2000_record_matches_only_same_zone(self):
@@ -1397,9 +1419,9 @@ class TestSkorowidzRegression:
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(render_wfs_body([record]))
         assert (
-            GugikProvider(
-                session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url("7.173.21.06")
+            GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m")
+            ._resolve_sheet("7.173.21.06")
+            .url
             == record["url_do_pobrania"]
         )
 
@@ -1410,4 +1432,4 @@ class TestSkorowidzRegression:
         with pytest.raises(NoCoverageError, match="PL-2000"):
             GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url("7.173.21.06")
+            )._resolve_sheet("7.173.21.06")

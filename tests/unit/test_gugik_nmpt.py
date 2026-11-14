@@ -517,13 +517,13 @@ class TestGugikNmptProviderDownload:
             _nmpt(session=session).download_bbox(sample_bbox, output_path)
         assert not output_path.exists()
 
-    def test_get_opendata_url_uses_nmpt_index(self):
-        """_get_opendata_url reads the NMPT WFS index (not NMT): one query."""
+    def test_resolve_sheet_uses_nmpt_index(self):
+        """_resolve_sheet reads the NMPT WFS index (not NMT): one query."""
         session = _index_session(
             {NMPT_EVRF2007: wfs_fixture(f"sheet_nmpt_evrf2007_{SHEET_E}.xml")}
         )
 
-        url = _nmpt(session=session)._get_opendata_url(SHEET_E)
+        url = _nmpt(session=session)._resolve_sheet(SHEET_E).url
 
         assert url == URL_E_1M
         session.get.assert_called_once()

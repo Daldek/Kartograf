@@ -45,6 +45,33 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   its hint names `--year`/`--max-year` and the other years of the sheet when known. Stores
   filled before keep such grids. `verify_sheet_extent` reads `dx`/`dy` headers too.
 
+### Removed
+
+- Dead and duplicated code (the author's request of 2026-11-14). No command, option, document,
+  MCP tool or name of `kartograf.__all__` changes; the deprecated aliases of
+  `LandCoverProvider` (`source_url`, `download_by_teryt`, `validate_teryt`) and the 0.7.x
+  `kampanie/` detection stay (public, used by Archiwista).
+  - Internal code without a caller in the package, with the tests that only exercised it:
+    `catalog.build.build_list`, the test hooks `catalog.build.clear_caches` and
+    `catalog.tools.clear_caches` (the tests clear the `functools.cache` themselves),
+    `core.parser_tm33.find_tiles_tm33_for_bbox` with its message, `download.storage.prune_empty_dirs`,
+    `landcover.manager.corine_year_choices`, `LandCoverManager.get_available_providers`, the
+    constants `catalog.shared.READ_ERRORS` and `core.parser_2000.SHEET_DIMENSIONS_2000`, the
+    wrappers `GugikProvider._get_opendata_url` and `GugikOrtoProvider._get_opendata_url` (the tests
+    call `_resolve_sheet`) and `transport.atom.atom_index` (a wrapper of the index reader that only
+    the tests called; they keep it as a helper of their own).
+  - Descriptor fields nothing read: `SourceDescriptor.tile_scheme` with the class `TileScheme` and
+    its three messages, `AccessChannel.server_reprojection` and `CountryProfile.dataset_keys`
+    (ARCHITECTURE 3.1 and 5).
+  - The unused parameters `south` and `east` of `Parser2000._apply_quadrant`.
+- Duplicates merged into one implementation: the PL-2000 sheet search uses the bbox intersection
+  of `core.sheet_parser` (`_bboxes_intersect_2000` was a copy, and so were its tests); the CUZK
+  sheet index and the RUIAN query share `core.bbox.validate_extent` (a bbox of positive area,
+  `core.invalid_bbox`); `download.fetch.local_only` returns the linked local version of a
+  position left out of a plan (and of the `unchecked` units of a collection) in place of five
+  private copies (collections, land cover, HSG, CZ contours, CZ orthophoto) and three inline
+  ones (PL cutout, CZ cutout, image cutout).
+
 ### Windows and macOS portability
 
 The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the release.

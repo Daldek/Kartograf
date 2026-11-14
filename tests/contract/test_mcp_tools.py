@@ -463,7 +463,7 @@ def test_a_mode_is_not_a_cache_of_another():
 
     assert first is again  # built once per process
     assert tool_specs(allow_writes=True) is not first
-    tools_module.clear_caches()
+    tools_module._built.cache_clear()
     assert tool_specs(allow_writes=False) is not first
     assert tool_specs(allow_writes=False) == first
 

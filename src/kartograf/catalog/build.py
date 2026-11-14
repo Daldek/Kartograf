@@ -300,13 +300,6 @@ def _command_list(
     return CommandList(TOOL, version, group_rows, rows)
 
 
-def build_list(
-    commands: Sequence[Command], groups: Sequence[Group], version: str
-) -> CommandList:
-    """Return the ``kartograf-command-list/1`` document of the declarations."""
-    return _command_list(build_entries(commands, groups), groups, version)
-
-
 def _version() -> str:
     from kartograf import __version__  # the package imports the catalog
 
@@ -322,12 +315,6 @@ def _entries() -> tuple[CommandEntry, ...]:
 @functools.cache
 def _list() -> CommandList:
     return _command_list(_entries(), declared().groups, _version())
-
-
-def clear_caches() -> None:
-    """Forget the documents built so far (for tests that swap the declarations)."""
-    _entries.cache_clear()
-    _list.cache_clear()
 
 
 def command_entries() -> tuple[CommandEntry, ...]:

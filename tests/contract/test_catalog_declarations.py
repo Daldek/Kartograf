@@ -867,7 +867,6 @@ def test_declaration_modules_do_not_call_providers_at_import(monkeypatch):
         "kartograf.landcover.manager": (
             "bdot10k_archive_choices",
             "bdoo_year_choices",
-            "corine_year_choices",
             "soil_choices",
         ),
         "kartograf.download.orto_cutout": (

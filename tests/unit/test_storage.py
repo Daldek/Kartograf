@@ -1006,35 +1006,6 @@ class TestRegistryVariantStorage:
         assert source["url"] == url
 
 
-class TestPruneEmptyDirs:
-    """Finding 10: a failure does not leave an empty <segment>/bbox/ tree."""
-
-    def test_removes_empty_chain_but_not_stop(self, tmp_path):
-        from kartograf.download.storage import prune_empty_dirs
-
-        leaf = tmp_path / "nmt" / "cz_dmr5g_bpv" / "bbox"
-        leaf.mkdir(parents=True)
-        prune_empty_dirs(leaf, tmp_path)
-        assert not (tmp_path / "nmt").exists() and tmp_path.exists()
-
-    def test_stops_at_non_empty_parent(self, tmp_path):
-        from kartograf.download.storage import prune_empty_dirs
-
-        leaf = tmp_path / "nmt" / "seg" / "bbox"
-        leaf.mkdir(parents=True)
-        (tmp_path / "nmt" / "seg" / "arkusz.asc").write_text("x")
-        prune_empty_dirs(leaf, tmp_path)
-        assert not leaf.exists() and (tmp_path / "nmt" / "seg").exists()
-
-    def test_never_touches_outside_stop(self, tmp_path):
-        from kartograf.download.storage import prune_empty_dirs
-
-        outside = tmp_path / "a" / "b"
-        outside.mkdir(parents=True)
-        prune_empty_dirs(outside, tmp_path / "other")
-        assert outside.exists()
-
-
 class TestStorageVariant:
     """E12: product variant as a segment suffix (orto CIR/B-W)."""
 

@@ -326,13 +326,6 @@ class TestSoilGridsManager:
         manager = LandCoverManager(root="data", provider="soilgrids")
         assert manager.provider_name == "SoilGrids"
 
-    def test_manager_available_providers(self):
-        """Test that soilgrids is in available providers."""
-        from kartograf.landcover.manager import LandCoverManager
-
-        providers = LandCoverManager.get_available_providers()
-        assert "soilgrids" in providers
-
 
 class TestPropertyDescriptions:
     """Test property descriptions dictionary."""

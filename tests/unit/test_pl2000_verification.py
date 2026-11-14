@@ -15,7 +15,6 @@ import re
 import pytest
 
 from kartograf.core.parser_2000 import (
-    SHEET_DIMENSIONS_2000,
     ZONE_EPSG,
     Parser2000,
     find_sheets_2000_for_bbox,
@@ -122,29 +121,6 @@ class TestPL2000BBoxReferenceValues:
 
         assert height == pytest.approx(expected_height, abs=0.01)
         assert width == pytest.approx(expected_width, abs=0.01)
-
-    @pytest.mark.parametrize(
-        "scale, expected_height, expected_width",
-        [(s, h, w) for s, (h, w) in SHEET_DIMENSIONS_2000.items()],
-        ids=list(SHEET_DIMENSIONS_2000),
-    )
-    def test_dimensions_match_constant(self, scale, expected_height, expected_width):
-        """Verify that SHEET_DIMENSIONS_2000 agrees with the computed dimensions."""
-        sheets_per_scale = {
-            "1:10000": "7.160.15",
-            "1:5000": "7.160.15.2",
-            "1:2000": "7.160.15.10",
-            "1:1000": "7.160.15.10.3",
-            "1:500": "7.160.15.10.3.2",
-        }
-        p = Parser2000(sheets_per_scale[scale])
-        bbox = p.get_bbox()
-
-        actual_height = bbox.max_y - bbox.min_y
-        actual_width = bbox.max_x - bbox.min_x
-
-        assert actual_height == pytest.approx(expected_height, abs=0.01)
-        assert actual_width == pytest.approx(expected_width, abs=0.01)
 
     @pytest.mark.parametrize("zone", [5, 6, 7, 8])
     def test_bbox_crs_matches_zone_epsg(self, zone):
@@ -543,7 +519,7 @@ class TestLiveGugikIndex:
         provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
         endpoint = _endpoint(provider.variant)
 
-        url = provider._get_opendata_url(sheet, timeout=LIVE_TIMEOUT)
+        url = provider._resolve_sheet(sheet, timeout=LIVE_TIMEOUT).url
 
         assert url.startswith("https://opendata.geoportal.gov.pl/")
         assert url.lower().endswith("_n-33-48-c-a-3-4.asc"), url
@@ -567,7 +543,7 @@ class TestLiveGugikIndex:
         provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
 
         with pytest.raises(NoCoverageError) as exc:
-            provider._get_opendata_url("N-33-48-C-a-1-3", timeout=LIVE_TIMEOUT)
+            provider._resolve_sheet("N-33-48-C-a-1-3", timeout=LIVE_TIMEOUT)
 
         assert exc.value.sheet == "N-33-48-C-a-1-3"
 

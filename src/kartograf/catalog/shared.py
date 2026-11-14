@@ -385,9 +385,6 @@ def update_params(
     return tuple(params)
 
 
-# What a command that only reads can raise: a wrong argument and, in the MCP server, a
-# path outside the allowed directories (ERR-1).
-READ_ERRORS = ("validation_error", "io_error", "forbidden")
 # What a command that downloads can raise.
 DATA_ERRORS = (
     "validation_error",

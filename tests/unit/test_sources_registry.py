@@ -30,12 +30,10 @@ from kartograf.sources.descriptor import (
     AccessChannel,
     ArchiveLayersParams,
     AtomFilesParams,
-    CountryProfile,
     FeatureBBoxParams,
     LicenseInfo,
     SheetIndexParams,
     SourceDescriptor,
-    TileScheme,
     TransportKind,
     UnitPackageParams,
     WcsCutoutParams,
@@ -258,7 +256,6 @@ class TestDescriptorDataclasses:
     def test_access_channel_defaults(self):
         ch = self._channel()
         assert ch.vertical_source == "native"
-        assert ch.server_reprojection is False
         assert ch.notes == ""
         assert ch.endpoint == ""
 
@@ -270,7 +267,6 @@ class TestDescriptorDataclasses:
             name="NMT 1m",
             provider_name="GUGiK",
             channels=(self._channel(),),
-            tile_scheme=None,
             storage_subdir="nmt/pl_{system}_1m_{vcrs}",
             default_extension=".asc",
             license=LicenseInfo(id="PL-PGiK-40a", attribution="GUGiK"),
@@ -279,23 +275,6 @@ class TestDescriptorDataclasses:
             desc.key = "x"  # type: ignore[misc]
         assert desc.resolution is None
         assert desc.auth == "none"
-
-    def test_tile_scheme_and_country_profile(self):
-        ts = TileScheme(
-            kind="computable",
-            crs="EPSG:2180",
-            width_m=2000.0,
-            height_m=2000.0,
-            description="test",
-        )
-        assert ts.kind == "computable"
-        cp = CountryProfile(
-            code="PL",
-            name="Polska",
-            extent_wgs84=BBox(14.07, 49.00, 24.20, 54.90, "EPSG:4326"),
-            dataset_keys=("pl.gugik.nmt_1m",),
-        )
-        assert cp.extent_wgs84.crs == "EPSG:4326"
 
 
 class TestRegistry:
@@ -465,7 +444,7 @@ class TestRegistry:
                 "EPSG:5514",
                 ("EPSG:8357",),
             )
-            assert ch.server_reprojection is False and "ADR-024" in ch.notes
+            assert "ADR-024" in ch.notes
             assert (ch.update_signal, ch.capabilities) == (
                 "none",
                 frozenset({"bbox_raster"}),
@@ -690,7 +669,6 @@ class TestResolveSubdir:
             channels=(
                 AccessChannel(transport=TransportKind.WCS, horizontal_crs="EPSG:2180"),
             ),
-            tile_scheme=None,
             storage_subdir=subdir,
             default_extension=".asc",
             license=LicenseInfo(id="X", attribution="X"),

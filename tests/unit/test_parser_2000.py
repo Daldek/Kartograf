@@ -9,9 +9,7 @@ import pytest
 
 from kartograf.core.parser_2000 import (
     SCALE_HIERARCHY_2000,
-    SHEET_DIMENSIONS_2000,
     Parser2000,
-    _bboxes_intersect_2000,
     find_sheets_2000_for_bbox,
 )
 from kartograf.core.sheet_parser import BBox
@@ -723,42 +721,6 @@ class TestParser2000Constants:
             "1:1000",
             "1:500",
         ]
-
-    def test_sheet_dimensions(self):
-        """Test SHEET_DIMENSIONS_2000."""
-        assert SHEET_DIMENSIONS_2000 == {
-            "1:10000": (5000, 8000),
-            "1:5000": (2500, 4000),
-            "1:2000": (1000, 1600),
-            "1:1000": (500, 800),
-            "1:500": (250, 400),
-        }
-
-    def test_sheet_dimensions_consistent_with_bbox(self):
-        """Test that SHEET_DIMENSIONS_2000 dimensions match BBox."""
-        for scale, (h, w) in SHEET_DIMENSIONS_2000.items():
-            # Build a suitable sheet code for each scale
-            if scale == "1:10000":
-                sheet = "6.179.12"
-            elif scale == "1:5000":
-                sheet = "6.179.12.1"
-            elif scale == "1:2000":
-                sheet = "6.179.12.01"
-            elif scale == "1:1000":
-                sheet = "6.179.12.01.1"
-            elif scale == "1:500":
-                sheet = "6.179.12.01.1.1"
-            else:
-                continue
-
-            p = Parser2000(sheet)
-            bbox = p.get_bbox()
-            assert bbox.max_y - bbox.min_y == pytest.approx(h), (
-                f"Height mismatch for {scale}"
-            )
-            assert bbox.max_x - bbox.min_x == pytest.approx(w), (
-                f"Width mismatch for {scale}"
-            )
 
 
 # =========================================================================
@@ -1641,51 +1603,6 @@ class TestFindSheets2000ForBBox:
         for sheet in result:
             p = Parser2000(sheet)
             assert p.scale == "1:10000"
-
-
-# =========================================================================
-# _bboxes_intersect_2000
-# =========================================================================
-
-
-class TestBBoxesIntersect2000:
-    """Tests of _bboxes_intersect_2000() (same convention as PL-1992)."""
-
-    def test_overlapping_boxes(self):
-        """Boxes with a positive intersection area."""
-        a = BBox(0, 0, 10, 10, "EPSG:2177")
-        b = BBox(5, 5, 15, 15, "EPSG:2177")
-        assert _bboxes_intersect_2000(a, b) is True
-
-    def test_touching_edge(self):
-        """Touching along an edge -> NOT an intersection (audit 0.7.0, A1-7)."""
-        a = BBox(0, 0, 5, 5, "EPSG:2177")
-        b = BBox(5, 0, 10, 5, "EPSG:2177")
-        assert _bboxes_intersect_2000(a, b) is False
-
-    def test_touching_corner(self):
-        """Touching at a corner -> NOT an intersection."""
-        a = BBox(0, 0, 5, 5, "EPSG:2177")
-        b = BBox(5, 5, 10, 10, "EPSG:2177")
-        assert _bboxes_intersect_2000(a, b) is False
-
-    def test_point_bbox_inside_box_intersects(self):
-        """Point inside the box -> intersection."""
-        a = BBox(2, 2, 2, 2, "EPSG:2177")
-        b = BBox(0, 0, 5, 5, "EPSG:2177")
-        assert _bboxes_intersect_2000(a, b) is True
-
-    def test_point_bbox_on_max_edge_does_not_intersect(self):
-        """Point on the max edge -> no intersection (half-open interval)."""
-        a = BBox(5, 2, 5, 2, "EPSG:2177")
-        b = BBox(0, 0, 5, 5, "EPSG:2177")
-        assert _bboxes_intersect_2000(a, b) is False
-
-    def test_point_bbox_on_min_edge_intersects(self):
-        """Point on the min edge -> intersection (half-open interval)."""
-        a = BBox(0, 2, 0, 2, "EPSG:2177")
-        b = BBox(0, 0, 5, 5, "EPSG:2177")
-        assert _bboxes_intersect_2000(a, b) is True
 
 
 class TestFindSheets2000DenseEnvelope:

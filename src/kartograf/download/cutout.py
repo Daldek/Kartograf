@@ -45,9 +45,7 @@ from kartograf.download.fetch import (
     VersionedFile,
     fetch_version,
     inspect_version,
-    link_version,
-    local_file,
-    local_version,
+    local_only,
     refreshes_cache,
     validate_update,
 )
@@ -566,14 +564,7 @@ def _run_pl_wcs_cutout(
         todo, excluded = select_planned(plan, [current], "pl_cutout")
         stale = tuple(excluded)
         if not todo:
-            local = local_version(slot)
-            if local is None:
-                return _cutout_result(None, stale=stale)
-            link_version(slot.std, local, refresh=False)
-            return _cutout_result(
-                local_file(slot.std, local),
-                stale=stale,
-            )
+            return _cutout_result(local_only(slot), stale=stale)
 
     from kartograf.providers.pl.prg import fetch_land_mask
     from kartograf.transport.chunks import align_bbox

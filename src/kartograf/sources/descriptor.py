@@ -2,7 +2,7 @@
 Source descriptors - pure data, zero IO, zero behavior.
 
 A descriptor describes ONE dataset (e.g. NMT 1 m from GUGiK): access channels,
-coordinate systems, licenses, tile scheme. The providers remain the source of
+coordinate systems, licenses, storage segment. The providers remain the source of
 truth for runtime logic; capabilities currently only drive channel selection
 in the sidecar (``build_metadata(capability=)``) and are not enforced in managers.
 
@@ -392,7 +392,6 @@ class AccessChannel:
     horizontal_crs: str  # "EPSG:2180", "EPSG:5514", ...
     vertical_crs_options: tuple[str, ...] = ()  # () when n/a (orto, landcover)
     vertical_source: str = "native"  # "native" | "ellipsoidal" | "server"
-    server_reprojection: bool = False
     capabilities: frozenset[str] = frozenset()
     # {"bbox_raster","bbox_vector","sheet_files","area_files","admin_unit_files",
     #  "archive_unit_files","country_files"}; the sidecar of a collection file
@@ -418,17 +417,6 @@ class AccessChannel:
 
 
 @dataclass(frozen=True)
-class TileScheme:
-    """Tile scheme of a source (computable or requiring an index)."""
-
-    kind: str  # "computable" | "index"
-    crs: str
-    width_m: float | None
-    height_m: float | None
-    description: str  # e.g. "SM5: nazwa miasta + cyfry, wymaga indeksu"
-
-
-@dataclass(frozen=True)
 class SourceDescriptor:
     """Full description of one dataset."""
 
@@ -438,7 +426,6 @@ class SourceDescriptor:
     name: str  # human-readable dataset name
     provider_name: str  # "GUGiK", "CUZK", ...
     channels: tuple[AccessChannel, ...]
-    tile_scheme: TileScheme | None
     # Segment template {system}/{vcrs} (ADR-026); land cover and collections: a
     # prefix completed by content tokens (download.storage.content_segment,
     # spec 3.4, ADR-042 D8)
@@ -486,9 +473,8 @@ class SourceDescriptor:
 
 @dataclass(frozen=True)
 class CountryProfile:
-    """Country profile: rough extent (for --country auto in stage 1) + datasets."""
+    """Country profile: rough extent (for ``--country auto``)."""
 
     code: str  # "PL"
     name: str
     extent_wgs84: BBox
-    dataset_keys: tuple[str, ...]

@@ -487,7 +487,7 @@ class TestGugikProviderCacheIntegration:
             session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
 
-        assert provider._get_opendata_url(SHEET) == SOURCE["url"]
+        assert provider._resolve_sheet(SHEET).url == SOURCE["url"]
         mock_session.get.assert_not_called()
         assert provider.source_info(SHEET) == SOURCE
 
@@ -500,7 +500,7 @@ class TestGugikProviderCacheIntegration:
         )
 
         with pytest.raises(NoCoverageError, match=SHEET):
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
         mock_session.get.assert_not_called()
 
     def test_cache_miss_queries_wfs_and_stores_source(self, cache):
@@ -511,7 +511,7 @@ class TestGugikProviderCacheIntegration:
         provider = GugikProvider(
             session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
-        result = provider._get_opendata_url(SHEET)
+        result = provider._resolve_sheet(SHEET).url
 
         assert result == record["url_do_pobrania"]
         assert mock_session.get.call_count == 1
@@ -529,7 +529,7 @@ class TestGugikProviderCacheIntegration:
             session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
         with pytest.raises(NoCoverageError) as first:
-            provider._get_opendata_url(sheet)
+            provider._resolve_sheet(sheet)
         assert first.value.hints == (
             (
                 "The GUGiK sheet index has this sheet in NMT 5m EVRF2007 - use "
@@ -543,7 +543,7 @@ class TestGugikProviderCacheIntegration:
         with pytest.raises(NoCoverageError) as hit:
             GugikProvider(
                 session=offline, cache=cache, vertical_crs="EVRF2007", resolution="1m"
-            )._get_opendata_url(sheet)
+            )._resolve_sheet(sheet)
         offline.get.assert_not_called()
         assert hit.value.hints == first.value.hints
 
@@ -555,7 +555,7 @@ class TestGugikProviderCacheIntegration:
                 cache=cache,
                 vertical_crs="EVRF2007",
                 resolution="1m",
-            )._get_opendata_url(SHEET)
+            )._resolve_sheet(SHEET)
         assert hit.value.hints == ()
 
     def test_cache_miss_empty_index_stores_no_coverage(self, cache):
@@ -566,7 +566,7 @@ class TestGugikProviderCacheIntegration:
             session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
         with pytest.raises(NoCoverageError, match=SHEET):
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
 
         own = wfs_requests(mock_session, NMT_EVRF2007)
         assert len(own) == 1  # one GetFeature with every yearly type
@@ -584,7 +584,7 @@ class TestGugikProviderCacheIntegration:
             session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as excinfo:
-            provider._get_opendata_url(SHEET)
+            provider._resolve_sheet(SHEET)
 
         assert not isinstance(excinfo.value, NoCoverageError)
         assert "SkorowidzNMT" in str(excinfo.value)
@@ -599,7 +599,7 @@ class TestGugikProviderCacheIntegration:
         provider = GugikProvider(
             session=_wfs_session([record]), vertical_crs="EVRF2007", resolution="1m"
         )
-        assert provider._get_opendata_url(SHEET) == record["url_do_pobrania"]
+        assert provider._resolve_sheet(SHEET).url == record["url_do_pobrania"]
 
     def test_5m_resolution_with_cache(self, cache):
         """5m key: a hit without network, a miss writes under the 5m variant."""
@@ -608,7 +608,7 @@ class TestGugikProviderCacheIntegration:
         provider = GugikProvider(
             session=mock_session, resolution="5m", cache=cache, vertical_crs="EVRF2007"
         )
-        assert provider._get_opendata_url(SHEET) == SOURCE["url"]
+        assert provider._resolve_sheet(SHEET).url == SOURCE["url"]
         mock_session.get.assert_not_called()
 
         cache.clear()
@@ -616,7 +616,7 @@ class TestGugikProviderCacheIntegration:
         mock_session.get.side_effect = _wfs_session(
             [wfs_record(SHEET), wfs_record(SHEET, resolution="5.00 m", url=url_5m)]
         ).get.side_effect
-        assert provider._get_opendata_url(SHEET) == url_5m
+        assert provider._resolve_sheet(SHEET).url == url_5m
         cached = cache.get_record(*NMT_5M)
         assert cached["source"]["url"] == url_5m
         assert cached["source"]["resolution_m"] == 5.0
@@ -640,7 +640,7 @@ class TestGugikNmptProviderCacheIntegration:
             session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
 
-        assert provider._get_opendata_url(SHEET) == nmpt_source["url"]
+        assert provider._resolve_sheet(SHEET).url == nmpt_source["url"]
         mock_session.get.assert_not_called()
 
     def test_nmt_entry_does_not_serve_nmpt(self, cache):
@@ -656,7 +656,7 @@ class TestGugikNmptProviderCacheIntegration:
         provider = GugikNmptProvider(
             session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
-        assert provider._get_opendata_url(SHEET) == nmpt_url
+        assert provider._resolve_sheet(SHEET).url == nmpt_url
 
         assert len(wfs_requests(mock_session, nmpt_index)) == 1
         assert mock_session.get.call_count == 1

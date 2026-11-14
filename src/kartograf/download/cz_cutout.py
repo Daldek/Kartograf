@@ -22,9 +22,7 @@ from kartograf.download.fetch import (
     VersionedFile,
     fetch_version,
     inspect_version,
-    link_version,
-    local_file,
-    local_version,
+    local_only,
     refreshes_cache,
     validate_update,
 )
@@ -249,14 +247,7 @@ def _run_cz_cutout(
         todo, skipped = select_planned(plan, [fresh], "cz_cutout")
         stale = tuple(skipped)
         if not todo:
-            local = local_version(slot)
-            if local is None:
-                return _result(None, stale)
-            link_version(slot.std, local, refresh=False)
-            return _result(
-                local_file(slot.std, local),
-                stale,
-            )
+            return _result(local_only(slot), stale)
 
     def fetch(staged: Path) -> None:
         nonlocal plain_empty
