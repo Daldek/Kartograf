@@ -40,6 +40,10 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   Nogat DEV-12.2, DEV-12.4 to DEV-12.9 (no `nogat-log/1` files) and DEV-20 (no provider lines
   G, SG, Z). `docs/DECISIONS.md`: ADR-020 erratum 5 (the removed `_get_opendata_url`), ADR-059
   erratum 1 (Nogat 1.0), index rows of ADR-037, ADR-040 and ADR-052 completed.
+- Documentation: release preparation of 2026-11-15 (Kartograf joins the first joint release
+  of the ecosystem). `docs/PROGRESS.md` records the green CI run of `develop` on every platform
+  that step (a) of the release waited for, and the module docstring of `kartograf._version`
+  gives the build identifier in the form it has (`0.8.0.dev0+c9afdd3f`, not `0.7.0-dev+...`).
 
 ### Fixed
 

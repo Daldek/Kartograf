@@ -4,7 +4,7 @@ Build identifier for development versions of Kartograf.
 ``kartograf.__version__`` stays the static release string read by
 ``pyproject.toml``. :func:`build_version` extends a development version
 (``"...dev..."``) with the git commit of the imported package, e.g.
-``"0.7.0-dev+6db4408"`` or ``"0.7.0-dev+6db4408.dirty"`` when tracked files
+``"0.8.0.dev0+c9afdd3f"`` or ``"0.8.0.dev0+c9afdd3f.dirty"`` when tracked files
 inside the package directory have uncommitted changes. Release versions are
 returned unchanged and never touch git.
 
