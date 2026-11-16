@@ -2,7 +2,7 @@
 
 Kartograf downloads official spatial data of Poland (GUGiK) and Czechia (CUZK), with Copernicus CORINE and ISRIC SoilGrids (NMT/NMPT, orthophoto, LAZ, BDOT10k, SoilGrids, HSG and more), and saves every file as a version in a store with a metadata sidecar. One command catalog drives the CLI `kartograf`, the Python library and the MCP server `kartograf-mcp`.
 
-Profile: `tool` (DEV §1). What it is for: `README.md`; scope: `docs/SCOPE.md`. Requirements are cited by ID (DEV, DOC, AGI, ERR, REL) from the [Nogat standard 1.0](https://github.com/Daldek/Nogat/tree/main/standards); this repository holds no copy of it (DEV-1.3).
+Profile: `tool` (DEV §1). What it is for: [README.md](README.md); scope: [docs/SCOPE.md](docs/SCOPE.md). Requirements are cited by ID (DEV, DOC, AGI, ERR, REL) from the [Nogat standard 1.0](https://github.com/Daldek/Nogat/tree/main/standards); this repository holds no copy of it (DEV-1.3).
 
 ## Critical rules
 
