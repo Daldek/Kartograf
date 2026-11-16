@@ -1,0 +1,11 @@
+{
+  "true_N-34-50-A-c-3-2-3": {
+    "url": "https://opendata.geoportal.gov.pl/DaneFotogrametryczne/TrueOrtho/73912/73912_1007148_N-34-50-A-c-3-2-3.tif",
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "296853152",
+      "Content-Disposition": "attachment; filename=\"73912_1007148_N-34-50-A-c-3-2-3.tif\""
+    }
+  }
+}

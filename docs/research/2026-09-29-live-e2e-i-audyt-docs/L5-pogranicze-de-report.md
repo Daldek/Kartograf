@@ -414,7 +414,7 @@ Proponowane teksty:
 
 ## 6. Surowe artefakty
 
-Katalog: `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L5-pogranicze-de/`
+Katalog: `<workspace>/Kartograf/e2e-data/2026-09-29-live/L5-pogranicze-de/`
 - `runs/<przebieg>/{cmd,stdout,stderr,rc,time,hosts.log}` oraz `runs/<przebieg>/data/` (dane
   i sidecary; ponowienia s2c2/s3b2-4/s4c2/s4d2-3/s5b2 pisza do katalogu `data/` pierwszej proby).
 - Skrypty:

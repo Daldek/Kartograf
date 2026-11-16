@@ -1,10 +1,10 @@
 # Przeglad fali poprawek dokumentacji (Kartograf, 2026-09-29) — zlecenie recenzenta
 
-**Kontekst.** Repo `/home/claude-agent/workspace/Kartograf`, galaz `develop`. Po testach na zywych
+**Kontekst.** Repo `<workspace>/Kartograf`, galaz `develop`. Po testach na zywych
 danych (raporty `L1`..`L7-*-report.md`) i audycie dokumentacji (`D1`, `D2`) agent wykonal fale
 poprawek DOKUMENTACJI: 12 commitow `152c31e..515f275` (BASE `152c31e`, HEAD `515f275`).
 Wszystkie pliki ponizej leza w katalogu tego zlecenia:
-`/home/claude-agent/workspace/Kartograf/.superpowers/sdd/2026-09-29-live-e2e-i-docs/`.
+`<workspace>/Kartograf/.superpowers/sdd/2026-09-29-live-e2e-i-docs/`.
 
 - wymagania fali: `DOCS-FIX-BRIEF.md`; raport wykonawcy: `DOCS-FIX-REPORT.md`;
 - pakiet recenzji (log, stat, `diff -U10` calej fali): `DOCS-REVIEW-PACKAGE.diff` (4809 linii — czytaj
@@ -16,7 +16,7 @@ Wszystkie pliki ponizej leza w katalogu tego zlecenia:
 
 **Twoja rola: niezalezny recenzent.** Repo TYLKO DO ODCZYTU: zero edycji, zero commitow, zero
 `git worktree`/`stash`/`checkout` (jedyny plik, ktory piszesz, to raport ponizej). Repo Hydrografu
-`/home/claude-agent/workspace/Hydrograf` — tylko odczyt. Siec niepotrzebna. Nie uruchamiaj subagentow.
+`<workspace>/Hydrograf` — tylko odczyt. Siec niepotrzebna. Nie uruchamiaj subagentow.
 Pliki tymczasowe tylko w katalogu z `mktemp -d`.
 
 ## Co sprawdzic

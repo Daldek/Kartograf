@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:georss="http://www.georss.org/georss" xmlns:inspire_dls="http://inspire.ec.europa.eu/schemas/inspire_dls/1.0" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xml:lang="cs">
+   <id>https://atom.cuzk.gov.cz/ZABAGED-GPKG/datasetFeeds/CZ-00025712-CUZK_ZABAGED-GPKG_1.xml</id>
+   <title>ZABAGED® - GPKG</title>
+   <updated>2026-10-04T21:33:41+02:00</updated>
+   <author>
+      <name>Český úřad zeměměřický a katastrální</name>
+      <uri>https://geoportal.cuzk.gov.cz</uri>
+      <email>cuzk.helpdesk@cuzk.gov.cz</email>
+   </author>
+   <rights>žádné podmínky neplatí</rights>
+   <link href="https://atom.cuzk.gov.cz/ZABAGED-GPKG/ZABAGED-GPKG.xml" hreflang="cs" rel="up" type="application/atom+xml" />
+   <link href="https://geoportal.cuzk.gov.cz" hreflang="cs" rel="describedby" type="text/html" />
+   <entry>
+      <id>https://openzu.cuzk.gov.cz/opendata/ZABAGED-GPKG/epsg-5514/ZABAGED-5514-gpkg-20261004.zip</id>
+      <title>ZABAGED® - GPKG</title>
+      <updated>2026-10-04T18:51:04+02:00</updated>
+      <link href="https://openzu.cuzk.gov.cz/opendata/ZABAGED-GPKG/epsg-5514/ZABAGED-5514-gpkg-20261004.zip" length="5805826649" rel="alternate" type="application/geopackage+sqlite3" hreflang="cs" />
+      <category label="S-JTSK" term="http://www.opengis.net/def/crs/EPSG/0/5514" />
+      <georss:polygon>51.354 18.6346 50.8229 11.9377 48.2331 12.6024 48.737 18.9554 51.354 18.6346</georss:polygon>
+   </entry>
+   <entry>
+      <id>https://openzu.cuzk.gov.cz/opendata/ZABAGED-GPKG/epsg-3045/ZABAGED-3045-gpkg-20261004.zip</id>
+      <title>ZABAGED® - GPKG</title>
+      <updated>2026-10-04T21:33:41+02:00</updated>
+      <link href="https://openzu.cuzk.gov.cz/opendata/ZABAGED-GPKG/epsg-3045/ZABAGED-3045-gpkg-20261004.zip" length="6742892709" rel="alternate" type="application/geopackage+sqlite3" hreflang="cs" />
+      <category label="ETRS89/TM33" term="http://www.opengis.net/def/crs/EPSG/0/3045" />
+      <georss:polygon>51.354 18.6346 50.8229 11.9377 48.2331 12.6024 48.737 18.9554 51.354 18.6346</georss:polygon>
+   </entry>
+</feed>

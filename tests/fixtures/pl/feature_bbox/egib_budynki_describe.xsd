@@ -1,0 +1,31 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<schema
+   targetNamespace="http://mapserver.gis.umn.edu/mapserver" 
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver" 
+   xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2001/XMLSchema"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   elementFormDefault="qualified" version="0.1" >
+
+  <import namespace="http://www.opengis.net/gml/3.2"
+          schemaLocation="http://schemas.opengis.net/gml/3.2.1/gml.xsd" />
+
+  <element name="budynki" 
+           type="ms:budynkiType" 
+           substitutionGroup="gml:AbstractFeature" />
+
+  <complexType name="budynkiType">
+    <complexContent>
+      <extension base="gml:AbstractFeatureType">
+        <sequence>
+          <element name="geom" type="gml:SurfacePropertyType" minOccurs="0" maxOccurs="1"/>
+          <element name="ID_BUDYNKU" minOccurs="0" type="string"/>
+          <element name="RODZAJ" minOccurs="0" type="string"/>
+          <element name="KONDYGNACJE_NADZIEMNE" minOccurs="0" type="string"/>
+          <element name="KONDYGNACJE_PODZIEMNE" minOccurs="0" type="string"/>
+        </sequence>
+      </extension>
+    </complexContent>
+  </complexType>
+
+</schema>

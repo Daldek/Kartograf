@@ -4296,7 +4296,7 @@ Wymaga sieci. Wyniki (ścieżki, rozmiary, fragmenty sidecarów) zapisz do `docs
 - [ ] **Krok 1: Godło TM33**
 
 ```bash
-cd /home/claude-agent/workspace/Kartograf && OUT=/tmp/kartograf-e2e-etap1
+cd <workspace>/Kartograf && OUT=/tmp/kartograf-e2e-etap1
 .venv/bin/kartograf download 302_5550 --country cz -o $OUT
 .venv/bin/python - <<'EOF'
 import json, rasterio

@@ -175,10 +175,10 @@ dopiero na koncu, na przywroconym stanie (patrz "Weryfikacja koncowa").
 
 ## Pliki
 
-- Zmiana: `/home/claude-agent/workspace/Kartograf/kartograf/download/cutout.py`
-- Zmiana: `/home/claude-agent/workspace/Kartograf/kartograf/cli/download_cmd.py`
-- Zmiana: `/home/claude-agent/workspace/Kartograf/tests/test_pl_cutout.py`
-- Zmiana: `/home/claude-agent/workspace/Kartograf/docs/CHANGELOG.md`
+- Zmiana: `<workspace>/Kartograf/kartograf/download/cutout.py`
+- Zmiana: `<workspace>/Kartograf/kartograf/cli/download_cmd.py`
+- Zmiana: `<workspace>/Kartograf/tests/test_pl_cutout.py`
+- Zmiana: `<workspace>/Kartograf/docs/CHANGELOG.md`
 
 ## Weryfikacja koncowa (po wszystkich mutacjach i przywroceniach)
 

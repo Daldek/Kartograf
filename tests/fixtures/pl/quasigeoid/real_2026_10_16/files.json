@@ -1,0 +1,13 @@
+{
+  "geoid2021": {
+    "url": "https://opendata.geoportal.gov.pl/InneDane/ModeleQuasiGeoidy/PL-geoid2021/Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "42328086"
+    },
+    "sha256": "d695cf81c7952043bea14b2213730586d01ac538560b2e405f58d76044465ea6",
+    "lines": 962002,
+    "head": "model_head.txt",
+    "tail": "model_tail.txt"
+  }
+}

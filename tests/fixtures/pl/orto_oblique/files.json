@@ -1,0 +1,38 @@
+{
+  "oblique_n": {
+    "url": "https://opendata.geoportal.gov.pl/DaneFotogrametryczne/OrtoUkosne/78945/78945_1220591_7.125.11.08_N.tif",
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "301669662",
+      "Content-Disposition": "attachment; filename=\"78945_1220591_7.125.11.08_N.tif\""
+    }
+  },
+  "oblique_e": {
+    "url": "https://opendata.geoportal.gov.pl/DaneFotogrametryczne/OrtoUkosne/78945/78945_1220323_7.125.11.08_E.tif",
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "274260638",
+      "Content-Disposition": "attachment; filename=\"78945_1220323_7.125.11.08_E.tif\""
+    }
+  },
+  "oblique_s": {
+    "url": "https://opendata.geoportal.gov.pl/DaneFotogrametryczne/OrtoUkosne/78945/78945_1220859_7.125.11.08_S.tif",
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "273570294",
+      "Content-Disposition": "attachment; filename=\"78945_1220859_7.125.11.08_S.tif\""
+    }
+  },
+  "oblique_w": {
+    "url": "https://opendata.geoportal.gov.pl/DaneFotogrametryczne/OrtoUkosne/78945/78945_1221127_7.125.11.08_W.tif",
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "271280590",
+      "Content-Disposition": "attachment; filename=\"78945_1221127_7.125.11.08_W.tif\""
+    }
+  }
+}

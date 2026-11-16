@@ -1,0 +1,7 @@
+# Line endings (DEV-14.1): LF in the repository and in every working copy.
+* text=auto eol=lf
+
+# Byte-exact files keep their bytes, line endings included: recorded server
+# responses and fixtures that tests compare byte for byte.
+tests/fixtures/** -text
+docs/research/**/gfi/*.body -text

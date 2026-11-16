@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?><wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:hy="http://inspire.ec.europa.eu/schemas/hy/4.0" xmlns:hy-n="http://inspire.ec.europa.eu/schemas/hy-n/4.0" xmlns:gn="http://inspire.ec.europa.eu/schemas/gn/4.0" xmlns:gml="http://www.opengis.net/gml/3.2" xmlns:net="http://inspire.ec.europa.eu/schemas/net/4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:base="http://inspire.ec.europa.eu/schemas/base/3.3" xmlns:xlink="http://www.w3.org/1999/xlink" numberMatched="unknown" numberReturned="1" timeStamp="2026-10-15T22:22:09.480Z" xsi:schemaLocation="http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://inspire.ec.europa.eu/schemas/hy-n/4.0 http://inspire.ec.europa.eu/schemas/hy-n/4.0/HydroNetwork.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"><wfs:member>
+    <hy-n:HydroNode gml:id="HydroNode.BH001_5753902988128725671855826184">
+      <net:beginLifespanVersion>2017-11-29T06:42:54Z</net:beginLifespanVersion>
+      <net:inspireId>
+        <base:Identifier>
+          <base:localId>BH001_5753902988128725671855826184</base:localId>
+          <base:namespace>CZ-00025712-CUZK_HY</base:namespace>
+        </base:Identifier>
+      </net:inspireId>
+      <net:geometry>
+        <gml:Point srsName="http://www.opengis.net/def/crs/EPSG/0/5514">
+          <gml:pos>-450998.415 -1111585.143</gml:pos>
+        </gml:Point>
+      </net:geometry>
+      <hy-n:hydroId>
+        <hy:HydroIdentifier>
+          <hy:localId>BH001_5753902988128725671855826184</hy:localId>
+          <hy:namespace>CZ-00025712-CUZK_HY</hy:namespace>
+        </hy:HydroIdentifier>
+      </hy-n:hydroId>
+      <hy-n:hydroNodeCategory xlink:href="http://inspire.ec.europa.eu/codelist/HydroNodeCategoryValue/source"/>
+    </hy-n:HydroNode>
+  </wfs:member></wfs:FeatureCollection>

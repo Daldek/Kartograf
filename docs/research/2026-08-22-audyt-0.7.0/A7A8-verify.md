@@ -289,7 +289,7 @@ polaczen, a nie tylko blokada.
   komponentu jest izolacja credentials i doklejanie naglowka `Bearer`, a zaden test tego nie
   sprawdza. Ale, jak przy A8-3, **to nie jest regresja 0.7.0**:
   `git diff --stat c356bf5..HEAD -- kartograf/auth/proxy.py` jest **pusty** — plik nie byl
-  ruszany od v0.6.0 (ostatni commit dotyczacy: `d3acf22`, sprzed 0.6.0).
+  ruszany od v0.6.0 (ostatni commit dotyczacy: `1bbecb0`, sprzed 0.6.0).
 - Naprawa przed wydaniem 0.7.0: NIE (odlozyc)
 - Zakres naprawy: n/d przed wydaniem. Do backlogu: `tests/test_auth_proxy.py` — instancjonowac
   klase handlera z podstawionym `rfile`/`wfile` (BytesIO) i `credentials` jako Mock; 4 asercje

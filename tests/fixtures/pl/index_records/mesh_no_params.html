@@ -1,0 +1,39 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1_strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">		
+	<title>WFS</title>
+	<script>
+		function load(){
+			var logi = document.getElementById('logi');
+			if(logi){
+				logi.src = window.location.protocol+'//'+window.location.host+'/logi.php?log=SkorowidzModeleSiatkowe3Dwfs';			}
+		}
+	</script>
+	<style>
+		body {font-family: sans-serif; }
+		.wmsTable{ border-left: 1px solid black; border-top: 1px solid black; }
+		td{ border-right: 1px solid black; border-bottom: 1px solid black; }
+	</style>
+</head>
+<body onLoad="load()">	
+<div style="float: left;">	
+Niniejszy adres dotyczy usługi przeglądania WFS będącej <a href="http://www.opengeospatial.org/standards/wfs">standardem OGC</a>.<br/>
+Korzystanie z takiej usługi związane jest z trzema podstawowymi rodzajami zapytań:<br/>
+<table class="wmsTable" border="0" style="text-align: left;text-indent: 6px" cellspacing="0">
+<tr><td style="width: 30px;text-align: center">1.</td><td style="width: 180px">GetCapabilities</td><td style="width: 120px"><a id="link" target="_blank" href="?SERVICE=WFS&REQUEST=GetCapabilities">Przykład</a></td></tr>
+<tr><td style="width: 30px;text-align: center">2.</td><td style="width: 180px">DescribeFeatureType</td><td style="width: 120px">
+<tr><td style="width: 30px;text-align: center">3.</td><td style="width: 180px">GetFeature</td><td style="width: 120px"></td></tr>
+</table>
+Więcej usług danych przestrzennych dostepnych jest w serwisie: <a href="http://geoportal.gov.pl">geoportal.gov.pl</a><br/><br/>
+W przypadku pytań dotyczących usługi prosimy o kontakt:<br/>
+<b>Główny Urząd Geodezji i Kartografii</b><br/>
+ul. Żurawia 6/12<br/>
+00-926 Warszawa<br/>
+e-mail: gugik@gugik.gov.pl
+</div>
+<div id="logi" style="float: left;width: 200px;height: 500px" width="200px" height="500px">
+Statystyki wykorzystania:<br/>brak dostępu 
+</div>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "url": "https://mapy.geoportal.gov.pl/wss/service/PZGIK/OsnowaMagnetyczna/WFS?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=ms%3ABazowa_magnetyczna&SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&BBOX=200000%2C500000%2C300000%2C650000%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&COUNT=2&STARTINDEX=2",
+  "status": 200,
+  "Content-Type": "text/xml; subtype=\"gml/3.2.1\"; charset=UTF-8"
+}

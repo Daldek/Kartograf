@@ -1,0 +1,5 @@
+{
+  "url": "https://mapy.geoportal.gov.pl/wss/ext/wfs/KrajowaIntegracjaNumeracjiAdresowej?SERVICE=WFS&VERSION=2.0.0&REQUEST=DescribeFeatureType&TYPENAMES=adresyUlice:A08_Ulice",
+  "status": 200,
+  "Content-Type": "application/gml+xml; version=3.2"
+}

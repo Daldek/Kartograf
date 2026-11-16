@@ -1,0 +1,96 @@
+"""``landcover download`` (ADR-037, ADR-044).
+
+``landcover list-layers`` is in ``layers_cmd``.
+
+The CLI translates flags to ``download_landcover`` / ``check_landcover``.
+"""
+
+import argparse
+import sys
+
+from kartograf.cli._args import library_arguments, target_arguments
+from kartograf.cli._language import localized
+from kartograf.cli.download_cmd import (
+    _end_progress,
+    _plan_context,
+    _present,
+    _print_version_summary,
+    _report_file,
+    _report_plan,
+    _report_stale,
+    _unit_of,
+    _update_mode,
+    _written_to,
+    notice_printer,
+    progress_printer,
+    run_with_plan_file,
+)
+from kartograf.download.fetch import UpdateMode
+from kartograf.envelope import exit_code_of
+from kartograf.landcover.manager import (
+    LandCoverReport,
+    check_landcover,
+    download_landcover,
+    require_landcover_product,
+)
+
+# Sources whose area is several TERYT unit packages (summary line).
+_UNIT_SOURCES = ("bdot10k", "bdoo")
+
+
+def cmd_landcover_download(args: argparse.Namespace) -> int:
+    """``landcover download``: flags -> ``download_landcover``/``check_landcover``."""
+    require_landcover_product(args.product)
+    return run_with_plan_file(args, _landcover_task)
+
+
+def _landcover_task(args: argparse.Namespace) -> int:
+    """Plan or download: the report as text or, with ``--json``, as a document."""
+    arguments = {**library_arguments(args), **target_arguments(args)}
+    on_notice = notice_printer(args)
+    if args.check:
+        return _report_plan(
+            args,
+            check_landcover(
+                **arguments, force=getattr(args, "force", False), on_notice=on_notice
+            ),
+        )
+    update = _update_mode(args)
+    on_progress = progress_printer(args, args.workers)
+    result = download_landcover(
+        **arguments,
+        update=update,
+        plan=_plan_context(args).loaded,
+        workers=args.workers,
+        on_notice=on_notice,
+        on_progress=on_progress,
+    )
+    return _present(
+        args, result, lambda: _print_landcover(args, result, on_progress, update)
+    )
+
+
+def _print_landcover(
+    args: argparse.Namespace,
+    result: LandCoverReport,
+    on_progress: object,
+    update: UpdateMode | None,
+) -> int:
+    """Print a status line per file, the errors per unit and the summary.
+
+    It is for a land cover report and returns the exit code.
+    """
+    _end_progress(on_progress)
+    out = _written_to(args, result)
+    statuses = []
+    for item in (*result.files, *result.raw):
+        _report_file(args, _unit_of(item.file.path, out), item.file, update)
+        statuses.append(item.file.status)
+    for failure in result.failed:
+        print(f"Error: {failure.unit}: {localized(failure.error)}", file=sys.stderr)
+    _report_stale(result.stale)
+    if args.product in _UNIT_SOURCES and args.teryt is None and not args.quiet:
+        _print_version_summary(
+            statuses, len(result.failed), out, plain=result.output_dir is not None
+        )
+    return exit_code_of(result)

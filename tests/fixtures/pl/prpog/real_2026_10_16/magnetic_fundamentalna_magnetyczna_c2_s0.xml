@@ -1,0 +1,87 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://mapserver.gis.umn.edu/mapserver https://mapy.geoportal.gov.pl/wss/service/PZGIK/OsnowaMagnetyczna?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ms:Fundamentalna_magnetyczna&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-16T20:03:39" numberMatched="unknown" numberReturned="2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>275529.600000 582743.120000</gml:lowerCorner>
+      		<gml:upperCorner>275537.180000 582745.570000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+<!-- WARNING: FeatureId item 'ptid' not found in typename 'Fundamentalna_magnetyczna'. -->
+    <wfs:member>
+      <ms:Fundamentalna_magnetyczna>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>275537.180000 582743.120000</gml:lowerCorner>
+        		<gml:upperCorner>275537.180000 582743.120000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>275537.180000 582743.120000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>27</ms:ogc_fid>
+        <ms:nr_punktu>M34053C-MF0020</ms:nr_punktu>
+        <ms:klasa_osnowy>Fundamentalna</ms:klasa_osnowy>
+        <ms:x1992>275537.180</ms:x1992>
+        <ms:y1992>582743.120</ms:y1992>
+        <ms:MP>0.10</ms:MP>
+        <ms:h_plevrf2007nh>287.0300</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.100</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh></ms:h_plkron86nh>
+        <ms:mh_plkron86nh></ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Naziemny z częścią podziemną</ms:typ_stabilizacji>
+        <ms:stan_znaku>Dobry</ms:stan_znaku>
+        <ms:deklinacja>55753.0</ms:deklinacja>
+        <ms:blad_deklinacji>14.5</ms:blad_deklinacji>
+        <ms:inklinacja>664209.0</ms:inklinacja>
+        <ms:blad_inklinacji>6.9</ms:blad_inklinacji>
+        <ms:natezenie_pola>49793.9</ms:natezenie_pola>
+        <ms:blad_natezenia_pola>2.6</ms:blad_natezenia_pola>
+        <ms:epoka_wyznaczenia>2021.5</ms:epoka_wyznaczenia>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Magnetyczna/Opisy_FOM/M34053C-MF0020_KlonowII.jpg</ms:opis_topograficzny>
+      </ms:Fundamentalna_magnetyczna>
+    </wfs:member>
+    <wfs:member>
+      <ms:Fundamentalna_magnetyczna>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>275529.600000 582745.570000</gml:lowerCorner>
+        		<gml:upperCorner>275529.600000 582745.570000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>275529.600000 582745.570000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>16</ms:ogc_fid>
+        <ms:nr_punktu>M34053C-MF0010</ms:nr_punktu>
+        <ms:klasa_osnowy>Fundamentalna</ms:klasa_osnowy>
+        <ms:x1992>275529.650</ms:x1992>
+        <ms:y1992>582745.640</ms:y1992>
+        <ms:MP>0.10</ms:MP>
+        <ms:h_plevrf2007nh>286.4800</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.100</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh></ms:h_plkron86nh>
+        <ms:mh_plkron86nh></ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Znak specjalny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Uszkodzony</ms:stan_znaku>
+        <ms:deklinacja>55812.0</ms:deklinacja>
+        <ms:blad_deklinacji>4.4</ms:blad_deklinacji>
+        <ms:inklinacja>664201.0</ms:inklinacja>
+        <ms:blad_inklinacji>4.8</ms:blad_inklinacji>
+        <ms:natezenie_pola>49793.9</ms:natezenie_pola>
+        <ms:blad_natezenia_pola>2.6</ms:blad_natezenia_pola>
+        <ms:epoka_wyznaczenia>2021.5</ms:epoka_wyznaczenia>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Magnetyczna/Opisy_FOM/M34053C-MF0010_Klonow.jpg</ms:opis_topograficzny>
+      </ms:Fundamentalna_magnetyczna>
+    </wfs:member>
+</wfs:FeatureCollection>
+

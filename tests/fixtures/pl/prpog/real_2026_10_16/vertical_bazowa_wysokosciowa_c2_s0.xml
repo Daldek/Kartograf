@@ -1,0 +1,74 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://mapserver.gis.umn.edu/mapserver https://mapy.geoportal.gov.pl/wss/service/PZGIK/PodstawowaOsnowaGeodezyjnawysokosciowa?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ms:Bazowa_wysokosciowa&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-16T20:03:34" numberMatched="unknown" numberReturned="2"
+   next="https://mapy.geoportal.gov.pl/wss/service/PZGIK/PodstawowaOsnowaGeodezyjnawysokosciowa?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;TYPENAMES=ms%3ABazowa_wysokosciowa&amp;SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&amp;BBOX=240600%2C567600%2C241200%2C568300%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&amp;COUNT=2&amp;gahLaQu1eeYooCu=1714006208.37151.0000&amp;STARTINDEX=2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>240701.000000 567786.000000</gml:lowerCorner>
+      		<gml:upperCorner>240907.000000 567980.000000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+<!-- WARNING: FeatureId item 'ptid' not found in typename 'Bazowa_wysokosciowa'. -->
+    <wfs:member>
+      <ms:Bazowa_wysokosciowa>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>240701.000000 567786.000000</gml:lowerCorner>
+        		<gml:upperCorner>240701.000000 567786.000000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>240701.000000 567786.000000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>15721</ms:ogc_fid>
+        <ms:nr_punktu>16330667</ms:nr_punktu>
+        <ms:klasa_osnowy>Bazowa</ms:klasa_osnowy>
+        <ms:x1992>240701.000</ms:x1992>
+        <ms:y1992>567786.000</ms:y1992>
+        <ms:MP>50.00</ms:MP>
+        <ms:h_plevrf2007nh>219.7931</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.010</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh>219.6108</ms:h_plkron86nh>
+        <ms:mh_plkron86nh>0.010</ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Ścienny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Dobry</ms:stan_znaku>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Wysokosciowa/1261/OpisyTopograficzne/16330667.jpg</ms:opis_topograficzny>
+      </ms:Bazowa_wysokosciowa>
+    </wfs:member>
+    <wfs:member>
+      <ms:Bazowa_wysokosciowa>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>240907.000000 567980.000000</gml:lowerCorner>
+        		<gml:upperCorner>240907.000000 567980.000000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>240907.000000 567980.000000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>32489</ms:ogc_fid>
+        <ms:nr_punktu>16330082</ms:nr_punktu>
+        <ms:klasa_osnowy>Bazowa</ms:klasa_osnowy>
+        <ms:x1992>240907.000</ms:x1992>
+        <ms:y1992>567980.000</ms:y1992>
+        <ms:MP>50.00</ms:MP>
+        <ms:h_plevrf2007nh>224.7106</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.010</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh>224.5282</ms:h_plkron86nh>
+        <ms:mh_plkron86nh>0.010</ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Naziemny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Zniszczony</ms:stan_znaku>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Wysokosciowa/1261/OpisyTopograficzne/16330082.jpg</ms:opis_topograficzny>
+      </ms:Bazowa_wysokosciowa>
+    </wfs:member>
+</wfs:FeatureCollection>
+

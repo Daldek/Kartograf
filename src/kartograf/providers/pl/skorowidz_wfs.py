@@ -1,0 +1,960 @@
+"""GUGiK sheet index over WFS: one client and one parser (ADR-041).
+
+The NMT, NMPT and LAZ indexes are WFS 2.0 services (MapServer) with one
+feature type per year (``gugik:SkorowidzNMT2025``). ``WfsIndex`` reads the
+yearly types from GetCapabilities and the features of an area with ONE
+``GetFeature`` for any number of types (``TYPENAMES`` comma-separated,
+answered as nested collections), ``BBOX`` and ``SRSNAME`` in the URN of
+EPSG:2180 with N,E axes, pages followed ONLY by the ``next`` attribute
+(the server ignores ``FILTER`` - every filter is on the client side,
+docs/research/2026-10-15-plan-a-b/raport.md 1). The server pages an answer
+of several types inconsistently (repeats and omissions, recorded
+2026-10-15) and one type consistently, so an answer of several types that
+does not fit one page is dropped and every type is queried on its own.
+A failure is never an empty answer: transport errors, an ``ExceptionReport``
+or non-XML at 200, a page whose ``numberReturned`` differs from its
+features, a feature repeated on a later page - all raise ``DownloadError``
+("wynik bylby niepelny"); a valid empty collection (sea) yields nothing.
+
+``parse_index_feature`` maps the WFS fields of NMT/NMPT records on the keys
+of ``SkorowidzRecord.raw`` used by ``to_source`` and ``CampaignRef``, so the
+download of a sheet, the campaign flow and the availability report read one
+parser. ``WfsSkorowidzLayersMixin`` gives the sheet flow of NMT/NMPT
+(``SkorowidzLayersMixin``: cache, hard filter, campaigns) the WFS index.
+
+One answer, one cache entry, every reader (ADR-056): the yearly types are
+kept under ``wfs-types|<endpoint>`` (``cached_feature_types``) and the answer
+of a GetFeature as the XML of its features under
+``wfs|<endpoint>|<types>|<bbox in mm>`` (``area_features``), so each reader
+parses what the index gave with its own parser. The availability report
+writes the answer of its area; the sheet records of a sheet that area holds
+(``WfsSkorowidzLayersMixin``), the archive sheets of an area inside it and the
+LAZ tiles of the same area (``cached_answer_by_type``) are read from it, so a
+plan made right after the report asks the index nothing
+(``MetadataCache.refresh_ttl_seconds``).
+"""
+
+import functools
+import logging
+import re
+import threading
+import xml.etree.ElementTree as ET
+from collections.abc import Callable, Iterator, Sequence
+from typing import TYPE_CHECKING
+from urllib.parse import urlencode
+
+import requests
+
+from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import BBox
+from kartograf.core.coverage import (
+    AREA_EPS,
+    Polygon,
+    clip_convex,
+    expand_convex,
+    normalize_convex,
+    polygon_area,
+    rectangle,
+)
+from kartograf.core.sheet_parser import SheetParser
+from kartograf.exceptions import DownloadError, ParseError, ValidationError
+from kartograf.messages import message, reason
+from kartograf.providers.pl.skorowidz import (
+    SkorowidzLayersMixin,
+    SkorowidzRecord,
+    horizontal_crs_of,
+    metres,
+)
+from kartograf.sources.variants import IndexRef
+from kartograf.transport.http import MAX_RETRIES, get_with_retry
+
+if TYPE_CHECKING:
+    from pyproj import Transformer
+
+logger = logging.getLogger(__name__)
+
+GUGIK_NS = "http://www.gugik.gov.pl"
+GML_NS = "http://www.opengis.net/gml/3.2"
+URN_2180 = "urn:ogc:def:crs:EPSG::2180"
+# Features per GetFeature page (COUNT); further pages only through `next`
+# (one type per query when an answer of several types needs more pages).
+PAGE_SIZE = 1000
+# The fact only: the remedy depends on the caller (download summaries add
+# "ponow pobranie", a ``--check`` line names no download).
+INCOMPLETE = message("providers.incomplete_result")
+# Half side (m) of the query square around a sheet centre (sheet lookup).
+QUERY_HALF_M = 10.0
+# A sheet frame overlaps an area only when it still does after its edges are
+# moved inwards by this many metres: neighbouring frames share edges up to the
+# 1 cm rounding of GUGiK coordinates (a 5 km x 1 cm sliver is 50 m2).
+EDGE_TOLERANCE_M = 1.0
+# Points per edge of a sheet frame transformed to EPSG:2180 (curved edges).
+_FRAME_POINTS = 16
+# Keys of the shared index answers in the metadata cache (``index_area_cache``).
+_AREA = "wfs"
+_TYPES = "wfs-types"
+
+
+def localname(tag: str) -> str:
+    """Local name of a possibly namespaced XML tag."""
+    return tag.rsplit("}", 1)[-1]
+
+
+def corner_xy(text: str, srs_name: str | None) -> tuple[float, float]:
+    """Return an EPSG:2180 position as (Easting, Northing).
+
+    URN/URI identifiers use the EPSG axis order (N, E); a missing ``srsName``
+    inherits the requested URN. Only the legacy ``EPSG:2180`` uses (E, N).
+    """
+    first, second = (float(value) for value in text.split()[:2])
+    if srs_name == "EPSG:2180":
+        return first, second
+    return second, first
+
+
+def feature_footprint(feature: ET.Element) -> tuple[tuple[float, float], ...] | None:
+    """Sheet/tile frame from ``gugik:msGeometry`` as a convex (E, N) polygon.
+
+    Only a single ``gml:Polygon`` without holes: other geometry (multi,
+    holes, concave polygon) gives ``None``. Axes as in ``corner_xy``.
+    """
+    geometry = feature.find(f"{{{GUGIK_NS}}}msGeometry")
+    if geometry is None:
+        return None
+    polygons = list(geometry.iter(f"{{{GML_NS}}}Polygon"))
+    if len(polygons) != 1 or polygons[0].find(f"{{{GML_NS}}}interior") is not None:
+        return None
+    polygon = polygons[0]
+    pos_list = polygon.find(
+        f"{{{GML_NS}}}exterior/{{{GML_NS}}}LinearRing/{{{GML_NS}}}posList"
+    )
+    if pos_list is None or not pos_list.text:
+        return None
+    try:
+        values = [float(v) for v in pos_list.text.split()]
+    except ValueError:
+        return None
+    if len(values) % 2:
+        return None
+    srs_name = polygon.get("srsName")
+    points = [
+        corner_xy(f"{values[i]} {values[i + 1]}", srs_name)
+        for i in range(0, len(values), 2)
+    ]
+    return normalize_convex(points)
+
+
+def time_position(feature: ET.Element, name: str) -> str | None:
+    """Text of the ``gml:timePosition`` of a time attribute (e.g. ``akt_data``)."""
+    elem = feature.find(f"{{{GUGIK_NS}}}{name}")
+    if elem is None:
+        return None
+    for child in elem.iter(f"{{{GML_NS}}}timePosition"):
+        if child.text:
+            return child.text.strip()
+    return elem.text.strip() if elem.text and elem.text.strip() else None
+
+
+def feature_text(feature: ET.Element, name: str) -> str | None:
+    """Return the stripped text of a ``gugik:`` attribute.
+
+    ``None`` when missing or empty.
+    """
+    child = feature.find(f"{{{GUGIK_NS}}}{name}")
+    if child is not None and child.text and child.text.strip():
+        return child.text.strip()
+    return None
+
+
+def bbox_param(bbox: BBox) -> str:
+    """``BBOX`` of an EPSG:2180 area in the URN axis order (N, E)."""
+    return f"{bbox.min_y},{bbox.min_x},{bbox.max_y},{bbox.max_x},{URN_2180}"
+
+
+_YEAR = re.compile(r"(\d{4})$")
+
+
+def type_year(name: str) -> int:
+    """Year of a yearly feature type (``gugik:SkorowidzNMT2025`` -> 2025)."""
+    match = _YEAR.search(name)
+    if match is None:
+        raise ValueError(f"feature type without a year: {name!r}")
+    return int(match[1])
+
+
+def parse_feature_types(root: ET.Element, layer_prefix: str) -> list[str]:
+    """Yearly feature types ``<prefix><year>`` of a GetCapabilities document.
+
+    Newest first, names as published (``gugik:SkorowidzNMT2025``); a type of
+    the product family outside the pattern is logged and left out (it is
+    never queried). ``[]`` when the document has no yearly type.
+    """
+    pattern = re.compile(rf"(?:\w+:)?{re.escape(layer_prefix)}(\d{{4}})")
+    family = re.compile(rf"(?:\w+:)?{re.escape(layer_prefix)}")
+    found: dict[str, int] = {}
+    for elem in root.iter():
+        if localname(elem.tag) != "FeatureType":
+            continue
+        for name in elem:
+            if localname(name.tag) != "Name" or not name.text:
+                continue
+            text = name.text.strip()
+            match = pattern.fullmatch(text)
+            if match is not None:
+                found[text] = int(match[1])
+            elif family.match(text):
+                logger.warning(
+                    message(
+                        "providers.type_pattern_mismatch",
+                        text=text,
+                        layer_prefix=layer_prefix,
+                    ),
+                )
+    return sorted(found, key=lambda t: -found[t])
+
+
+class WfsIndex:
+    """One WFS index service (``endpoint``) with yearly types ``<prefix><year>``.
+
+    ``session_factory`` returns the session of the calling thread
+    (``SessionPerThread.get``); ``timeout``/``retries`` go to every request.
+    Feature types are memoized after the first successful GetCapabilities.
+    """
+
+    def __init__(
+        self,
+        session_factory: Callable[[], requests.Session],
+        endpoint: str,
+        layer_prefix: str,
+        *,
+        timeout: float,
+        retries: int = MAX_RETRIES,
+    ):
+        self._session_factory = session_factory
+        self._endpoint = endpoint
+        self._prefix = layer_prefix
+        self._timeout = timeout
+        self._retries = retries
+        self._types: list[str] | None = None
+        self._lock = threading.Lock()
+
+    @property
+    def endpoint(self) -> str:
+        """WFS address of the service."""
+        return self._endpoint
+
+    @property
+    def layer_prefix(self) -> str:
+        """Name prefix of the yearly feature types."""
+        return self._prefix
+
+    def _xml(self, url: str, description: str) -> ET.Element:
+        """Return the parsed answer.
+
+        Any failure is a ``DownloadError``, never empty.
+        """
+        try:
+            response = get_with_retry(
+                self._session_factory(),
+                url,
+                timeout=self._timeout,
+                retries=self._retries,
+                description=description,
+            )
+        except DownloadError as e:
+            # keep the transport classification (status code, requests
+            # cause) - an index outage lets the manager use a local version
+            raise DownloadError(
+                message(
+                    "providers.error_incomplete",
+                    error=reason(e),
+                    incomplete=INCOMPLETE,
+                ),
+                status_code=e.status_code,
+            ) from e.__cause__
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as e:
+            raise DownloadError(
+                message(
+                    "providers.wfs_response_unreadable",
+                    description=description,
+                    error=reason(e),
+                    incomplete=INCOMPLETE,
+                )
+            ) from e
+        if localname(root.tag) == "ExceptionReport":
+            details = "; ".join(
+                elem.text.strip()
+                for elem in root.iter()
+                if localname(elem.tag) == "ExceptionText" and elem.text
+            )
+            raise DownloadError(
+                message(
+                    "providers.wfs_exception_report",
+                    description=description,
+                    details=details,
+                    incomplete=INCOMPLETE,
+                )
+            )
+        return root
+
+    def feature_types(self) -> list[str]:
+        """Yearly feature types of the service, newest first (as published).
+
+        A type of the product family outside ``<prefix><year>`` is logged
+        and not queried; no yearly type at all is a ``DownloadError``.
+        """
+        with self._lock:
+            if self._types is None:
+                self._types = self._fetch_types()
+            return list(self._types)
+
+    def _fetch_types(self) -> list[str]:
+        params = {"SERVICE": "WFS", "VERSION": "2.0.0", "REQUEST": "GetCapabilities"}
+        description = f"WFS GetCapabilities {self._endpoint}"
+        root = self._xml(f"{self._endpoint}?{urlencode(params)}", description)
+        found = parse_feature_types(root, self._prefix)
+        if not found:
+            raise DownloadError(
+                message(
+                    "providers.no_feature_types",
+                    description=description,
+                    prefix=self._prefix,
+                    incomplete=INCOMPLETE,
+                )
+            )
+        return found
+
+    def features(self, bbox: BBox, types: Sequence[str]) -> Iterator[ET.Element]:
+        """Features of ``types`` intersecting an EPSG:2180 ``bbox`` (all pages).
+
+        One ``GetFeature`` with every type; further pages only through the
+        ``next`` attribute of the answer (it must point at this service).
+        The server pages several types inconsistently (repeats AND
+        omissions, recorded 2026-10-15), one type consistently: when the
+        answer of several types has a ``next`` page, it is dropped and each
+        type is queried (and paged) on its own. A feature repeated on a
+        later page is a ``DownloadError``, never a silently incomplete result.
+        """
+        if bbox.crs != "EPSG:2180":
+            raise ValidationError(message("providers.area_crs_not_2180", crs=bbox.crs))
+        if not types:
+            return
+        pages = self._pages(bbox, types)
+        found, following = next(pages)
+        if following is not None and len(types) > 1:
+            logger.info(
+                f"WFS {self._endpoint}: more than {PAGE_SIZE} features across "
+                f"{len(types)} types - querying per type (server paging across "
+                f"multiple types is inconsistent)",
+            )
+            for name in types:
+                for page_features, _ in self._pages(bbox, [name]):
+                    yield from page_features
+            return
+        yield from found
+        for page_features, _ in pages:
+            yield from page_features
+
+    def _pages(
+        self, bbox: BBox, types: Sequence[str]
+    ) -> Iterator[tuple[list[ET.Element], str | None]]:
+        """Return the checked pages of one ``GetFeature``.
+
+        Each page is (features, ``next`` URL).
+        """
+        params = {
+            "SERVICE": "WFS",
+            "VERSION": "2.0.0",
+            "REQUEST": "GetFeature",
+            "TYPENAMES": ",".join(types),
+            "SRSNAME": URN_2180,
+            "BBOX": bbox_param(bbox),
+            "COUNT": str(PAGE_SIZE),
+        }
+        shown = (
+            types[0]
+            if len(types) == 1
+            else message(
+                "providers.types_shown_label",
+                types_count=len(types),
+                prefix=self._prefix,
+            )
+        )
+        url: str | None = f"{self._endpoint}?{urlencode(params)}"
+        seen: set[str] = set()
+        # (type, gml:id, URL) of every feature already returned
+        yielded: set[tuple[str, str | None, str | None]] = set()
+        page = 0
+        while url is not None:
+            if url in seen:
+                raise DownloadError(
+                    message(
+                        "providers.wfs_paging_loop",
+                        endpoint=self._endpoint,
+                        incomplete=INCOMPLETE,
+                    )
+                )
+            seen.add(url)
+            page += 1
+            description = message(
+                "providers.wfs_getfeature_page", shown=shown, page=page
+            )
+            root = self._xml(url, description)
+            if localname(root.tag) != "FeatureCollection":
+                raise DownloadError(
+                    message(
+                        "providers.not_feature_collection",
+                        description=description,
+                        localname=localname(root.tag),
+                        incomplete=INCOMPLETE,
+                    )
+                )
+            found = [elem for elem in root.iter() if self._is_feature(elem)]
+            returned = root.get("numberReturned", "")
+            if not returned.isdigit() or int(returned) != len(found):
+                raise DownloadError(
+                    message(
+                        "providers.number_returned_mismatch",
+                        description=description,
+                        returned=returned,
+                        found_count=len(found),
+                        incomplete=INCOMPLETE,
+                    )
+                )
+            for elem in found:
+                key = (
+                    elem.tag,
+                    elem.get(f"{{{GML_NS}}}id"),
+                    feature_text(elem, "url_do_pobrania"),
+                )
+                if key in yielded:
+                    raise DownloadError(
+                        message(
+                            "providers.feature_repeated_page",
+                            description=description,
+                            key_value=key[1],
+                            incomplete=INCOMPLETE,
+                        )
+                    )
+                yielded.add(key)
+            following = root.get("next") or None
+            if following and not following.startswith(f"{self._endpoint}?"):
+                raise DownloadError(
+                    message(
+                        "providers.next_page_outside_service",
+                        description=description,
+                        following=following,
+                        incomplete=INCOMPLETE,
+                    )
+                )
+            yield found, following
+            url = following
+
+    def _is_feature(self, elem: ET.Element) -> bool:
+        # local name: the NMT/NMPT/LAZ indexes publish http://www.gugik.gov.pl,
+        # the mesh index https://www.gugik.gov.pl (recorded 2026-10-16)
+        tag = elem.tag
+        return isinstance(tag, str) and localname(tag).startswith(self._prefix)
+
+
+def parse_index_feature(feature: ET.Element) -> SkorowidzRecord | None:
+    """``SkorowidzRecord`` of one NMT/NMPT feature; ``None`` when unusable.
+
+    WFS fields map on the ``raw`` keys of the index record: ``url_do_pobrania``
+    -> ``url``, ``godlo`` -> ``sheet`` (canonical), ``akt_data`` ->
+    ``aktualnosc``, ``akt_rok`` -> ``aktualnoscRok``, ``dt_pzgik``,
+    ``uklad_xy`` -> ``ukladWspolrzednychPoziomych``, ``uklad_h`` ->
+    ``ukladWspolrzednychPionowych``, ``char_przestrz`` ->
+    ``charakterystykaPrzestrzenna`` (``resolution_m``), ``czy_ark_wypelniony``
+    -> ``calyArkuszWypelnionyTrescia`` (``full_sheet``), ``nr_zglosz`` ->
+    ``numerZgloszeniaPracy``, ``zrodlo_danych`` -> ``zrodloDanych``,
+    ``format``, ``blad_sr_wys`` -> ``bladSredniWysokosci``, ``blad_sr_syt``
+    -> ``bladSredniPolozenia``, ``modul_archiwizacji`` -> ``modulArchiwizacji``;
+    ``layer`` = the feature type (``SkorowidzNMT2025``). A feature without
+    an HTTPS URL or with a sheet code outside ``SheetParser`` gives ``None``
+    (``index_feature_issue`` names the reason).
+    """
+    if index_feature_issue(feature) is not None:
+        return None
+    layer = localname(feature.tag)
+    url = feature_text(feature, "url_do_pobrania") or ""
+    sheet = SheetParser(feature_text(feature, "godlo") or "").sheet
+    declared_crs = feature_text(feature, "uklad_xy")
+    system, zone = horizontal_crs_of(declared_crs)
+    resolution_text = feature_text(feature, "char_przestrz")
+    full_text = feature_text(feature, "czy_ark_wypelniony")
+    date = time_position(feature, "akt_data") or ""
+    raw = {
+        key: value
+        for key, value in (
+            ("url", url),
+            ("godlo", feature_text(feature, "godlo")),
+            ("aktualnosc", date),
+            ("aktualnoscRok", feature_text(feature, "akt_rok")),
+            ("dt_pzgik", time_position(feature, "dt_pzgik")),
+            ("ukladWspolrzednychPoziomych", declared_crs),
+            ("ukladWspolrzednychPionowych", feature_text(feature, "uklad_h")),
+            ("charakterystykaPrzestrzenna", resolution_text),
+            ("calyArkuszWypelnionyTrescia", full_text),
+            ("numerZgloszeniaPracy", feature_text(feature, "nr_zglosz")),
+            ("zrodloDanych", feature_text(feature, "zrodlo_danych")),
+            ("format", feature_text(feature, "format")),
+            ("bladSredniWysokosci", feature_text(feature, "blad_sr_wys")),
+            ("bladSredniPolozenia", feature_text(feature, "blad_sr_syt")),
+            ("modulArchiwizacji", feature_text(feature, "modul_archiwizacji")),
+        )
+        if value
+    }
+    record = SkorowidzRecord(
+        url=url,
+        sheet=sheet,
+        aktualnosc=date,
+        dt_pzgik=raw.get("dt_pzgik"),
+        layer=layer,
+        system=system,
+        zone=zone,
+        resolution_m=metres(resolution_text),
+        full_sheet={"TAK": True, "NIE": False}.get((full_text or "").upper()),
+        raw=raw,
+    )
+    year = raw.get("aktualnoscRok") or date[:4]
+    match = _YEAR.search(layer)
+    if match and year.isdigit() and year != match[1]:
+        logger.warning(
+            message(
+                "providers.year_outside_partition", layer=layer, sheet=sheet, year=year
+            )
+        )
+    return record
+
+
+def index_feature_issue(feature: ET.Element) -> str | None:
+    """Why a feature cannot become a record (``None`` = usable).
+
+    ``"url"``: no HTTPS ``url_do_pobrania``; ``"sheet"``: ``godlo`` outside
+    the sheet systems of ``SheetParser``.
+    """
+    url = feature_text(feature, "url_do_pobrania") or ""
+    if not url.startswith("https://"):
+        return "url"
+    try:
+        SheetParser(feature_text(feature, "godlo") or "")
+    except (ParseError, ValidationError):
+        return "sheet"
+    return None
+
+
+def sheet_query_bbox(parser: SheetParser) -> BBox:
+    """``QUERY_HALF_M`` square around the centre of a sheet in EPSG:2180."""
+    frame = parser.get_bbox(crs="EPSG:2180")
+    x = (frame.min_x + frame.max_x) / 2
+    y = (frame.min_y + frame.max_y) / 2
+    return BBox(
+        x - QUERY_HALF_M,
+        y - QUERY_HALF_M,
+        x + QUERY_HALF_M,
+        y + QUERY_HALF_M,
+        "EPSG:2180",
+    )
+
+
+def _area_key(endpoint: str, types: Sequence[str], bbox: BBox) -> str:
+    """Return the cache key of the answer of a GetFeature of ``types`` in ``bbox``.
+
+    ``wfs|<endpoint>|<types as asked>|<EPSG:2180 bbox in whole millimetres>``
+    (``index_area_cache``), the one entry of every reader of the answer.
+    """
+    return "|".join((_AREA, endpoint, ",".join(types), _mm(bbox)))
+
+
+def _mm(bbox: BBox) -> str:
+    """Key part: the envelope in whole millimetres."""
+    return ",".join(
+        str(round(value * 1000))
+        for value in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
+    )
+
+
+def _key_area(key: str) -> tuple[tuple[str, ...], BBox] | None:
+    """Return the types and the envelope of an ``area_key`` (``None``: another key)."""
+    parts = key.split("|")
+    if len(parts) != 4 or parts[0] != _AREA:
+        return None
+    try:
+        x0, y0, x1, y1 = (int(value) / 1000 for value in parts[3].split(","))
+        return tuple(parts[2].split(",")), BBox(x0, y0, x1, y1, "EPSG:2180")
+    except (ValueError, ValidationError):
+        return None
+
+
+def cached_feature_types(index: WfsIndex, cache: MetadataCache | None) -> list[str]:
+    """Return the yearly types of the service (``WfsIndex.feature_types``).
+
+    The answer of GetCapabilities is kept under ``wfs-types|<endpoint>`` for
+    every reader: the availability report, the sheet records and the LAZ tiles.
+    """
+    key = f"{_TYPES}|{index.endpoint}"
+    if cache is not None:
+        cached = cache.get_index_area(key)
+        if (
+            isinstance(cached, list)
+            and cached
+            and all(isinstance(name, str) for name in cached)
+        ):
+            return cached
+    types = index.feature_types()
+    if cache is not None:
+        cache.set_index_area(key, types)
+    return types
+
+
+def area_features(
+    index: WfsIndex, bbox: BBox, types: Sequence[str], cache: MetadataCache | None
+) -> list[ET.Element]:
+    """Return the features of ``types`` intersecting ``bbox`` (``WfsIndex.features``).
+
+    The answer is kept as the XML of its features (``_area_key``), so each
+    reader parses what the index gave with its own parser; within the TTL of
+    the cache the same query asks nothing.
+    """
+    key = _area_key(index.endpoint, types, bbox)
+    if cache is not None:
+        restored = cached_features(cache, key)
+        if restored is not None:
+            return restored
+    features = list(index.features(bbox, types))
+    if cache is not None:
+        cache.set_index_area(
+            key, [ET.tostring(feature, encoding="unicode") for feature in features]
+        )
+    return features
+
+
+def cached_answers(
+    cache: MetadataCache, endpoint: str
+) -> list[tuple[tuple[str, ...], BBox, str]]:
+    """Return the cached GetFeature answers of a service, newest first.
+
+    Each as the types it asked, its EPSG:2180 envelope and its key.
+    """
+    found = []
+    for key in cache.index_area_keys(f"{_AREA}|{endpoint}|"):
+        area = _key_area(key)
+        if area is not None:
+            found.append((*area, key))
+    return found
+
+
+def cached_features(cache: MetadataCache, key: str) -> list[ET.Element] | None:
+    """Return the features of a cached answer; ``None``: none or unreadable."""
+    payload = cache.get_index_area(key)
+    if not isinstance(payload, list) or not all(isinstance(f, str) for f in payload):
+        return None
+    try:
+        return [ET.fromstring(feature) for feature in payload]
+    except ET.ParseError:
+        return None
+
+
+def cached_answer_by_type(
+    cache: MetadataCache | None, endpoint: str, bbox: BBox
+) -> dict[str, list[ET.Element]] | None:
+    """Return the features of the newest cached answer for ``bbox``, by type.
+
+    Every type the answer asked is a key (its local name; ``[]`` for a type
+    without features): an answer of several types holds, per type, what a
+    query of that type alone gives (recorded 2026-10-15), so it stands for
+    such a query. ``None`` when no cached answer has this envelope.
+    """
+    if cache is None:
+        return None
+    target = _mm(bbox)
+    for asked, envelope, key in cached_answers(cache, endpoint):
+        if _mm(envelope) != target:
+            continue
+        features = cached_features(cache, key)
+        if features is None:
+            continue
+        by_type: dict[str, list[ET.Element]] = {
+            name.rsplit(":", 1)[-1]: [] for name in asked
+        }
+        for feature in features:
+            by_type.setdefault(localname(feature.tag), []).append(feature)
+        return by_type
+    return None
+
+
+def _contains(outer: BBox, inner: BBox) -> bool:
+    return (
+        outer.min_x <= inner.min_x
+        and outer.min_y <= inner.min_y
+        and outer.max_x >= inner.max_x
+        and outer.max_y >= inner.max_y
+    )
+
+
+class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
+    """Sheet records of NMT/NMPT from the WFS index of the provider's variant.
+
+    ``_layers`` gives ONE group: every yearly type of the service (its cached
+    answer or GetCapabilities), queried by one ``GetFeature`` around the sheet
+    centre (``_query_layer``) unless a cached answer of the group for an area
+    the sheet's frame overlaps holds the sheet's records (``_cached_layer``);
+    cache, hard filter (``SkorowidzQuery``), campaigns and no-coverage hints
+    stay in ``SkorowidzLayersMixin``. The derived class sets ``self._sessions``
+    and ``self._index_refs`` (endpoint -> ``IndexRef`` of the services it may
+    ask).
+    """
+
+    _index_refs: dict[str, IndexRef]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._wfs_lock = threading.Lock()
+        self._wfs: dict[str, WfsIndex] = {}
+        # Cached answers read by this provider: key -> sheet -> its features.
+        self._answers: dict[str, dict[str, list[ET.Element]]] = {}
+
+    def _wfs_index(
+        self,
+        endpoint: str,
+        retries: int | None = None,
+        timeout: float | None = None,
+    ) -> WfsIndex:
+        """Return the ``WfsIndex`` of a known service.
+
+        One per endpoint, retry policy and
+        timeout (``None``: the provider's ``MAX_RETRIES``/``DEFAULT_TIMEOUT``).
+        """
+        attempts = self.MAX_RETRIES if retries is None else retries
+        seconds = self.DEFAULT_TIMEOUT if timeout is None else timeout
+        key = f"{endpoint}|{attempts}|{seconds}"
+        with self._wfs_lock:
+            index = self._wfs.get(key)
+            if index is None:
+                ref = self._index_refs[endpoint]
+                index = WfsIndex(
+                    self._sessions.get,
+                    ref.endpoint,
+                    ref.layer_prefix,
+                    timeout=seconds,
+                    retries=attempts,
+                )
+                self._wfs[key] = index
+            return index
+
+    def _layers(self, endpoint: str, timeout: float | None = None) -> list[str]:
+        """Return one query group: every yearly type of the service (newest first).
+
+        ``timeout`` (default ``DEFAULT_TIMEOUT``) goes to GetCapabilities.
+        """
+        with self._layers_lock:
+            if endpoint not in self._validated_layers:
+                types = cached_feature_types(
+                    self._wfs_index(endpoint, timeout=timeout), self._cache
+                )
+                self._validated_layers[endpoint] = [",".join(types)]
+            return self._validated_layers[endpoint]
+
+    def _cached_layer(
+        self, parser: SheetParser, endpoint: str, layer: str
+    ) -> list[SkorowidzRecord] | None:
+        """Return the sheet's records from a cached answer of the group's types.
+
+        The index gives every record its sheet frame (recorded 2026-10-15), so
+        the answer for an envelope the frame overlaps by more than an edge
+        sliver holds every record of the sheet - all the records a query
+        around its centre selects from. The newest such answer; ``None`` when
+        there is none.
+        """
+        if self._cache is None:
+            return None
+        types = tuple(layer.split(","))
+        frame = sheet_frame_2180(parser.sheet)
+        for asked, envelope, key in cached_answers(self._cache, endpoint):
+            area = rectangle(
+                envelope.min_x, envelope.min_y, envelope.max_x, envelope.max_y
+            )
+            if asked != types or not overlaps_area(frame, area):
+                continue
+            by_sheet = self._answer(key)
+            if by_sheet is not None:
+                return [
+                    record
+                    for feature in by_sheet.get(parser.sheet, ())
+                    if (record := parse_index_feature(feature)) is not None
+                ]
+        return None
+
+    def _answer(self, key: str) -> dict[str, list[ET.Element]] | None:
+        """Return the usable features of a cached answer by their sheet (read once)."""
+        assert self._cache is not None
+        with self._wfs_lock:
+            if key in self._answers:
+                return self._answers[key]
+        features = cached_features(self._cache, key)
+        if features is None:
+            return None
+        by_sheet: dict[str, list[ET.Element]] = {}
+        for feature in features:
+            if index_feature_issue(feature) is None:
+                sheet = SheetParser(feature_text(feature, "godlo") or "").sheet
+                by_sheet.setdefault(sheet, []).append(feature)
+        with self._wfs_lock:
+            self._answers[key] = by_sheet
+        return by_sheet
+
+    def _area_features(
+        self, endpoint: str, envelope: BBox, types: Sequence[str]
+    ) -> list[ET.Element]:
+        """Return the features of ``types`` in ``envelope``, or more of them.
+
+        A cached answer of these types (or more) for an envelope that contains
+        this one gives its features of the types: a superset of the answer for
+        ``envelope`` that the caller filters by the overlap of a frame with its
+        area. Else the index is asked (``area_features``).
+        """
+        if self._cache is not None:
+            wanted = {name.rsplit(":", 1)[-1] for name in types}
+            for asked, cached, key in cached_answers(self._cache, endpoint):
+                held = {name.rsplit(":", 1)[-1] for name in asked}
+                if not (wanted <= held and _contains(cached, envelope)):
+                    continue
+                features = cached_features(self._cache, key)
+                if features is not None:
+                    return [f for f in features if localname(f.tag) in wanted]
+        return area_features(self._wfs_index(endpoint), envelope, types, self._cache)
+
+    def _query_layer(
+        self,
+        parser: SheetParser,
+        endpoint: str,
+        layer: str,
+        timeout: int,
+        query_bbox: str,
+    ) -> list[SkorowidzRecord]:
+        """Return the records of every type of ``layer`` around the sheet centre.
+
+        A failed query is a ``DownloadError`` naming the sheet (transport class kept).
+        """
+        index = self._wfs_index(endpoint, timeout=timeout)
+        try:
+            return index_records(index, sheet_query_bbox(parser), layer.split(","))
+        except DownloadError as e:
+            raise DownloadError(
+                message("providers.sheet_error", sheet=parser.sheet, error=reason(e)),
+                sheet=parser.sheet,
+                status_code=e.status_code,
+            ) from e.__cause__
+
+
+def index_records(
+    index: WfsIndex, bbox: BBox, types: Sequence[str]
+) -> list[SkorowidzRecord]:
+    """Return the parsed records of ``types`` in ``bbox``.
+
+    Unusable features are skipped.
+    """
+    return [
+        record
+        for feature in index.features(bbox, types)
+        if (record := parse_index_feature(feature)) is not None
+    ]
+
+
+@functools.lru_cache(maxsize=8)
+def _to_2180(source_crs: str) -> "Transformer":
+    from pyproj import Transformer
+
+    return Transformer.from_crs(source_crs, "EPSG:2180", always_xy=True)
+
+
+def convex_hull(points: Sequence[tuple[float, float]]) -> Polygon:
+    """Convex hull (CCW, Andrew's monotone chain) of at least three points."""
+    pts = sorted(set(points))
+
+    def cross(
+        o: tuple[float, float], a: tuple[float, float], b: tuple[float, float]
+    ) -> float:
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    lower: list[tuple[float, float]] = []
+    for p in pts:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+    upper: list[tuple[float, float]] = []
+    for p in reversed(pts):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+    return tuple(lower[:-1] + upper[:-1])
+
+
+def sheet_frame_2180(sheet: str) -> Polygon:
+    """Frame of a sheet code as a convex (E, N) polygon in EPSG:2180.
+
+    The frame is a rectangle in the CRS of the sheet system (PL-1992:
+    WGS84 degrees, PL-2000: the zone CRS); its densified edges are curves
+    in EPSG:2180, one of them bent inwards, so the frame is the convex hull
+    of the curves - wider than the frame by the bend of that edge (about
+    0.1 m for a 1:10000 sheet, 0.5 m for 1:25000, below ``EDGE_TOLERANCE_M``).
+    """
+    parser = SheetParser(sheet)
+    native = (
+        parser.get_bbox()
+        if parser.sheet_system == "2000"
+        else parser.get_bbox("EPSG:4326")
+    )
+    corners = (
+        (native.min_x, native.min_y),
+        (native.max_x, native.min_y),
+        (native.max_x, native.max_y),
+        (native.min_x, native.max_y),
+    )
+    xs: list[float] = []
+    ys: list[float] = []
+    for i, (x0, y0) in enumerate(corners):
+        x1, y1 = corners[(i + 1) % 4]
+        for step in range(_FRAME_POINTS):
+            t = step / _FRAME_POINTS
+            xs.append(x0 + t * (x1 - x0))
+            ys.append(y0 + t * (y1 - y0))
+    east, north = _to_2180(native.crs).transform(xs, ys)
+    return convex_hull(list(zip(east, north, strict=True)))
+
+
+def area_envelope(areas: Sequence[Polygon]) -> BBox:
+    """EPSG:2180 envelope of convex (E, N) polygons."""
+    xs = [x for area in areas for x, _ in area]
+    ys = [y for area in areas for _, y in area]
+    return BBox(min(xs), min(ys), max(xs), max(ys), "EPSG:2180")
+
+
+def overlaps_area(frame: Polygon, area: Polygon) -> bool:
+    """Check whether a sheet frame overlaps an area by more than an edge sliver.
+
+    The frame with its edges moved ``EDGE_TOLERANCE_M`` inwards must still
+    intersect the convex area (both (E, N) in EPSG:2180, compared in local
+    coordinates). Shared by the archive sheet selection and the
+    availability report: a neighbour sharing an edge never counts. Separate
+    envelopes answer first - an area of many convex pieces (a polygon of a
+    geometry file, ADR-058) clips only the pieces near the frame.
+    """
+    if (
+        max(x for x, _ in frame) <= min(x for x, _ in area)
+        or min(x for x, _ in frame) >= max(x for x, _ in area)
+        or max(y for _, y in frame) <= min(y for _, y in area)
+        or min(y for _, y in frame) >= max(y for _, y in area)
+    ):
+        return False
+    ox, oy = area[0]
+    local_frame = tuple((x - ox, y - oy) for x, y in frame)
+    local_area = tuple((x - ox, y - oy) for x, y in area)
+    inner = expand_convex(local_frame, -EDGE_TOLERANCE_M)
+    if polygon_area(inner) <= AREA_EPS:
+        return False  # a frame narrower than twice the tolerance
+    part = clip_convex(inner, local_area)
+    return len(part) >= 3 and abs(polygon_area(part)) > AREA_EPS

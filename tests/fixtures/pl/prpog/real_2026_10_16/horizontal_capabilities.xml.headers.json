@@ -1,0 +1,5 @@
+{
+  "url": "https://mapy.geoportal.gov.pl/wss/service/PZGIK/PodstawowaOsnowaGeodezyjnaPozioma/WFS?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities",
+  "status": 200,
+  "Content-Type": "text/xml; charset=UTF-8"
+}

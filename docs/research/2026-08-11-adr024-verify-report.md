@@ -50,7 +50,7 @@ Kryteria z zadania: **minimum RMS w (0,0) ±0,5 m** oraz **RMS(0,0) < 0,1 m**.
 
 ```bash
 cd .../scratchpad/seam/verify
-/home/claude-agent/workspace/Kartograf/.venv/bin/kartograf download 302_5550 --country cz -o v1
+<workspace>/Kartograf/.venv/bin/kartograf download 302_5550 --country cz -o v1
 # -> Downloading 302_5550 (CZ, resolution: 2m)...
 # -> Downloaded to v1/cz_dmr5g/302/5550/302_5550.tif
 # exit 0, real 1,300 s
@@ -146,7 +146,7 @@ Zastrzezenie 3.
 ## 3. Punkt 4 — bbox z `--target-crs EPSG:2180`
 
 ```bash
-/home/claude-agent/workspace/Kartograf/.venv/bin/kartograf download \
+<workspace>/Kartograf/.venv/bin/kartograf download \
   --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz \
   --target-crs EPSG:2180 --vertical-crs EVRF2007 -o v4
 # -> Downloading CZ bbox (2m, EPSG:2180)...
@@ -230,7 +230,7 @@ Porownanie transgraniczne wykonano wiec na **bboxie z seam-report** (te same ark
 ktore nadal leza w `../seam-pl/`), komenda identyczna jak w punkcie 4:
 
 ```bash
-/home/claude-agent/workspace/Kartograf/.venv/bin/kartograf download \
+<workspace>/Kartograf/.venv/bin/kartograf download \
   --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country cz \
   --target-crs EPSG:2180 --vertical-crs EVRF2007 -o v4s
 # -> Downloaded to v4s/cz_dmr5g_471194.6628_209462.3009_474803.6146_211258.6264.tif

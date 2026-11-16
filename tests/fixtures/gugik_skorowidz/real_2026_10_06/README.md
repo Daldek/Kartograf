@@ -17,9 +17,13 @@ Pliki skopiowane BEZ edycji tresci; tylko wybrany podzbior rundy.
   2026, PL-2000). Pliki `7.173.21.01_*` poza `Starsze` sa bajtowo rowne
   plikom N-34-139-A-c-1-1 (ten sam punkt zapytania).
 
-Testy: `tests/test_real_gugik_responses.py`.
-- `caps/` — surowe GetCapabilities WMS (ADR-030, rodzina nazw warstw): z
-  `a/raw/caps/*.xml` (NMT EVRF2007/KRON86, NMT 5 m, NMPT EVRF2007/KRON86)
-  oraz `b/raw/C12/caps.xml` jako `ORTO_WMS_SkorowidzeWgAktualnosci.xml`
-  (poza warstwami skorowidza: `default`, `WMS`, a dla orto
-  `SkorowidzeOrtofotomapyZasiegi*`). Testy: `tests/test_wms_layer_validation.py`.
+Testy: `nmt/` - prawdziwe rekordy `SkorowidzRecord` dla kampanii i wyboru
+arkusza (`tests/test_campaigns.py`, `tests/test_manager_campaigns.py`; od
+0.8.0 pobieranie NMT/NMPT czyta skorowidz WFS, ADR-041, a odpowiedzi WFS sa
+w `tests/fixtures/gugik_wfs/`); `orto/` - `tests/test_real_gugik_responses.py`,
+`tests/test_provider_campaigns.py`.
+- `caps/ORTO_WMS_SkorowidzeWgAktualnosci.xml` — surowe GetCapabilities WMS
+  ortofotomapy (ADR-030, rodzina nazw warstw) z `b/raw/C12/caps.xml` (poza
+  warstwami skorowidza: `default`, `WMS`, `SkorowidzeOrtofotomapyZasiegi*`).
+  GetCapabilities WMS NMT/NMPT usunieto w 0.8.0 (nieuzywane po przejsciu
+  na WFS). Testy: `tests/test_wms_layer_validation.py`.

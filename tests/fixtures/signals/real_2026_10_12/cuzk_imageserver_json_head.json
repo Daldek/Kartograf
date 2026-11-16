@@ -1,0 +1,12 @@
+{
+  "url": "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer?f=json",
+  "method": "HEAD",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "must-revalidate,max-age=0,public",
+    "Content-Length": "2610",
+    "Content-Type": "application/json; charset=UTF-8",
+    "ETag": "\"dc0c00dd\""
+  },
+  "recorded": "2026-10-12"
+}

@@ -98,10 +98,10 @@ CHANGELOG `### Tests`: "1854 testy offline, pokrycie 92,9%" (+ historia 1779 -> 
 4. Poza zakresem, nie zmieniane: CLAUDE.md/README zalecaja `pytest tests/` (bez `-m "not live"` odpala 8 testow sieciowych — P-16); README tabela sidecara "nodata odczytana z pliku" (dla wycinka PL stala -9999.0 — opisane w ARCHITECTURE 3.2).
 
 ## Pliki
-- `/home/claude-agent/workspace/Kartograf/docs/ARCHITECTURE.md`
-- `/home/claude-agent/workspace/Kartograf/docs/DECISIONS.md`
-- `/home/claude-agent/workspace/Kartograf/docs/CHANGELOG.md`
-- `/home/claude-agent/workspace/Kartograf/docs/SCOPE.md`
-- `/home/claude-agent/workspace/Kartograf/CLAUDE.md`
-- `/home/claude-agent/workspace/Kartograf/README.md`
+- `<workspace>/Kartograf/docs/ARCHITECTURE.md`
+- `<workspace>/Kartograf/docs/DECISIONS.md`
+- `<workspace>/Kartograf/docs/CHANGELOG.md`
+- `<workspace>/Kartograf/docs/SCOPE.md`
+- `<workspace>/Kartograf/CLAUDE.md`
+- `<workspace>/Kartograf/README.md`
 - E2E (poza repo): `.superpowers/sdd/2026-09-28-fala-review-max-i-wycinek-biblioteczny/e2e/{e2e_pl_cutout.py,e2e_warp_diagnostics.py,e2e_result.json,e2e_diag.json}`; `mypy-after.txt` w katalogu SDD.

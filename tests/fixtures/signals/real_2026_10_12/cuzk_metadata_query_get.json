@@ -1,0 +1,12 @@
+{
+  "url": "https://ags.cuzk.gov.cz/arcgis/rest/services/Metadata/MapServer/20/query?geometry=-670050%2C-1084750&geometryType=esriGeometryPoint&inSR=5514&spatialRel=esriSpatialRelIntersects&outFields=ROK%2CID&returnGeometry=false&f=json",
+  "method": "GET",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "must-revalidate,max-age=0,public",
+    "Content-Length": "169",
+    "Content-Type": "application/json; charset=UTF-8",
+    "ETag": "\"1788781987\""
+  },
+  "recorded": "2026-10-12"
+}

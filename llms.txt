@@ -1,0 +1,25 @@
+# Kartograf
+
+> Downloader of official spatial data for Poland and Czechia: elevation models and LAZ point clouds, orthophotos, land cover, soils and HSG, boundaries, cadastre and 3D models, saved as versions with metadata in a store. Python library, CLI and MCP server.
+
+Kartograf is for getting the data of an area (a sheet code, a bbox, a geometry file, a TERYT code) from GUGiK (PL), CUZK (CZ), Copernicus and ISRIC, and for reading what was downloaded. It is not for hydrological computation (use Hydrolog) or for IMGW and CHMU measurement series (use Obserwator).
+
+Interfaces: Python (`kartograf.download_data(product="nmt", sheet="N-34-130-D-d-2-4", resolution="1m", vertical_crs="EVRF2007", root="/data/kartograf")`), the CLI (`kartograf <group> <command> --option value --json`) and the MCP server (`kartograf-mcp`, read only unless started with `--allow-writes --allow-dir DIR`; a tool is an `operation_id`). Install with `pip install "kartograf @ git+https://github.com/Daldek/Kartograf.git"`; the extra `mcp` adds the server.
+
+Work in four steps: discover (`kartograf commands list`, `kartograf commands schema --command NAME`), check (`--check`), run, read (`status`, `result`, `items`, `notices`). A result is a `kartograf-result/1` envelope; an error is a `kartograf-error/1` document whose `code` is one of: `internal_error` (1), `validation_error` (2), `source_unavailable` (5), `no_data` (14), `store_unavailable` (8), `data_error` (7), `conflict` (4), `missing_dependency` (6), `forbidden` (12), `calculation_error` (13), `unsupported` (15), `io_error` (9), `cancelled` (130), `terminated` (143).
+
+Command groups: `boundaries`, `cadastre`, `elevation`, `geodesy`, `hydro`, `imagery`, `landcover`, `maps`, `models3d`, `names`, `sheet`, `soil`, `store`, `cache`, `commands`, `config`.
+
+## Documentation
+
+- [AGENTS.md](https://raw.githubusercontent.com/Daldek/Kartograf/main/AGENTS.md): the full guide for agents: interfaces, envelope, error codes, command index, typical flows
+- [README.md](https://raw.githubusercontent.com/Daldek/Kartograf/main/README.md): what Kartograf is for, installation and quick start
+- [Usage](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/USAGE.md): task-oriented guide to the CLI, the library and the MCP server
+- [Architecture](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/ARCHITECTURE.md): modules, store layout, sidecar, command catalog
+- [Scope](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/SCOPE.md): what is in and out of scope
+- [Changelog](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/CHANGELOG.md): changes per release
+
+## Optional
+
+- [Decisions](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/DECISIONS.md): architecture decision records
+- [PRD](https://raw.githubusercontent.com/Daldek/Kartograf/main/docs/PRD.md): product requirements

@@ -1,0 +1,6 @@
+{
+  "url": "https://ags.cuzk.gov.cz/arcgis/rest/services/GeomorfologickeJednotky/MapServer/39/query?geometry=-452000%2C-1112000%2C-450000%2C-1110000&geometryType=esriGeometryEnvelope&inSR=5514&spatialRel=esriSpatialRelIntersects&outSR=5514&outFields=%2A&orderByFields=OBJECTID&resultOffset=0&resultRecordCount=1000&returnGeometry=true&f=geojson",
+  "status": 200,
+  "Content-Type": "application/geo+json; charset=UTF-8",
+  "ETag": "\"1723534590\""
+}

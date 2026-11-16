@@ -338,7 +338,7 @@ kodzie juz przyznaja, ze `None` jest niemozliwe.
   `parser_registry.register_system`/`SheetSystem.parser_factory` znikaja.
   `kartograf/__init__.py` nietkniete (`ParserTM33` zostaje eksportem).
   Hydrograf/Hydrolog: brak importow z `providers.cuzk` ani `parser_registry`
-  (grep w `/home/claude-agent/workspace/Hydrograf`, `Hydrolog`).
+  (grep w `<workspace>/Hydrograf`, `Hydrolog`).
 - Dokumentacja do poprawy: `docs/ARCHITECTURE.md:118-124` (uwaga o leniwym
   imporcie `core -> providers` — przestaje byc prawdziwa, co jest zyskiem),
   `:841-843` (instrukcja "nowy kraj": rejestracja bez `parser_factory`),

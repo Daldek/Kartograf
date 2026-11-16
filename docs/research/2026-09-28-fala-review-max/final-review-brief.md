@@ -42,7 +42,7 @@ Fala naprawcza po review max z 2026-08-30 (15 znalezisk w torze wycinka PL
 4. Pakiet diffu calej fali (bez planu i raportow research):
    `review-final-81e71cb..84bd0a8.diff` (~354 KB — czytaj partiami, powiedz w raporcie,
    ze tak zrobiles). Commity:
-   `git log --oneline 81e71cb..84bd0a8` w `/home/claude-agent/workspace/Kartograf`.
+   `git log --oneline 81e71cb..84bd0a8` w `<workspace>/Kartograf`.
 5. Ledger: `progress.md` — WSZYSTKIE linie `Ruling:`, `minor (deferred)`,
    `DEFERRED-LOAD-BEARING`, `note`. Raporty zadan: `task-N-report.md` (wedlug potrzeby).
 
@@ -83,7 +83,7 @@ E. **Zgodnosc z Global Constraints**: tor CZ i `transform/raster.py` bez zmian
    (`git diff 81e71cb..84bd0a8 --stat -- kartograf/providers/cuzk kartograf/transform/raster.py`);
    brak shimow zgodnosciowych; semantyka, ktorej nie wolno zmienic (lista w
    COMMON-CONTEXT); CHANGELOG mowi o przebudowie z `--force`.
-F. **Konsument biblioteki — Hydrograf** (tylko odczyt: `/home/claude-agent/workspace/Hydrograf`,
+F. **Konsument biblioteki — Hydrograf** (tylko odczyt: `<workspace>/Hydrograf`,
    NIE modyfikuj niczego, takze cache): jedna kontrola — czy Hydrograf importuje/uzywa
    czegos, co fala zmienila albo usunela (np. prywatne `_laz_uklad`, `_PL_*` z CLI,
    `FileStorage._*_SUBDIRS`, sygnatura `mosaic_and_crop`, tresc komunikatu "No NMT ...

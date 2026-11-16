@@ -72,7 +72,7 @@ klucza standardowego.
 - Zmiana nazwy `kampanie/` na angielska.
 - CZ (6.4), LAZ (6.2), wycinki `--target-crs` (6.3), land cover.
 
-## 2. Stan kodu (pomiar 2026-10-10, `develop` `fc4c176`)
+## 2. Stan kodu (pomiar 2026-10-10, `develop` `8dceccd`)
 
 | Element | Dzis | Gdzie |
 |---|---|---|

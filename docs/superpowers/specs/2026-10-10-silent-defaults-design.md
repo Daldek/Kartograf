@@ -67,7 +67,7 @@ i jest gotowy dla (a).
 
 ## 2. d1 — `Info:` o mieszanych ukladach wysokosci pod `--country auto`
 
-### 2.1 Stan kodu (develop `4fa4e9c`)
+### 2.1 Stan kodu (develop `508d10f`)
 
 | Element | Dzis | Gdzie |
 |---|---|---|

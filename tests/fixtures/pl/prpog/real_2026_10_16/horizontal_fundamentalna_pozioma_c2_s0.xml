@@ -1,0 +1,74 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://mapserver.gis.umn.edu/mapserver https://mapy.geoportal.gov.pl/wss/service/PZGIK/PodstawowaOsnowaGeodezyjnaPozioma?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ms:Fundamentalna_pozioma&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-16T20:03:26" numberMatched="unknown" numberReturned="2"
+   next="https://mapy.geoportal.gov.pl/wss/service/PZGIK/PodstawowaOsnowaGeodezyjnaPozioma?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;TYPENAMES=ms%3AFundamentalna_pozioma&amp;SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&amp;BBOX=240000%2C560000%2C250000%2C575000%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&amp;COUNT=2&amp;gahLaQu1eeYooCu=1781115072.37151.0000&amp;STARTINDEX=2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>243690.246000 565040.263000</gml:lowerCorner>
+      		<gml:upperCorner>244722.421000 565855.748000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+<!-- WARNING: FeatureId item 'ptid' not found in typename 'Fundamentalna_pozioma'. -->
+    <wfs:member>
+      <ms:Fundamentalna_pozioma>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>244722.421000 565855.748000</gml:lowerCorner>
+        		<gml:upperCorner>244722.421000 565855.748000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>244722.421000 565855.748000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>117</ms:ogc_fid>
+        <ms:nr_punktu>163302400</ms:nr_punktu>
+        <ms:klasa_osnowy>Fundamentalna</ms:klasa_osnowy>
+        <ms:x1992>244722.421</ms:x1992>
+        <ms:y1992>565855.748</ms:y1992>
+        <ms:MP>0.01</ms:MP>
+        <ms:h_plevrf2007nh>227.4350</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.010</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh></ms:h_plkron86nh>
+        <ms:mh_plkron86nh></ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Na budowli</ms:typ_stabilizacji>
+        <ms:stan_znaku>Dobry</ms:stan_znaku>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Pozioma/1261/OpisyTopograficzne/163302400.jpg</ms:opis_topograficzny>
+      </ms:Fundamentalna_pozioma>
+    </wfs:member>
+    <wfs:member>
+      <ms:Fundamentalna_pozioma>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>243690.246000 565040.263000</gml:lowerCorner>
+        		<gml:upperCorner>243690.246000 565040.263000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>243690.246000 565040.263000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>118</ms:ogc_fid>
+        <ms:nr_punktu>163302401</ms:nr_punktu>
+        <ms:klasa_osnowy>Fundamentalna</ms:klasa_osnowy>
+        <ms:x1992>243690.246</ms:x1992>
+        <ms:y1992>565040.263</ms:y1992>
+        <ms:MP>0.01</ms:MP>
+        <ms:h_plevrf2007nh>205.4197</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.004</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh>205.2385</ms:h_plkron86nh>
+        <ms:mh_plkron86nh>0.004</ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Znak specjalny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Dobry</ms:stan_znaku>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Pozioma/1261/OpisyTopograficzne/163302401.jpg</ms:opis_topograficzny>
+      </ms:Fundamentalna_pozioma>
+    </wfs:member>
+</wfs:FeatureCollection>
+

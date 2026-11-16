@@ -1,0 +1,176 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:gugik="http://www.gugik.gov.pl"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://www.gugik.gov.pl https://mapy.geoportal.gov.pl/wss/service/PZGIK/NumerycznyModelPokryciaTerenuKRON86/WFS/Skorowidze?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=gugik:SkorowidzNMPT2019,gugik:SkorowidzNMPT2018,gugik:SkorowidzNMPT2017,gugik:SkorowidzNMPT2016,gugik:SkorowidzNMPT2015,gugik:SkorowidzNMPT2014,gugik:SkorowidzNMPT2013,gugik:SkorowidzNMPT2012,gugik:SkorowidzNMPT2011,gugik:SkorowidzNMPT2010&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-15T20:39:19" numberMatched="4" numberReturned="4">
+  <wfs:boundedBy>
+  	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+  		<gml:lowerCorner>718847.690000 477654.490000</gml:lowerCorner>
+  		<gml:upperCorner>721174.360000 479696.160000</gml:upperCorner>
+  	</gml:Envelope>
+  </wfs:boundedBy>
+  <wfs:member>
+   <wfs:FeatureCollection timeStamp="2026-10-15T20:39:19" numberMatched="2" numberReturned="2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>718847.690000 477654.490000</gml:lowerCorner>
+      		<gml:upperCorner>721174.360000 479696.160000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzNMPT2010 gml:id="SkorowidzNMPT2010.349385">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>718847.690000 477654.490000</gml:lowerCorner>
+        		<gml:upperCorner>721174.360000 479696.160000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMPT2010.349385.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">720595.160000 477662.960000 721174.360000 477665.790000 721171.910000 478173.380000 721169.520000 478680.970000 721167.180000 479188.570000 721164.910000 479696.160000 720585.710000 479693.600000 720006.300000 479691.030000 719426.890000 479688.460000 718847.690000 479685.890000 718849.970000 479178.040000 718852.310000 478670.190000 718854.700000 478162.340000 718857.150000 477654.490000 719436.340000 477657.310000 720015.750000 477660.140000 720595.160000 477662.960000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-50-C-d-3-4</gugik:godlo>
+        <gugik:akt_rok>2010</gugik:akt_rok>
+        <gugik:asortyment>NMPT</gugik:asortyment>
+        <gugik:format>ASCII XYZ GRID</gugik:format>
+        <gugik:char_przestrz>0.50 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-KRON86-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>N-34-001/11</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMPT2010.349385.akt_data"><gml:timePosition>2010-11-01</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/3615/3615_349385_N-34-50-C-d-3-4.xyz.zip</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMPT2010.349385.dt_pzgik"><gml:timePosition>2012-04-23</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.40</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMPT2010>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzNMPT2010 gml:id="SkorowidzNMPT2010.349317">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>718847.690000 477654.490000</gml:lowerCorner>
+        		<gml:upperCorner>721174.360000 479696.160000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMPT2010.349317.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">720595.160000 477662.960000 721174.360000 477665.790000 721171.910000 478173.380000 721169.520000 478680.970000 721167.180000 479188.570000 721164.910000 479696.160000 720585.710000 479693.600000 720006.300000 479691.030000 719426.890000 479688.460000 718847.690000 479685.890000 718849.970000 479178.040000 718852.310000 478670.190000 718854.700000 478162.340000 718857.150000 477654.490000 719436.340000 477657.310000 720015.750000 477660.140000 720595.160000 477662.960000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-50-C-d-3-4</gugik:godlo>
+        <gugik:akt_rok>2010</gugik:akt_rok>
+        <gugik:asortyment>NMPT</gugik:asortyment>
+        <gugik:format>ARC/INFO ASCII GRID</gugik:format>
+        <gugik:char_przestrz>0.50 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-KRON86-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>N-34-001/11</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMPT2010.349317.akt_data"><gml:timePosition>2010-11-01</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/3614/3614_349317_N-34-50-C-d-3-4.asc</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMPT2010.349317.dt_pzgik"><gml:timePosition>2012-04-23</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.40</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMPT2010>
+    </wfs:member>
+   </wfs:FeatureCollection>
+  </wfs:member>
+  <wfs:member>
+   <wfs:FeatureCollection timeStamp="2026-10-15T20:39:19" numberMatched="2" numberReturned="2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>718847.690000 477654.490000</gml:lowerCorner>
+      		<gml:upperCorner>721174.360000 479696.160000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzNMPT2018 gml:id="SkorowidzNMPT2018.850645">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>718847.690000 477654.490000</gml:lowerCorner>
+        		<gml:upperCorner>721174.360000 479696.160000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMPT2018.850645.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">720595.160000 477662.960000 721174.360000 477665.790000 721171.910000 478173.380000 721169.520000 478680.970000 721167.180000 479188.570000 721164.910000 479696.160000 720585.710000 479693.600000 720006.300000 479691.030000 719426.890000 479688.460000 718847.690000 479685.890000 718849.970000 479178.040000 718852.310000 478670.190000 718854.700000 478162.340000 718857.150000 477654.490000 719436.340000 477657.310000 720015.750000 477660.140000 720595.160000 477662.960000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-50-C-d-3-4</gugik:godlo>
+        <gugik:akt_rok>2018</gugik:akt_rok>
+        <gugik:asortyment>NMPT</gugik:asortyment>
+        <gugik:format>ASCII XYZ GRID</gugik:format>
+        <gugik:char_przestrz>0.50 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-KRON86-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>DFT.7201.015.2018</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMPT2018.850645.akt_data"><gml:timePosition>2018-03-18</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/70933/70933_850645_N-34-50-C-d-3-4.xyz.zip</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMPT2018.850645.dt_pzgik"><gml:timePosition>2019-02-05</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.40</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMPT2018>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzNMPT2018 gml:id="SkorowidzNMPT2018.850798">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>718847.690000 477654.490000</gml:lowerCorner>
+        		<gml:upperCorner>721174.360000 479696.160000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMPT2018.850798.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">720595.160000 477662.960000 721174.360000 477665.790000 721171.910000 478173.380000 721169.520000 478680.970000 721167.180000 479188.570000 721164.910000 479696.160000 720585.710000 479693.600000 720006.300000 479691.030000 719426.890000 479688.460000 718847.690000 479685.890000 718849.970000 479178.040000 718852.310000 478670.190000 718854.700000 478162.340000 718857.150000 477654.490000 719436.340000 477657.310000 720015.750000 477660.140000 720595.160000 477662.960000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-50-C-d-3-4</gugik:godlo>
+        <gugik:akt_rok>2018</gugik:akt_rok>
+        <gugik:asortyment>NMPT</gugik:asortyment>
+        <gugik:format>ARC/INFO ASCII GRID</gugik:format>
+        <gugik:char_przestrz>0.50 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-KRON86-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>DFT.7201.015.2018</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMPT2018.850798.akt_data"><gml:timePosition>2018-03-18</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/70934/70934_850798_N-34-50-C-d-3-4.asc</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMPT2018.850798.dt_pzgik"><gml:timePosition>2019-02-05</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.40</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMPT2018>
+    </wfs:member>
+   </wfs:FeatureCollection>
+  </wfs:member>
+</wfs:FeatureCollection>
+

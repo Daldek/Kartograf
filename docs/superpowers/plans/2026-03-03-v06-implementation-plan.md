@@ -85,10 +85,10 @@ Before every commit:
 
 ### Key Files to Read First
 
-- `/home/claude-agent/workspace/Kartograf/CLAUDE.md` — project instructions
-- `/home/claude-agent/workspace/Kartograf/docs/PROGRESS.md` — current state
-- `/home/claude-agent/workspace/Kartograf/docs/DECISIONS.md` — architectural decisions
-- `/home/claude-agent/workspace/Kartograf/kartograf/__init__.py` — public API exports
+- `<workspace>/Kartograf/CLAUDE.md` — project instructions
+- `<workspace>/Kartograf/docs/PROGRESS.md` — current state
+- `<workspace>/Kartograf/docs/DECISIONS.md` — architectural decisions
+- `<workspace>/Kartograf/kartograf/__init__.py` — public API exports
 
 ### Existing Tests: 835 tests, ~84% coverage. DO NOT modify existing tests unless absolutely necessary.
 

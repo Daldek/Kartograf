@@ -1,0 +1,5 @@
+{
+  "url": "https://mapy.geoportal.gov.pl/wss/service/PZGIK/PRG/WFS/AdministrativeBoundaries?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=ms%3AA02_Granice_powiatow&PROPERTYNAME=JPT_KOD_JE&COUNT=1000&BBOX=310000%2C334000%2C313000%2C337000%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180",
+  "status": 200,
+  "Content-Type": "text/xml; subtype=\"gml/3.2.1\"; charset=UTF-8"
+}

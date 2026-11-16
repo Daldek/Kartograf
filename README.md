@@ -1,122 +1,286 @@
-# Kartograf
+# Kartograf: official spatial data of Poland and Czechia for GIS and hydrology
 
-Kartograf pobiera dane przestrzenne z publicznych usług GUGiK (Polska), CUZK
-(Czechy), Copernicus i ISRIC: wybierasz obszar (godło arkusza, bbox albo plik
-geometrii), a Kartograf pobiera arkusze albo wycinek WCS NMT/NMPT PL
-(`--target-crs`) i zapisuje je w uporządkowanym katalogu `data/`
-razem z metadanymi każdego pliku. Działa
-jako narzędzie wiersza poleceń (`kartograf`) i jako biblioteka Python.
+Kartograf downloads spatial data: digital elevation models (DEM, Polish NMT), surface models (NMPT), orthophotos and LAZ point clouds from GUGiK (Poland) and CUZK (Czechia), BDOT10k and CORINE land cover, SoilGrids soils with hydrologic soil groups (HSG), boundaries, cadastre and 3D models. Every file is saved as an immutable version with metadata. CLI, Python library and MCP server.
 
-Jest częścią toolchainu hydrologicznego: **Hydrograf** używa go jako źródła
-danych GIS (NMT, pokrycie terenu), **Hydrolog** opcjonalnie (grupy
-hydrologiczne gleb, SoilGrids), a dane obserwacyjne dostarcza **IMGWTools**.
-Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
+## When to use
 
-## Obsługiwane dane
+- Get the data of an area (a sheet code, a bounding box, a vector file, a TERYT county code or a whole country) from the official source, with its CRS, licence and origin recorded next to every file.
+- Keep a reproducible data set: versions are never overwritten, and the sidecar of every version records its SHA-256.
+- Let an AI agent discover and call the same operations through MCP, the CLI or Python, with one result format and stable error codes.
 
-- **NMT (PL)** — Numeryczny Model Terenu z GUGiK (1 m / 5 m)
-- **NMT (CZ)** — DMR 5G/4G z CUZK (2 m / 5 m)
-- **NMPT** — Numeryczny Model Pokrycia Terenu (DSM) z GUGiK
-- **Ortofotomapa** — zdjęcia lotnicze GUGiK (25 cm)
-- **LAZ** — chmury punktów LIDAR (ALS) z GUGiK
-- **BDOT10k** — wektorowa baza obiektów topograficznych (pokrycie terenu, hydrografia)
-- **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (Copernicus)
-- **SoilGrids** — globalne dane glebowe (ISRIC)
-- **HSG** — grupy hydrologiczne gleb dla metody SCS-CN, liczone z SoilGrids
+## When not to use
 
-## Instalacja
+- Hydrological computation (concentration time, SCS-CN, hydrographs, statistics): [Hydrolog](https://github.com/Daldek/Hydrolog). Kartograf only classifies HSG.
+- IMGW-PIB and CHMU measurement series, PMAXTP: [Obserwator](https://github.com/Daldek/Obserwator).
+- Watershed delineation and design hydrographs in a web application: [Hydrograf](https://github.com/Daldek/Hydrograf), which takes its elevation and land cover data from Kartograf.
+- Browsing and managing a store in a browser: [Archiwista](https://github.com/Daldek/Archiwista). Projects (task lists with pinned versions) are kept by Archiwista (ADR-057).
+- Areas outside Poland and Czechia: use the provider of that country. The only global source is SoilGrids.
+
+## Install
+
+Kartograf is not on PyPI yet; install it from Git (Python 3.12 or newer):
 
 ```bash
-git clone https://github.com/Daldek/Kartograf.git
-cd Kartograf
-python3.12 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
+uv tool install "kartograf @ git+https://github.com/Daldek/Kartograf.git@v0.8.0"
+uv add "kartograf @ git+https://github.com/Daldek/Kartograf.git@v0.8.0"
+uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0" kartograf-mcp
 ```
 
-## Szybki start
+The lines install the CLI of the release 0.8.0, add the library to a project pinned to its tag and start the MCP server once. Without `@v0.8.0` they take the default branch `main`, the latest release.
+
+| Extra | Adds |
+|---|---|
+| `mcp` | the MCP server `kartograf-mcp` (SDK `mcp>=2.3.0,<3`, protocol revision 2026-07-28) |
+
+Development setup: `git clone https://github.com/Daldek/Kartograf.git && cd Kartograf && uv sync --locked --all-extras`.
+
+## Quick start
+
+Every command takes `--json`: stdout is then exactly one `kartograf-result/1` document, logs go to stderr. Without it the output is for people, in the language of `--lang` (`pl` or `en`).
 
 ### CLI
 
 ```bash
-# Informacje o godle arkusza
-kartograf parse N-34-130-D-d-2-4
-
-# NMT dla arkusza, inne produkty GUGiK
-kartograf download N-34-130-D-d-2-4
-kartograf download N-34-130-D-d-2-4 --product orto
-
-# NMT dla obszaru: bbox (domyślnie EPSG:2180) albo plik SHP/GPKG
-kartograf download --bbox 530000,382000,533000,386000 --country pl
-kartograf download --geometry zlewnia.gpkg --layer catchments
-
-# NMT Czech
-kartograf download 302_5550 --country cz
-
-# Pokrycie terenu i grupy hydrologiczne gleb
-kartograf landcover download --source bdot10k --teryt 1465
-kartograf soilgrids hsg --godlo N-34-130-D --stats
+kartograf sheet parse N-34-139-C-a-3-1 --json
 ```
 
-Pełna lista opcji: `kartograf <komenda> --help`. Więcej przykładów, wybór
-kraju (`--country`), scalony wycinek (`--target-crs`) i kampanie GUGiK:
-[docs/USAGE.md](docs/USAGE.md).
+Offline. The envelope names the command and holds the document of the command:
 
-### Biblioteka Python
+```json
+{
+  "schema": "kartograf-result/1",
+  "tool": "kartograf",
+  "command": "sheet parse",
+  "check": false,
+  "status": "ok",
+  "result": {
+    "schema": "kartograf-sheet/1",
+    "sheet": "N-34-139-C-a-3-1",
+    "system": "pl1992",
+    "country": "PL",
+    "scale": "1:10000",
+    "crs": "EPSG:2180"
+  },
+  "items": [],
+  "notices": []
+}
+```
+
+Plan a download, then run it (network). `--check` writes nothing:
+
+```bash
+kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 --root ~/kartograf-data --check --json
+kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 --root ~/kartograf-data --json
+```
+
+The plan is `"check": true` with `result.schema` `kartograf-plan/1` and one item per file (`status` `missing`, `newer`, `current`, `unverifiable` or `check_failed`). The run has `result.schema` `kartograf-download/1`:
+
+```json
+{
+  "schema": "kartograf-result/1",
+  "command": "elevation download",
+  "check": false,
+  "status": "ok",
+  "result": {
+    "schema": "kartograf-download/1",
+    "files": [{"unit": "N-34-139-C-a-3-1", "country": "PL", "status": "new"}],
+    "failed": [],
+    "ok": true
+  }
+}
+```
+
+`result.files[].path` is the file below the store (with `-o`, the file in the output directory), listed with its `size_bytes` and `sha256`. An area, a country or another product is another option set: `kartograf commands schema --command "elevation download"`.
+
+Where the files go: `--root DIR` writes the versioned store (`versions/`, sidecars); `-o DIR` / `--output-dir DIR` writes plain files named as in the store, flat in `DIR`, with no sidecar and no hard links (it works on FAT, exFAT and SMB; `--force` replaces existing files, and without it an existing file is a conflict before the first byte; PL sheets take the newest FULL flight). An output directory that is, or lies in, a store is a `conflict` before any request: write a store with `--root`. A command with neither option writes the default store (`KARTOGRAF_ROOT`, `[kartograf] root`, `<data_dir>/kartograf`). `--upgrade`, `--plan` and `--all-campaigns` work only with a store. There is no `--output FILE`: no command writes exactly one file. Details: [USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md) 1.12.
+
+```bash
+# plain files in ./dem, named as in the store; a rerun is a conflict, --force replaces them
+kartograf elevation download --product nmt --sheet N-34-139-C-a-3-1 --resolution 1m --vertical-crs EVRF2007 -o ./dem
+```
+
+### Python
 
 ```python
-from kartograf import BBox, DownloadManager, download_pl_cutout
+from kartograf import describe_sheet
 
-# Arkusz NMT po godle
-manager = DownloadManager(output_dir="./data")
-path = manager.download_sheet("N-34-130-D-d-2-4")
-
-# Obszar NMT PL jako wycinek WCS 1 m z maską lądu, jeden GeoTIFF w zadanym układzie
-result = download_pl_cutout(
-    BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-    "EPSG:2180",
-    output_dir="./data",
-)
-print(result.path)
+info = describe_sheet("N-34-139-C-a-3-1")
+print(info.scale, info.crs)  # 1:10000 EPSG:2180
 ```
 
-## Gdzie trafiają dane
+Offline. Documents have `to_dict()` and `to_json()`; the dictionary is the `result` of the CLI envelope. A download is one call with the same options as keyword arguments (network):
 
-Pliki lądują w `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
-(np. `data/nmt/pl_1992_1m_evrf2007/`), a każdy ma obok sidecar
-`<plik>.meta.json` z układem, licencją i pochodzeniem danych — opis
-w [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (sekcja 3).
+```python
+from pathlib import Path
 
-## Dokumentacja
+from kartograf import check_data, download_data
 
-| Plik | Zawartość |
+choice = {
+    "product": "nmt",
+    "sheet": "N-34-139-C-a-3-1",
+    "resolution": "1m",
+    "vertical_crs": "EVRF2007",
+    "root": Path.home() / "kartograf-data",
+}
+plan = check_data(**choice)  # reads the source, writes nothing
+report = download_data(**choice)
+print(report.ok, [item.file.path for item in report.files])
+```
+
+Failures raise `KartografError` subclasses with `code`, `exit_code`, `hint` and `details`.
+
+### MCP
+
+The server lists the tools of the catalog. A tool is called with the options as arguments and answers with the same envelope as `--json`, as `structuredContent` and as text:
+
+```json
+{"name": "kartograf_sheet_parse", "arguments": {"sheet": "N-34-139-C-a-3-1"}}
+```
+
+## Capabilities
+
+The CLI group is `kartograf <group> download` and `product` selects the data; `kartograf <group> list-sources` lists the sources and values of a group offline. The MCP tool is `kartograf_<group>_download`. Every row reads from the source named in the last column and writes a store version with its licence, or with `-o` a plain file.
+
+| Task | CLI group (`--product`) | Python function | Data source and licence |
+|---|---|---|---|
+| DEM (NMT), surface model (NMPT), LAZ point clouds, ZABAGED contours | `elevation` (`nmt`, `nmpt`, `laz`, `contours`) | `download_data` | GUGiK (PL): free reuse with attribution; CUZK (CZ): CC BY 4.0 |
+| Availability of years, grids and formats of an area, without downloading | `elevation availability` | `check_availability` | GUGiK, CUZK |
+| Orthophoto, LIDAR intensity, true and oblique orthophoto | `imagery` (`orto`, `intensity`, `true-orto`, `oblique-orto`) | `download_data` | GUGiK, CUZK |
+| Land cover: BDOT10k (also yearly archives), BDOO, CORINE, ZABAGED, Data50, Data250 | `landcover` | `download_landcover` | GUGiK, CUZK; CORINE: Copernicus CLMS data policy, attribution required |
+| SoilGrids layers and hydrologic soil groups (HSG, SCS-CN) | `soil` (`download`, `hsg`) | `download_soil`, `calculate_hsg` | ISRIC SoilGrids: CC BY 4.0 |
+| Boundaries (PRG, RUIAN), addresses, geomorphology | `boundaries` | `download_collection` | GUGiK, CUZK |
+| Cadastral map (EGiB, RCN prices; CZ cadastral map) | `cadastre` | `download_collection` | GUGiK, CUZK |
+| 3D building and tree models, city meshes (PL) | `models3d` | `download_collection` | GUGiK |
+| Water network HY-NET (CZ); water management plan layers of PGW Wody Polskie (PL) | `hydro` | `download_collection` | CUZK; PGW Wody Polskie (no licence named) |
+| Geographic names (PRNG, Geonames, world) | `names` | `download_collection` | GUGiK, CUZK |
+| Topographic maps (BDOT10k visualisations, ZTM) | `maps` | `download_collection` | GUGiK, CUZK |
+| Geodetic control networks, quasi-geoid models | `geodesy` | `download_collection` | GUGiK, CUZK |
+| Sheet codes: parse one, find the sheets of an area | `sheet parse`, `sheet find` | `describe_sheet`, `find_sheets` | none (offline) |
+| Read a store without writing | `store overview`, `store entries`, `store sidecar` | `describe_store`, `list_store_entries`, `read_store_sidecar`; `command_for_file` (the command that selects a stored file again) | none (offline) |
+
+The full list is `kartograf commands list --json`. Python names are keyword-only functions of the top-level package (`kartograf.__all__`).
+
+## For AI agents
+
+- [llms.txt](https://raw.githubusercontent.com/Daldek/Kartograf/main/llms.txt) and [AGENTS.md](https://raw.githubusercontent.com/Daldek/Kartograf/main/AGENTS.md) are generated from the command catalog; `kartograf commands guide --format agents|llms|agents-md-block` prints them and `--inject PATH` puts the block into the AGENTS.md of another repository.
+- Discover the commands with `kartograf commands list --json` and one command with `kartograf commands schema --command "elevation download" --json` (options, allowed values with meanings, rules, examples, errors). In Python: `list_commands()`, `command_schema()`, `validate_command()`, `check_command()`, `run_command()`; in MCP: `kartograf_commands_list` and `kartograf_commands_schema`.
+- Every command answers with `kartograf-result/1` (`status` `ok`, `partial` or `failed`, `result`, `items`, `notices`); an error is `kartograf-error/1` on the last line of stderr.
+- Read-only operations come first: `--check` plans without fetching or writing, a version is never overwritten, and the MCP server only plans until it is started with `--allow-writes`.
+
+## MCP server
+
+`kartograf-mcp` serves 34 tools named `kartograf_<group>_<verb>` over stdio. Each client below starts it as in the Install section:
+
+```bash
+claude mcp add kartograf -- uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0" kartograf-mcp
+codex mcp add kartograf -- uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0" kartograf-mcp
+```
+
+Cursor reads `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "kartograf": {
+      "command": "uvx",
+      "args": ["--from", "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0", "kartograf-mcp"]
+    }
+  }
+}
+```
+
+VS Code reads `.vscode/mcp.json`, whose key is `servers`:
+
+```json
+{
+  "servers": {
+    "kartograf": {
+      "command": "uvx",
+      "args": ["--from", "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0", "kartograf-mcp"]
+    }
+  }
+}
+```
+
+| Option | Meaning |
 |---|---|
-| [USAGE.md](docs/USAGE.md) | Przewodnik użytkownika: CLI i biblioteka, wynik pobrania, kampanie, CLMS, znane problemy |
-| [SCOPE.md](docs/SCOPE.md) | Zakres projektu: co jest, czego nie ma, ograniczenia techniczne |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architektura, moduły, kontrakty danych, układ `data/`, przepływy per produkt |
-| [PRD.md](docs/PRD.md) | Wymagania produktowe, publiczne API |
-| [DECISIONS.md](docs/DECISIONS.md) | Rejestr decyzji architektonicznych (ADR) |
-| [CHANGELOG.md](docs/CHANGELOG.md) | Historia zmian per wydanie |
-| [PROGRESS.md](docs/PROGRESS.md) | Bieżący stan prac |
-| [DEVELOPMENT_STANDARDS.md](docs/DEVELOPMENT_STANDARDS.md) | Dla deweloperów: środowisko, testy, konwencje, workflow |
+| `--tools FAMILIES` | `discovery`, `availability`, `data`, `store`; `core` is the ten tools of the main tasks |
+| `--allow-dir DIR` | absolute directory (repeatable) that every path argument and the store must lie in; another path is `forbidden` |
+| `--allow-writes` | data tools write (needs `--allow-dir`); without it they only plan (`check`) |
 
-## Wymagania
+Tool descriptions and instructions are English; the server plans until `--allow-writes` and never writes outside `--allow-dir`.
 
-Python 3.12+; zależności wymienia `pyproject.toml` (`dependencies`,
-narzędzia deweloperskie w `[dev]`). CORINE jako GeoTIFF wymaga konta
-Copernicus CLMS ([docs/USAGE.md](docs/USAGE.md), sekcja 6) — bez niego
-pobierany jest podgląd PNG.
+## Related tools
 
-## Licencja
+- [Hydrolog](https://github.com/Daldek/Hydrolog) reads the SoilGrids rasters that `soil download` writes and computes HSG, curve numbers and hydrographs.
+- [Hydrograf](https://github.com/Daldek/Hydrograf) is a web application that downloads its DEM, land cover and HSG through the Kartograf library.
+- [Obserwator](https://github.com/Daldek/Obserwator) provides the hydro-meteorological observations and PMAXTP that Kartograf does not; its store follows the same design.
+- [Archiwista](https://github.com/Daldek/Archiwista) browses Kartograf and Obserwator stores through `iter_store` and `read_sidecar`.
+- [Retman](https://github.com/Daldek/Retman) is a Polish natural-language layer over the catalogs of the tools.
+- External: the Geoportal of GUGiK (https://www.geoportal.gov.pl) for one-off manual downloads and ordering; OpenTopography for global DEMs outside Poland and Czechia.
 
-MIT — szczegóły w pliku `LICENSE`.
+## Errors and exit codes
 
-## Autor
+An error is a `kartograf-error/1` document with `code`, `title`, `message`, `hint`, `details` and `exit_code`; the codes come from the [shared registry](https://github.com/Daldek/Nogat/blob/main/standards/ERROR_REGISTRY.md). The outcomes `partial` (10) and `failed` (11) are results, not errors: read `items` and retry the failed units. The most common errors:
 
-[Piotr de Bever](https://www.linkedin.com/in/piotr-de-bever/)
+| Code | Exit | What to do |
+|---|---|---|
+| `validation_error` | 2 | an option is wrong or missing: fix `details.option` as `hint` says |
+| `source_unavailable` | 5 | network, HTTP or timeout: retry the same call later |
+| `no_data` | 14 | the source has no data there (`details.reason`): change the area or the year |
+| `io_error` | 9 | a directory or file is unavailable: check `details.path` and the permissions |
+| `conflict` | 4 | the target is taken (`details.reason`, `details.paths`): `--force` replaces existing files; an output directory in a store needs `--root` instead |
 
-## Status
+Ctrl-C ends with 130 and SIGTERM with 143; nothing half written stays in the store or in the output directory.
 
-Projekt w aktywnym rozwoju; wersję pakietu podaje `kartograf --version`.
-Zmiany, także niewydane jeszcze zmiany kontraktów, opisuje
-[docs/CHANGELOG.md](docs/CHANGELOG.md).
+## Data and licensing
+
+Sources, as in the [Nogat registry](https://github.com/Daldek/Nogat/blob/main/ecosystem.yaml):
+
+| Source | Data | Licence |
+|---|---|---|
+| GUGiK (Poland) | NMT, NMPT, orthophoto, LAZ, BDOT10k, PRG, EGiB, 3D models, geodesy | free reuse with attribution (Prawo geodezyjne i kartograficzne) |
+| CUZK (Czechia) | DMR, DMP, orthophoto, LAZ, ZABAGED, RUIAN, HY-NET | CC BY 4.0 |
+| PGW Wody Polskie (Poland) | IIaPGW geodatabase of the water management plans, 2022-2027 | no licence named; auxiliary materials, the plans in Dziennik Ustaw are binding |
+| Copernicus CLMS | CORINE Land Cover | Copernicus data policy, attribution required |
+| ISRIC SoilGrids | soil properties, input of HSG | CC BY 4.0 |
+
+Every file of the store has a sidecar `<file>.meta.json` (`kartograf-meta/1`) with the CRS, the source, the request, the SHA-256 and the licence with a ready-made attribution text; pass it on when you publish results. A plain file (`-o`) has no sidecar: its licence is the one of its source in the table above.
+
+Files go to the directory of `--root` (`root`), one directory per product: `<root>/<product>/<country>_<system>[_<variant>]/...`. A version is a file in `versions/<label>_<sha8>/`; the standard path and `full_sheet/` are hard links to the newest local version ([ARCHITECTURE.md](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md), section 3). With `-o DIR` the same file names lie flat in `DIR` (`N-34-139-C-a-3-1.asc`), with nothing else.
+
+### Settings, directories and backup
+
+Settings come from the first of: the command-line option, the variable `KARTOGRAF_<KEY>`, the shared variable `NOGAT_<KEY>` (only `data_dir`, `cache_dir` and `lang`), the table `[kartograf]` and then `[nogat]` of `nogat.toml`, and the default (Nogat DEV-18). `nogat.toml` is in the user configuration directory (`~/.config/nogat/nogat.toml` on Linux) or at the path in `NOGAT_CONFIG`; Kartograf works without it, and refuses to run with a file it cannot read (`validation_error`, reason `invalid_config`). `kartograf config show [--json]` lists every setting with its value and source. [.env.example](https://github.com/Daldek/Kartograf/blob/main/.env.example) has every variable; Kartograf does not read a `.env` file.
+
+| Variable | Key in `nogat.toml` | Meaning | Default |
+|---|---|---|---|
+| `KARTOGRAF_ROOT` | `[kartograf] root` | root of the store a command writes when it names neither `--root` nor `--output-dir` (ADR-054) | `<data_dir>/kartograf` |
+| `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR` | `data_dir` | parent of the stores | user data directory of `nogat` (`~/.local/share/nogat`) |
+| `KARTOGRAF_CACHE_DIR`, `NOGAT_CACHE_DIR` | `cache_dir` | parent of the caches; the metadata cache is `<cache_dir>/kartograf/metadata.db` | user cache directory of `nogat` (`~/.cache/nogat`) |
+| `KARTOGRAF_LANG`, `NOGAT_LANG` | `lang` | language of human-readable output, `pl` or `en`; `--lang` overrides it; the `--json` output and the error line are English | `pl` |
+| `KARTOGRAF_DEBUG` | `[kartograf] debug` | print tracebacks and every library log record | off |
+| `NOGAT_CONFIG` | - | path of `nogat.toml` | user configuration directory |
+| `CLMS_CREDENTIALS` | never in the file | CLMS API credentials for CORINE as GeoTIFF ([USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md), section 6); `config show` says present or missing | - |
+
+Kartograf never writes a cache or state into the current directory. Without `CLMS_CREDENTIALS` CORINE is a PNG preview.
+
+**Backup.** A store keeps hard links: the standard path and `full_sheet/` are hard links to a file in `versions/`. Back it up with a copy that preserves them (`rsync -aH SOURCE/ TARGET/`); on Windows use a tool that keeps hard links, not Explorer or `robocopy`, or the copy is two to three times larger. A source serves its current state, so a version that the source has since replaced or withdrawn (a campaign GUGiK no longer lists, a national file replaced in place) cannot be downloaded again: the store holds the only copy, and that part is the one to protect first. The metadata cache is not data and needs no backup.
+
+## Documentation
+
+| File | Content |
+|---|---|
+| [USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md) | task-oriented guide to the CLI, the library and the MCP server |
+| [ARCHITECTURE.md](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md) | modules, contracts, store layout, flows per product |
+| [DECISIONS.md](https://github.com/Daldek/Kartograf/blob/main/docs/DECISIONS.md) | architecture decision records |
+| [SCOPE.md](https://github.com/Daldek/Kartograf/blob/main/docs/SCOPE.md) and [PRD.md](https://github.com/Daldek/Kartograf/blob/main/docs/PRD.md) | scope, limits and product requirements |
+| [CHANGELOG.md](https://github.com/Daldek/Kartograf/blob/main/docs/CHANGELOG.md) | changes per release, including breaking ones |
+
+## Development
+
+Read [CLAUDE.md](https://github.com/Daldek/Kartograf/blob/main/CLAUDE.md) first: rules, code map and documentation map. `scripts/gate.sh` runs the whole gate (ruff, mypy, offline tests with coverage, commit checks); it must pass before a commit.
+
+## Status, licence, author
+
+Alpha (`Development Status :: 3 - Alpha`, releases 0.x): the version is `kartograf --version`, and the changes that are not released yet are in the CHANGELOG under `[Unreleased]`. Licence: MIT ([LICENSE](https://github.com/Daldek/Kartograf/blob/main/LICENSE)). Author: [Piotr de Bever](https://www.linkedin.com/in/piotr-de-bever/).

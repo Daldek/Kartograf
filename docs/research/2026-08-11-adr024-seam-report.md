@@ -41,7 +41,7 @@ Wszystkie wnioski merytoryczne o szwie opieram na tych drugich.
 Uruchamiane z katalogu roboczego (baza `.kartograf_cache.db` powstaje w cwd, poza repo).
 
 ```bash
-K=/home/claude-agent/workspace/Kartograf/.venv/bin/kartograf
+K=<workspace>/Kartograf/.venv/bin/kartograf
 
 # (1) CZ w ukladzie porownywalnym z PL — reprojekcja SERWEROWA
 $K download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 \

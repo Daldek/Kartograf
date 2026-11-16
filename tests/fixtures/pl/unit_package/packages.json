@@ -1,0 +1,75 @@
+{
+  "bdot10k_2024_shp_1261": {
+    "url": "https://opendata.geoportal.gov.pl/Archiwum/bdot10k/2024/SHP/12/1261_SHP_2024.zip",
+    "headers": {"Content-Type": "application/octet-stream", "Content-Length": "47404309"},
+    "members": [
+      "PL.PZGiK.283.1261__OT_ADJA_A.cpg",
+      "PL.PZGiK.283.1261__OT_ADJA_A.dbf",
+      "PL.PZGiK.283.1261__OT_ADJA_A.prj",
+      "PL.PZGiK.283.1261__OT_ADJA_A.shp",
+      "PL.PZGiK.283.1261__OT_ADJA_A.shx",
+      "PL.PZGiK.283.1261__OT_PTWP_A.shp"
+    ]
+  },
+  "bdot10k_2024_gml_1261": {
+    "url": "https://opendata.geoportal.gov.pl/Archiwum/bdot10k/2024/GML/12/1261_GML_2024.zip",
+    "headers": {"Content-Type": "application/octet-stream", "Content-Length": "42585266"},
+    "members": [
+      "PL.PZGiK.283.1261/BDOT10k/PL.PZGiK.283.1261__OT_PTWP_A.xml",
+      "PL.PZGiK.283.1261/BDOT10k/PL.PZGiK.283.1261__OT_ADJA_A.xml"
+    ]
+  },
+  "buildings_lod1_2024_1261": {
+    "url": "https://opendata.geoportal.gov.pl/InneDane/Budynki3D/LOD1/2024/12/1261.zip",
+    "headers": {"Content-Type": "application/octet-stream", "Content-Length": "28790760"},
+    "members": [
+      "1261_M-34-65-c-d-1-2.gml",
+      "1261_M-34-76-b-b-2-3.gml",
+      "1261_M-34-64-d-c-4-1.gml"
+    ]
+  },
+  "buildings_lod2_2017_1261": {
+    "url": "https://opendata.geoportal.gov.pl/InneDane/Budynki3D/LOD2/1261_gml.zip",
+    "headers": {"Content-Type": "application/octet-stream", "Content-Length": "59961467"},
+    "members": [
+      "Modele_3D/",
+      "Modele_3D/1261_M-34-64-D-a-4-2.gml",
+      "Modele_3D/1261_M-34-64-D-a-4-3.gml"
+    ]
+  },
+  "prg_woj_12": {
+    "url": "https://opendata.geoportal.gov.pl/prg/granice/12_GraniceAdministracyjne.zip",
+    "headers": {"Content-Type": "application/octet-stream", "Content-Length": "22070839"},
+    "members": [
+      "A06_Granice_obrebow_ewidencyjnych.gml",
+      "A03_Granice_gmin.gml",
+      "A01_Granice_wojewodztw.gml",
+      "A05_Granice_jednostek_ewidencyjnych.gml",
+      "A02_Granice_powiatow.gml"
+    ]
+  },
+  "prg_country": {
+    "url": "https://opendata.geoportal.gov.pl/prg/granice/00_jednostki_administracyjne.zip",
+    "headers": {"Content-Type": "application/octet-stream", "Content-Length": "377419459"},
+    "members": [
+      "A00_Granice_panstwa.cpg",
+      "A00_Granice_panstwa.dbf",
+      "A00_Granice_panstwa.prj",
+      "A00_Granice_panstwa.qmd",
+      "A00_Granice_panstwa.shp",
+      "A00_Granice_panstwa.shx",
+      "A01_Granice_wojewodztw.shp"
+    ]
+  },
+  "egib_1261": {
+    "url": "https://opendata.geoportal.gov.pl/InneDane/latest_exports/eziudp_wfs/GPKG/1261.gpkg.zip",
+    "headers": {"Content-Type": "application/octet-stream", "Content-Length": "87175594"},
+    "members": ["1261.gpkg"]
+  },
+  "buildings_lod2_2017_3262_missing": {
+    "url": "https://opendata.geoportal.gov.pl/InneDane/Budynki3D/LOD2/3262_gml.zip",
+    "status": 404,
+    "headers": {"Content-Type": "text/html; charset=UTF-8"},
+    "body": "plik nie istnieje: /InneDane/Budynki3D/LOD2/3262_gml.zip"
+  }
+}

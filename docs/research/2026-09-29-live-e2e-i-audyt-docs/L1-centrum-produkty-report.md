@@ -442,7 +442,7 @@ podstawia plik PL-1992. To samo dotyczy kafli LAZ z `uklad_xy: PL-2000:*`.
 
 ## Surowe artefakty
 
-Katalog: `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L1-centrum-produkty/`
+Katalog: `<workspace>/Kartograf/e2e-data/2026-09-29-live/L1-centrum-produkty/`
 - `logs/<ID>.meta|.out|.err` — polecenie, czas, exit, stdout, stderr kazdego przebiegu (A1-F1).
 - `logs/service_incidents.log` — zerwane polaczenia GUGiK z godzinami.
 - `logs/00_wms_coverage_*.log`, `02_orto_entries_*.log`, `03_nmt_nmpt_entries_*.log`,

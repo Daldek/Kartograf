@@ -1,0 +1,5 @@
+{
+  "url": "https://mapy.geoportal.gov.pl/wss/service/PZGIK/PodstawowaOsnowaGeodezyjnaPozioma/WFS?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=ms%3AFundamentalna_pozioma&SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&BBOX=240000%2C560000%2C250000%2C575000%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&COUNT=2&STARTINDEX=0",
+  "status": 200,
+  "Content-Type": "text/xml; subtype=\"gml/3.2.1\"; charset=UTF-8"
+}

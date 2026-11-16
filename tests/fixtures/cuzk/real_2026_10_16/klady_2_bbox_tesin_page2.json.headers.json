@@ -1,0 +1,6 @@
+{
+  "url": "https://ags.cuzk.gov.cz/arcgis/rest/services/KladyMapovychListu/MapServer/2/query?f=json&outFields=MAPNOM%2CMAPNAME&returnGeometry=true&resultOffset=2&resultRecordCount=2&geometry=-452000%2C-1112000%2C-449000%2C-1110000&geometryType=esriGeometryEnvelope&inSR=5514&spatialRel=esriSpatialRelIntersects&outSR=5514",
+  "status": 200,
+  "Content-Type": "application/json; charset=UTF-8",
+  "ETag": "\"1638273821\""
+}

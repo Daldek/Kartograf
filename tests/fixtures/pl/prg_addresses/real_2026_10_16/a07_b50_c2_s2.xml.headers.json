@@ -1,0 +1,5 @@
+{
+  "url": "https://mapy.geoportal.gov.pl/wss/ext/wfs/KrajowaIntegracjaNumeracjiAdresowej?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=adresyUlice%3AA07_Punkty_adresowe&SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&BBOX=244150%2C567100%2C244200%2C567150%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&COUNT=2&STARTINDEX=2",
+  "status": 200,
+  "Content-Type": "application/gml+xml; version=3.2"
+}

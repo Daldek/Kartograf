@@ -1,0 +1,11 @@
+{
+  "url": "https://opendata.geoportal.gov.pl/ortofotomapa/83832/83832_1514596_N-33-130-D-d-1-4.tif",
+  "method": "GET",
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/octet-stream",
+    "Content-Length": "46223016",
+    "Cache-Control": "must-revalidate"
+  },
+  "recorded": "2026-10-12"
+}

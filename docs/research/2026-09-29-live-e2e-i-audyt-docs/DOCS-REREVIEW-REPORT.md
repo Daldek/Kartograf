@@ -175,7 +175,7 @@ wszystko zgodne. Drobna nieprecyzyjnosc B4 — RR-15.
 - `.venv/bin/python -m ruff check kartograf/ tests/` -> `All checks passed!`;
   `.venv/bin/python -m ruff format --check kartograf/ tests/` -> `87 files already formatted`.
 - mypy: BASE (`git archive 152c31e | tar -x -C "$(mktemp -d)"`, uruchomienie
-  `/home/claude-agent/workspace/Kartograf/.venv/bin/python -m mypy kartograf/` z tego katalogu) —
+  `<workspace>/Kartograf/.venv/bin/python -m mypy kartograf/` z tego katalogu) —
   `Found 32 errors in 9 files`; HEAD — `Found 32 errors in 9 files`;
   `grep -E "error:" | sed -E 's/:[0-9]+: /: /' | sort` -> 32 = 32, `diff` **pusty**.
 
