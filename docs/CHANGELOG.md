@@ -7,8 +7,11 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Everything below ships in 0.8.0: the release pull request renames this heading to
-`[0.8.0] - <date>` (REL-2.1).
+Everything below ships in 0.8.0: the release commit renames this heading to
+`[0.8.0] - <date>` (REL-2.1). The author closed the release on 2026-11-16 as a member of the
+first joint release of the ecosystem (Nogat release set `candidate-6`); the changes merged
+after the freeze of 2026-11-03 are in it by the author's approvals (ADR-060, ADR-061, the CI
+fixes) and decision of 2026-11-16 (the PGW data and the size-probe fixes).
 
 ### Added
 
@@ -44,6 +47,11 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   of the ecosystem). `docs/PROGRESS.md` records the green CI run of `develop` on every platform
   that step (a) of the release waited for, and the module docstring of `kartograf._version`
   gives the build identifier in the form it has (`0.8.0.dev0+c9afdd3f`, not `0.7.0-dev+...`).
+- Documentation: release closure of 2026-11-16. `docs/PROGRESS.md` and `CLAUDE.md` record that
+  0.8.0 is closed until the tag (only the release commit), the admission of PGW and the
+  size-probe fixes into 0.8.0, the release steps in the order of the joint release and the known
+  defects deferred to the next release (Nogat `candidate-5` C1, C5 and the scenario test of
+  2026-11-15/16); `README.md` and `docs/USAGE.md` install the release by its tag `v0.8.0`.
 
 ### Fixed
 
@@ -319,8 +327,9 @@ The macOS (1) and Windows (121) failures of CI run 41597405023, fixed before the
 - The package lives in `src/kartograf/` (ECO-011). Import paths do not change;
   repeat an editable install made before (`uv sync --locked --all-extras`).
 - `kartograf.__version__` is `0.8.0.dev0` on `develop` (REL-1.1); the release
-  pull request sets `0.8.0`. A requirement `kartograf>=0.8.0` does not accept the
-  development version: pin the commit until the tag exists.
+  commit sets `0.8.0`. A requirement `kartograf>=0.8.0` does not accept the
+  development version: a consumer pins the commit with `>=0.8.0.dev0,<0.9` until the tag
+  exists, then the tag `v0.8.0` with `>=0.8.0,<0.9` (REL-5.3, REL-5.6).
 - The `dev` extra is the `dev` dependency group; environments are installed with
   `uv sync --locked --all-extras` from the committed `uv.lock` (DEV-6.2, DEV-6.3).
 - `docs/DECISIONS.md` has LF line endings (DEV-14.1).

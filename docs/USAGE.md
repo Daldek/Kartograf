@@ -3673,12 +3673,13 @@ says (instructions, descriptions, its own messages) is English (AGI-9.2).
 dependency:
 
 ```bash
-pip install "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git"
+pip install "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0"
 ```
 
-(after the release: the tag `v0.8.0`; a development checkout: `uv sync --locked --all-extras`
-includes `mcp`). `import kartograf` and the CLI work without `mcp`; the script `kartograf-mcp`
-is always installed, and without the SDK it ends with the exit code 6 (`missing_dependency`):
+(the release 0.8.0 by its tag; without `@v0.8.0` the default branch `main`; a development
+checkout: `uv sync --locked --all-extras` includes `mcp`). `import kartograf` and the CLI work
+without `mcp`; the script `kartograf-mcp` is always installed, and without the SDK it ends with
+the exit code 6 (`missing_dependency`):
 the last line of stderr is the `kartograf-error/1` document with the hint
 `uv add "kartograf[mcp]"`, stdout stays empty.
 
