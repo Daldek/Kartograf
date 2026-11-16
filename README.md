@@ -21,12 +21,12 @@ Kartograf downloads spatial data: digital elevation models (DEM, Polish NMT), su
 Kartograf is not on PyPI yet; install it from Git (Python 3.12 or newer):
 
 ```bash
-uv tool install "kartograf @ git+https://github.com/Daldek/Kartograf.git"
-uv add "kartograf @ git+https://github.com/Daldek/Kartograf.git"
-uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git" kartograf-mcp
+uv tool install "kartograf @ git+https://github.com/Daldek/Kartograf.git@v0.8.0"
+uv add "kartograf @ git+https://github.com/Daldek/Kartograf.git@v0.8.0"
+uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0" kartograf-mcp
 ```
 
-The lines install the CLI, add the library to a project and start the MCP server once.
+The lines install the CLI of the release 0.8.0, add the library to a project pinned to its tag and start the MCP server once. Without `@v0.8.0` they take the default branch `main`, the latest release.
 
 | Extra | Adds |
 |---|---|
@@ -172,8 +172,8 @@ The full list is `kartograf commands list --json`. Python names are keyword-only
 `kartograf-mcp` serves 34 tools named `kartograf_<group>_<verb>` over stdio. Each client below starts it as in the Install section:
 
 ```bash
-claude mcp add kartograf -- uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git" kartograf-mcp
-codex mcp add kartograf -- uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git" kartograf-mcp
+claude mcp add kartograf -- uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0" kartograf-mcp
+codex mcp add kartograf -- uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0" kartograf-mcp
 ```
 
 Cursor reads `.cursor/mcp.json`:
@@ -183,7 +183,7 @@ Cursor reads `.cursor/mcp.json`:
   "mcpServers": {
     "kartograf": {
       "command": "uvx",
-      "args": ["--from", "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git", "kartograf-mcp"]
+      "args": ["--from", "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0", "kartograf-mcp"]
     }
   }
 }
@@ -196,7 +196,7 @@ VS Code reads `.vscode/mcp.json`, whose key is `servers`:
   "servers": {
     "kartograf": {
       "command": "uvx",
-      "args": ["--from", "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git", "kartograf-mcp"]
+      "args": ["--from", "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0", "kartograf-mcp"]
     }
   }
 }
@@ -230,7 +230,6 @@ An error is a `kartograf-error/1` document with `code`, `title`, `message`, `hin
 | `no_data` | 14 | the source has no data there (`details.reason`): change the area or the year |
 | `io_error` | 9 | a directory or file is unavailable: check `details.path` and the permissions |
 | `conflict` | 4 | the target is taken (`details.reason`, `details.paths`): `--force` replaces existing files; an output directory in a store needs `--root` instead |
-| `forbidden` | 12 | MCP only: a path outside `--allow-dir`, or a write without `--allow-writes` |
 
 Ctrl-C ends with 130 and SIGTERM with 143; nothing half written stays in the store or in the output directory.
 
@@ -284,4 +283,4 @@ Read [CLAUDE.md](https://github.com/Daldek/Kartograf/blob/main/CLAUDE.md) first:
 
 ## Status, licence, author
 
-Pre-release (development status alpha): the version is `kartograf --version`, and the changes that are not released yet are in the CHANGELOG. Licence: MIT ([LICENSE](https://github.com/Daldek/Kartograf/blob/main/LICENSE)). Author: [Piotr de Bever](https://www.linkedin.com/in/piotr-de-bever/).
+Alpha (`Development Status :: 3 - Alpha`, releases 0.x): the version is `kartograf --version`, and the changes that are not released yet are in the CHANGELOG under `[Unreleased]`. Licence: MIT ([LICENSE](https://github.com/Daldek/Kartograf/blob/main/LICENSE)). Author: [Piotr de Bever](https://www.linkedin.com/in/piotr-de-bever/).
