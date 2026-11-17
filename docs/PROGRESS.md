@@ -110,7 +110,7 @@ Branches (2026-11-14): `feature/archiwista-projects`, `feature/data-output`, `ch
    - GEO-02: the PL-1992 scale labels look shifted by one level (the NMT 5 m grid is "1:10000", `--scale 1:5000` returns 4x too many sheets); to check against the ADRs. Deferred to the next release.
    - GEO-05: a root without a marker: `hydro download` writes, `landcover ... --check` gives `store_unavailable`; to decide whether it is by design. Deferred to the next release.
    - GEO-06: no source of CZ catchment polygons (HY-NET has lines only), and the documented DIBAVOD `dib_A08` URL answers 404. Deferred to the next release.
-   - E5a-01: several `--sheet` in one call exit 0 and plan only the last sheet, without a warning (section 6, B2: `--sheet` as a list). Deferred to the next release.
+   - E5a-01: several `--sheet` in one call exited 0 and planned only the last sheet, without a warning. Fixed on `fix/0.8.1`: `--sheet` given twice is a usage error naming its parameter (`catalog.cliparser._Once`), in the CLI and `parse_command`. Open: `--sheet` as a list (section 6, B2) is a feature; the other flags still keep argparse's last value, which the CLI tests rely on (`--root` added to a line), so refusing every repeated flag needs a decision (next minor release).
    - E5a-02: `store overview` of a foreign directory (`store_state` `foreign`) answers `ok` with a false segment and no message. Deferred to the next release.
    - E2-08 (= E7-05): `unverifiable` positions are downloaded again in one call and not in another of the same form. Deferred to the next release.
    - E2-02-A (= E2-02-C = E7-06): the NMT 5 m gaps need a hand-made list (`no_coverage_some` shows 10 codes and "..."), and filling them is one 1 m call per sheet (B2). Deferred to the next release.

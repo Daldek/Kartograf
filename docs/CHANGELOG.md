@@ -24,6 +24,13 @@ Changes since 0.8.0, to be released as 0.8.1: defect fixes only (the author's ap
   ERR-5): a root inside a store names that store to keep out of, a root that is the store of
   another tool asks for another directory, and a root with a store below it names the store to
   move out. Before, its error document had no `hint`, unlike `not_empty` and `no_marker`.
+- `--sheet` given more than once in a command line is a usage error (`validation_error`,
+  reason `usage`, exit 2) with `details.option` `sheet` and a hint to give it once, in the CLI
+  and in `parse_command` (E5a-01 of the scenario test of 2026-11-15/16). argparse kept the last
+  value and dropped the others without a word: `elevation download --sheet A --sheet B --sheet C
+  ... --check` exited 0 with a plan of the sheet C alone, and the run would have fetched C alone.
+  `--sheet` keeps its one value (a coarser code expands to its sheets); several sheets are
+  several calls. The other flags keep the last value as before.
 
 ## [0.8.0] - 2026-11-16
 

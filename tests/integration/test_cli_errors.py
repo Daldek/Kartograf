@@ -253,6 +253,34 @@ def test_json_usage_error_of_a_known_command_names_it_and_gives_an_example(
     assert parse_command(example).command == "elevation download"
 
 
+def test_several_sheets_in_one_call_are_refused_not_planned_as_the_last_one(
+    capsys, tmp_path
+):
+    """E5a-01: three ``--sheet`` gave exit 0 and a plan of the last sheet alone."""
+    sheets = ["M-33-11-D-b-4-4", "M-33-23-C-d-3-1", "M-33-24-C-b-1-3"]
+    argv = [
+        *("elevation", "download", "--product", "nmt"),
+        *(word for sheet in sheets for word in ("--sheet", sheet)),
+        *("--resolution", "5m", "--vertical-crs", "EVRF2007"),
+        *("--output-dir", str(tmp_path / "out"), "--check", "--json"),
+    ]
+
+    code, out, err = _run(capsys, argv)
+
+    document = error_document(err)
+    assert (code, out) == (2, "")
+    assert (document["code"], document["details"]) == (
+        "validation_error",
+        {"reason": "usage", "option": "sheet"},
+    )
+    assert document["command"] == "elevation download"
+    assert "--sheet" in document["hint"]
+    assert not (tmp_path / "out").exists()
+    with pytest.raises(UsageError) as parsed:  # the same line through the API
+        parse_command(argv)
+    assert parsed.value.option == "sheet"
+
+
 def test_json_usage_error_without_a_command_has_the_generic_hint(capsys):
     code, out, err = _run(capsys, ["elevation", "frobnicate", "--json"])
 
