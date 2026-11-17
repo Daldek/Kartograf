@@ -6,8 +6,7 @@ Profile: `tool` (DEV §1). What it is for: [README.md](README.md); scope: [docs/
 
 ## Critical rules
 
-- **CLOSED until `v0.8.0` (author, frozen 2026-11-03, closed 2026-11-16).** 0.8.0 is a member of the first joint release of the ecosystem (Nogat release set `candidate-6`); until the tag the only change is the release commit of `docs/PROGRESS.md` Next 1 (`__version__`, the CHANGELOG heading, the lock). Every other change, a defect included, waits for the next release (PROGRESS, Next 32). Ask the author before any commit.
-  - Admitted into 0.8.0 after the freeze (the Obserwator store marker, ADR-060, ADR-061, the CI fixes, and by the decision of 2026-11-16 PGW and the size-probe fixes): `docs/PROGRESS.md` Next 1.
+- **0.8.1: defect fixes only (the author's approval of 2026-11-17).** It is prepared on `fix/0.8.1` from `develop` at `0.8.1.dev0`; the known defects are `docs/PROGRESS.md` Next 32. A feature, a breaking change or a decision with alternatives waits for the next minor release. `v0.8.0` (2026-11-16) is a member of the first joint release of the ecosystem (Nogat release set `candidate-6`).
 - Python only from the project environment: `uv sync --locked --all-extras`, then `uv run ...` or `.venv/bin/python` (DEV-6.2, DEV-6.3).
 - `scripts/gate.sh` (ruff format, ruff check, mypy, offline tests with coverage, commit checks; also works from a worktree) is green before every commit (DEV-7.6). Tests are offline (`-m "not live"`, no network: `tests/conftest.py` fails a test that opens a socket); `live` tests only on purpose (DEV-10.1 to DEV-10.3).
 - Downloaded data goes outside the repository and outside `/tmp`, always with an explicit `--root`. The metadata cache is in the user cache directory (`<cache_dir>/kartograf/metadata.db`), never in the current directory; `kartograf config show` reports every setting. If the data directory is unavailable, stop and ask. Tests write only in `tmp_path`.
