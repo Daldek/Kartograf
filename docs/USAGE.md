@@ -1901,10 +1901,11 @@ root that has the layout of a store and no `kartograf-store.json` is `store_unav
 (`no_marker`, exit 8, the hint is `kartograf store init --root DIR`), a root that holds other
 files is `conflict` (`not_empty`, exit 4), and a root that lies in, holds or has below it a
 store of Kartograf or Obserwator (its raw root or its data root) is `conflict` (`nested_store`,
-exit 4). `--check` lists a root that is a `conflict` as the one position of the track `store`
-(`action` `conflict`, `reason`, the root as `path`): the plan is `ok`, exits 0 and asks nothing;
-the plan of a root without its marker fails as the run does (exit 8). An `output_dir` that is,
-or lies in, a store is refused the same way (`output_in_store`).
+exit 4, the hint names the store to keep out of or to move). `--check` lists a root that is a
+`conflict` as the one position of the track `store` (`action` `conflict`, `reason`, the root as
+`path`): the plan is `ok`, exits 0 and asks nothing; the plan of a root without its marker fails
+as the run does (exit 8). An `output_dir` that is, or lies in, a store is refused the same way
+(`output_in_store`).
 
 **What a root is, without writing.** `kartograf.store_state(root)` answers with the
 judgement above and writes nothing: `marked` (a store with its marker), `layout` (the layout

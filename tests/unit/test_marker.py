@@ -285,6 +285,27 @@ def test_a_store_below_the_root_is_refused_but_the_product_trees_are_not_entered
     prepare_store(store)  # not looked into
 
 
+def test_every_nested_root_is_refused_with_a_hint_that_names_the_way_out(tmp_path):
+    outer = tmp_path / "outer"
+    outer.mkdir()
+    (outer / "obserwator-data.json").write_text("{}")
+    below = tmp_path / "parent" / "obserwator"
+    below.mkdir(parents=True)
+    (below / "obserwator-store.json").write_text("{}")
+    roots = {"inside": outer / "k", "holds": outer, "below": tmp_path / "parent"}
+
+    hints = {}
+    for case, root in roots.items():
+        with pytest.raises(ConflictError) as caught:
+            prepare_store(root)
+        assert caught.value.reason == "nested_store"
+        hints[case] = error_report(caught.value).hint
+
+    assert str(outer.resolve()) in hints["inside"]  # the store to stay out of
+    assert str(outer.resolve()) in hints["holds"]  # the store of another tool
+    assert str(below.resolve()) in hints["below"]  # the store to move out
+
+
 def test_store_around_and_below_find_a_marker_by_its_file_name(tmp_path):
     prepare_store(tmp_path / "s")
     inner = tmp_path / "s" / "nmt" / "a" / "b"

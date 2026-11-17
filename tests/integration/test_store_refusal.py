@@ -475,6 +475,7 @@ def test_the_cli_exits_with_the_code_of_the_refusal_and_prints_its_document(
     )
     assert document["exit_code"] == expected.exit_code
     assert document["command"] == "elevation download"
+    assert document["hint"]  # every refusal of a root says how to get past it (ERR-5)
     assert asked == []
 
 

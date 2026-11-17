@@ -20,6 +20,10 @@ Changes since 0.8.0, to be released as 0.8.1: defect fixes only (the author's ap
   store was made there, and Obserwator then refused its own root (`nested_store`). Such a root
   is now `conflict` `nested_store` (a root in it, the root itself or one with it below) or
   `output_in_store` (`-o`), before any request, as for the other markers.
+- The `conflict` `nested_store` has a hint (C5 of Nogat's integration run of `candidate-5`;
+  ERR-5): a root inside a store names that store to keep out of, a root that is the store of
+  another tool asks for another directory, and a root with a store below it names the store to
+  move out. Before, its error document had no `hint`, unlike `not_empty` and `no_marker`.
 
 ## [0.8.0] - 2026-11-16
 
