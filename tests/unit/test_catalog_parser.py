@@ -21,6 +21,7 @@ from kartograf.catalog.shared import OUTPUT_TITLE, SELECTION_TITLE
 from kartograf.catalog.spec import Command, Example, Group, Param
 from kartograf.exceptions import UsageError, ValidationError
 from kartograf.messages import localize
+from tests.support.errors import error_document
 
 
 def _data(command_id: str, *params: Param, **fields) -> Command:
@@ -473,6 +474,50 @@ def test_usage_error_mode_reaches_every_command_parser():
     ):
         with pytest.raises(UsageError):
             parser.parse_args([*words, "--nope"])
+
+
+@pytest.mark.parametrize("given_only", [False, True], ids=["cli", "api"])
+@pytest.mark.parametrize(
+    "flags",
+    [["--sheet", "A", "--sheet", "B", "--sheet", "C"], ["--sheet", "A", "--sheet=B"]],
+    ids=["three", "with-equals"],
+)
+def test_a_sheet_given_twice_is_a_usage_error_naming_its_parameter(given_only, flags):
+    """argparse kept the last value and dropped the others without a word: three
+    ``--sheet`` planned the last sheet alone and exited 0 (E5a-01)."""
+    parser = _parser(usage_errors=True, given_only=given_only)
+
+    with pytest.raises(UsageError) as error:
+        parse_command_line(parser, ["elevation", "download", *flags])
+
+    assert (error.value.reason, error.value.option) == ("usage", "sheet")
+    assert error.value.command == "elevation download"
+    assert error.value.hint is not None and "--sheet" in error.value.hint
+
+
+def test_a_flag_without_a_value_may_be_repeated_and_one_with_a_value_given_once():
+    parsed = parse_command_line(
+        _parser(usage_errors=True),
+        ["elevation", "download", "--sheet", "A", "--cutout", "--cutout", "-q", "-q"],
+    )
+
+    assert (parsed.sheet, parsed.cutout, parsed.quiet) == ("A", True, True)
+
+
+def test_default_mode_refuses_a_flag_given_twice_with_its_usage_and_exit_2(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        parse_command_line(
+            _parser(), ["elevation", "download", "--sheet", "A", "--sheet", "B"]
+        )
+
+    assert exit_info.value.code == 2
+    error = capsys.readouterr().err
+    assert error.startswith("usage: kartograf elevation download")
+    document = error_document(error)
+    assert (document["code"], document["details"]) == (
+        "validation_error",
+        {"reason": "usage", "option": "sheet"},
+    )
 
 
 def test_negative_bbox_values_are_joined():

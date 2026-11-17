@@ -377,6 +377,14 @@ MESSAGES = {
         "unknown option {flag} ({hint}). Options: {prog} --help",
         "nieznana opcja {flag} ({hint}). Opcje: {prog} --help",
     ),
+    "repeated_option": Text(
+        "{flag} is given more than once, but it takes one value",
+        "{flag} podano wiecej niz raz, a przyjmuje jedna wartosc",
+    ),
+    "repeated_option_hint": Text(
+        "Give {flag} once, and run the command once for each value",
+        "Podaj {flag} raz i uruchom komende raz dla kazdej wartosci",
+    ),
     "crs_needs_bbox": Text(
         "{flag} needs {area} (the CRS of the rectangle is given together with it)",
         "{flag} wymaga {area} (uklad wspolrzednych prostokata podaje sie razem z nim)",

@@ -72,8 +72,13 @@ MARKER: Final = "kartograf-store.json"
 """File name of the marker of a Kartograf store."""
 MARKER_SCHEMA: Final = "kartograf-store/1"
 TOOL: Final = "kartograf"
-STORE_MARKERS: Final[tuple[str, ...]] = (MARKER, "obserwator-store.json")
-"""File names that mark the root of a store of any Nogat tool (DEV-19.12)."""
+STORE_MARKERS: Final[tuple[str, ...]] = (
+    MARKER,
+    "obserwator-store.json",
+    "obserwator-data.json",
+)
+"""File names that mark the root of a store of any Nogat tool (DEV-19.12): Kartograf's,
+Obserwator's raw root and the data root beside it (Obserwator ADR-017)."""
 MAX_PROBLEMS: Final = 20
 INCOMING: Final = ".incoming"  # the staging directory of a version
 
@@ -237,7 +242,7 @@ def _check_nested(path: Path, *, below: bool) -> None:
     ConflictError
         ``nested_store``: an ancestor holds a marker, the root holds the marker of
         another tool, or (with ``below``) a store lies below the root, outside the
-        product trees of this one.
+        product trees of this one. The hint names the store to keep out of or to move.
     """
     for ancestor in path.parents:
         for name in STORE_MARKERS:
@@ -251,6 +256,7 @@ def _check_nested(path: Path, *, below: bool) -> None:
                     ),
                     reason="nested_store",
                     path=path,
+                    hint=message("marker.inside_a_store_hint", ancestor=ancestor),
                 )
     foreign = next(
         (name for name in STORE_MARKERS if name != MARKER and (path / name).is_file()),
@@ -261,6 +267,7 @@ def _check_nested(path: Path, *, below: bool) -> None:
             message("marker.holds_another_store", path=path, marker=foreign),
             reason="nested_store",
             path=path,
+            hint=message("marker.holds_another_store_hint", path=path),
         )
     if not below:
         return
@@ -272,6 +279,7 @@ def _check_nested(path: Path, *, below: bool) -> None:
             message("marker.store_below", path=path, folder=found, marker=marker),
             reason="nested_store",
             path=path,
+            hint=message("marker.store_below_hint", path=path, folder=found),
         )
 
 
