@@ -533,3 +533,50 @@ def test_the_cli_check_of_an_unmarked_root_fails_with_its_hint(capsys, tmp_path,
         "no_marker",
     )
     assert document["hint"].startswith(f"kartograf store init --root {root.resolve()}")
+
+
+# --------------------------------------------------------------------------
+# Obserwator's data root is the store of another tool (DEV-19.12)
+# --------------------------------------------------------------------------
+
+
+def obserwator_data_root(base: Path) -> Path:
+    """The data root of Obserwator (its ADR-017): the marker and a series."""
+    root = base / "obserwator-data"
+    (root / "series").mkdir(parents=True)
+    (root / "series" / "a.csv").write_text("date,P\n", encoding="utf-8")
+    (root / "obserwator-data.json").write_text(
+        json.dumps({"schema": "obserwator-data/1", "tool": "obserwator"}),
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_no_command_plans_or_makes_a_store_or_files_in_obserwators_data_root(
+    capsys, tmp_path, asked
+):
+    data = obserwator_data_root(tmp_path)
+    inside = data / "kartograf"
+    before = tree(tmp_path)
+
+    plans = [
+        run(capsys, "store", "init", "--root", inside, "--check", "--json"),
+        run(capsys, *NMT, "--root", inside, "--check"),
+    ]
+    runs = {
+        "nested_store": run(capsys, "store", "init", "--root", inside, "--json"),
+        "output_in_store": run(capsys, *NMT, "-o", data / "files"),
+    }
+
+    for code, out, err in plans:
+        items = json.loads(out)["result"]["items"]
+        assert (code, err) == (0, "")
+        assert [(i["action"], i["reason"]) for i in items] == [
+            ("conflict", "nested_store")
+        ]
+    for reason, (code, out, err) in runs.items():
+        document = error_document(err)
+        assert (code, out) == (4, "")
+        assert (document["code"], document["details"]["reason"]) == ("conflict", reason)
+    assert asked == []
+    assert tree(tmp_path) == before

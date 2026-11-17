@@ -10,6 +10,17 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Changes since 0.8.0, to be released as 0.8.1: defect fixes only (the author's approval of
 2026-11-17). The release commit renames this heading to `[0.8.1] - <date>` (REL-2.1).
 
+### Fixed
+
+- A root or an output directory in Obserwator's data root is refused like one in any other
+  store (C1 of Nogat's integration run of `candidate-5`; DEV-19.12, Obserwator ADR-017).
+  `marker.STORE_MARKERS` named `kartograf-store.json` and `obserwator-store.json` but not
+  `obserwator-data.json`, the marker of the data root beside Obserwator's raw root, so
+  `store init --root`, `--root` and `-o` inside such a root were planned as `write`, a Kartograf
+  store was made there, and Obserwator then refused its own root (`nested_store`). Such a root
+  is now `conflict` `nested_store` (a root in it, the root itself or one with it below) or
+  `output_in_store` (`-o`), before any request, as for the other markers.
+
 ## [0.8.0] - 2026-11-16
 
 Everything below ships in 0.8.0: the release commit renames this heading to

@@ -12,7 +12,7 @@ import pytest
 from kartograf.download.plan import PlanItem, new_plan, plain_items
 from kartograf.exceptions import ConflictError, ValidationError
 from kartograf.interrupt import Terminated
-from kartograf.marker import STORE_MARKERS, store_below
+from kartograf.marker import store_below
 from kartograf.output import (
     STAGING,
     Staging,
@@ -137,7 +137,9 @@ def test_a_plan_without_conflicts_passes(tmp_path):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("marker", STORE_MARKERS)
+@pytest.mark.parametrize(
+    "marker", ["kartograf-store.json", "obserwator-store.json", "obserwator-data.json"]
+)
 def test_a_directory_that_is_or_lies_in_a_store_of_any_tool_is_refused(
     tmp_path, marker
 ):

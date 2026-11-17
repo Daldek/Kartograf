@@ -238,32 +238,41 @@ def test_the_refusal_of_a_root_is_returned_as_the_error_a_write_is_refused_with(
 # -- a store never nests -------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["kartograf-store.json", "obserwator-store.json"])
+# The markers of the stores of another tool (DEV-19.12), by file name: Obserwator's
+# raw root holds obserwator-store.json, its data root (Obserwator ADR-017)
+# obserwator-data.json.
+OTHER_MARKERS = ("obserwator-store.json", "obserwator-data.json")
+
+
+@pytest.mark.parametrize("name", [MARKER, *OTHER_MARKERS])
 def test_a_root_inside_a_store_of_any_tool_is_refused(tmp_path, name):
     (tmp_path / name).write_text("{}")
 
-    with pytest.raises(ConflictError) as caught:
-        prepare_store(tmp_path / "inner" / "store")
-
-    assert caught.value.reason == "nested_store"
+    for check in (prepare_store, lenient_store, init_store, store_state):
+        with pytest.raises(ConflictError) as caught:
+            check(tmp_path / "inner" / "store")
+        assert caught.value.reason == "nested_store"
     assert not (tmp_path / "inner").exists()
 
 
-def test_a_root_that_holds_the_marker_of_another_tool_is_refused(tmp_path):
-    (tmp_path / "obserwator-store.json").write_text("{}")
+@pytest.mark.parametrize("name", OTHER_MARKERS)
+def test_a_root_that_holds_the_marker_of_another_tool_is_refused(tmp_path, name):
+    (tmp_path / name).write_text("{}")
 
-    for check in (prepare_store, lenient_store, init_store):
+    for check in (prepare_store, lenient_store, init_store, store_state):
         with pytest.raises(ConflictError) as caught:
             check(tmp_path)
         assert caught.value.reason == "nested_store"
+    assert not (tmp_path / MARKER).exists()
 
 
+@pytest.mark.parametrize("name", OTHER_MARKERS)
 def test_a_store_below_the_root_is_refused_but_the_product_trees_are_not_entered(
-    tmp_path,
+    tmp_path, name
 ):
     below = tmp_path / "work" / "obserwator"
     below.mkdir(parents=True)
-    (below / "obserwator-store.json").write_text("{}")
+    (below / name).write_text("{}")
     with pytest.raises(ConflictError) as caught:
         prepare_store(tmp_path)
     assert caught.value.reason == "nested_store"
@@ -272,7 +281,7 @@ def test_a_store_below_the_root_is_refused_but_the_product_trees_are_not_entered
     prepare_store(store)
     hidden = store / "nmt" / "x"
     hidden.mkdir(parents=True)
-    (hidden / "obserwator-store.json").write_text("{}")  # inside a managed product tree
+    (hidden / name).write_text("{}")  # inside a managed product tree
     prepare_store(store)  # not looked into
 
 
