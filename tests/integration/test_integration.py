@@ -45,7 +45,6 @@ class TestPublicAPIImports:
 
         pattern = r"^\d+\.\d+\.\d+(\.dev\d+)?$"
         assert re.match(pattern, __version__), f"Invalid version: {__version__}"
-        assert __version__.startswith("0.8.0")
 
 
 class TestParserStorageIntegration:

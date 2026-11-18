@@ -5,6 +5,33 @@ All significant changes to the project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-11-18
+
+Changes since 0.8.0, to be released as 0.8.1: defect fixes only (the author's approval of
+2026-11-17). The release commit renames this heading to `[0.8.1] - <date>` (REL-2.1).
+
+### Fixed
+
+- A root or an output directory in Obserwator's data root is refused like one in any other
+  store (C1 of Nogat's integration run of `candidate-5`; DEV-19.12, Obserwator ADR-017).
+  `marker.STORE_MARKERS` named `kartograf-store.json` and `obserwator-store.json` but not
+  `obserwator-data.json`, the marker of the data root beside Obserwator's raw root, so
+  `store init --root`, `--root` and `-o` inside such a root were planned as `write`, a Kartograf
+  store was made there, and Obserwator then refused its own root (`nested_store`). Such a root
+  is now `conflict` `nested_store` (a root in it, the root itself or one with it below) or
+  `output_in_store` (`-o`), before any request, as for the other markers.
+- The `conflict` `nested_store` has a hint (C5 of Nogat's integration run of `candidate-5`;
+  ERR-5): a root inside a store names that store to keep out of, a root that is the store of
+  another tool asks for another directory, and a root with a store below it names the store to
+  move out. Before, its error document had no `hint`, unlike `not_empty` and `no_marker`.
+- `--sheet` given more than once in a command line is a usage error (`validation_error`,
+  reason `usage`, exit 2) with `details.option` `sheet` and a hint to give it once, in the CLI
+  and in `parse_command` (E5a-01 of the scenario test of 2026-11-15/16). argparse kept the last
+  value and dropped the others without a word: `elevation download --sheet A --sheet B --sheet C
+  ... --check` exited 0 with a plan of the sheet C alone, and the run would have fetched C alone.
+  `--sheet` keeps its one value (a coarser code expands to its sheets); several sheets are
+  several calls. The other flags keep the last value as before.
+
 ## [0.8.0] - 2026-11-16
 
 Everything below ships in 0.8.0: the release commit renames this heading to
@@ -5012,6 +5039,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[0.8.1]: https://github.com/Daldek/Kartograf/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Daldek/Kartograf/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/Daldek/Kartograf/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/Daldek/Kartograf/compare/v0.7.0...v0.7.1

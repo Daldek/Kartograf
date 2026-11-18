@@ -87,16 +87,81 @@ class _Parser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         # only the parser of a command knows its id: a group or the root parser
         # has none, and the error is not about one command
-        error = UsageError(message, command=self.get_default("_command_id"))
+        self.fail(UsageError(message, command=self.get_default("_command_id")))
+
+    def fail(self, error: UsageError) -> NoReturn:
+        """Raise ``error`` (``usage_errors``), else print it like argparse and exit 2.
+
+        ``error`` is the usage error of this parser's line; the printed usage is this
+        parser's and the error document ends stderr.
+        """
         if self.usage_errors:
             raise error
         try:
-            super().error(localize(message, self.lang))
+            super().error(error.localized(self.lang))
         except SystemExit:
             from kartograf.error_report import error_line, error_report
 
             print(error_line(error_report(error)), file=sys.stderr, flush=True)
             raise
+
+
+_GIVEN = "_kartograf_given_flags"
+"""Attribute of a parsed namespace with the flags the line wrote (``_Once``).
+
+``parse_command_line`` removes it, as argparse removes its own bookkeeping."""
+
+# The parameters whose flag is refused when given twice (``_Once``). A repeated
+# ``--sheet`` dropped every sheet but the last without a word (E5a-01); the other
+# flags keep argparse's last value, which callers that add a flag such as ``--root``
+# to a line rely on.
+_ONCE: frozenset[str] = frozenset({"sheet"})
+
+
+class _Once(argparse.Action):
+    """Store the one value of a flag; the flag given again is a usage error.
+
+    argparse's ``store`` keeps the last value of a repeated flag and drops the others
+    without a word: ``--sheet A --sheet B --sheet C`` planned the sheet C alone and
+    exited 0 (scenario test of 2026-11-15, E5a-01). A sheet flag takes one code (a
+    coarser code expands to its sheets), so a second one is a mistake of the line.
+    The error names the parameter in ``option`` (the API argument, not the flag) and
+    says how to give it once.
+    """
+
+    def __init__(
+        self,
+        option_strings: Sequence[str],
+        dest: str,
+        *,
+        option: str,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(option_strings, dest, **kwargs)
+        self.option = option
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        given: frozenset[str] = getattr(namespace, _GIVEN, frozenset())
+        if self.dest in given:
+            flags = "/".join(self.option_strings)
+            cast(_Parser, parser).fail(
+                UsageError(
+                    message("catalog.repeated_option", flag=flags),
+                    command=parser.get_default("_command_id"),
+                    option=self.option,
+                    hint=message(
+                        "catalog.repeated_option_hint", flag=self.option_strings[0]
+                    ),
+                )
+            )
+        setattr(namespace, _GIVEN, given | {self.dest})
+        setattr(namespace, self.dest, values)
 
 
 class _LazyVersionAction(argparse.Action):
@@ -293,12 +358,14 @@ def parse_command_line(
     ``--bbox`` with negative coordinates after a space is joined with its
     value; an unknown flag is reported by the parser of the command (its
     usage) with the commands that have it, or a hint for the usual mix-ups
-    (``landcover download --product``, ``soil download --product``, ...).
+    (``landcover download --product``, ``soil download --product``, ...); a
+    ``--sheet`` given twice is refused with its parameter (``_Once``).
     """
     parsed, extras = parser.parse_known_args(_join_bbox_values(argv))
     if extras:
         command = _command_parser(parser, parsed)
         command.error(_unknown_text(parser, command, extras))
+    vars(parsed).pop(_GIVEN, None)
     return parsed
 
 
@@ -428,7 +495,7 @@ def _argument_kwargs(param: Param, given_only: bool, lang: Lang) -> dict[str, An
     """Return the keyword arguments of ``add_argument`` of a parameter.
 
     With ``given_only`` there is no default, so the namespace has the flags of the line
-    only.
+    only. A sheet flag takes its value once (``_Once``).
     """
     kwargs: dict[str, Any] = {"help": _help(resolve(param.description), lang)}
     if not param.positional:
@@ -452,6 +519,8 @@ def _argument_kwargs(param: Param, given_only: bool, lang: Lang) -> dict[str, An
         kwargs["choices"] = list(resolve(param.allowed))
     if param.nargs is not None:
         kwargs["nargs"] = param.nargs
+    if not param.positional and param.name in _ONCE:
+        kwargs.update(action=_Once, option=param.name)
     return kwargs
 
 

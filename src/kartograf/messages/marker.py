@@ -22,6 +22,18 @@ MESSAGES = {
         "magazyn {folder} ({marker}) lezy pod {path}: magazyn nie zagniezdza sie w "
         "innym magazynie",
     ),
+    "inside_a_store_hint": Text(
+        "Give a store root outside the store {ancestor}",
+        "Podaj korzen magazynu poza magazynem {ancestor}",
+    ),
+    "holds_another_store_hint": Text(
+        "Give another directory as the store root: {path} is the store of another tool",
+        "Podaj inny katalog jako korzen magazynu: {path} to magazyn innego narzedzia",
+    ),
+    "store_below_hint": Text(
+        "Give a store root with no store below it, or move {folder} out of {path}",
+        "Podaj korzen magazynu bez magazynu pod nim albo przenies {folder} poza {path}",
+    ),
     # ``marker``: the document and the layout of a root.
     "not_a_marker": Text(
         "{path} is not a {schema} document",
