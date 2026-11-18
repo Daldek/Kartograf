@@ -339,7 +339,9 @@ def test_soil_sidecar_has_the_units_and_an_empty_raster_is_reported(tmp_path, va
 
 
 def _oracle(clay: int, sand: int, silt: int) -> int:
-    """USDA triangle on exact fractions, the rules written out independently."""
+    """USDA triangle on exact fractions, transcribed independently from the Soil
+    Survey Manual (2017), ch. 3, pp. 122-124: "X to less than Y" is ``X <= v < Y``.
+    The definitions are disjoint, so exactly one class must hold (no rule order)."""
     total = Fraction(clay + sand + silt)
     c, s, si = (Fraction(100 * v) / total for v in (clay, sand, silt))
     half = Fraction(3, 2)
@@ -348,12 +350,12 @@ def _oracle(clay: int, sand: int, silt: int) -> int:
         (2, (si + half * c >= 15) and (si + 2 * c < 30)),
         (
             3,
-            (7 <= c <= 20 and s > 52 and si + 2 * c >= 30)
+            (7 <= c < 20 and s > 52 and si + 2 * c >= 30)
             or (c < 7 and si < 50 and si + 2 * c >= 30),
         ),
         (6, si >= 80 and c < 12),
         (5, (si >= 50 and 12 <= c < 27) or (50 <= si < 80 and c < 12)),
-        (4, 7 <= c <= 27 and 28 <= si < 50 and s <= 52),
+        (4, 7 <= c < 27 and 28 <= si < 50 and s <= 52),
         (7, 20 <= c < 35 and si < 28 and s > 45),
         (8, 27 <= c < 40 and 20 < s <= 45),
         (9, 27 <= c < 40 and s <= 20),
@@ -361,7 +363,8 @@ def _oracle(clay: int, sand: int, silt: int) -> int:
         (11, c >= 40 and si >= 40),
         (12, c >= 40 and s <= 45 and si < 40),
     ]
-    return next((code for code, hit in rules if hit), 4)
+    (code,) = [code for code, hit in rules if hit]
+    return code
 
 
 @pytest.mark.parametrize("dtype", [np.float64, np.float32])

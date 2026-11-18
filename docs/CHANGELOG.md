@@ -5,6 +5,34 @@ All significant changes to the project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- USDA texture classes on the lines clay = 20 % and clay = 27 % follow the Soil Survey Manual
+  (2017, ch. 3, pp. 122-124; Nogat TRIAGE T17, ADR-025 erratum 1).
+  `classify_usda_texture`/`classify_usda_texture_array` (and so `soil hsg`, `calculate_hsg`,
+  `hsg_from_rasters`) used `7 <= clay <= 20` for sandy loam and `7 <= clay <= 27` for loam,
+  where the SSM says "7 to less than 20 percent clay" and "7 to less than 27 percent clay"; the
+  rules are now `clay < 20` and `clay < 27` (clay as a share of clay + sand + silt), and every
+  other class limit was checked against the SSM wording and agrees. Affected compositions:
+  clay exactly 20 % with sand > 52 % (was sandy loam, is sandy clay loam) and clay exactly 27 %
+  with sand more than 20 to 45 % (was loam, is clay loam) — 50 of the 5151 integer-percent
+  compositions (28 + 22, 0.97 %) and 500 of the 501 501 integer g/kg compositions (280 + 220);
+  each changes HSG from **B to C**, no other point changes. Hydrolog's classifier takes the same
+  fix; both classify every composition identically. **Finding and recomputing affected
+  results:** HSG rasters computed by 0.7.0-0.8.1 (sidecar `kartograf_version` 0.7.0 to 0.8.1)
+  differ from a recomputation only on cells whose clay is exactly 20 % or 27 % of the sum
+  (e.g. 200 or 270 g/kg in a sum of 1000) where the other limits make them sandy clay loam or
+  clay loam; those cells were B and are C, so CN derived from them changes by one group. A
+  store reuses an HSG version for the same input sha256 (also with `--force`), so upgrading
+  alone does not recompute it: run `kartograf soil hsg ... --output-dir DIR` (a plain write is
+  never reused), or in a store delete the HSG version directory
+  (`hsg/<segment>/versions/<hierarchy>/<label>_<sha8>/`, or the whole `hsg/<segment>/`) and run
+  the same `kartograf soil hsg` again; the local SoilGrids inputs are used, nothing is
+  downloaded (USAGE, HSG section). Texture classes returned by the functions for such
+  compositions change the same way.
+
 ## [0.8.1] - 2026-11-18
 
 Changes since 0.8.0, to be released as 0.8.1: defect fixes only (the author's approval of
