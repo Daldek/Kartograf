@@ -51,6 +51,55 @@ CANONICAL_CONTROL_POINTS = [
     (60, 20, 20, "clay"),
 ]
 
+# Points ON the limits of the class definitions of the Soil Survey Manual (Soil
+# Science Division Staff 2017, USDA Agriculture Handbook 18, ch. 3, pp. 122-124):
+# "X to less than Y percent" includes X and excludes Y, "more than X" excludes X,
+# "X or more" includes X. Each point sits on one limit; the class follows from the
+# wording, not from the order of the rules. HSG by the ADR-025 table.
+SSM2017_BOUNDARY_POINTS = [
+    # (clay, sand, silt, texture, hsg)  # limit and SSM wording
+    # sandy loams "7 to less than 20 percent clay"; sandy clay loam "20 to less than 35"
+    (20, 60, 20, "sandy_clay_loam", "C"),
+    (20, 53, 27, "sandy_clay_loam", "C"),
+    (19, 61, 20, "sandy_loam", "B"),
+    # loam "7 to less than 27 percent clay"; clay loam "27 to less than 40"
+    (27, 38, 35, "clay_loam", "C"),
+    (27, 45, 28, "clay_loam", "C"),
+    (26, 38, 36, "loam", "B"),
+    # silt loam "12 to less than 27 percent clay"; clay = 27 with sand > 20 -> clay loam
+    (27, 22, 51, "clay_loam", "C"),
+    (27, 15, 58, "silty_clay_loam", "C"),
+    # loam "7 to ... percent clay": clay = 7 is loam, clay < 7 with silt < 50 sandy loam
+    (7, 45, 48, "loam", "B"),
+    (6, 45, 49, "sandy_loam", "B"),
+    # loam "52 percent or less sand"; sandy loams "more than 52 percent sand"
+    (15, 52, 33, "loam", "B"),
+    (15, 53, 32, "sandy_loam", "B"),
+    # loam "28 to less than 50 percent silt"; sandy clay loam "less than 28 ... silt"
+    (25, 47, 28, "loam", "B"),
+    (25, 48, 27, "sandy_clay_loam", "C"),
+    # silt loam "50 percent or more silt"; silt "80 ... or more silt, less than 12 clay"
+    (10, 40, 50, "silt_loam", "B"),
+    (5, 15, 80, "silt", "B"),
+    (12, 8, 80, "silt_loam", "B"),
+    # sandy clay "35 percent or more clay and more than 45 percent sand"
+    (35, 46, 19, "sandy_clay", "D"),
+    (34, 46, 20, "sandy_clay_loam", "C"),
+    (30, 45, 25, "clay_loam", "C"),
+    # clay loam "more than 20 to 45 percent sand"; silty clay loam "20 percent or less"
+    (30, 21, 49, "clay_loam", "C"),
+    (30, 20, 50, "silty_clay_loam", "C"),
+    # clay "40 percent or more clay, 45 or less sand, less than 40 silt"
+    (40, 30, 30, "clay", "D"),
+    (39, 30, 31, "clay_loam", "C"),
+    (40, 20, 40, "silty_clay", "D"),
+    # sands "silt + 1.5 clay less than 15"; sandy loams "silt + 2 clay 30 or more"
+    (2, 86, 12, "loamy_sand", "A"),
+    (0, 85, 15, "loamy_sand", "A"),
+    (0, 70, 30, "sandy_loam", "B"),
+    (10, 80, 10, "sandy_loam", "B"),
+]
+
 
 def _simplex_points():
     """All simplex points clay+sand+silt=100 in 1 percent steps (5151 points)."""
@@ -146,6 +195,21 @@ class TestUSDATextureClassification:
     ):
         """Canonical control points of the USDA triangle (Soil Survey Manual)."""
         assert classify_usda_texture(clay=clay, sand=sand, silt=silt) == expected
+
+    @pytest.mark.parametrize(
+        ("clay", "sand", "silt", "texture", "hsg"), SSM2017_BOUNDARY_POINTS
+    )
+    def test_class_limits_are_inclusive_as_worded_in_the_ssm(
+        self, clay, sand, silt, texture, hsg
+    ):
+        """A point on a class limit gets the class the SSM 2017 wording gives it,
+        in percent and in the g/kg of SoilGrids, and its HSG follows."""
+        assert classify_usda_texture(clay=clay, sand=sand, silt=silt) == texture
+        gkg = classify_usda_texture_array(
+            np.array([10 * clay]), np.array([10 * sand]), np.array([10 * silt])
+        )
+        assert TEXTURE_NAMES[int(gkg[0])] == texture
+        assert texture_to_hsg(texture) == hsg
 
     def test_zero_sum_returns_loam(self):
         """Sum 0 (no data) -> explicitly loam, not a hit of the `sand` rule."""

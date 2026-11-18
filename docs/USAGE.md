@@ -3010,10 +3010,22 @@ print(report.stale, report.files.get(godlo, ()))
   `sha256`; `extra.source_layers` is, as in HSG, a list of layer names).
 - The classification uses the **canonical thresholds of the USDA triangle** (oblique boundaries
   `silt + 1.5*clay`, `silt + 2*clay`), shared by the scalar
-  and array versions. The texture → HSG mapping is deliberately more lenient than the
+  and array versions, with every limit closed or open as the Soil Survey Manual (2017) words
+  it: sandy loam and loam have clay "to less than" 20 % and 27 %, so clay = 20 % (sand > 52 %)
+  is sandy clay loam and clay = 27 % (sand more than 20 to 45 %) clay loam. The texture → HSG
+  mapping is deliberately more lenient than the
   TR-55 table: `sandy_loam` = **B** (not A), `clay_loam`
   and `silty_clay_loam` = **C** (not D) — these are transitional classes whose group
   also depends on the soil structure ([ADR-025](DECISIONS.md)).
+- **HSG computed by 0.7.0-0.8.1** (sidecar `kartograf_version` 0.7.0 to 0.8.1) put cells whose
+  clay is exactly 20 % or 27 % of clay + sand + silt (e.g. 200 or 270 g/kg in a sum of
+  1000) in B instead of C, where the other limits make them sandy clay loam or clay loam
+  (ADR-025 erratum 1). A store reuses such a version for the same inputs, also with
+  `--force`. To recompute it: `kartograf soil hsg ... --output-dir DIR` (a plain write is
+  never reused), or in a store delete the HSG version directory
+  (`hsg/<segment>/versions/<hierarchy>/<label>_<sha8>/`, or the whole `hsg/<segment>/`) and
+  run the same `kartograf soil hsg` again — the local SoilGrids inputs are used, nothing is
+  downloaded.
 - `--summary` computes the **task area** (bbox; with `--geometry` its
   envelope in EPSG:2180; with `--sheet` the sheet frame), not the whole raster:
   the SoilGrids grid (250 m, EPSG:4326) extends beyond the area, so a cell at the
