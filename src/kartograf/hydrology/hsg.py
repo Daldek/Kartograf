@@ -150,13 +150,16 @@ HSG_PROFILE = "0-100cm"
 HSG_PROFILE_DEPTHS = ("0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm")
 
 
-# Canonical USDA texture triangle (Soil Survey Manual) - the SINGLE source of
-# truth for both the scalar and the vectorised classifier. A predicate gets
-# 100 x the amounts of clay, sand and silt (``c``, ``s``, ``si``) and their
-# total ``u``: the share of clay in percent is ``c / u``, so "k percent" is
-# ``k * u``. The rules compare amounts and never divide them, which keeps
+# Canonical USDA texture triangle (Soil Survey Manual 2017, ch. 3, pp. 122-124) -
+# the SINGLE source of truth for both the scalar and the vectorised classifier.
+# A predicate gets 100 x the amounts of clay, sand and silt (``c``, ``s``, ``si``)
+# and their total ``u``: the share of clay in percent is ``c / u``, so "k percent"
+# is ``k * u``. The rules compare amounts and never divide them, which keeps
 # every comparison exact (``classify_usda_texture_array``). A predicate
-# returns a boolean mask. Order matters: first matching rule wins.
+# returns a boolean mask. Each limit is closed or open as the SSM words it
+# ("7 to less than 20 percent clay" is ``7 <= clay < 20``), so the twelve
+# rules are disjoint and cover the triangle: every composition matches exactly
+# one rule and their order does not decide any class.
 _USDA_RULES: tuple[
     tuple[
         str,
@@ -172,7 +175,7 @@ _USDA_RULES: tuple[
     (
         "sandy_loam",
         lambda c, s, si, u: (
-            ((c >= 7 * u) & (c <= 20 * u) & (s > 52 * u) & (si + 2 * c >= 30 * u))
+            ((c >= 7 * u) & (c < 20 * u) & (s > 52 * u) & (si + 2 * c >= 30 * u))
             | ((c < 7 * u) & (si < 50 * u) & (si + 2 * c >= 30 * u))
         ),
     ),
@@ -187,11 +190,7 @@ _USDA_RULES: tuple[
     (
         "loam",
         lambda c, s, si, u: (
-            (c >= 7 * u)
-            & (c <= 27 * u)
-            & (si >= 28 * u)
-            & (si < 50 * u)
-            & (s <= 52 * u)
+            (c >= 7 * u) & (c < 27 * u) & (si >= 28 * u) & (si < 50 * u) & (s <= 52 * u)
         ),
     ),
     (

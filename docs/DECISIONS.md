@@ -46,7 +46,7 @@ each relation is recorded on both sides.
 | [ADR-022](#adr-022-multi-country-source-architecture--descriptors-registries-sidecar-strict-transformation-policy-stage-0) | Multi-country source architecture — descriptors, registries, sidecar, strict transformation policy (stage 0) | 2026-08-10 | Accepted — amended by [ADR-023](#adr-023-cuzk-engine-cz-crs-policy-and-evrf20075621-stage-1) (formal engine interface: `CuzkClient`, (a)) and [ADR-031](#adr-031-identifier-language--english-sidecar-from-070-apicli-until-v100) (English sidecar key names) |
 | [ADR-023](#adr-023-cuzk-engine-cz-crs-policy-and-evrf20075621-stage-1) | CUZK engine, CZ CRS policy and EVRF2007→5621 (stage 1) | 2026-08-11 | Accepted — partly superseded by [ADR-024](#adr-024-reprojection-of-cz-content-only-locally-no-imagesr--native) (TM33 download mechanism in (c), Additional findings item 1) and [ADR-027](#adr-027---target-crs-for-pl--merged-bbox-cutout-mosaic--pinned-warp) (`--target-crs` for CZ only; Additional findings item 6) and [ADR-038](#adr-038-explicit-cutout-mode-and-crs-names---cutout---horizontal-crs---sheet-system) (a CZ area is always a cutout; now `--cutout`); amended by [ADR-029](#adr-029-choosing-laz-tiles-by-area-coverage-and-downloading-laz-in-the-library) ((f).1 covers LAZ) and [ADR-034](#adr-034-common-mechanism-for-area-queries-chunks-on-the-source-grid) (CUZK chunking in `transport/chunks.py`); amends [ADR-022](#adr-022-multi-country-source-architecture--descriptors-registries-sidecar-strict-transformation-policy-stage-0); erratum 2: `--country` required with an area, values per country (0.8.0) |
 | [ADR-024](#adr-024-reprojection-of-cz-content-only-locally-no-imagesr--native) | Reprojection of CZ content only locally (no `imageSR` != native) | 2026-08-11 | Accepted — amended by [ADR-034](#adr-034-common-mechanism-for-area-queries-chunks-on-the-source-grid) (common chunk planning with an NW anchor); supersedes part of [ADR-023](#adr-023-cuzk-engine-cz-crs-policy-and-evrf20075621-stage-1) (TM33 download mechanism in (c), Additional findings item 1) |
-| [ADR-025](#adr-025-texture---hsg-mapping-and-the-canonical-usda-triangle-070-audit) | Texture -> HSG mapping and the canonical USDA triangle (0.7.0 audit) | 2026-08-22 | Accepted |
+| [ADR-025](#adr-025-texture---hsg-mapping-and-the-canonical-usda-triangle-070-audit) | Texture -> HSG mapping and the canonical USDA triangle (0.7.0 audit) | 2026-08-22 | Accepted — amended by its erratum 1 (clay = 20 % and 27 % belong to sandy clay loam and clay loam, as worded in the Soil Survey Manual 2017) |
 | [ADR-026](#adr-026-data-layout-per-product--segments-and-templates-in-descriptors) | data/ layout per product — segments and templates in descriptors | 2026-08-28 | Accepted — amended by [ADR-030](#adr-030-campaign-strategies-newestall---min-year-and-the-kampanie-layout-with-a-hard-link) (files in `<segment>/kampanie/`, standard path = hard link or copy; erratum 2), [ADR-036](#adr-036-versioned-store) (`<segment>/versions/`; erratum 3) and [ADR-044](#adr-044-unifying-cli-and-api---product---summary-land-cover-soils-and-hsg-functions) (D7: naming convention for `data/` keys and directories); supersedes [ADR-013](#adr-013-renaming-storage-subdirectories-from-1m5m-to-nmt_1mnmt_5m) and the implementation of the layout from [ADR-005](#adr-005-nmt-directory-structure-split-by-resolution), amends [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (closes the deferral) |
 | [ADR-027](#adr-027---target-crs-for-pl--merged-bbox-cutout-mosaic--pinned-warp) | --target-crs for PL — merged bbox cutout (mosaic + pinned warp) | 2026-08-28 | Accepted — partly superseded by [ADR-035](#adr-035-pl-cutouts-from-gugik-wcs-with-a-prg-land-mask) (cutout source in the CLI and `download_pl_cutout`; sheet API removed in 0.8.0, erratum 2 of ADR-035) and [ADR-038](#adr-038-explicit-cutout-mode-and-crs-names---cutout---horizontal-crs---sheet-system) (the name `--target-crs`, enabling a cutout with a CRS flag); amended by [ADR-030](#adr-030-campaign-strategies-newestall---min-year-and-the-kampanie-layout-with-a-hard-link) (deprecated sheet path only); supersedes part of [ADR-023](#adr-023-cuzk-engine-cz-crs-policy-and-evrf20075621-stage-1) (`--target-crs` for CZ only) and [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--separating-the-nmt-download-paths) (bbox = WCS GeoTIFF) |
 | [ADR-028](#adr-028-choosing-the-gugik-sheet-index-record-and-extrasource) | Choosing the GUGiK sheet index record and `extra.source` | 2026-09-30 | Accepted — amended by [ADR-030](#adr-030-campaign-strategies-newestall---min-year-and-the-kampanie-layout-with-a-hard-link) (campaign strategies `newest`/`all`, `--min-year`; the `newest` selection rule unchanged; sheet index failure: erratum 2) and [ADR-054](decisions/0054-data-output-plain-mode-store-and-default-root.md) (plain mode takes the newest full flight); partly superseded by [ADR-031](#adr-031-identifier-language--english-sidecar-from-070-apicli-until-v100) (`extra.source` key names); supersedes part of [ADR-020](#adr-020-validating-wms-layers-via-getcapabilities) (hard-coded layers and fallback), amends [ADR-019](#adr-019-sqlite-wal-as-metadata-cache) (`record_cache`) |
@@ -1137,7 +1137,7 @@ and (f) now live in `transform/crs.py`, shared by the CZ track and the PL cutout
 ## ADR-025: Texture -> HSG mapping and the canonical USDA triangle (0.7.0 audit)
 
 **Data:** 2026-08-22
-**Status:** Accepted
+**Status:** Accepted — amended by erratum 1 (class limits as worded in the Soil Survey Manual 2017)
 
 **Context:** The pre-release audit of 0.7.0 (findings A4-4, A4-8, A4-9) showed
 two independent problems in `kartograf/hydrology/hsg.py`. (1) The texture classification
@@ -1174,18 +1174,21 @@ result for the consumer.
 
 **Decision:**
 
-(a) **The texture thresholds are the canonical USDA rules** (Soil Survey Manual), kept
-in a single list `_USDA_RULES` as `(name, predicate)` pairs; the predicate receives
-a float64 array of shares in percent (after normalisation to a sum of 100) and
-returns a mask. Order matters — the first matching rule wins:
+(a) **The texture thresholds are the canonical USDA rules** (Soil Survey Manual 2017,
+ch. 3, pp. 122-124), kept in a single list `_USDA_RULES` as `(name, predicate)` pairs;
+the predicate compares the amounts of clay, sand and silt with their total (no
+division, exact for integer g/kg) and returns a mask. Each limit is closed or open
+as the SSM words it ("7 to less than 20 percent clay" is `7 <= clay < 20`), so the
+twelve rules are disjoint and cover the triangle; their order decides nothing
+(erratum 1):
 
 1. `sand`: `silt + 1.5*clay < 15`
 2. `loamy_sand`: `silt + 1.5*clay >= 15 and silt + 2*clay < 30`
-3. `sandy_loam`: `(7 <= clay <= 20 and sand > 52 and silt + 2*clay >= 30) or
+3. `sandy_loam`: `(7 <= clay < 20 and sand > 52 and silt + 2*clay >= 30) or
    (clay < 7 and silt < 50 and silt + 2*clay >= 30)`
 4. `silt`: `silt >= 80 and clay < 12`
 5. `silt_loam`: `(silt >= 50 and 12 <= clay < 27) or (50 <= silt < 80 and clay < 12)`
-6. `loam`: `7 <= clay <= 27 and 28 <= silt < 50 and sand <= 52`
+6. `loam`: `7 <= clay < 27 and 28 <= silt < 50 and sand <= 52`
 7. `sandy_clay_loam`: `20 <= clay < 35 and silt < 28 and sand > 45`
 8. `clay_loam`: `27 <= clay < 40 and 20 < sand <= 45`
 9. `silty_clay_loam`: `27 <= clay < 40 and sand <= 20`
@@ -1194,16 +1197,16 @@ returns a mask. Order matters — the first matching rule wins:
 12. `clay`: `clay >= 40 and sand <= 45 and silt < 40`
 
 The array version (`classify_usda_texture_array`, the one used by
-`calculate_hsg_by_bbox`) is the source of truth: it computes the masks and picks the first
+`calculate_hsg_by_bbox`) is the source of truth: it computes the masks and picks the
 matching one via `np.select`. The scalar version (`classify_usda_texture`) is a
 wrapper — the same rules on a one-element array and `TEXTURE_NAMES[code]`.
 The equivalence of the two functions is pinned by a test on the **whole** simplex at 1% steps
 (5151 points), which at the same time proves that the rules are a partition: every point
 gets a class 1-12, and `default` in `np.select` is never used.
-Normalisation is computed **in float64** (`_normalize_pct`) — this removes the float32
-divergence at the `clay = 15%` boundary (A4-8); `np.divide(..., where=)` also removes
+The comparison of amounts in float64 removes the float32
+divergence at the `clay = 15%` boundary (A4-8) and the
 `RuntimeWarning: invalid value encountered in divide` for pixels without
-data. Points with a sum of 0 get an **explicit guard** -> `loam`: after normalisation
+data. Points with a sum of 0 get an **explicit guard** -> `loam`: with a total of 0
 `(0, 0, 0)` satisfies rule 1 (`silt + 1.5*clay = 0 < 15`), so without the guard
 it would be `sand`. This is not fiction: nodata pixels of the raster pipeline are
 masked separately, but the public function is meant to return `loam` by decision, not
@@ -1248,12 +1251,34 @@ pixels than in 0.6.x — consistent with the standard. The "Changed" entry in
 Note: the audit verification report (A4-4) gives smaller numbers — "3.4%,
 136 B->A, 35 B->C, 5 C->D", recorded in the other direction (reference -> code) and for
 the scalar version. The difference of 226 vs 176 points does not result from the direction of the notation:
-that reference was a separate implementation of the rules and closed the class boundaries
-differently. Two ties on the boundary are resolved here by the order of rules from point (a):
-`clay = 20%` with `sand > 45` and `silt < 28` goes to `sandy_loam`, not to
-`sandy_clay_loam` (28 points), and `clay = 27%` with `20 < sand <= 45` goes to
-`loam`, not to `clay_loam` (22 points). Binding for consumers are the numbers from the
-table above — computed by a test directly on the implementation from point (a).
+that reference was a separate implementation of the rules and closed the class limits
+`clay = 20%` and `clay = 27%` as the Soil Survey Manual does, while the table above was
+computed with `clay <= 20` (sandy loam) and `clay <= 27` (loam). The reference was right;
+erratum 1 corrects the rules and the table.
+
+**Erratum 1 (2026-11-18, hotfix, Nogat TRIAGE T17):** (a) wrote `7 <= clay <= 20` for
+sandy loam and `7 <= clay <= 27` for loam, and the note above (as of 0.7.0) called the lines
+`clay = 20%` and `clay = 27%` two ties resolved by the order of rules. The Soil Survey
+Manual (2017, ch. 3, pp. 122-124) defines sandy loams with "7 to less than 20 percent
+clay", loam with "7 to less than 27 percent clay", sandy clay loam with "20 to less than
+35 percent clay" and clay loam with "27 to less than 40 percent clay" — there are no
+ties; `aqp::ssc_to_texcl` (NASIS logic) has the same limits. The rules are now
+`clay < 20` and `clay < 27`; every other limit of (a) was checked against the SSM
+wording and agrees. Against 0.7.0-0.8.1 this changes 50 of the 5151 integer-percent
+compositions (28 `sandy_loam` -> `sandy_clay_loam` at `clay = 20%`, `sand > 52`;
+22 `loam` -> `clay_loam` at `clay = 27%`, `20 < sand <= 45`, `silt < 50`) and 500 of the
+501 501 integer g/kg compositions (280 and 220), all from HSG B to C. The corrected
+"Consequences" table (0.6.x -> corrected rules, same grid and version):
+
+| HSG change | points | share of simplex | texture change |
+|---|---|---|---|
+| A -> B | 136 | 2.64% | `loamy_sand` -> `sandy_loam` |
+| C -> B | 35 | 0.68% | `sandy_clay_loam` -> `loam` |
+| D -> C | 5 | 0.10% | `sandy_clay` -> `clay_loam` |
+| **total** | **176** | **3.42%** | (the texture class changes for 378 points = 7.34%) |
+
+These are the numbers of the A4-4 reference. Hydrolog's `classify_usda_texture` takes the
+same fix, so both classify every composition identically.
 
 ---
 
