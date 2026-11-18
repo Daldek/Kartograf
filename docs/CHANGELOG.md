@@ -5,7 +5,10 @@ All significant changes to the project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.2] - 2026-11-18
+
+An urgent patch of a gross formula defect (Nogat CMP-9.1, CMP-9.2), released outside the
+release plan.
 
 ### Fixed
 
