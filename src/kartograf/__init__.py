@@ -296,7 +296,7 @@ from kartograf.transform.crs import PinnedTransform
 from kartograf.transport.http import get_with_retry, make_gugik_session
 from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
 
-__version__ = "0.8.2"
+__version__ = "0.9.0.dev0"
 
 __all__ = [
     # Cache

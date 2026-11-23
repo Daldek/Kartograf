@@ -7,7 +7,9 @@ History is the git log and [`docs/CHANGELOG.md`](CHANGELOG.md); this file holds 
 | Component | State | Note |
 |---|---|---|
 | Release 0.8.0 | released (2026-11-16) | Tagged `v0.8.0` on `main`, a member of the first joint release of the ecosystem (Nogat release set `candidate-6`; ECO-074): Next 1 |
-| Release 0.8.1 | in progress | Defect fixes only (the author's approval of 2026-11-17), prepared on `fix/0.8.1` from `develop` `593a8b47` at `0.8.1.dev0`; not merged until the author approves. Its items: the known defects of Next 32 marked there as fixed on `fix/0.8.1`; what it ships is in CHANGELOG `[Unreleased]` |
+| Release 0.8.1 | released (2026-11-18) | Defect fixes only (the author's approval of 2026-11-17), tagged `v0.8.1` on `main`: the known defects of Next 32 marked there as fixed on `fix/0.8.1` |
+| Release 0.8.2 | released (2026-11-18) | An urgent patch outside the release plan, tagged `v0.8.2` on `main`: the USDA texture limits clay 20 % and 27 % as the Soil Survey Manual words them (ADR-025 erratum 1) |
+| Release 0.9.0 | in progress | The next minor release, at `0.9.0.dev0` on `feat/camels-pl-catchments` from `develop` `228a2870`: the catchments and gauging stations of CAMELS-PL (Nogat plan `docs/plans/2026-11-22-camels-pl.md` step 2, approved by the author on 2026-11-22); not merged until the author approves; what it ships is in CHANGELOG `[Unreleased]` |
 | NMT PL (GUGiK) | done | Sheets (PL-1992, PL-2000), all resolutions from one variant registry (ADR-041), `--cutout` from WCS with PRG land mask (ADR-035, ADR-038); a grid whose cell size differs from its index record is a failed unit `resolution_mismatch` (ADR-060) |
 | PL-2000 zones | done | A zone is the area of its powiats (§ 22 of Dz.U. 2012 poz. 1247; ADR-055): `find_sheets_for_bbox(..., "2000")` lists each zone's sheets only inside its area, `find_sheet_outlines` adds the zone and the outline cut at the zone boundary (for Archiwista's grid); zone data from GUGiK PRG of 2026-10-25, rebuilt by `scripts/build_pl2000_zones.py` when powiat boundaries change |
 | NMPT PL | done | Sheets and WCS cutout (float32 heights, 4 Mpx coverage chunks) |
