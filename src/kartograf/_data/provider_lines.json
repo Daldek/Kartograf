@@ -1,0 +1,81 @@
+{
+  "source": "Nogat DEVELOPMENT_STANDARDS 1.2, section 20 (DEV-20.4, DEV-20.7; ECO-086, ECO-087)",
+  "lines": [
+    {
+      "code": "S",
+      "text": "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej – Państwowy Instytut Badawczy",
+      "order": 1,
+      "processed_code": "P",
+      "processed": "Dane Instytutu Meteorologii i Gospodarki Wodnej – Państwowego Instytutu Badawczego zostały przetworzone"
+    },
+    {
+      "code": "PS",
+      "text": "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej – Państwowy Instytut Badawczy, dane pochodzą ze strony https://klimat.imgw.pl/opady-maksymalne",
+      "order": 2,
+      "processed_code": "PP",
+      "processed": "Dane Instytutu Meteorologii i Gospodarki Wodnej – Państwowego Instytutu Badawczego pochodzące ze strony https://klimat.imgw.pl/opady-maksymalne zostały przetworzone"
+    },
+    {
+      "code": "M",
+      "text": "„Modele probabilistyczne opadów maksymalnych o określonym czasie trwania i prawdopodobieństwie przewyższenia – Projekt PMAXTP”, red. Bogdan Ozga-Zieliński, Instytut Meteorologii i Gospodarki Wodnej – Państwowy Instytut Badawczy, Warszawa 2022",
+      "order": 3
+    },
+    {
+      "code": "C",
+      "text": "Źródło danych: Český hydrometeorologický ústav (ČHMÚ), https://opendata.chmi.cz, licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)",
+      "order": 4,
+      "processed_code": "CP",
+      "processed": "Dane ČHMÚ zostały przetworzone"
+    },
+    {
+      "code": "L",
+      "text": "Źródło danych: CAMELS-PL {version} (Brzezińska i in., {year}), https://doi.org/{doi}, licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)",
+      "order": 5,
+      "processed_code": "LP",
+      "processed": "Dane CAMELS-PL zostały przetworzone"
+    },
+    {
+      "code": "E",
+      "text": "We acknowledge the E-OBS dataset and the data providers in the ECA&D project (https://www.ecad.eu). Cornes, R., G. van der Schrier, E.J.M. van den Besselaar, and P.D. Jones. 2018: An Ensemble Version of the E-OBS Temperature and Precipitation Datasets, J. Geophys. Res. Atmos., 123. doi:10.1029/2017JD028200",
+      "order": 6
+    },
+    {
+      "code": "D",
+      "text": "Źródło danych: G2DC-PL+ (Piniewski i in., 2020), https://doi.org/10.4121/uuid:a3bed3b8-e22a-4b68-8d75-7b87109c9feb, CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/)",
+      "order": 7
+    },
+    {
+      "code": "G",
+      "text": "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, {products} (wytworzono {period}, pozyskano {date}); dane przetworzone",
+      "order": 8
+    },
+    {
+      "code": "SG",
+      "text": "Źródło: ISRIC – World Soil Information, SoilGrids, licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); dane przetworzone",
+      "order": 9
+    },
+    {
+      "code": "Z",
+      "text": "Źródło: Český úřad zeměměřický a katastrální (ČÚZK), {products} (pozyskano {date}), licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); dane przetworzone",
+      "order": 10
+    }
+  ],
+  "terms": [
+    {
+      "code": "RD",
+      "text": "Regulamin danych IMGW-PIB: https://danepubliczne.imgw.pl/regulations"
+    },
+    {
+      "code": "RH",
+      "text": "Regulamin serwisu hydrologicznego IMGW-PIB: https://hydro.imgw.pl/#/regulamin"
+    },
+    {
+      "code": "RK",
+      "text": "Regulamin danych PMAXTP: https://klimat.imgw.pl/opady-maksymalne"
+    },
+    {
+      "code": "RE",
+      "text": "Regulamin danych E-OBS: https://www.ecad.eu/documents/ECAD_datapolicy.pdf"
+    }
+  ]
+}

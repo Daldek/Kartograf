@@ -6,7 +6,7 @@ Profile: `tool` (DEV §1). What it is for: [README.md](README.md); scope: [docs/
 
 ## Critical rules
 
-- **0.8.1: defect fixes only (the author's approval of 2026-11-17).** It is prepared on `fix/0.8.1` from `develop` at `0.8.1.dev0`; the known defects are `docs/PROGRESS.md` Next 32. A feature, a breaking change or a decision with alternatives waits for the next minor release. `v0.8.0` (2026-11-16) is a member of the first joint release of the ecosystem (Nogat release set `candidate-6`).
+- **0.9.0, the next minor release, at `0.9.0.dev0`.** `v0.8.1` and `v0.8.2` (2026-11-18) are released; 0.9.0 opens with the catchments and gauging stations of CAMELS-PL (`hydro download --product camels`; Nogat plan `docs/plans/2026-11-22-camels-pl.md` step 2, approved by the author on 2026-11-22), prepared on `feat/camels-pl-catchments` from `develop` and not merged until the author approves. `v0.8.0` (2026-11-16) is a member of the first joint release of the ecosystem (Nogat release set `candidate-6`).
 - Python only from the project environment: `uv sync --locked --all-extras`, then `uv run ...` or `.venv/bin/python` (DEV-6.2, DEV-6.3).
 - `scripts/gate.sh` (ruff format, ruff check, mypy, offline tests with coverage, commit checks; also works from a worktree) is green before every commit (DEV-7.6). Tests are offline (`-m "not live"`, no network: `tests/conftest.py` fails a test that opens a socket); `live` tests only on purpose (DEV-10.1 to DEV-10.3).
 - Downloaded data goes outside the repository and outside `/tmp`, always with an explicit `--root`. The metadata cache is in the user cache directory (`<cache_dir>/kartograf/metadata.db`), never in the current directory; `kartograf config show` reports every setting. If the data directory is unavailable, stop and ask. Tests write only in `tmp_path`.
@@ -22,7 +22,7 @@ Profile: `tool` (DEV §1). What it is for: [README.md](README.md); scope: [docs/
 
 - The CLI only translates: a handler in `src/kartograf/cli/` turns flags into the arguments of one library function and prints its result. No data logic there: no validation of values, no choice of countries, sheets or campaigns, no `parent_request`, no reading of sidecars to decide (ADR-037; `tests/contract/test_cli_translation.py`).
 - A command is a declaration in `src/kartograf/catalog/commands/<group>.py`. The CLI parser and the MCP tools are built from it, a data command also has its entry in `src/kartograf/data_commands.py`, and the library and `catalog` never import `kartograf.cli` or `mcp` (ADR-046).
-- Command-level functions take keyword-only arguments, check their types before any network or write (`download/arguments.py`) and have no default that changes which data is chosen (product, variant, resolution, vertical CRS, area, output): a missing value is an error that names the option and its allowed values (ADR-044).
+- Command-level functions take keyword-only arguments, check their types before any network or write (`download/arguments.py`) and have no default that changes which data is chosen (product, variant, resolution, vertical CRS, area, output): a missing value is an error that names the option and its allowed values (ADR-044). The one exception is the release of CAMELS-PL: `version=None` reads the newest release the registry supports (ADR-062, as the Nogat plan designs it), and the sidecar names the release read.
 - Every exception is a `KartografError` subclass with its own registry `code` and a `reason` (ADR-049). Invalid input is `ValidationError` (a sheet code `ParseError`), never `ValueError`; validators set `option`, `options` and `allowed` (the API argument, not the flag); keep the chain with `raise ... from err`; carry facts as attributes, not in the text.
 - Data messages are `Notice(level, code, text)` in the `notices` of the result (`notices.py`); the library does not print. Results are `@dataclass(frozen=True)` with the `Document` mixin (`serialization.py`): a new document is a class, a row in `tests/contract/test_json_contract.py` and a row in ARCHITECTURE 3.5; schemas `/1` only grow (ADR-046).
 - Logging: `logging.getLogger(__name__)`, `%`-style arguments, never an f-string; the library does not call `print` or configure handlers (DEV-12).
@@ -61,10 +61,12 @@ commands.py        parse_command, validate_command, format_command, run_command,
                    catalog command (the call is read from its declaration: catalog/arguments.py)
 data_commands.py   DATA_COMMANDS: the data commands with their checks, download and check calls
 download/          data.py (download_data/check_data), collections.py, manager.py (sheets,
-                   campaigns, versions), availability.py, laz.py, cutouts, cz_*.py, storage.py
+                   campaigns, versions), availability.py, laz.py, cutouts, cz_*.py, storage.py,
+                   releases.py (the files of a release of a published data set: CAMELS-PL)
 sources/           registry.py (source descriptors, channels, licences), variants.py
 providers/         pl/ (GUGiK), cuzk/, corine.py, soilgrids.py: talk to one source
-transport/         engines shared by products: http.py, unit_package, feature_bbox, atom, chunks
+transport/         engines shared by products: http.py, unit_package, feature_bbox, atom, chunks,
+                   zip_range (the members of a ZIP by HTTP range requests)
 transform/         pinned CRS transforms (crs.py), GeoPackage writer, raster warp
 core/              sheet parsers (PL-1992, PL-2000, CZ), bbox, geometry
 landcover/         BDOT10k, CORINE and SoilGrids orchestration
@@ -74,6 +76,7 @@ stored_command.py  command_for_file: the command that selects a stored file agai
 cache/  auth/      metadata cache (SQLite WAL); CLMS Auth Proxy
 mcp_server.py      MCP server on the catalog (extra mcp); guide.py generates AGENTS.md, llms.txt
 exceptions.py  error_report.py  envelope.py  notices.py  serialization.py  config.py
+attribution.py     provider lines of Nogat DEV §20 (_data/provider_lines.json), ATTRIBUTION.txt
 _errors.py  _output_schema.py   generated; _data/agents/ holds the guide templates
 testing.py         producer fixtures for consumers (DEV-10.6)
 ```
@@ -120,7 +123,7 @@ The place of Kartograf in the ecosystem, its dependencies and consumers: https:/
 - AGI-4.1: the domain JSON Schemas are not published in `src/kartograf/schemas` (PROGRESS, Next 6).
 - DEV-12.2: no `--verbose` and no `KARTOGRAF_LOG_LEVEL`; `--quiet`/`-q` drops the progress bar and the status lines of stdout, and `KARTOGRAF_DEBUG=1` lets every library record through and prints the traceback of an unexpected error.
 - DEV-12.4 to DEV-12.9: no command answers HTTP (`kartograf-mcp` is stdio), so nothing writes `nogat-log/1` files under `<state_dir>/kartograf/logs`; the CLMS Auth Proxy (`python -m kartograf.auth.proxy`, started by `kartograf.auth.AuthProxyClient` for a CORINE GeoTIFF download on 127.0.0.1) logs plain text to its stderr (`logging.basicConfig`), with the client address in its request lines.
-- DEV-20: files and documents do not carry the provider lines G, SG and Z. The sidecar `license.attribution` holds Kartograf's own text per source (`sources/registry.py`, `messages/legal.py`), the JSON documents have no `attribution` or `terms_notice` and a plain directory has no `ATTRIBUTION.txt`.
+- DEV-20: the GUGiK, ISRIC and ČÚZK products do not carry the provider lines G, SG and Z: their sidecar `license.attribution` holds Kartograf's own text per source (`sources/registry.py`, `messages/legal.py`) and a plain directory of them has no `ATTRIBUTION.txt`. The CAMELS-PL files carry S, P and L of their release (DEV-20.12, ADR-062) in the sidecar (`license.attribution`, `extra.attribution`) and in `ATTRIBUTION.txt` of a plain write (`kartograf.attribution`, `_data/provider_lines.json`). The JSON documents carry no lines (no `attribution` or `terms_notice`).
 - DEV-2.1, ECO-005: `docs/research` and `docs/superpowers` are Polish records (PROGRESS, Next 26).
 - DEV-13.7, DEV-16.2, DEV-3.6, DEV-4.2: `SECURITY.md`, `CONTRIBUTING.md`, `docs/CLA.md`, `CONTRIBUTORS.md`, the GitHub rulesets and the single author identity of the history are the author's steps (PROGRESS, Next 3).
 - REL: the distribution is `kartograf`, not `nogat-kartograf`; no `server.json` yet (PROGRESS, Next 5).

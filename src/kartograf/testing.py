@@ -51,6 +51,26 @@ Its features are fictional and lie around ``PGW_AREA``; the archive is stored by
 the job of ``hydro download --whole-country`` itself, served from memory, and the
 GeoPackage is what ``hydro download --bbox <PGW_AREA> --layers PGW_WP`` (the
 request of Hydrograf) writes from that stored archive.
+
+The CAMELS-PL store (``build_camels_store``, ADR-062)::
+
+    hydro/pl_camels/                         the files of a CAMELS-PL release
+        country/pl_catchments.gpkg                   standard path (hard link)
+        country/pl_gauging-stations.gpkg             standard path (hard link)
+        versions/country/2026-10-07_<sha8>/pl_catchments.gpkg
+        versions/country/2026-10-07_<sha8>/pl_gauging-stations.gpkg
+
+Its archives (``build_camels_archive``) have the layout of the published ZIPs of
+releases 2.0.0 and 2.1.0 (the root ``CAMELS_PL_2.0/`` or ``CAMELS_PL_2.1/``, the
+members the registry names, the ``.prj`` beside each GeoPackage) and the same two
+tiny GeoPackages in both, as the published releases hold the same bytes: the
+layers ``CAMELS_PL_catchments`` (GEOMETRY) and ``CAMELS_PL_gauging_stations``
+(POINT) in EPSG:2180 with the fields ``gauge_id`` (INTEGER), ``gauge_name`` and
+``water_body_name``, six gauges of 2.1.0 with their codes, names and points as
+published and fictional catchments (``_data/camels_fixture.json``). The store holds
+what ``hydro download --product camels --country pl --whole-country`` writes: the
+release is read by the engine itself through range requests answered from memory,
+its checks made against a registry that pins the bytes of the fixture archive.
 """
 
 import contextlib
@@ -59,11 +79,13 @@ import hashlib
 import io
 import itertools
 import json
+import re
 import tempfile
 import threading
 import zipfile
+import zlib
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from importlib import resources
 from pathlib import Path
@@ -85,6 +107,7 @@ from kartograf.download.collections import (
 )
 from kartograf.download.fetch import FileSlot, FileStatus, fetch_version, local_version
 from kartograf.download.links import ensure_link
+from kartograf.download.releases import choose_release, release_params, run_release
 from kartograf.download.storage import unit_slot
 from kartograf.download.versions import (
     INCOMING_DIR,
@@ -100,6 +123,8 @@ from kartograf.marker import prepare_store
 from kartograf.messages import message
 from kartograf.notices import NoticeSink
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
+from kartograf.sources.descriptor import DatasetRelease, ReleaseFilesParams
+from kartograf.sources.registry import get_source
 from kartograf.sources.sidecar import emit_sidecar
 
 __all__ = [
@@ -111,15 +136,20 @@ __all__ = [
     "PGW_ARCHIVE_SEGMENT",
     "PGW_AREA_SEGMENT",
     "PGW_AREA",
+    "CAMELS_DATASET",
+    "CAMELS_SEGMENT",
     "VARIANTS",
     "Variant",
     "FixtureFile",
     "FixtureStore",
     "FixtureVersion",
     "PgwFixture",
+    "CamelsFixture",
     "build_fixture_store",
     "build_pgw_archive",
     "build_pgw_store",
+    "build_camels_archive",
+    "build_camels_store",
     "make_sidecar",
 ]
 
@@ -143,6 +173,11 @@ PGW_ARCHIVE_SEGMENT = "hydro/pl_pgw_gdb"
 PGW_AREA = BBox(380000.0, 540000.0, 390000.0, 550000.0, "EPSG:2180")
 # The segment of the GeoPackage of ``PGW_AREA`` with the layers of ``PGW_WP``.
 PGW_AREA_SEGMENT = "hydro/pl_pgw_pgw-wp"
+CAMELS_DATASET = "pl.camels.camels"
+# The segment of the files of every CAMELS-PL release (``build_camels_store``).
+CAMELS_SEGMENT = "hydro/pl_camels"
+# One span of a ``Range`` header: ``bytes=<first>-[<last>]`` or ``bytes=-<count>``.
+_RANGE = re.compile(r"bytes=(\d*)-(\d*)")
 
 _PL_DATASET = "pl.gugik.nmt_1m"
 _CZ_DATASET = "cz.cuzk.dmr4g"
@@ -450,15 +485,176 @@ def _pgw_archive_bytes() -> bytes:
     return buffer.getvalue()
 
 
+# --- CAMELS-PL data (ADR-062) ---------------------------------------------------
+
+# The six gauges, the layers and the dates of the fixture files (package data).
+_CAMELS_DATA = "camels_fixture.json"
+
+
+@functools.cache
+def _camels_data() -> dict[str, Any]:
+    """Return the fixture data of CAMELS-PL (``_data/camels_fixture.json``)."""
+    text = (
+        resources.files("kartograf")
+        .joinpath("_data", _CAMELS_DATA)
+        .read_text(encoding="utf-8")
+    )
+    data: dict[str, Any] = json.loads(text)
+    return data
+
+
+def _camels_params() -> ReleaseFilesParams:
+    """Return the releases of CAMELS-PL as the registry knows them."""
+    (channel,) = get_source(CAMELS_DATASET).channels
+    return release_params(channel)
+
+
+@functools.cache
+def _camels_gpkg(theme: str) -> bytes:
+    """Return the fixture GeoPackage of the file ``theme``, built once per process.
+
+    ``catchments`` (layer ``CAMELS_PL_catchments``, GEOMETRY) or
+    ``gauging-stations`` (``CAMELS_PL_gauging_stations``, POINT) of the six gauges.
+    GDAL (``pyogrio``) records the last change of the published file
+    (``OGR_CURRENT_DATE``), so one GDAL version gives the same bytes.
+    """
+    import numpy as np  # lazy: heavy, and only the fixtures of geodata need them
+    import pyogrio.raw
+    import shapely
+    from shapely.geometry import shape
+
+    from kartograf.transform.gpkg import gdal_config
+
+    data = _camels_data()
+    spec = data["files"][theme]
+    gauges = data["gauges"]
+    if theme == "catchments":
+        shapes = [shape(gauge["catchment"]) for gauge in gauges]
+    else:
+        shapes = [shapely.Point(*gauge["point"]) for gauge in gauges]
+    with tempfile.TemporaryDirectory(prefix="kartograf-testing-") as tmp:
+        path = Path(tmp) / f"{spec['layer']}.gpkg"
+        with gdal_config({"OGR_CURRENT_DATE": spec["last_change"]}):
+            pyogrio.raw.write(
+                path,
+                np.array([shapely.to_wkb(item) for item in shapes], dtype=object),
+                [
+                    np.array([g["gauge_id"] for g in gauges], dtype=np.int64),
+                    np.array([g["gauge_name"] for g in gauges], dtype=object),
+                    np.array([g["water_body_name"] for g in gauges], dtype=object),
+                ],
+                ["gauge_id", "gauge_name", "water_body_name"],
+                layer=spec["layer"],
+                driver="GPKG",
+                geometry_type=spec["geometry"],
+                crs=data["crs"],
+            )
+        return path.read_bytes()
+
+
+@functools.cache
+def _camels_archive_bytes(version: str) -> bytes:
+    """Return the fixture ZIP of the supported release ``version``, built once.
+
+    The members the registry names for the release, each GeoPackage after the
+    ``.prj`` beside it, under the directory entries of their paths; deflated, with
+    the date of the published GeoPackages.
+    """
+    data = _camels_data()
+    release = next(r for r in _camels_params().releases if r.version == version)
+    year, month, day, hour, minute, second = data["member_date"]
+    date = (year, month, day, hour, minute, second)
+    prj = str(data["prj"]).encode("ascii")
+    folders: set[str] = set()
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for member in release.members:
+            parts = member.path.split("/")[:-1]
+            for depth in range(1, len(parts) + 1):
+                folder = "/".join(parts[:depth]) + "/"
+                if folder not in folders:
+                    folders.add(folder)
+                    archive.writestr(zipfile.ZipInfo(folder, date_time=date), b"")
+            for name, body in (
+                (member.path.removesuffix(".gpkg") + ".prj", prj),
+                (member.path, _camels_gpkg(member.theme)),
+            ):
+                info = zipfile.ZipInfo(name, date_time=date)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(info, body)
+    return buffer.getvalue()
+
+
+def _camels_release(release: DatasetRelease) -> DatasetRelease:
+    """Return ``release`` as if it were published with the fixture files.
+
+    A refused release stays as it is; a supported one gets the length of its
+    fixture ZIP and the size, CRC and SHA-256 of the fixture GeoPackages.
+    """
+    if release.refusal is not None:
+        return release
+    members = []
+    for member in release.members:
+        body = _camels_gpkg(member.theme)
+        members.append(
+            replace(
+                member,
+                size=len(body),
+                crc32=f"{zlib.crc32(body):08x}",
+                sha256=hashlib.sha256(body).hexdigest(),
+            )
+        )
+    return replace(
+        release,
+        size=len(_camels_archive_bytes(release.version)),
+        members=tuple(members),
+    )
+
+
+def _camels_session(params: ReleaseFilesParams) -> requests.Session:
+    """Return a session that serves the fixture releases of ``params`` from memory.
+
+    The ZIP of every supported release, answering range requests, and the record of
+    the concept DOI, which names the newest release as Zenodo does.
+    """
+    newest = params.releases[-1]
+    record = {
+        "id": int(newest.record),
+        "doi": newest.doi,
+        "metadata": {"version": newest.version, "publication_date": newest.published},
+    }
+    files: dict[str, tuple[bytes, Mapping[str, str]]] = {
+        release.url: (
+            _camels_archive_bytes(release.version),
+            {"Content-Type": "application/octet-stream"},
+        )
+        for release in params.releases
+        if release.refusal is None
+    }
+    files[params.concept] = (
+        json.dumps(record).encode("utf-8"),
+        {"Content-Type": "application/json"},
+    )
+    return _served(files, ranges=True)
+
+
 class _ServedFiles(BaseAdapter):
     """Answer the requests of a session from files in memory: no network.
 
-    ``files``: URL -> (body, headers); any other URL answers 404.
+    ``files``: URL -> (body, headers); any other URL answers 404. With ``ranges``
+    a ``Range`` of one span (``bytes=<first>-[<last>]`` or ``bytes=-<count>``) is
+    answered with those bytes (206 and ``Content-Range``), as Zenodo answers it.
     """
 
-    def __init__(self, files: Mapping[str, tuple[bytes, Mapping[str, str]]]) -> None:
+    def __init__(
+        self,
+        files: Mapping[str, tuple[bytes, Mapping[str, str]]],
+        *,
+        ranges: bool = False,
+    ) -> None:
         super().__init__()
         self._files = dict(files)
+        self._ranges = ranges
 
     def send(
         self,
@@ -477,6 +673,21 @@ class _ServedFiles(BaseAdapter):
         response.url = request.url or ""
         response.status_code = 200 if found is not None else 404
         response.reason = "OK" if found is not None else "Not Found"
+        asked = request.headers.get("Range")
+        if self._ranges and found is not None and isinstance(asked, str):
+            span = _RANGE.fullmatch(asked)
+            if span is not None and (span[1] or span[2]):
+                total = len(body)
+                first = int(span[1]) if span[1] else max(total - int(span[2]), 0)
+                last = int(span[2]) if span[1] and span[2] else total - 1
+                last = min(last, total - 1)
+                if first <= last:
+                    headers = {
+                        **headers,
+                        "Content-Range": f"bytes {first}-{last}/{total}",
+                    }
+                    body = body[first : last + 1]
+                    response.status_code, response.reason = 206, "Partial Content"
         response.headers = CaseInsensitiveDict(
             {**headers, "Content-Length": str(len(body))}
         )
@@ -487,10 +698,12 @@ class _ServedFiles(BaseAdapter):
         """Release nothing: the files are in memory."""
 
 
-def _served(files: Mapping[str, tuple[bytes, Mapping[str, str]]]) -> requests.Session:
+def _served(
+    files: Mapping[str, tuple[bytes, Mapping[str, str]]], *, ranges: bool = False
+) -> requests.Session:
     """Return a session that answers from ``files`` and opens no socket."""
     session = requests.Session()
-    adapter = _ServedFiles(files)
+    adapter = _ServedFiles(files, ranges=ranges)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
     return session
@@ -610,6 +823,31 @@ class PgwFixture:
     root: Path
     archive: FixtureFile
     area: FixtureFile
+
+
+@dataclass(frozen=True)
+class CamelsFixture:
+    """The CAMELS-PL store built by ``build_camels_store``.
+
+    Attributes
+    ----------
+    root : Path
+        The store root (``root`` of the read API and of ``download_collection``).
+    release : str
+        The release whose files were read (``2.1.0``).
+    catchments : FixtureFile
+        The catchments: segment ``CAMELS_SEGMENT``, unit ``pl_catchments``, one
+        version labelled ``2026-10-07``, the date of the first release with these
+        bytes (2.0.0).
+    gauging_stations : FixtureFile
+        The gauging stations: the same segment and label, unit
+        ``pl_gauging-stations``.
+    """
+
+    root: Path
+    release: str
+    catchments: FixtureFile
+    gauging_stations: FixtureFile
 
 
 # --- writers -------------------------------------------------------------------
@@ -879,6 +1117,61 @@ def _pgw_area_file(root: Path) -> FixtureFile:
     )
 
 
+def _camels_files(root: Path, version: str | None) -> tuple[str, list[FixtureFile]]:
+    """Store the files of a CAMELS-PL release as ``hydro download`` stores them.
+
+    The request is resolved as ``--product camels --country pl --whole-country``
+    resolves it and the release is read by the engine of the command
+    (``run_release``), its range requests answered from memory; the only change is
+    that the registry pins the bytes of the fixture archives, not the published ones.
+    Returns the release read and the files in the order of the registry.
+    """
+    request = validate_collection_request(
+        product="camels", country="pl", whole_country=True, version=version, root=root
+    )
+    (part,) = request.parts
+    assert part.release is not None
+    params = release_params(part.channel)
+    fixture = replace(
+        params, releases=tuple(_camels_release(r) for r in params.releases)
+    )
+    release = choose_release(fixture, part.release.version, product="camels")
+    stored, _ = run_release(
+        root,
+        part.descriptor,
+        replace(part.channel, params=fixture),
+        release,
+        segment=part.segment,
+        ext=part.ext,
+        request={"whole_country": True, **part.choice},
+        update=None,
+        plan=None,
+        sink=NoticeSink(None),
+        track="collection",
+        session=_camels_session(fixture),
+    )
+    files = []
+    for item in stored:
+        version_ = FixtureVersion(
+            item.file.label,
+            item.file.sha256,
+            item.file.size_bytes,
+            item.file.version_path,
+            _commit_status(item.file.status),
+        )
+        files.append(
+            FixtureFile(
+                CAMELS_SEGMENT,
+                item.unit,
+                CAMELS_DATASET,
+                item.file.path,
+                None,
+                (version_,),
+            )
+        )
+    return release.version, files
+
+
 # --- public API ----------------------------------------------------------------
 
 
@@ -1061,6 +1354,116 @@ def build_pgw_store(root: str | Path) -> PgwFixture:
         area = _pgw_area_file(base)
     _remove_staging(base)
     return PgwFixture(base, archive, area)
+
+
+def build_camels_archive(path: str | Path, *, version: str | None = None) -> Path:
+    """Write a tiny ZIP of a CAMELS-PL release in its published layout, offline.
+
+    The ZIP has the root directory of the release (``CAMELS_PL_2.1/`` for 2.1.0,
+    ``CAMELS_PL_2.0/`` for 2.0.0), the members the registry names for it -
+    ``CAMELS_PL_catchment_boundaries/catchments/CAMELS_PL_catchments.gpkg`` and
+    ``CAMELS_PL_catchment_boundaries/gauging_stations/CAMELS_PL_gauging_stations.gpkg``
+    - each beside its ``.prj``, under their directory entries, deflated. Both
+    releases hold the same two GeoPackages, as the published ones do (module
+    docstring): six gauges of 2.1.0 as published (``gauge_id``, ``gauge_name``,
+    ``water_body_name``, the points) and fictional catchments in EPSG:2180, nested
+    as published (Wisla in Ustron-Oblaziec in Skoczow, Gorki Wielkie in Skoczow),
+    one a MultiPolygon of two parts (Wampierzow) and one with a ring
+    self-intersection (Okuninka). The bytes are built once per process; one GDAL
+    version gives the same ones.
+
+    Parameters
+    ----------
+    path : str or Path
+        The ZIP to write; its directory is created, an existing file replaced.
+    version : str, optional
+        A release the registry supports (``2.0.0``, ``2.1.0``); the newest without
+        it, as ``hydro download --product camels``.
+
+    Returns
+    -------
+    Path
+        ``path``.
+
+    Raises
+    ------
+    ValidationError
+        ``version`` is a release the registry refuses or does not know.
+
+    Examples
+    --------
+    >>> import tempfile, zipfile
+    >>> from pathlib import Path
+    >>> from kartograf.testing import build_camels_archive
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     archive = build_camels_archive(Path(tmp) / "CAMELS_PL_2.1.zip")
+    ...     print(zipfile.ZipFile(archive).namelist()[0])
+    CAMELS_PL_2.1/
+    """
+    release = choose_release(_camels_params(), version, product="camels")
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(_camels_archive_bytes(release.version))
+    return target
+
+
+def build_camels_store(
+    root: str | Path, *, version: str | None = None
+) -> CamelsFixture:
+    """Build a store with the files of a CAMELS-PL release, offline.
+
+    ``hydro download --product camels --country pl --whole-country [--version]``
+    reads the archive of ``build_camels_archive`` by range requests answered from
+    memory, checks it against a registry that pins the fixture bytes and stores
+    both GeoPackages as published: the version ``2026-10-07_<sha8>`` (the date of
+    2.0.0, the first release with these bytes) of
+    ``hydro/pl_camels/country/pl_catchments.gpkg`` and of
+    ``pl_gauging-stations.gpkg``, the standard paths linked to them, each with the
+    sidecar that command writes: ``request`` ``{"whole_country": true, "version":
+    ...}``, ``license.attribution`` the provider lines S, P and L of the release one
+    per line, ``extra.release`` (``version``, ``record``, ``doi``, ``published``),
+    ``extra.releases`` (2.0.0 and 2.1.0, which hold these bytes),
+    ``extra.attribution`` (the lines as a list), ``extra.source`` (``url``,
+    ``member``, ``crc32``, ``read`` ``range``) and ``extra.version``.
+
+    Parameters
+    ----------
+    root : str or Path
+        Store directory; it must not exist or must be empty.
+    version : str, optional
+        The release to read (``2.0.0``, ``2.1.0``); the newest without it.
+
+    Returns
+    -------
+    CamelsFixture
+        ``root``, the release read and the two files with their versions.
+
+    Raises
+    ------
+    ValidationError
+        A ``root`` that exists and is not an empty directory, or a ``version`` the
+        registry refuses or does not know.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> from kartograf import list_segments, read_sidecar
+    >>> from kartograf.testing import build_camels_store
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     store = build_camels_store(Path(tmp) / "data")
+    ...     meta = read_sidecar(store.catchments.path)
+    ...     print(list_segments(store.root), store.catchments.versions[0].label)
+    ...     print([r["version"] for r in meta.raw["extra"]["releases"]])
+    ['hydro/pl_camels'] 2026-10-07
+    ['2.0.0', '2.1.0']
+    """
+    base = _new_root(root)
+    with _fixed_clock():
+        prepare_store(base)  # the marker, as the first write into a root writes it
+        release, (catchments, gauges) = _camels_files(base, version)
+    _remove_staging(base)
+    return CamelsFixture(base, release, catchments, gauges)
 
 
 def make_sidecar(

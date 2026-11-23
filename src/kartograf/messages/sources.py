@@ -145,6 +145,28 @@ MESSAGES = {
         "wynik obszaru bez 34 tabel atrybutow geobazy (charakterystyki, cele, presje, "
         "dzialania) - sa w archiwum krajowym: --whole-country --country pl",
     ),
+    "camels_name": Text(
+        "CAMELS-PL - catchment boundaries and gauging stations of IMGW-PIB gauges",
+        "CAMELS-PL - granice zlewni i wodowskazy IMGW-PIB",
+    ),
+    "camels_note": Text(
+        "the GeoPackages of the catchments and of the gauging stations (EPSG:2180) "
+        "of a CAMELS-PL release, read from its ZIP on Zenodo by HTTP range requests "
+        "(the whole ZIP when the server does not answer them) and stored as "
+        "published, only with --whole-country; --version chooses the release",
+        "GeoPackage zlewni i wodowskazow (EPSG:2180) wydania CAMELS-PL, czytane z "
+        "jego ZIP w Zenodo zapytaniami o zakres HTTP (caly ZIP, gdy serwer na nie "
+        "nie odpowiada) i zapisywane 1:1, tylko z --whole-country; --version wybiera "
+        "wydanie",
+    ),
+    "camels_1_0_0_refused": Text(
+        "its 354 catchments are another file under the root CAMELS-PL/, other "
+        "files are named otherwise, and its record licenses it under CC BY-NC 4.0, "
+        "not the CC BY 4.0 that the provider line L names",
+        "jego 354 zlewnie to inny plik pod katalogiem CAMELS-PL/, inne pliki maja "
+        "inne nazwy, a jego rekord podaje licencje CC BY-NC 4.0, nie CC BY 4.0, "
+        "ktora podaje linia dostawcy L",
+    ),
     "cz_dmr5g_name": Text(
         "DMR 5G - Digitalni model reliefu 5. generace (2 m, ImageServer: TM33 tile "
         "and cutout)",

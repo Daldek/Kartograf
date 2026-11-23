@@ -254,6 +254,7 @@ MESSAGES = {
     ),
     # The placeholders of the values in ``--help`` and in the usage lines.
     "metavar_year": Text("YEAR", "ROK"),
+    "metavar_version": Text("VERSION", "WERSJA"),
     "metavar_scale": Text("SCALE", "SKALA"),
     "metavar_file": Text("FILE", "PLIK"),
     "metavar_name": Text("NAME", "NAZWA"),

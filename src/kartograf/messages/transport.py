@@ -319,6 +319,55 @@ MESSAGES = {
         "Failed to download {context} after {retries} attempts ({failure_reason})",
         "Nie udalo sie pobrac {context} po {retries} probach ({failure_reason})",
     ),
+    "range_unsupported": Text(
+        "{context}: the server does not answer the range request {range} with that "
+        "range (HTTP {http_status}, Content-Range {content_range})",
+        "{context}: serwer nie odpowiada na zapytanie o zakres {range} tym zakresem "
+        "(HTTP {http_status}, Content-Range {content_range})",
+    ),
+    "range_short": Text(
+        "{context}: the range ended after {got} of {expected} bytes",
+        "{context}: zakres urwal sie po {got} z {expected} bajtow",
+    ),
+    # ``transport.zip_range``.
+    "zip_no_end": Text(
+        "{context}: no end record of a ZIP central directory - not a ZIP",
+        "{context}: brak rekordu konca katalogu centralnego ZIP - to nie jest ZIP",
+    ),
+    "zip_disks": Text(
+        "{context}: a ZIP split into several disks is not read",
+        "{context}: ZIP podzielony na kilka dyskow nie jest czytany",
+    ),
+    "zip_damaged": Text(
+        "{context}: the central directory of the ZIP is damaged",
+        "{context}: katalog centralny ZIP jest uszkodzony",
+    ),
+    "zip_no_local_header": Text(
+        "{context}: no local header of {member} at byte {offset} of the ZIP",
+        "{context}: brak naglowka lokalnego {member} w bajcie {offset} ZIP",
+    ),
+    "zip_method": Text(
+        "{context}: {member} is packed by method {method} or encrypted; only stored "
+        "(0) and deflated (8) members are read",
+        "{context}: {member} jest spakowany metoda {method} albo zaszyfrowany; "
+        "czytane sa tylko czlonki zapisane (0) i deflate (8)",
+    ),
+    "zip_unreadable": Text(
+        "{context}: not a readable ZIP: {error}",
+        "{context}: nieczytelny ZIP: {error}",
+    ),
+    "zip_member_unreadable": Text(
+        "{context}: {member} does not unpack: {error}",
+        "{context}: {member} nie daje sie rozpakowac: {error}",
+    ),
+    "zip_member_damaged": Text(
+        "{context}: {member} unpacked to {size} bytes with CRC {crc32}, its directory "
+        "entry says {expected_size} bytes with CRC {expected_crc32} - damaged on the "
+        "way",
+        "{context}: {member} rozpakowany do {size} bajtow z CRC {crc32}, a jego wpis "
+        "w katalogu podaje {expected_size} bajtow z CRC {expected_crc32} - uszkodzony "
+        "w drodze",
+    ),
     # ``transport.index_records``.
     "gfi_context": Text("{sheet}: layer {layer}", "{sheet}: warstwa {layer}"),
     "gfi_not_utf8": Text(

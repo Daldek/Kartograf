@@ -216,6 +216,7 @@ def build_metadata(
     digest: tuple[str, int] | None = None,
     version: dict[str, Any] | None = None,
     product: str | None = None,
+    attribution: str | None = None,
 ) -> ResultMetadata:
     """Build metadata from the descriptor + the call context.
 
@@ -229,7 +230,9 @@ def build_metadata(
     read (D20); the file is then not hashed again. ``version`` becomes
     ``extra.version`` (a version sidecar is written once, D12). ``product``
     names a product derived from the descriptor's data (``hsg`` from
-    SoilGrids); default: the descriptor's ``product``.
+    SoilGrids); default: the descriptor's ``product``. ``attribution`` is the
+    ``license.attribution`` of a file whose lines depend on it (the provider lines
+    of a CAMELS-PL release, ADR-062); default: the descriptor's text.
     """
     if capability is not None:
         channel = _select_channel_by_capability(descriptor, capability)
@@ -266,7 +269,9 @@ def build_metadata(
         request=request,
         license={
             "id": descriptor.license.id,
-            "attribution": descriptor.license.attribution,
+            "attribution": descriptor.license.attribution
+            if attribution is None
+            else attribution,
             "url": descriptor.license.url,
         },
         transform=transform,
@@ -358,6 +363,7 @@ def emit_sidecar(
     version: dict[str, Any] | None = None,
     exclusive: bool = False,
     product: str | None = None,
+    attribution: str | None = None,
 ) -> Path | None:
     """Write a best-effort result sidecar (it never aborts the download).
 
@@ -379,11 +385,11 @@ def emit_sidecar(
     ``exclusive=True`` (version sidecar, implies ``required``): published with
     ``os.link`` (``write_sidecar(exclusive=True)``); ``FileExistsError``
     PROPAGATES unchanged - another writer published the sidecar first.
-    ``digest``/``version``/``product`` as in ``build_metadata``. A version
-    must always have a sidecar, so without a descriptor a BARE one is written: only
-    ``request``, ``extra``, ``sha256``, ``size_bytes``, ``downloaded_at``,
-    ``kartograf_version``, ``producer`` and ``producer_version`` (a stub or
-    foreign provider; plan 1/3 decision 7).
+    ``digest``/``version``/``product``/``attribution`` as in ``build_metadata``.
+    A version must always have a sidecar, so without a descriptor a BARE one is
+    written: only ``request``, ``extra``, ``sha256``, ``size_bytes``,
+    ``downloaded_at``, ``kartograf_version``, ``producer`` and ``producer_version``
+    (a stub or foreign provider; plan 1/3 decision 7).
 
     Returns
     -------
@@ -445,6 +451,7 @@ def emit_sidecar(
             digest=digest,
             version=version,
             product=product,
+            attribution=attribution,
         )
         return write_sidecar(data_path, meta, atomic=required, exclusive=exclusive)
     except Exception as e:  # noqa: BLE001 — failure policy in one place (D7)

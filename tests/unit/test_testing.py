@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import zipfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -37,6 +38,8 @@ from kartograf.exceptions import (
     ValidationError,
 )
 from kartograf.testing import (
+    CAMELS_DATASET,
+    CAMELS_SEGMENT,
     CZ_SEGMENT,
     PGW_ARCHIVE_SEGMENT,
     PGW_AREA,
@@ -46,6 +49,8 @@ from kartograf.testing import (
     VARIANTS,
     FixtureStore,
     _pgw_archive_bytes,
+    build_camels_archive,
+    build_camels_store,
     build_fixture_store,
     build_pgw_archive,
     build_pgw_store,
@@ -466,6 +471,101 @@ def test_two_pgw_store_builds_are_byte_identical(tmp_path, pgw_store):
     again = build_pgw_store(tmp_path / "data")
 
     assert _tree(again.root) == _tree(pgw_store.root)
+
+
+# --- build_camels_archive and build_camels_store (ADR-062) --------------------------
+
+_CAMELS_FILES = (
+    ("catchments", "CAMELS_PL_catchments", "CAMELS_PL_catchments"),
+    ("gauging_stations", "CAMELS_PL_gauging_stations", "CAMELS_PL_gauging_stations"),
+)
+
+
+@pytest.mark.parametrize(
+    ("version", "root"), [("2.0.0", "CAMELS_PL_2.0"), ("2.1.0", "CAMELS_PL_2.1")]
+)
+def test_camels_archive_has_the_published_layout_of_the_release(
+    tmp_path, version, root
+):
+    """The root of the release, the directories and each GeoPackage after its
+    ``.prj``; six gauges in EPSG:2180 with the published fields, the same bytes in
+    both releases."""
+    path = build_camels_archive(tmp_path / f"{version}.zip", version=version)
+    newest = build_camels_archive(tmp_path / "newest.zip")
+
+    base = f"{root}/CAMELS_PL_catchment_boundaries"
+    expected = [f"{root}/", f"{base}/"]
+    for folder, name, _ in _CAMELS_FILES:
+        expected += [f"{base}/{folder}/", f"{base}/{folder}/{name}.prj"]
+        expected.append(f"{base}/{folder}/{name}.gpkg")
+    archive = zipfile.ZipFile(path)
+    assert archive.namelist() == expected
+    latest = zipfile.ZipFile(newest)
+    assert latest.namelist()[0] == "CAMELS_PL_2.1/"
+    for folder, name, layer in _CAMELS_FILES:
+        member = f"{base}/{folder}/{name}.gpkg"
+        assert archive.getinfo(member).compress_type == zipfile.ZIP_DEFLATED
+        assert archive.read(member) == latest.read(
+            member.replace(root, "CAMELS_PL_2.1")
+        )
+        info = pyogrio.read_info(f"/vsizip/{path}/{member}", layer=layer)
+        assert (info["features"], info["crs"]) == (6, "EPSG:2180")
+        assert list(info["fields"]) == ["gauge_id", "gauge_name", "water_body_name"]
+
+
+def test_camels_fixtures_refuse_a_release_the_registry_refuses(tmp_path):
+    with pytest.raises(ValidationError) as archive:
+        build_camels_archive(tmp_path / "old.zip", version="1.0.0")
+    with pytest.raises(ValidationError) as store:
+        build_camels_store(tmp_path / "data", version="9.9.9")
+
+    assert archive.value.option == store.value.option == "version"
+    assert not (tmp_path / "old.zip").exists()
+
+
+@pytest.fixture(scope="module")
+def camels_store(tmp_path_factory: pytest.TempPathFactory):
+    return build_camels_store(tmp_path_factory.mktemp("camels-store") / "data")
+
+
+def test_camels_store_holds_both_files_as_the_whole_country_command_stores_them(
+    camels_store, tmp_path
+):
+    """Each file one version labelled by the first release with its bytes (2.0.0);
+    the sidecar names the release read and both releases, and gives the command
+    that selects it again. 2.0.0 gives the same versions."""
+    older = build_camels_store(tmp_path / "data", version="2.0.0")
+    archive = zipfile.ZipFile(build_camels_archive(tmp_path / "2.1.zip"))
+
+    assert list_segments(camels_store.root) == [CAMELS_SEGMENT]
+    assert all(entry.problem is None for entry in iter_store(camels_store.root))
+    assert (camels_store.release, older.release) == ("2.1.0", "2.0.0")
+    files = (camels_store.catchments, camels_store.gauging_stations)
+    previous = (older.catchments, older.gauging_stations)
+    for file, again, (folder, name, _) in zip(
+        files, previous, _CAMELS_FILES, strict=True
+    ):
+        assert (file.segment, file.dataset) == (CAMELS_SEGMENT, CAMELS_DATASET)
+        (version,) = file.versions
+        assert (version.label, version.status) == ("2026-10-07", "new")
+        assert version.path.parent.name == f"2026-10-07_{version.sha256[:8]}"
+        assert file.path.samefile(version.path)
+        member = f"CAMELS_PL_2.1/CAMELS_PL_catchment_boundaries/{folder}/{name}.gpkg"
+        assert version.path.read_bytes() == archive.read(member)
+        assert again.versions[0].sha256 == version.sha256
+        meta = read_sidecar(version.path)
+        assert (meta.dataset_key, meta.product) == (CAMELS_DATASET, "camels")
+        assert meta.request == {"whole_country": True, "version": "2.1.0"}
+        assert meta.extra is not None
+        assert meta.extra["source"]["read"] == "range"
+        assert [r["version"] for r in meta.extra["releases"]] == ["2.0.0", "2.1.0"]
+        assert command_for_file(meta).options == {
+            "product": "camels",
+            "country": "pl",
+            "whole_country": True,
+            "version": "2.1.0",
+        }
+    assert [file.unit for file in files] == ["pl_catchments", "pl_gauging-stations"]
 
 
 # --- make_sidecar ------------------------------------------------------------------

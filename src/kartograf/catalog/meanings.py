@@ -50,6 +50,10 @@ MEANINGS: Final[Mapping[str, Mapping[str, str]]] = {
         "trees": "3D tree models (CityGML, LoD1); PL.",
         "network": "HY-NET hydrographic network (INSPIRE Hydrography - Network); CZ.",
         "pgw": "IIaPGW geodatabase of the water management plans (PGW); PL.",
+        "camels": (
+            "CAMELS-PL catchment boundaries and gauging stations of the gauges of "
+            "IMGW-PIB, as published on Zenodo; PL."
+        ),
         "geographic": "Geographic names: PRNG (PL), Geonames (CZ).",
         "world": "Polish geographic names of the world (PRNG); PL.",
         "topographic": "Topographic maps: BDOT10k visualisations (PL), ZTM (CZ).",
@@ -231,6 +235,12 @@ _PATTERNS: Final[tuple[tuple[frozenset[str], re.Pattern[str], str], ...]] = (
     ),
     (frozenset({"scale"}), re.compile(r"1:[0-9]+"), "Sheets or maps at the scale {}."),
     (frozenset({"year"}), re.compile(r"[0-9]{4}"), "Year {}."),
+    (
+        frozenset({"version"}),
+        re.compile(r"[0-9]+\.[0-9]+\.[0-9]+"),
+        "Release {} of the published data set (CAMELS-PL), as its publisher numbers "
+        "it.",
+    ),
 )
 
 

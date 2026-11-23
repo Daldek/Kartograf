@@ -33,8 +33,8 @@ in `registry.py`). Execution logic stays in the providers —
 the descriptor says WHAT the source can do and where the result should land, not HOW to download it.
 The exception is the collection channels (ADR-042): typed channel parameters
 (`AccessChannel.params`) configure the generic engines for unit packages,
-area objects, CUZK ATOM feed files and the area layers of a stored national archive
-(ADR-059), so such a product has no
+area objects, CUZK ATOM feed files, the area layers of a stored national archive
+(ADR-059) and the files of the releases of a published data set (ADR-062), so such a product has no
 provider (section 4.10); the CZ orthophoto uses the ATOM engine in its own track
 (section 4.4), and the WCS channels of the PL orthophoto cutout (`WcsCutoutParams`)
 configure `GugikOrtoProvider` (section 4.3).
@@ -50,7 +50,8 @@ transformations performed. Sidecars are written by the **managing layers** —
 (`HSGCalculator._reuse_or_compute`, section 4.8), CZ rasters (below),
 CZ orthophoto (`download/cz_orto.py`, section 4.4), the PL orthophoto cutout
 (`download/orto_cutout.py`, section 4.3) and collection files
-(`download/collections.py::run_job`/`run_layers_job`, section 4.10)
+(`download/collections.py::run_job`/`run_layers_job`, section 4.10; the files of a release:
+`download/releases.py::run_release`, section 4.10.1)
 — never the providers; a provider returns a `Path`, and the metadata is assembled one level up,
 where the task context is known. It follows that a direct call of a
 provider from the library (e.g. `GugikProvider.download`,
@@ -186,9 +187,10 @@ config ──> marker, kartograf (l, __version__)
 marker ──> kartograf (_clock), _version, download (TYPE_CHECKING; at runtime
         lazy), config (l), sources (l)
 output ──> config, marker, interrupt
+attribution ──> output
 download ──> providers, sources, transform, core, cache, notices,
         _version, kartograf (_clock), transport, interrupt, config, marker,
-        output
+        output, attribution
 landcover ──> providers, download, core, cache, sources, notices, transport,
         interrupt, config, output
 hydrology ──> download, notices, config, output, core, landcover, cache,
@@ -212,8 +214,8 @@ _clock, notices, auth, interrupt, _errors, _output_schema ──> (nothing inter
 core ──> (nothing except exceptions, messages and serialization)
 exceptions ──> serialization (encoder for `details()`), _errors (registry codes);
         edges TO it omitted above — every package imports it except __main__,
-        _clock, _version, _errors, _output_schema, auth, data_commands, envelope,
-        interrupt, messages, notices and serialization
+        _clock, _version, _errors, _output_schema, attribution, auth, data_commands,
+        envelope, interrupt, messages, notices and serialization
 serialization ──> (leaf, nothing internal; edges TO it omitted, as
         for exceptions — it is imported by the result types: Document, EncodeContext)
 messages ──> (leaf, nothing internal; edges TO it omitted, as for exceptions —
@@ -279,6 +281,11 @@ Notes that are easy to overlook:
   and `WOJEWODZTWO_NAMES`, and lazily `providers.cuzk.raster.bbox_to_crs`,
   `providers.cuzk.sheets.SheetIndex` (CZ sheet grid) and `providers.cuzk.ruian` (the
   cadastral areas of an area).
+- `download/releases.py` (the files of the releases of a published data set, ADR-062, section
+  4.10.1) imports at module level `transport.zip_range` (the members of a ZIP by range requests),
+  `transport.http` (`download_to`, `get_with_retry`, `RANGE_UNSUPPORTED`), `attribution` (the
+  provider lines and `ATTRIBUTION.txt`), `output`, `marker` and `sources.sidecar`;
+  `download/collections.py` imports it at module level and calls it instead of the unit jobs.
 - `cli` only translates flags into command-level function arguments
   and prints the result (Z1, Z8; ADR-037, ADR-046): it builds the parser from the catalog
   declaration (`catalog.cliparser`; `cli/_parser.py::create_parser` is a facade),
@@ -462,6 +469,8 @@ kartograf/
 │                        # the sheet, .hints = hints (e.g. --scale 1:2000), YearRangeError,
 │                        # ResolutionMismatchError(.campaign, .url, .declared_m, .found_m;
 │                        # code data_error) — a grid of another cell size than its record;
+│                        # ReleaseLayoutError(.version, .record, .url, .member; code data_error) —
+│                        # the ZIP of a release differs from the registry (CAMELS-PL, ADR-062);
 │                        # CacheError; ConflictError(.path, .paths; code conflict) — the target
 │                        # forbids the write; StoreUnavailableError(.path) — a store layout without
 │                        # its marker; InvalidLayoutError(.path, .problems; code data_error) — not
@@ -492,6 +501,9 @@ kartograf/
 ├── output.py            # Plain output (ADR-054, 3.6): Target/resolve_target, plan_plain, refuse, Staging
 │                        # (.kartograf-incoming/<host>_<pid>_<token>/), FileResult, digest_of; guard_store,
 │                        # directory_refusal (the target is refused before any request), writing, writes
+├── attribution.py       # The provider lines of Nogat DEV §20 (ADR-062): provider_lines, merge_lines
+│                        # (the order of DEV-20.4), plan_attribution/write_attribution (ATTRIBUTION.txt
+│                        # of a plain write), ATTRIBUTION_FILE; the lines in _data/provider_lines.json
 ├── core/                # Base logic, no network IO
 │   ├── bbox.py             # BBox, validate_bbox, validate_extent (positive area: CUZK sheet
 │   │                       # index, RUIAN), transform_bbox (dense envelope: _DENSIFY
@@ -516,7 +528,9 @@ kartograf/
 │   │                    # collection channel parameters (AccessChannel.params, ADR-042):
 │   │                    # UnitPackageParams/PackageVariant, FeatureBBoxParams/FeatureLayer,
 │   │                    # AtomFilesParams (CUZK ATOM feed), ArchiveLayersParams (area layers of a
-│   │                    # stored archive, ADR-059); WcsCutoutParams (orthophoto cutout),
+│   │                    # stored archive, ADR-059), ReleaseFilesParams/ReleaseFile/ReleaseMember/
+│   │                    # DatasetRelease (the files of the releases of a data set, ADR-062);
+│   │                    # WcsCutoutParams (orthophoto cutout),
 │   │                    # SheetIndexParams (WMS sheet index of a GUGiK image product)
 │   ├── registry.py      # PL/CZ/EU/GLOBAL registry: get_source, sources_for, get_country,
 │   │                    # all_countries, vertical_crs_code, resolve_vertical_crs (family ->
@@ -547,6 +561,7 @@ kartograf/
 │   │                    # CuzkClient.query) — the only place for retry (network, 429, 5xx;
 │   │                    # Retry-After): is_retryable, retry_wait, backoff_delay;
 │   │                    # make_gugik_session, SessionPerThread (session per thread)
+│   │                    # fetch_range, require_partial (a range of a file; RANGE_UNSUPPORTED, ADR-062)
 │   ├── chunks.py        # GridSpec, ChunkLimits, Chunk; align_bbox, plan_chunks,
 │   │                    # fetch_chunks — shared chunks for CUZK and GUGiK WCS
 │   ├── aaigrid.py       # multipart WCS -> ASC (streaming), grid validation and atomic float32 GeoTIFF
@@ -565,6 +580,10 @@ kartograf/
 │   │                    # cache with ETag), resolve_atom_file (dataset feed -> file, release
 │   │                    # from updated), check_atom_crs, atom_segment_tokens, fetch_atom_file
 │   │                    # (size = feed length), unpack_members (ZIP members 1:1)
+│   ├── zip_range.py     # Members of a ZIP on an HTTP server by range requests (ADR-062): read_directory
+│   │                    # (the central directory from the last 1 MiB, ZIP64), fetch_member (local
+│   │                    # header, compressed bytes, unpacked and checked by size and CRC),
+│   │                    # local_directory/extract_member (the same entries of a downloaded ZIP)
 │   └── index_records.py # File index records (ADR-043): IndexRecord, gfi_records/
 │                        # records_from_gfi (WMS GetFeatureInfo link table), wfs_records/
 │                        # records_from_wfs (WFS records, e.g. mesh tiles)
@@ -630,7 +649,8 @@ kartograf/
 ├── guide.py             # guide for agents from the catalog (AGI 8): agent_guide -> AgentGuide
 │                        # (kartograf-guide/1), inject_block; templates in _data/agents/*.md
 ├── testing.py           # Offline fixtures of the written formats for consumers: build_fixture_store
-│                        # (FixtureStore), make_sidecar, build_pgw_archive/build_pgw_store (PgwFixture);
+│                        # (FixtureStore), make_sidecar, build_pgw_archive/build_pgw_store (PgwFixture),
+│                        # build_camels_archive/build_camels_store (CamelsFixture);
 │                        # built by the real writers under a fixed clock
 ├── catalog/             # Command catalog - the single source of truth (section 4.11), no cli/mcp import
 │   ├── spec.py          # Command, Param, Constraint, Example, Group (data; value providers from the registry)
@@ -723,7 +743,11 @@ kartograf/
 │   │                    # inspect_job; collection plan route), run_layers_job (an area GeoPackage
 │   │                    # from the stored national archive, ADR-059), area limit (100 files,
 │   │                    # 10 GB), landcover_request/run_request/plan_request (ZABAGED,
-│   │                    # BDOO, Data50, Data250)
+│   │                    # BDOO, Data50, Data250); the files of a release through releases.py
+│   ├── releases.py      # Files of the releases of a published data set (ADR-062, section 4.10.1):
+│   │                    # choose_release, release_lines, holders, release_jobs, run_release (range
+│   │                    # reads, the whole ZIP as the fallback, checks, publish), plan_release,
+│   │                    # newer_release (the record of the concept DOI)
 │   ├── updates.py       # Internal PL plan items (kartograf-plan/1, ADR-036)
 │   └── versions.py      # Versioned store (ADR-036): exclusive write, labels,
 │                        # version list, cleaning up .incoming/
@@ -806,6 +830,7 @@ are subject to the naming convention (section 3.3, rule 10; ADR-044 D7).
 | `cz.cuzk.ruian` | `boundaries/cz_ruian` (prefix + tokens, rule 9) | `.gpkg` |
 | `cz.cuzk.hynet` | `hydro/cz_hynet` (prefix + tokens, rule 9) | `.gpkg` |
 | `pl.pgw.pgw` | `hydro/pl_pgw` (prefix + `--layers` token, rule 9) and `hydro/pl_pgw_gdb` (the archive, format token `gdb`) | `.gpkg` (the archive `.zip`) |
+| `pl.camels.camels` | `hydro/pl_camels` (prefix, rule 9); slot `country/<country>_<theme>` (`pl_catchments`, `pl_gauging-stations`) | `.gpkg` |
 | `pl.gugik.bdoo` | `landcover/pl_bdoo` (prefix + tokens: vintage and `--layers` classes, rule 9); slot `teryt/<woj>` | `.zip` |
 | `cz.cuzk.data50`, `cz.cuzk.data250` | `landcover/cz_data50`, `landcover/cz_data250` (prefix + tokens, rule 9) | `.gpkg` (nationwide file `.zip`) |
 | `pl.gugik.mesh` | `models3d/pl_mesh` (prefix, rule 9); slot `<crs>[/<zone>]/<file of the tile>` | `.zip` |
@@ -923,6 +948,7 @@ immutable engine configuration - data without IO:
 | `FeatureBBoxParams` | `protocol` (`wfs`/`arcgis`/`ogcapi`, consistent with the `transport` of the `WFS`/`ARCGIS_QUERY`/`OGC_API_FEATURES` channel), `native_crs`, `axis_order` (`yx` = northing first in BBOX), `page_size`, `layers` (`FeatureLayer`), `selection` (`level` = the layers of one code of the option `selection_key`, `--level` by default, `network` for the CZ control; `all` = every one), `order_field` (ArcGIS `orderByFields`), `drop_fields`, `choice` (option values selecting the channel when a product has one service per value), `timeout`, `area_omitted` and `response_note` (texts of the `Info` of an area request) | `transport/feature_bbox.py` + `transform/gpkg.py` |
 | `FeatureLayer` | `code` (value of `--level`/`--layers` or a fixed code), `source` (WFS type `ms:A03_Granice_gmin`, ArcGIS layer id or the layer of a geodatabase), `name` (GPKG layer), `id_field` (stable feature identifier: dedupe and ordering) | as above |
 | `ArchiveLayersParams` (ADR-059) | `native_crs` (the CRS written to the GeoPackage; nothing is reprojected), `layers` (`FeatureLayer`: `code` = the group `--layers` chooses), `area_omitted` | `download/collections.py::run_layers_job` + `transform/gpkg.py::write_archive_gpkg` |
+| `ReleaseFilesParams` (ADR-062) | `dataset` (the name in messages), `files` (`ReleaseFile`: `theme` = the unit `<country>_<theme>`, `pattern` = a regular expression searched in the path of every ZIP member), `releases` (`DatasetRelease`: `version`, `record`, `doi`, `published`, `url` and `size` of the ZIP, `members` = `ReleaseMember(theme, path, size, crc32, sha256)`, `refusal` = why a known release is not read), `concept` and `concept_doi` (the record that resolves to the newest release), `lines` (the codes of the provider lines of DEV §20) | `download/releases.py` + `transport/zip_range.py` |
 | `AtomFilesParams` (plan D) | `service_feed` (ATOM service feed), `entry_pattern` (expression on the dataset feed id; group `sheet` = index key, `woj` = TERYT of a voivodeship, `year` = release year in the file name; without `sheet`/`woj` the feed has one dataset), `crs` (EPSG codes of the CRS category of the dataset files; `()` = one file), `members` (pairs of ZIP member suffix -> save suffix; `()` = ZIP 1:1), `segment_tokens` (+ EPSG code, when `crs` has several CRSs), `choice` (option values selecting the feed), `force_https` | `transport/atom.py` |
 | `WcsCutoutParams` (plan D) | `variant` (`--coverage`: `standard`/`high`; true orthophoto: `true`), `coverage_id`, `native_step` (coverage step, 0.1 m; true orthophoto 0.05 m), `resolutions` (result pixels: 0.1, 0.25, 0.5, 1, true orthophoto also 0.05; labels K2), `max_native_pixels` (request budget in coverage pixels, 4 Mpx) | `GugikImageProvider` (`GugikOrtoProvider` for the orthophoto) + `download/orto_cutout.py` |
 
@@ -1013,6 +1039,17 @@ listed in `CollectionReport.inputs`. A size probe asks for `Accept-Encoding: ide
 the coded bytes (20 B for the 142 MB archive); `response_signal` never takes the `Content-Length`
 of a coded answer as the length of a file.
 
+`pl.camels.camels` (`hydro --product camels --country pl`, ADR-062; the key by ADR-044 D7) has one channel:
+`DIRECT_FILES` + `ReleaseFilesParams`, `country_files`, EPSG:2180, signal `metadata`, endpoint
+`https://zenodo.org/api/records/`. Its releases: 1.0.0 (record 20133183, `refusal`: another layout, CC BY-NC
+4.0), 2.0.0 (23102156, published 2026-10-07, `CAMELS_PL_2.0.zip`, 1,654,474,228 B) and 2.1.0 (23275336, 2026-10-11,
+`CAMELS_PL_2.1.zip`, 1,670,805,350 B); both supported releases hold the same members,
+`<root>/CAMELS_PL_catchment_boundaries/catchments/CAMELS_PL_catchments.gpkg` (95,703,040 B, CRC `2ff1251b`) and
+`<root>/CAMELS_PL_catchment_boundaries/gauging_stations/CAMELS_PL_gauging_stations.gpkg` (196,608 B, CRC
+`6addfeba`), each pinned by its SHA-256. `concept` is `https://zenodo.org/api/records/20133182` (concept DOI
+10.5281/zenodo.20133182), `lines` `S`, `P`, `L`. The descriptor's `license` is `CC-BY-4.0`; its attribution text
+(`messages/legal.py`) is that of `list-sources`, and the sidecar of a file carries the lines of its release instead.
+
 Plan E1 channels (ADR-043; `download_data` products, not collections):
 
 | Descriptor (selection) | Channel, capability | Parameters |
@@ -1075,7 +1112,7 @@ provider does not write a sidecar (section 1).
 | `resolution` | resolution from the descriptor: registry K2 label (`0.15m`, `0.5m`, `1m`, `10m`, archives up to `50m`, NMT 100 m `100m`; CZ `0.5m`/`2m`/`5m`) or `null` (PL and CZ orthophoto - the pixel of an orthophoto cutout carries `request.resolution`; PL and CZ LAZ, TIN/TTN archives, collections) |
 | `nodata` | empty pixel value: for `.asc` read automatically from the header (`read_asc_nodata`), in the CZ path from the GeoTIFF tag (`download/cz_cutout.py::read_tif_nodata`; in bbox mode with the `CUZK_NODATA` fallback), for the PL cutout the constant `-9999.0`, for the HSG result `0`, for CORINE/SoilGrids GeoTIFFs from `LandCoverManager` from the file tag (section 4.8); `null` when none of these paths applies (e.g. orthophoto) |
 | `request` | the task that produced THIS file: `sheet` (sheet code), `bbox` + `bbox_crs` in the result CRS or `teryt`; for PL campaigns `campaigns` (resolved `newest`/`all`, always), `min_year`/`max_year` (when given) and `year` (when the bounds are equal); LAZ: `year`/`min_year`/`max_year`/`min_density` when given, `campaigns` only for `all`; land cover: content parameters with default values — SoilGrids `property`/`depth`/`stat`, CORINE `year`, BDOT10k `format` (4.8); orthophoto cutout: `bbox`/`bbox_crs` of the result grid, `coverage` and `resolution`; CZ orthophoto: `sheet`; collections: `teryt`, `bbox`/`bbox_crs` in the service CRS or `whole_country: true` and the given variants (`level`, `lod`, `year`, `horizontal_crs`). `request` describes the original DOWNLOAD of the file, not the latest use; `extra.parent_request(s)` does not carry year flags (3.4) |
-| `license` | `{id, attribution, url}` from the descriptor |
+| `license` | `{id, attribution, url}` from the descriptor; a CAMELS-PL file: `attribution` = the provider lines S, P and L of its release, one per line (ADR-062) |
 | `downloaded_at`, `kartograf_version` | UTC timestamp (ISO 8601, since 0.8.0 with microseconds — ordering of two downloads within one second) and the package version from `src/kartograf/_version.py::build_version()`: release = `__version__` alone; development version (`dev`) = `<__version__>+<short SHA>` of the commit from which the package was imported, with the `.dirty` suffix when tracked files of the `kartograf/` directory have uncommitted changes (docs/tests do not count); when git is unavailable or the package does not come from the repository it lies in (`os.path.samefile`), `__version__` alone. The same value in `kartograf --version`; the HTTP `User-Agent` carries `__version__` alone |
 | `producer`, `producer_version` | DEV-19.16 (ADR-054): the package that wrote the file (`kartograf`, `src/kartograf/_version.py::PRODUCER`) and its version, the same value as `kartograf_version`, which stays; optional within `/1`: a sidecar written before they existed has neither, and the typed `Sidecar` then reports `kartograf` and the value of `kartograf_version` |
 | `transform` | dictionary of axes (`horizontal`/`vertical`) with a description of the operation used in the format `pinned: <description> (<accuracy> m)`; an axis without conversion has no key, and without any conversion the whole field is `null` |
@@ -1207,6 +1244,15 @@ split into counties or converted from a sheet/geometry/another CRS -
 (`label_source="edition"`: BDOT10k vintage, 3D model year), the release
 from the ATOM feed (`updated` date, e.g. `2026-10-04`), otherwise the
 download date.
+
+**CAMELS-PL (ADR-062) in the sidecar.** `download/releases.py` writes the sidecar of both files with
+`capability="country_files"`, `horizontal_crs` EPSG:2180, `request` = `{"whole_country": true, "version":
+<the release read>}` (with `horizontal_crs` when given), `license.attribution` = the lines one per line
+(`emit_sidecar(attribution=)`), `extra.source` = `{url, member, crc32, read}` (`member` = the published path of the
+ZIP member, `read` = `range` or `archive`), `extra.release` = `{version, record, doi, published}` of the release
+read, `extra.releases` = every supported release with these bytes, oldest first (as the registry knew them when the
+version was written), `extra.attribution` = the lines as a list and `extra.version` (`label` = the date of the first
+release with these bytes, `label_source="edition"`); no `extra.http`.
 
 **Versioned store (ADR-036).** The VERSION sidecar (`versions/.../<label>_<sha8>/<file>.meta.json`)
 is MANDATORY and immutable in all paths (PL and CZ sheets,
@@ -1340,7 +1386,9 @@ data/
 │   ├── cz_hynet/bbox/<coords>.gpkg             # HY-NET of the area (WFS: WatercourseLink, HydroNode), EPSG:5514
 │   ├── cz_hynet_gpkg/country/cz.zip            # national file (GPKG in ZIP, EPSG:3045, http signal)
 │   ├── pl_pgw[_<layers>]/bbox/<coords>.gpkg    # PGW layers of the area (read from the archive), EPSG:2180
-│   └── pl_pgw_gdb/country/pl.zip               # IIaPGW geodatabase archive 1:1 (ZIP, signal none, label = edition)
+│   ├── pl_pgw_gdb/country/pl.zip               # IIaPGW geodatabase archive 1:1 (ZIP, signal none, label = edition)
+│   ├── pl_camels/country/pl_catchments.gpkg    # CAMELS-PL catchments as published (EPSG:2180, read by ranges)
+│   └── pl_camels/country/pl_gauging-stations.gpkg   # CAMELS-PL gauges; versions 2026-10-07_<sha8> (the first release with the bytes)
 ├── geodesy/
 │   ├── pl_control_horizontal/bbox/<coords>.gpkg      # network points of the area (network WFS), EPSG:2180
 │   ├── pl_control_horizontal_xls/teryt/1201.zip      # county package (XLS lists, JPG descriptions) 1:1
@@ -1559,7 +1607,7 @@ data/
     before the release (no migration). It is enforced by the registry test
     `tests/unit/test_sources_registry.py::TestNamingConvention`.
     - **Source key** = `<country>.<provider>.<name>`: descriptor country (`pl`,
-      `cz`, `eu`, `global`), provider (`gugik`, `cuzk`, `pgw`, `clms`, `isric`),
+      `cz`, `eu`, `global`), provider (`gugik`, `cuzk`, `pgw`, `camels`, `clms`, `isric`),
       `<name>` - words `[a-z0-9]` joined by `_` (no `-` or dot in the key:
       `0.5m` -> `0_5m`), composed of whole words of the `data/` path:
       the dataset name from the segment (`hynet`, `geoid2021`, `cadastral-map` ->
@@ -1597,7 +1645,8 @@ data/
       (rule 2), file = full sheet code; also ZTM sheets, never flat.
     - **File name** = unit code (TERYT, `pl`/`cz`, KU code, sheet code,
       `<coords>`, tile record file), suffix after `_`: topic of a nationwide file
-      (`country/pl_miejscowosci.zip`, `pl_obiekty-fizjograficzne.zip`),
+      (`country/pl_miejscowosci.zip`, `pl_obiekty-fizjograficzne.zip`) or the theme of a file of a
+      release (`country/pl_catchments.gpkg`, `pl_gauging-stations.gpkg`),
       direction of an oblique orthophoto (`7.125.11.08_n.tif`). ZIP members stored 1:1
       keep the source names (`CTES96.TM33N.jgw`).
     - **Key stability (contract with store consumers, KA-8
@@ -1609,7 +1658,7 @@ data/
       `Sidecar.dataset_key` gives the descriptor's current key, and a key
       unknown to the registry gives `dataset_key=None`, not an error (3.3.1).
       The provider is in the sidecar's `provider` field (`provider_name`
-      of the descriptor: `GUGiK`, `CUZK`, `PGW Wody Polskie`, `Copernicus CLMS`, `ISRIC`), the country in the
+      of the descriptor: `GUGiK`, `CUZK`, `PGW Wody Polskie`, `CAMELS-PL`, `Copernicus CLMS`, `ISRIC`), the country in the
       `country` field; the middle part of the key is not a provider identifier,
       and the consumer compares the key as a whole and does not derive from it
       the product, variant, provider or country (it takes them from the sidecar
@@ -1639,7 +1688,7 @@ simply a descriptor entry with the channel parameters.
 | `boundaries/` | `boundaries` | `--product admin`, `addresses`, `special`, `geomorphology` |
 | `cadastre/` | `cadastre` | `--product map`, `prices` |
 | `models3d/` | `models3d` | `--product buildings`, `trees`, `mesh` |
-| `hydro/` | `hydro` | `--product network`, `pgw` |
+| `hydro/` | `hydro` | `--product network`, `pgw`, `camels` |
 | `names/` | `names` | `--product geographic`, `world` |
 | `maps/` | `maps` | `--product topographic` |
 | `geodesy/` | `geodesy` | `--product control`, `geoid` |
@@ -3866,6 +3915,7 @@ of one dataset (QGZU; `atom.single_dataset`); sheet and voivodeship feeds
 | area of a product with a tile channel (`unit="tile"`) | `unit_package` of tiles from WFS index records | area records (`next` pages), `year` = record filter (`Notice` `unit_list`) | `<crs>[/<zone>]/<tile>` |
 | area of a product without `feature_bbox` (county) | `unit_package` of the county | counties from PRG (`discover_teryts_for_bbox`, metadata cache; `Notice` `unit_list`) | `teryt/<T>` of each county |
 | `whole_country` | `unit_package` of the unit `country` or `atom_files` (file from the ATOM feed of CUZK; `horizontal_crs` required when the file has several CRSs) | `pl` or `cz` (PRNG: topics) | `country/<code>` (PRNG: `pl_<topic>`) |
+| `whole_country` of a product published in releases (`ReleaseFilesParams`, CAMELS-PL, ADR-062) | `download/releases.py` instead of unit jobs (section 4.10.1) | the files of the release of `version` (the newest supported without it) | `country/<country>_<theme>` |
 
 Area: `bbox` in a CRS from the `--bbox-crs` list, `sheet` = extent of the PL
 or CZ sheet code, `geometry` = envelope of the objects in the file (`--layer`).
@@ -4143,6 +4193,59 @@ as text without NUL and markers) and QGZU ZIP from the ATOM feed (a collection p
 with only the ATOM channel of one dataset); an area = an error with `--whole-country`.
 Kartograf does not apply the models to other data (ADR-043, item 7 of plan E).
 
+### 4.10.1 The files of a release of a published data set: CAMELS-PL (ADR-062)
+
+`download_collection(product="camels", country="pl", whole_country=True, version=None)` (and
+`check_collection` with the same arguments) resolves like every collection request; the channel with
+`ReleaseFilesParams` makes `_release_content` the part of the request: it refuses the content options of other
+products (`level`, `lod`, `year`, `format`, ...), `layers` and a `horizontal_crs` other than EPSG:2180, and
+`choose_release` takes the release of `version` (the newest supported without it; a refused or unknown version is
+a `ValidationError` with `option="version"` and the supported versions in `allowed`). `version` with another product
+is `collections.version_not_applicable`. `run_request` and `plan_request` hand such a part to
+`download/releases.py` (`_release_part`) instead of unit jobs.
+
+**Run (`run_release`).**
+
+1. `release_jobs`: one job per `ReleaseFile`, unit `<country>_<theme>` in the slot `country/` of `hydro/pl_camels`,
+   the label `published` of the first supported release whose member has the pinned SHA-256 (`holders`).
+2. A plain write first checks its targets (`preflight`) and `ATTRIBUTION.txt` (`plan_attribution`: a file that is
+   no readable UTF-8 text is `conflict` `output_exists` without `--force`), before any request.
+3. In the store, a slot that holds a version with the pinned SHA-256 is that version (`local`, no request) unless
+   `update="force"`; a plan (`--upgrade --plan`) takes only its positions.
+4. When a file has to be read (or with `update="upgrade"`), `newer_release` asks the record of the concept DOI: a
+   record the registry does not know is the `info` notice `NEWER_RELEASE`; a failure is a log record.
+5. `_stage`: `read_directory` (a suffix range of `TAIL_BYTES` = 1 MiB; a second range for a directory that begins
+   before it; ZIP64), the length of the ZIP against `size`, each file found by its `pattern` exactly once, its entry
+   against the size and CRC of the `ReleaseMember` and a method of `READ_METHODS` (stored, deflated; not encrypted);
+   the `warning` `WHOLE_COUNTRY_SIZE` (the size, the transfer, the ZIP); then `fetch_member` per file (the local
+   header, the compressed bytes by `download_to` with a `Range` header and `require_partial` as `validate`,
+   unpacked into the staging directory, size and CRC against the entry: a difference is a `DownloadError`) and the
+   SHA-256 against the registry. Every other difference is a `ReleaseLayoutError` (`data_error`, `release_layout`,
+   exit 7): the staged files are removed and nothing is published.
+6. A `DownloadError` with the reason `RANGE_UNSUPPORTED` (`require_partial`: no `206` or another `Content-Range`)
+   makes `_stage_archive`: the `warning` `WHOLE_ARCHIVE`, the whole ZIP into the staging directory
+   (`Accept-Encoding: identity`, its `Content-Length` and then its length against `size`), `local_directory` and
+   `extract_member` under the same checks, the ZIP removed; `extra.source.read` = `archive`.
+7. `store_file` publishes each file under its label (`VersionRef(label, "edition")`, the sidecar of 3.2); the same
+   bytes again are `unchanged`. A plain write moves the files to `DIR/<unit>.gpkg` and merges the lines into
+   `DIR/ATTRIBUTION.txt` (`write_attribution`, listed in `files[]`).
+
+Read timeouts: 60 s for the directory, 30 s for the concept record, 120 s for a member (its local header
+included) or the whole ZIP; the retries are those of `transport/http.py` (`fetch_range` does not retry
+`RANGE_UNSUPPORTED`).
+
+**Plan (`plan_release`).** No transfer: per file `current` (a version with the pinned SHA-256), `newer` (the slot
+holds other bytes only) or `missing`, `available_label` = the label of the release's bytes and `available_signal`
+= `{version, record, sha256}`; the concept record is asked (`NEWER_RELEASE`, or `CHECK_FAILED` when it fails). A
+plain plan has the targets of the two files and the position of `ATTRIBUTION.txt` (`write`, `replace`, `conflict`;
+none when it holds every line).
+
+**Store and read API.** The segment `hydro/pl_camels` (rule 9) with `country/pl_catchments.gpkg` and
+`country/pl_gauging-stations.gpkg`; `store.py` knows `ReleaseFilesParams` (`describe_segment`, `iter_store`), and
+`command_for_file` rebuilds `hydro download --product camels --country pl --whole-country --version
+<request.version>`. `kartograf.testing.build_camels_store` runs `run_release` against a registry copy that pins the
+bytes of its fixture archive, the range requests answered from memory.
+
 ### 4.11 Interface for agents: command catalog, documents and MCP server (ADR-046)
 
 **Principle.** The same task run through the CLI with `--json`, through the library (`to_dict()`) and
@@ -4398,7 +4501,7 @@ in `tests/unit/test_sheet_parser.py`, `test_parser_2000.py` and `test_parser_reg
 voivodeship, national file), area objects from WFS 2.0 / ArcGIS REST / OGC API Features or
 a file from the CUZK ATOM feed is a descriptor entry with `AccessChannel.params`
 (`UnitPackageParams`, `FeatureBBoxParams` or `AtomFilesParams`, section
-3.1) - without a provider and without engine code:
+3.1; the files of a release: `ReleaseFilesParams`) - without a provider and without engine code:
 segment = `storage_subdir` + variant tokens (section 3.3 rules 9 and 10), the channel
 follows from the kind of selection (section 4.10), the sidecar, versions and plan are shared.
 Confirm the BBOX axis order (`axis_order`) with a test against a real
@@ -4419,7 +4522,7 @@ channel of an existing descriptor (the BDOT10k archive). (2) The parameters of t
 the same keys in `choice` (for example `("lod", "year")`) and different values; `file_kind`
 (`zip`, `tiff`, `pdf`, `txt`) is checked by the first bytes; the protocol agrees with the
 transport of the channel (WFS: `wfs`, ARCGIS_QUERY: `arcgis`, OGC_API_FEATURES: `ogcapi`,
-DIRECT_FILES: `UnitPackageParams`, `AtomFilesParams` or `ArchiveLayersParams`); `url_template` and `endpoint` start
+DIRECT_FILES: `UnitPackageParams`, `AtomFilesParams`, `ArchiveLayersParams` or `ReleaseFilesParams`); `url_template` and `endpoint` start
 with `https://`; `page_size` is not larger than the page limit of the service
 (`CountDefault` or `maxRecordCount`, checked at the download). (3) The channels of one
 capability may share a kind (for example a WFS per network) when they declare the same
@@ -4431,6 +4534,15 @@ channel and the variant select the values of the options in `choice` (ADR-043 D5
 answers under `tests/fixtures/pl/` and `tests/fixtures/cz/` (`feature_bbox/` with `*.headers.json`). (6) A group needs
 its `catalog/commands` module, its name in `COLLECTION_GROUPS` and an entry of
 `data_commands.py::DATA_COMMANDS`.
+
+**A new release of a published data set (CAMELS-PL, ADR-062)** is a registry row, after its layout is checked
+and never from the concept DOI alone: read the central directory of its ZIP by range requests, check that each
+`ReleaseFile.pattern` finds exactly one member, and add a `DatasetRelease` to `releases` (oldest first; the last
+supported one is the default) with the record, the release DOI, `published`, the URL and length of the ZIP and one
+`ReleaseMember` per file (its path, size, CRC and the SHA-256 of its unpacked bytes). A release whose layout or
+licence Kartograf does not read gets a `refusal` (a catalog message) instead of members. `--version` and the
+catalog values follow the registry; the release goes out in a patch release with its CHANGELOG entry. A release
+with the same bytes makes no new version in a store; other bytes are a new version labelled by its `published`.
 
 ---
 

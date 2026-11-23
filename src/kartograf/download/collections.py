@@ -40,6 +40,13 @@ written from the same archive ``sha256`` (``extra.source_files``) is reused,
 otherwise ``transform.gpkg.write_archive_gpkg`` writes a new one labelled by
 the archive's label. The archive is reported in ``inputs``.
 
+The files of a release of a published data set (CAMELS-PL, ADR-062:
+``ReleaseFilesParams``, ``whole_country`` with the release ``version``, the newest
+the registry supports by default) are read out of the ZIP of the release by
+``kartograf.download.releases`` (``run_release``, ``plan_release``) instead of unit
+jobs: by HTTP range requests, checked against what the registry pins for the
+release, a new version only when their bytes change.
+
 ``download_landcover`` (``LandCoverManager``) runs the BDOT10k archive
 through the same unit jobs (``package_job``, ``run_job``, ``inspect_job``)
 and ZABAGED, BDOO, Data50 and Data250 through
@@ -137,6 +144,12 @@ from kartograf.download.plan import (
     select_planned,
     store_id,
 )
+from kartograf.download.releases import (
+    choose_release,
+    plan_release,
+    run_release,
+    supported_releases,
+)
 from kartograf.download.storage import bbox_cutout_path, content_segment, unit_slot
 from kartograf.download.versions import (
     ContentDigest,
@@ -181,9 +194,11 @@ from kartograf.sources.descriptor import (
     ArchiveLayersParams,
     AtomFilesParams,
     ChannelParams,
+    DatasetRelease,
     FeatureBBoxParams,
     FeatureLayer,
     PackageVariant,
+    ReleaseFilesParams,
     SheetGrid,
     SignalKind,
     SourceDescriptor,
@@ -289,13 +304,16 @@ def _is_collection(descriptor: SourceDescriptor) -> bool:
     """Describe a channel of a collection engine, a product of ``download_collection``.
 
     A product of ``download_collection``: a channel of a collection engine
-    outside ``landcover`` - unit packages, features of an area or the
-    national file of an ATOM feed of one dataset (QGZU); the ATOM feeds of
-    sheets or voivodeships (CZ orthophoto, NMT 100 m) and the WCS cutout
-    channels belong to products of ``download_data``.
+    outside ``landcover`` - unit packages, features of an area, the files of the
+    releases of a published data set (CAMELS-PL) or the national file of an ATOM
+    feed of one dataset (QGZU); the ATOM feeds of sheets or voivodeships (CZ
+    orthophoto, NMT 100 m) and the WCS cutout channels belong to products of
+    ``download_data``.
     """
     return descriptor.storage_subdir.split("/", 1)[0] != _LANDCOVER_GROUP and any(
-        isinstance(channel.params, UnitPackageParams | FeatureBBoxParams)
+        isinstance(
+            channel.params, UnitPackageParams | FeatureBBoxParams | ReleaseFilesParams
+        )
         or (
             isinstance(channel.params, AtomFilesParams)
             and single_dataset(channel.params)
@@ -378,14 +396,17 @@ def _channel_options(params: ChannelParams | None) -> dict[str, tuple[str, ...]]
     """Return the option values a channel offers (ADR-043).
 
     Option values a channel offers (ADR-043): the variant choices of a unit
-    package channel, the ``choice`` selecting a feature or ATOM channel and
-    the layer codes chosen by ``selection_key``.
+    package channel, the ``choice`` selecting a feature or ATOM channel, the
+    layer codes chosen by ``selection_key`` and the releases ``version`` reads
+    (ADR-062).
     """
     if isinstance(params, UnitPackageParams):
         return {
             key: _distinct(dict(variant.choice)[key] for variant in params.variants)
             for key in choice_keys(params)
         }
+    if isinstance(params, ReleaseFilesParams):
+        return {"version": tuple(r.version for r in supported_releases(params))}
     options: dict[str, tuple[str, ...]] = {}
     if isinstance(params, FeatureBBoxParams | AtomFilesParams):
         options = {key: (value,) for key, value in params.choice}
@@ -550,7 +571,8 @@ class CollectionPart:
     index records of a ``tile``/``sheet`` channel (the newest record of a
     unit without it); ``parent`` the ``extra.parent_request`` of its files;
     ``extra`` more ``extra`` of their sidecars (``vertical_crs_note``);
-    ``classes`` the classes kept from each package (``layers``, BDOO).
+    ``classes`` the classes kept from each package (``layers``, BDOO);
+    ``release`` the release of a channel of release files (ADR-062).
     """
 
     country: str
@@ -567,6 +589,7 @@ class CollectionPart:
     year_filter: int | None = None
     extra: dict[str, Any] = field(default_factory=dict[str, Any])
     classes: tuple[str, ...] = ()
+    release: DatasetRelease | None = None
 
 
 @dataclass(frozen=True)
@@ -688,6 +711,8 @@ def _selections(
         return [(area, message("collections.what_area_features"))]
     if isinstance(params, AtomFilesParams):
         return [("--whole-country", message("collections.what_country_file"))]
+    if isinstance(params, ReleaseFilesParams):
+        return [("--whole-country", message("collections.what_release_files"))]
     if not isinstance(params, UnitPackageParams):
         return []
     if params.unit in _AREA_UNITS:
@@ -985,11 +1010,15 @@ def _candidates(
         )
         return _package_channels(descriptor, "ku"), missing
     if kind == "whole_country":
-        atom = [c for c in descriptor.channels if isinstance(c.params, AtomFilesParams)]
+        files = [
+            c
+            for c in descriptor.channels
+            if isinstance(c.params, AtomFilesParams | ReleaseFilesParams)
+        ]
         missing = message(
             "collections.no_country_file", product=product, country=country
         )
-        return _package_channels(descriptor, "country") + atom, missing
+        return _package_channels(descriptor, "country") + files, missing
     channels = _area_channels(descriptor) or _area_package_channels(descriptor)
     return channels, message(
         "collections.no_area_data", product=product, country=country
@@ -1298,21 +1327,46 @@ def _content(
     countries: tuple[str, ...] = (),
     classes: Sequence[str] | None = None,
     whole_country: bool = False,
+    version: str | None = None,
 ) -> CollectionPart:
     """Describe the content of one country part.
 
-    Content of one country part: variant, layers or ATOM file, segment and
-    request values. ``options``: ``format``, ``scale``, ``sheet_system``,
+    Content of one country part: variant, layers, ATOM file or release, segment
+    and request values. ``options``: ``format``, ``scale``, ``sheet_system``,
     ``network`` (``None`` = not given). ``countries``: the countries of an
     area request (hint of the per-country ``--level`` syntax). ``classes``:
     the ``layers`` of a land cover source whose packages hold class files
     (BDOO) or of an area read from a national archive (the codes of its
-    layer groups, PGW; ``None`` = not given).
+    layer groups, PGW; ``None`` = not given). ``version``: the release of the
+    files of a published data set (CAMELS-PL; ``None`` = the newest the registry
+    supports), an error for any other content.
     """
     product = descriptor.product
     params = channel.params
     level_value = country_value(level, code)
     given = {key: value for key, value in options.items() if value is not None}
+    if isinstance(params, ReleaseFilesParams):
+        offered = {"level": level_value, "lod": lod, "year": year, **given}
+        return _release_content(
+            code,
+            descriptor,
+            channel,
+            params,
+            offered=offered,
+            horizontal_crs=horizontal_crs,
+            classes=classes,
+            whole_country=whole_country,
+            version=version,
+        )
+    if version is not None:
+        raise ValidationError(
+            message(
+                "collections.version_not_applicable",
+                product=product,
+                country=descriptor.country,
+            ),
+            option="version",
+        )
     variant: PackageVariant | None = None
     layers: tuple[FeatureLayer, ...] = ()
     year_filter: int | None = None
@@ -1432,6 +1486,73 @@ def _content(
         choice,
         year_filter=year_filter,
         classes=kept,
+    )
+
+
+def _release_content(
+    code: str,
+    descriptor: SourceDescriptor,
+    channel: AccessChannel,
+    params: ReleaseFilesParams,
+    *,
+    offered: Mapping[str, object],
+    horizontal_crs: str | None,
+    classes: Sequence[str] | None,
+    whole_country: bool,
+    version: str | None,
+) -> CollectionPart:
+    """Return the part of the files of a release of a published data set (ADR-062).
+
+    The release of ``version`` (the newest the registry supports without it) and
+    the segment of the descriptor; the sidecar ``request`` names the release.
+
+    Raises
+    ------
+    ValidationError
+        A content option of another kind of product (``offered``: ``level``,
+        ``lod``, ``year``, ``format``, ...), ``layers``, a ``horizontal_crs`` other
+        than the CRS of the files, or a release that is refused or unknown.
+    """
+    product = descriptor.product
+    for name, value in offered.items():
+        if value is not None:
+            raise ValidationError(
+                message(
+                    "collections.flag_not_for_release_files",
+                    cli_flag=cli_flag(name),
+                    product=product,
+                    country=descriptor.country,
+                ),
+                option=name,
+            )
+    _chosen_classes(None, classes, product, whole_country=whole_country)
+    crs = channel.horizontal_crs
+    if horizontal_crs is not None and horizontal_crs != crs:
+        raise ValidationError(
+            message(
+                "collections.hcrs_file_only_crs",
+                horizontal_crs=horizontal_crs,
+                product=product,
+                country=descriptor.country,
+                crs=crs,
+            ),
+            option="horizontal_crs",
+            allowed=(crs,),
+        )
+    release = choose_release(params, version, product=product)
+    choice: dict[str, Any] = {"version": release.version}
+    if horizontal_crs is not None:
+        choice["horizontal_crs"] = horizontal_crs
+    return CollectionPart(
+        code,
+        descriptor,
+        channel,
+        None,
+        (),
+        content_segment(descriptor.key, ()),
+        descriptor.default_extension,
+        choice,
+        release=release,
     )
 
 
@@ -1784,6 +1905,7 @@ def validate_collection_request(
     network: str | Mapping[str, str] | None = None,
     horizontal_crs: str | None = None,
     layers: Sequence[str] | None = None,
+    version: str | None = None,
 ) -> CollectionRequest:
     """Check a collection request without network (ADR-042 D2, ADR-043).
 
@@ -1804,7 +1926,9 @@ def validate_collection_request(
     per country with ``auto``) for an area of a product with levels;
     ``horizontal_crs`` only equal to the CRS of the file; ``layers`` (an area
     of a product read from a national archive: the codes of its layer groups,
-    any letter case; PGW ``PGW_WP``, ``JCWPd``, ``SIG``) not empty and known.
+    any letter case; PGW ``PGW_WP``, ``JCWPd``, ``SIG``) not empty and known;
+    ``version`` (the files of a published data set, ``camels``: a release the
+    registry supports, the newest without it; a refused or unknown one is named).
     ``country``, ``format``, ``horizontal_crs`` and the ``bbox`` CRS are taken
     in any case (``PL``, ``shp``, ``epsg:5514``). Reads the geometry file (its
     envelope) - never the network.
@@ -1835,7 +1959,7 @@ def _resolve(
     for name in ("lod", "year"):
         if args[name] is not None:
             require_int(args[name], cli_flag(name))
-    for name in ("teryt", "ku", "sheet", *_OPTION_NAMES):
+    for name in ("teryt", "ku", "sheet", "version", *_OPTION_NAMES):
         if name not in _PER_COUNTRY_OPTIONS and args[name] is not None:
             require_str(args[name], cli_flag(name))
     for name in _PER_COUNTRY_OPTIONS:
@@ -1874,6 +1998,7 @@ def _resolve(
         "options": options,
         "horizontal_crs": args["horizontal_crs"],
         "classes": classes,
+        "version": args["version"],
     }
     teryt, ku = args["teryt"], args["ku"]
     root = resolve_root(args["root"])
@@ -3787,6 +3912,7 @@ _CHOICE_NAMES = (
     "network",
     "horizontal_crs",
     "layers",
+    "version",
 )
 
 
@@ -3812,6 +3938,7 @@ def download_collection(
     network: str | Mapping[str, str] | None = None,
     horizontal_crs: str | None = None,
     layers: Sequence[str] | None = None,
+    version: str | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     workers: int = 1,
@@ -3826,7 +3953,8 @@ def download_collection(
 
     Choices as in ``validate_collection_request`` (called first, no network):
     ``product`` (``admin`` PRG and RUIAN, ``map`` EGiB, ``buildings`` 3D
-    models, ``network`` HY-NET, ``pgw`` the IIaPGW geodatabase, the products
+    models, ``network`` HY-NET, ``pgw`` the IIaPGW geodatabase, ``camels`` the
+    catchments and gauges of CAMELS-PL, the products
     of plan E), one selection (``teryt``, ``ku``, ``sheet``, ``bbox``,
     ``geometry`` or ``whole_country``), ``country`` (``pl``/``cz``/``auto``),
     ``level`` (``admin`` of an area: PL ``wojewodztwo``, ``powiat``,
@@ -3839,9 +3967,12 @@ def download_collection(
     product: a channel or a published variant), ``horizontal_crs`` (a
     national file published in several CRSs), ``layers`` (an area of
     ``pgw``: the layer groups ``PGW_WP``, ``JCWPd``, ``SIG``; every spatial
-    layer without it). An area of ``pgw`` is read from the national archive
-    in the store (downloaded once when missing, reported in ``inputs``;
-    ADR-059). Files:
+    layer without it), ``version`` (``camels``: the release, the newest the
+    registry supports without it). An area of ``pgw`` is read from the national
+    archive in the store (downloaded once when missing, reported in ``inputs``;
+    ADR-059). The files of a CAMELS-PL release are read out of its ZIP by range
+    requests, a store version only when their bytes change, and a plain write adds
+    ``ATTRIBUTION.txt`` with their provider lines (ADR-062). Files:
     ``<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>[-<temat>]|ku/<kod>|<arkusz>|<strefa>/<kafel>}``
     with versions in ``versions/`` (ADR-042 D8, ADR-043). ``update``/``plan``
     as in every store command (``plan`` from ``check_collection`` with
@@ -3961,6 +4092,7 @@ def landcover_request(
         "network": None,
         "horizontal_crs": horizontal_crs,
         "layers": layers,
+        "version": None,
     }
     return _resolve(args, sink, {descriptor.country: descriptor})
 
@@ -4241,6 +4373,10 @@ def run_request(
     directory of the staging directory and is removed with it (no input, no
     target).
 
+    The files of a release of a published data set (``ReleaseFilesParams``,
+    ADR-062) are read by ``run_release`` instead of unit jobs: one ZIP, its
+    members checked against the registry before any of them is written.
+
     Raises
     ------
     ValidationError
@@ -4253,7 +4389,8 @@ def run_request(
     DownloadError
         The query of the units failed (PRG, indexes, RUIAN) in the only
         country or in every country of the request (unit failures land in
-        the result).
+        the result); a request of the files of a release that failed
+        (``ReleaseLayoutError`` when its ZIP differs from the registry).
     """
     validate_update(update)
     if plan is not None:
@@ -4263,6 +4400,25 @@ def run_request(
             )
         require_store(plan, store_id(request.root))
     require_workers(workers, "--workers")
+    release = _release_part(request)
+    if release is not None:
+        assert release.release is not None
+        release_files, release_stale = run_release(
+            request.root,
+            release.descriptor,
+            release.channel,
+            release.release,
+            segment=release.segment,
+            ext=release.ext,
+            request={"whole_country": True, **release.choice},
+            update=update,
+            plan=plan,
+            sink=sink,
+            track=track,
+            session=_session(),
+            on_progress=on_progress,
+        )
+        return release_files, (), (), release_stale
     write = plain_of(request.root)
     with (
         open_cache(
@@ -4373,6 +4529,14 @@ def run_request(
     return tuple(files), tuple(kept), tuple(failed), stale
 
 
+def _release_part(request: CollectionRequest) -> CollectionPart | None:
+    """Return the part of a request of the files of a release (ADR-062), or None."""
+    for part in request.parts:
+        if isinstance(part.channel.params, ReleaseFilesParams):
+            return part
+    return None
+
+
 def plan_request(
     request: CollectionRequest,
     *,
@@ -4389,7 +4553,23 @@ def plan_request(
     warning, and the plan of the other one an ``AUTO_PARTIAL_SUCCESS`` one.
     An area read from a national archive has the position of the archive and
     of its GeoPackage (``_inspect_jobs``; in a plain write the GeoPackage only).
+    The files of a release of a published data set are judged by ``plan_release``
+    without a transfer (the registry pins their bytes).
     """
+    release = _release_part(request)
+    if release is not None:
+        assert release.release is not None
+        return plan_release(
+            request.root,
+            release.channel,
+            release.release,
+            segment=release.segment,
+            ext=release.ext,
+            country=release.country,
+            sink=sink,
+            track=track,
+            session=_session(),
+        )
     with open_cache(cache, force=True, on_notice=sink.add) as metadata:
         jobs, unlisted = _jobs(request, sink, metadata)
         items = _inspect_jobs(jobs, track=track, cache=metadata)
@@ -4421,6 +4601,7 @@ def check_collection(
     network: str | Mapping[str, str] | None = None,
     horizontal_crs: str | None = None,
     layers: Sequence[str] | None = None,
+    version: str | None = None,
     force: bool = False,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
@@ -4438,9 +4619,13 @@ def check_collection(
     (PRG powiats, sheet grid or index, tile index, RUIAN). The GeoPackage of
     an area read from a national archive (PGW) is ``current`` when a version
     written from the local archive exists, else ``missing``, after the
-    position of the archive. With ``output_dir`` the positions are the
-    targets of a plain write (``action``, ``path``, ``reason``; ``force`` makes
-    an existing file ``replace``) and nothing is asked of the source.
+    position of the archive. The files of a CAMELS-PL release are ``current``
+    when a version holds the bytes the registry pins for the release, ``newer``
+    when the store holds other bytes only, else ``missing``; the record of its
+    concept DOI is asked for a newer release (``NEWER_RELEASE``). With
+    ``output_dir`` the positions are the targets of a plain write (``action``,
+    ``path``, ``reason``; ``force`` makes an existing file ``replace``) and
+    nothing is asked of the source but that record.
     """
     sink = NoticeSink(on_notice)
     with writing(output_dir=output_dir, root=root, force=force, guard=False) as store:

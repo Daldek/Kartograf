@@ -7,6 +7,7 @@ frozen clock.
 Scenarios: PRG objects of an area (``--level``), PRG national file (size
 notice), RUIAN objects of an area (CZ), HY-NET national file (HEAD and GET),
 the GeoPackage of a PGW area (``--layers``) with the archive it is read from,
+the files of a CAMELS-PL release (``--version``, range requests),
 EGiB export of a powiat, 3D models of a powiat, 3D models of an area with a
 powiat without a package, ``--check --plan`` + ``--upgrade --plan``,
 input errors. BDOT10k ``--year`` and ZABAGED:
@@ -38,6 +39,7 @@ from tests.integration.test_collections_products import (
     _prg_route,
     serve_prg_obreby,
 )
+from tests.support.camels import fixture_params, use_params, zenodo
 from tests.support.fake_packages import (
     FakePackageSession,
     package_route,
@@ -217,6 +219,42 @@ def test_pgw_area_layers_with_its_archive(tmp_path, monkeypatch):
         "2023-09-15_" in run.cli_stdout
     )
     assert session.calls == [("HEAD", url), ("GET", url)] * 2
+
+
+def test_camels_release_files(tmp_path, monkeypatch):
+    """The two GeoPackages of CAMELS-PL 2.0.0 (``--version``) read by range requests
+    out of the fixture ZIP, the registry re-pinned to its bytes; the concept DOI
+    answers as recorded (tests/fixtures/pl/camels)."""
+    params = fixture_params()
+    use_params(monkeypatch, params)
+    session = zenodo(params).session()
+    monkeypatch.setattr(col, "_session", lambda: session)
+    run = run_both(
+        [
+            "hydro",
+            "download",
+            "--product",
+            "camels",
+            "--country",
+            "pl",
+            "--whole-country",
+            "--version",
+            "2.0.0",
+        ],
+        lambda out: download_collection(
+            product="camels",
+            root=out,
+            country="pl",
+            whole_country=True,
+            version="2.0.0",
+        ),
+        tmp_path,
+    )
+    _same(run, statuses=["new", "new"])
+    assert [n.code for n in run.api_result.notices] == [WHOLE_COUNTRY_SIZE]
+    assert "hydro/pl_camels/country/pl_catchments.gpkg: nowa wersja 2026-10-07_" in (
+        run.cli_stdout
+    )
 
 
 def test_egib_teryt_export(tmp_path, monkeypatch):

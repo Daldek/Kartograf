@@ -36,6 +36,7 @@ Examples
 import argparse
 import functools
 import inspect
+import itertools
 import shlex
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -66,8 +67,11 @@ from kartograf.notices import Notice
 from kartograf.output import resolve_target
 from kartograf.serialization import Document
 
-# Flags that print and exit: no part of a command that can be called.
-_EXITING_FLAGS = ("-h", "--help", "--version")
+# Flags that print and exit: no part of a command that can be called. ``--help`` is one
+# anywhere; ``--version`` only before the group, where it is the program's: after it,
+# ``hydro download --version`` chooses a release (ADR-062).
+_HELP_FLAGS = ("-h", "--help")
+_VERSION_FLAG = "--version"
 _PROGRAM = "kartograf"
 # The effect that makes a command work on a store (never on plain files).
 _STORE_EFFECT = "store_write"
@@ -176,8 +180,9 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     ------
     UsageError
         A mistake of the line: an unknown command or flag, a flag without its
-        value, a value outside the choices of a flag, ``--help``/``--version``,
-        a removed command, an empty line, a group without a command
+        value, a value outside the choices of a flag, ``--help``, the program's
+        ``--version`` (before the group), a removed command, an empty line, a group
+        without a command
         (``command`` is the id of the command the line named, when it did).
     ValidationError
         A ``--bbox`` that is not four numbers or a ``--bbox-crs`` without ``--bbox``
@@ -197,7 +202,8 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     if removed is not None:
         raise UsageError(removed)
     named = _words(tokens)
-    if any(token in _EXITING_FLAGS for token in tokens):
+    leading = itertools.takewhile(lambda token: token.startswith("-"), tokens)
+    if any(token in _HELP_FLAGS for token in tokens) or _VERSION_FLAG in leading:
         raise UsageError(
             message("commands.help_version_not_a_call"),
             command=named,
