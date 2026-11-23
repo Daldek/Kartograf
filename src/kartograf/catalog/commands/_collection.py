@@ -116,6 +116,7 @@ def collection_commands(
     workers: str | None = WORKERS_HELP,
     content: Content | None = None,
     constraints: Sequence[Constraint] = (),
+    errors: tuple[str, ...] = DATA_ERRORS,
 ) -> tuple[Command, Command]:
     """``<group> download`` and ``<group> list-sources``.
 
@@ -132,7 +133,9 @@ def collection_commands(
     help; ``check``: the source signals in ``--check``; ``workers``: the
     help of ``--workers`` (``None`` for a group whose request is one file; no
     flag); ``content``: the content parameters of the group, from its products;
-    ``constraints``: the rules besides the area choice.
+    ``constraints``: the rules besides the area choice; ``errors``: the registry
+    codes the download can raise (``hydro`` adds ``data_error``: a CAMELS-PL
+    release whose ZIP differs from the registry, ADR-062).
     """
 
     def products() -> tuple[str, ...]:
@@ -257,7 +260,7 @@ def collection_commands(
         constraints=(*declared, *constraints, *shared.target_constraints()),
         examples=tuple(examples),
         rules=rules,
-        errors=DATA_ERRORS,
+        errors=errors,
         family="data",
     )
     return download, shared.list_sources_command(group, products)

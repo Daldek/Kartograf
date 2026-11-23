@@ -455,6 +455,50 @@ class ResolutionMismatchError(DownloadError):
         self.found_m = found_m
 
 
+class ReleaseLayoutError(DownloadError):
+    """The ZIP of a release of a published data set is not what the registry knows.
+
+    Raised before anything is written (ADR-062): the ZIP has another length, a file
+    of the release is not found by its path pattern exactly once, or its member has
+    another size, CRC, compression method or SHA-256 than the registry pins for that
+    release (``ReleaseFilesParams``). A data state of the source, so ``data_error``,
+    not ``source_unavailable``: retrying does not help; a Kartograf release that
+    checked the new layout does.
+
+    Attributes
+    ----------
+    version : str
+        The release (``2.1.0``).
+    record : str
+        The record of the release (Zenodo).
+    url : str
+        The ZIP of the release.
+    member : str or None
+        The file the difference concerns (its path pattern or its member), ``None``
+        for the ZIP itself.
+    """
+
+    code = "data_error"
+    reason = "release_layout"
+    DETAIL_FIELDS = ("version", "record", "url", "member")
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        version: str,
+        record: str,
+        url: str,
+        member: str | None = None,
+        hint: str | None = None,
+    ):
+        super().__init__(message, hint=hint)
+        self.version = version
+        self.record = record
+        self.url = url
+        self.member = member
+
+
 class CacheError(KartografError):
     """
     The metadata cache cannot be used (``MetadataCache(strict=True)``).

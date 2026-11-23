@@ -514,7 +514,7 @@ class TestCommandGroups:
         ),
         "cadastre": ("--product", {"map", "prices"}),
         "models3d": ("--product", {"buildings", "mesh", "trees"}),
-        "hydro": ("--product", {"network", "pgw"}),
+        "hydro": ("--product", {"network", "pgw", "camels"}),
         "geodesy": ("--product", {"control", "geoid"}),
     }
 
@@ -628,7 +628,8 @@ class TestCommandGroups:
     def test_hydro_group_registered(self):
         """``hydro download`` has only the flags of the group (ADR-039): no
         ``--teryt`` or ``--sheet`` (its areas are study areas, ADR-059); the area,
-        the national file, the layer groups of a PGW area and the write target."""
+        the national file, the layer groups of a PGW area, the release of CAMELS-PL
+        (``--version``, ADR-062) and the write target."""
         parser = create_parser()
         group = next(
             action
@@ -652,6 +653,7 @@ class TestCommandGroups:
             "--layer",
             "--whole-country",
             "--layers",
+            "--version",
             "--output-dir",
             "-o",
             "--root",

@@ -25,6 +25,7 @@ list of the public API: `src/kartograf/__init__.py` (`__all__`).
    - [1.11 3D mesh, trees, geodetic control networks and quasi-geoids](#111-3d-mesh-trees-geodetic-control-networks-and-quasi-geoids)
    - [1.12 Plain files or the store (`--output-dir`, `--root`)](#112-plain-files-or-the-store---output-dir---root)
    - [1.13 PGW water management plans: the geodatabase and the layers of an area (Poland)](#113-pgw-water-management-plans-the-geodatabase-and-the-layers-of-an-area-poland)
+   - [1.14 CAMELS-PL: catchments and gauging stations (Poland)](#114-camels-pl-catchments-and-gauging-stations-poland)
 2. [Python library](#2-python-library)
 3. [Download result](#3-download-result)
 4. [GUGiK campaigns](#4-gugik-campaigns)
@@ -55,7 +56,7 @@ Commands are grouped by data type (`kartograf <group> <command>`, ADR-039):
 | `boundaries` | `download`, `list-sources` | unit boundaries (`admin`): PRG (PL), RUIAN (CZ); address points and streets (`addresses`) and special boundaries (`special`) from PRG (PL); geomorphological units (`geomorphology`, CZ) |
 | `cadastre` | `download`, `list-sources` | cadastral map (`map`): EGiB — parcels and buildings (PL), cadastral map (CZ, `--ku`); RCN real estate prices (`prices`, PL) |
 | `models3d` | `download`, `list-sources` | 3D models (PL): CityGML LoD1/LoD2 buildings (`buildings`), CityGML trees (`trees`), OBJ city 3D mesh (`mesh`) |
-| `hydro` | `download`, `list-sources` | HY-NET water network (`network`, CZ); water management plan geodatabase of PGW Wody Polskie (`pgw`, PL: national archive, GeoPackage of the layers of an area; section 1.13) |
+| `hydro` | `download`, `list-sources` | HY-NET water network (`network`, CZ); water management plan geodatabase of PGW Wody Polskie (`pgw`, PL: national archive, GeoPackage of the layers of an area; section 1.13); catchment boundaries and gauging stations of CAMELS-PL (`camels`, PL: the two GeoPackages of a release; section 1.14) |
 | `names` | `download`, `list-sources` | geographic names (`geographic`): PRNG RP (PL), Geonames (CZ); Polish names of the world (`world`, PL) |
 | `maps` | `download`, `list-sources` | topographic maps (`topographic`): BDOT10k visualisations (PL), ZTM (CZ) |
 | `geodesy` | `download`, `list-sources` | geodetic control networks (`control`): PL (GUGiK) and CZ (Bodove pole); quasi-geoids (`geoid`): PL-geoid2021 and QGZU-2013 |
@@ -91,8 +92,8 @@ explicitly. A missing value gives an `Error:` with the list of permitted values
 (code 2, before the network; exit codes: section 8.3); the lists and meanings of values are also given by `kartograf
 <group> <command> --help`. Only the format of NMT and NMPT
 (ASC grid; the GUGiK archive selects `--format`) and of current BDOT10k
-(GPKG), the `--bbox-crs EPSG:2180` CRS, switches and technical parameters
-(`--workers`) remain default.
+(GPKG), the `--bbox-crs EPSG:2180` CRS, the release of CAMELS-PL (`--version`: the newest Kartograf
+reads, ADR-062), switches and technical parameters (`--workers`) remain default.
 
 **The store without `--root`.** `--root` names the store (`<root>/<product>/<variant>/versions/...`);
 a command given none works on the default store, the first of `KARTOGRAF_ROOT`, `[kartograf] root`
@@ -1300,8 +1301,8 @@ and `--format` in `boundaries`, `--format` and `--ku` in `cadastre`,
 `models3d` is for Poland only (`--country pl`); `boundaries` also has
 CZ boundaries (RUIAN) and CZ geomorphological units, `cadastre` — the CZ
 cadastral map, and the CZ water network — the `hydro` group (section 1.9; the CZ examples
-of this chapter are also there; the PL product of that group, the water management plans of PGW, is
-in section 1.13). The archive of BDOT10k annual editions is in the group
+of this chapter are also there; the PL products of that group, the water management plans of PGW and
+the catchments of CAMELS-PL, are in sections 1.13 and 1.14). The archive of BDOT10k annual editions is in the group
 `landcover` (`--year`). 3D mesh and tree models (`models3d`) and control networks
 and quasi-geoids (group `geodesy`) are described in section 1.11.
 
@@ -1853,7 +1854,8 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
   `<unit><ext>` for a package (`0208.zip`, `1465.gpkg`), `<coordinates>.tif` for a SoilGrids layer
   and the HSG raster, `<sheet>.laz` for a CZ point cloud. There is no sidecar, no `versions/`, no
   standard path, no `full_sheet/` and no hard link, so a plain write works on FAT, exFAT and SMB.
-  `landcover download --keep-raw` writes `<teryt>.gpkg` and the original `<teryt>.zip`.
+  `landcover download --keep-raw` writes `<teryt>.gpkg` and the original `<teryt>.zip`. A plain write of
+  CAMELS-PL adds `ATTRIBUTION.txt` with the provider lines (section 1.14).
 - *Before the first request* the directory is looked at: one that is, or lies in, a store of
   Kartograf or Obserwator (its raw root or its data root) is `conflict` (`output_in_store`,
   `details.paths` the directory, the hint names `--root`), and nothing is asked of the source.
@@ -2015,6 +2017,94 @@ for the author of the project to decide (Kartograf stores, it does not redistrib
 Out of scope: the plans in editable formats, the index of the files in Dziennik Ustaw, the set of
 measures and the water-body cards.
 
+### 1.14 CAMELS-PL: catchments and gauging stations (Poland)
+
+`hydro download --product camels --country pl --whole-country` downloads the catchment boundaries and the gauging
+stations of CAMELS-PL, the data set of the 869 gauges of IMGW-PIB that its authors publish on Zenodo (concept DOI
+10.5281/zenodo.20133182): two GeoPackages in EPSG:2180, read out of the ZIP of a release and stored as published
+([ADR-062](decisions/0062-camels-pl-catchments-and-gauging-stations.md)). The catchments were made to the order of
+IMGW-PIB and are nested (a catchment holds those of the gauges upstream). The rest of CAMELS-PL (attributes,
+signatures, forcing, simulations) is not Kartograf's: the Nogat plan gives it to Obserwator (provider `CAMELS`).
+
+```bash
+# the newest release Kartograf reads (2.1.0): 96 MB of GeoPackages read from the ZIP of 1.67 GB by range requests
+kartograf hydro download --product camels --country pl --whole-country --root ~/kartograf-data
+#   Warning: camels PL: CAMELS-PL 2.1.0 (rekord Zenodo 23275336): 2 pliki, 95899648 B (ok. 96 MB), czytane z ZIP 1670805350 B (ok. 1671 MB) pod https://zenodo.org/api/records/23275336/files/CAMELS_PL_2.1.zip/content zapytaniami o zakres - 55507931 B (ok. 56 MB) do przeslania
+#   -> hydro/pl_camels/country/pl_catchments.gpkg (wersja 2026-10-07_dadc37e0)
+#   -> hydro/pl_camels/country/pl_gauging-stations.gpkg (wersja 2026-10-07_a0616fc6)
+# release 2.0.0 holds the same bytes: the versions above, without a request
+kartograf hydro download --product camels --country pl --whole-country --version 2.0.0 --root ~/kartograf-data
+#   hydro/pl_camels/country/pl_catchments.gpkg: lokalna wersja 2026-10-07
+#   hydro/pl_camels/country/pl_gauging-stations.gpkg: lokalna wersja 2026-10-07
+# the plan: no transfer, only the record of the concept DOI is asked (a newer release: Info newer_release)
+kartograf hydro download --product camels --country pl --whole-country --check --root ~/kartograf-data
+#   hydro/pl_camels/country/pl_catchments.gpkg: aktualne (2026-10-07)
+# plain files: the two GeoPackages under their store names and ATTRIBUTION.txt
+kartograf hydro download --product camels --country pl --whole-country -o ./camels
+#   pl_catchments.gpkg: zapisano
+#   pl_gauging-stations.gpkg: zapisano
+#   ATTRIBUTION.txt: zapisano
+```
+
+```python
+from kartograf import download_collection, read_sidecar
+
+# = hydro download --product camels --country pl --whole-country (--version 2.0.0: version="2.0.0")
+report = download_collection(product="camels", country="pl", whole_country=True, root=out)
+meta = read_sidecar(report.files[0].file.path)  # hydro/pl_camels/country/pl_catchments.gpkg
+meta.request                  # {"whole_country": True, "version": "2.1.0"}: the release read
+meta.license["attribution"]   # the provider lines S, P and L, one per line
+meta.extra["releases"]        # every release with these bytes: 2.0.0 and 2.1.0
+```
+
+**Releases.** Kartograf reads the releases it checked: 2.0.0 (Zenodo record 23102156, 2026-10-07) and 2.1.0
+(record 23275336, 2026-10-11), the default. Both hold the same two files, so they make one version, labelled by the
+date of the first release with these bytes, `2026-10-07`. `--version 1.0.0` is an `Error:` (code 2) that says why:
+its 354 catchments are another file under another root, other files are named otherwise, and its record licenses
+it under CC BY-NC 4.0; a version Kartograf does not know is the same error, and `--version` with another product
+too. A newer release on Zenodo is read by the Kartograf release that adds it after checking its layout: until then
+the `Info:` `newer_release` names it (in `--check`, and in a run that reads the ZIP or `--upgrade`).
+
+**Files.** `hydro/pl_camels/country/pl_catchments.gpkg` (the layer `CAMELS_PL_catchments`: 869 catchments, 845
+Polygon and 24 MultiPolygon features, 3 of them invalid geometries) and `pl_gauging-stations.gpkg`
+(`CAMELS_PL_gauging_stations`: 869 points), EPSG:2180, the fields `gauge_id` (the nine-digit code of IMGW-PIB),
+`gauge_name` and `water_body_name`, the bytes as published (the published path of the member is
+`extra.source.member` of the sidecar). Only `--whole-country` selects them; `--bbox`, `--teryt`, `--year`,
+`--format`, `--layers` and a `--horizontal-crs` other than EPSG:2180 are an `Error:` (code 2).
+
+**Reading and checks.** Kartograf asks the end of the ZIP for its central directory, then the two members, and the
+`Warning:` before the transfer gives their size, the bytes to transfer and the size of the ZIP. Before anything is
+written it checks the length of the ZIP, that each file is found once, the size, CRC and method of each member and,
+after unpacking, its SHA-256 against the values it knows for the release: a difference is `data_error` (exit 7,
+`details.reason` `release_layout`, `ReleaseLayoutError`, the hint names the DOI of the release) and nothing is
+written. When the server does not answer range requests, the whole ZIP (1.67 GB) is downloaded, with the `Warning:`
+`whole_archive`, and the members are read from it under the same checks (`extra.source.read` `archive`).
+
+**Versions and freshness.** A stored version with the bytes of the release is used without a request; `--force`
+reads the files again (the same bytes: `bez zmian`); `--check` says `aktualne` when a version has the bytes of the
+release, `nowsza` when the store holds other bytes only, and `do pobrania` without a version, and transfers nothing.
+
+**Plain files (`-o DIR`).** `DIR/pl_catchments.gpkg`, `DIR/pl_gauging-stations.gpkg` and `DIR/ATTRIBUTION.txt`,
+read from the ZIP on every run. `ATTRIBUTION.txt` holds the provider lines of Nogat DEV §20 (UTF-8, one per line);
+a later write into the same directory merges its lines in, keeps the lines it had and removes none, so `--force` is
+not needed for it. `--check` lists it as `do zapisania` or, when it lacks a line, with the text of every replaced
+file, `do zastapienia (--force)`; a file that holds every line is not listed. An existing `ATTRIBUTION.txt` that is
+not a UTF-8 text file is a conflict (`output_exists`, exit 4) before any request; with `--force` the provider lines
+alone replace it.
+
+**Rights.** CC BY 4.0, the licence of the records of 2.0.0 and 2.1.0. The sidecar (`license.attribution` and
+`extra.attribution`) and `ATTRIBUTION.txt` carry the lines Nogat DEV-20.12 asks for: S and P of IMGW-PIB, whose
+data the catchment boundaries are, and L, the citation of the release read:
+
+```text
+Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej – Państwowy Instytut Badawczy
+Dane Instytutu Meteorologii i Gospodarki Wodnej – Państwowego Instytutu Badawczego zostały przetworzone
+Źródło danych: CAMELS-PL 2.1.0 (Brzezińska i in., 2026), https://doi.org/10.5281/zenodo.23275336, licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+```
+
+Pass them on with the data and with what you derive from it. Kartograf's other products do not carry such lines
+(`CLAUDE.md`, Deviations).
+
 ---
 
 ## 2. Python library
@@ -2112,7 +2202,7 @@ print([v.label for v in variants(product="nmt", vertical_crs="KRON86", format="A
 ```
 
 Collections (`boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`,
-`geodesy`; sections 1.8–1.11 and 1.13) — result `CollectionReport(files, failed, stale,
+`geodesy`; sections 1.8–1.11, 1.13 and 1.14) — result `CollectionReport(files, failed, stale,
 notices, ok)` and `inputs` (the files an area result was read from: the PGW archive, section 1.13;
 empty otherwise), the elements of `files`, `inputs` and `failed` as in `DataReport`:
 
@@ -2250,6 +2340,10 @@ download_collection(product="network", root=out, country="cz",
 pgw = download_collection(product="pgw", country="pl", layers=["PGW_WP"], root=out,
                           bbox=BBox(380000, 540000, 390000, 550000, "EPSG:2180"))
 # pgw.inputs = the national archive (downloaded once), pgw.files = the GeoPackage
+# = hydro download --product camels --country pl --whole-country [--version 2.0.0] (section 1.14)
+camels = download_collection(product="camels", country="pl", whole_country=True, root=out,
+                             on_notice=show)  # the newest release Kartograf reads: 2.1.0
+# camels.files = pl_catchments.gpkg and pl_gauging-stations.gpkg; version="2.0.0" chooses a release
 ```
 
 Lower level (tracks) — the same files and sidecars as `download_data`:
@@ -2545,7 +2639,7 @@ default pyproj. Cost, threads and layout variants: ARCHITECTURE 3.3.1.
 | `auto_partial_success` | warning | `--country auto`: one country ended with an error, the other downloaded (exit code 0) | `elevation`, `imagery download`, collection groups with an area |
 | `legacy_campaigns_dir` | info | the store contains a `kampanie/` directory from 0.7.x | `elevation`, `imagery download` |
 | `newer_available` | info | the source has a newer flight, the local version used (without `--upgrade`) | PL sheets `elevation`, `imagery` |
-| `check_failed` | warning | the source could not be checked (e.g. GUGiK sheet index unavailable), the local version used | data commands, `elevation availability` |
+| `check_failed` | warning | the source could not be checked (e.g. GUGiK sheet index unavailable; `--check` of CAMELS-PL: the record of its concept DOI), the local version used | data commands, `elevation availability` |
 | `unverified_local` | info | `--upgrade`: local version of a source without a cheap change signal (new content: `--force`) | data commands |
 | `no_coverage_some`, `no_coverage_hint` | warning, info | some sheets without GUGiK data (at least 1 file downloaded) and provider hints | `elevation`, `imagery download` |
 | `better_coverage`, `link_outside_range` | info | an older flight from the year range has larger coverage; the link stayed on a flight outside the range | `elevation`, `imagery download` |
@@ -2556,7 +2650,9 @@ default pyproj. Cost, threads and layout variants: ARCHITECTURE 3.3.1.
 | `all_nodata` | warning | NMT/NMPT cutout or CZ sheet or cutout without data (nodata only; a PL cutout entirely outside land and an image cutout entirely 0,0,0 are an `Error:`); a SoilGrids raster of zeros only and an HSG raster without any group (section 7) | `elevation download`, `soil download`, `soil hsg` |
 | `slow_source` | info | slow service: measured response time before the area query (OGC API PRNG) | `names download` |
 | `laz_superseded` | info | LAZ tiles skipped as covered by newer ones | `elevation download --product laz` |
-| `download_size`, `whole_country_size` | warning | unit file over 100 MiB or a country file: size before transfer | collections, `landcover --whole-country`, true orthophoto and oblique orthophoto sheets |
+| `download_size`, `whole_country_size` | warning | unit file over 100 MiB or a country file: size before transfer (CAMELS-PL: the size of its two files, the bytes to transfer and the size of the ZIP) | collections, `landcover --whole-country`, true orthophoto and oblique orthophoto sheets |
+| `whole_archive` | warning | the server does not answer range requests: the whole ZIP of the release is downloaded to read the files from it | `hydro --product camels` |
+| `newer_release` | info | the record of the concept DOI names a release newer than every one Kartograf knows; it is not read until a Kartograf release adds it | `hydro --product camels` |
 | `area_omitted` | info | the area result deliberately omits source layers that are in the country file (PRG special boundaries, HY-NET, ZABAGED, the 34 attribute tables of PGW) | `boundaries`, `hydro`, `landcover download` |
 | `classes_absent` | info | the package has no file for one of the `--layers` classes (no such objects) | `landcover --product bdot10k` and `bdoo` |
 | `corine_preview` | info | CORINE without CLMS credentials: WMS preview instead of data | `landcover --product corine` |
@@ -2864,6 +2960,7 @@ query the sheet index for the file selection (sheet index records from the cache
 | 3D mesh tiles (`models3d --product mesh`) | label of the tile's index record (`index`) | `--check` compares the date and work number of the record without downloading (section 1.11) |
 | national RUIAN and HY-NET files, CZ cadastral map packages | `ETag`/`Last-Modified` (`http`) | like SM5 sheets |
 | PGW geodatabase archive and the GeoPackage of an area (`hydro --product pgw`) | none (`none`) | label = edition (`2023-09-15`); a local version without a request; `--check` = `nie da sie sprawdzic bez pobrania` for the archive, `aktualne` for a GeoPackage written from the local archive; `--force` downloads the archive again (section 1.13) |
+| catchments and gauging stations of CAMELS-PL (`hydro --product camels`) | the bytes the registry pins for the release (`metadata`) | label = the date of the first release with these bytes (`2026-10-07`); a version with them is used without a request; `--check` = `aktualne` or `nowsza` without a transfer, and the record of the concept DOI tells of a newer release (`Info:` `newer_release`); `--force` reads the files again (section 1.14) |
 | national ZABAGED, Data50 and Data250 files | release from the ATOM feed (`metadata`) | label = release date (`2026-10-04`); like CZ orthophoto |
 | PRNG/Geonames areas, PRNG country | none (`none`) | `--force` to check for new content; PRNG RP has two national packages |
 | Geonames country, QGZU-2013 (`geodesy --product geoid --country cz`) | ATOM feed release (`metadata`) | `--check` compares the release date without downloading the ZIP |
@@ -3167,6 +3264,10 @@ proxy).
   store, each time with `-o DIR`); the area GeoPackage has the 25 spatial layers only, not the 34
   attribute tables; `--check` cannot see a newer edition (the source has no validators); the portal
   names no licence (section 1.13).
+- CAMELS-PL (`hydro --product camels`): only the releases Kartograf checked are read (2.0.0, 2.1.0); a newer
+  release waits for the Kartograf release that adds it (`newer_release`), and a ZIP that differs from what Kartograf
+  knows is `data_error` with nothing written. The files keep the 3 invalid geometries of the published catchments
+  (section 1.14).
 - GUGiK archives (`--format XYZ|ASCII-NMT|TBD|TIN|TTN|GRD|DXF|DGN`) are
   downloaded as source files without conversion (ZIP, `.ttn`, `.grd`,
   `.dxf`, `.dgn`): Kartograf does not unpack them, resample them to a
@@ -3479,6 +3580,7 @@ failed units; the result lists them (`items`) and no error document is written.
 | `data_error` | `invalid_sidecar` | `InvalidSidecarError` | 7 | the kartograf-meta/1 sidecar is missing, unreadable or of another schema, or a field command_for_file reads has a value of a wrong form |
 | `data_error` | `invalid_layout` | `InvalidLayoutError` | 7 | a root without a marker is not the layout of a Kartograf store, or the marker is not a kartograf-store/1 document (details.problems lists what is wrong) |
 | `data_error` | `resolution_mismatch` | `ResolutionMismatchError` | 7 | a downloaded grid has another cell size than its index record declares (details.declared_m, details.found_m): nothing is written; another flight of the sheet (--year, --max-year) may have the declared grid |
+| `data_error` | `release_layout` | `ReleaseLayoutError` | 7 | the ZIP of a release of a published data set (CAMELS-PL) differs from what the registry pins for it (its length, a file not found by its path pattern or one of another size, CRC, method or SHA-256; details.version, details.member): nothing is written; a Kartograf release that checked the new layout reads it |
 | `conflict` | - | `ConflictError` | 4 | the target forbids the write (reasons: output_exists, duplicate_output_name, output_in_store, nested_store, not_empty): an output file that exists, two targets of one name, a plain directory in a store, a store in another store or a store root that is not empty |
 | `missing_dependency` | - | `MissingDependencyError` | 6 | an optional extra is not installed (kartograf[mcp] for the MCP server); the hint names the install command (uv add "kartograf[mcp]") |
 | `forbidden` | - | `ForbiddenError` | 12 | the MCP server refuses the call: a path outside its allowed directories (--allow-dir), or a write on a server that does not write (--allow-writes) |

@@ -19,8 +19,16 @@ _PGW_ATTRIBUTION = (
     "Dane: PGW Wody Polskie, KZGW, IIaPGW (apgw.gov.pl); materialy pomocnicze, "
     "prawnie obowiazuja plany gospodarowania wodami ogloszone w Dzienniku Ustaw"
 )
+# The descriptor's text of CAMELS-PL (``list-sources``): the sidecar of a file carries
+# the provider lines of its release instead (DEV-20.12, ADR-062).
+_CAMELS_ATTRIBUTION = (
+    "CAMELS-PL (Brzezinska et al.), Zenodo, CC BY 4.0; catchment boundaries of the "
+    "gauges of IMGW-PIB; the sidecar of a file carries the provider lines L, S and P "
+    "of its release"
+)
 
 MESSAGES = {
     "gugik_attribution": Text(_GUGIK_ATTRIBUTION, _GUGIK_ATTRIBUTION),
     "pgw_attribution": Text(_PGW_ATTRIBUTION, _PGW_ATTRIBUTION),
+    "camels_attribution": Text(_CAMELS_ATTRIBUTION, _CAMELS_ATTRIBUTION),
 }

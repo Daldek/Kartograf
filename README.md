@@ -151,7 +151,7 @@ The CLI group is `kartograf <group> download` and `product` selects the data; `k
 | Boundaries (PRG, RUIAN), addresses, geomorphology | `boundaries` | `download_collection` | GUGiK, CUZK |
 | Cadastral map (EGiB, RCN prices; CZ cadastral map) | `cadastre` | `download_collection` | GUGiK, CUZK |
 | 3D building and tree models, city meshes (PL) | `models3d` | `download_collection` | GUGiK |
-| Water network HY-NET (CZ); water management plan layers of PGW Wody Polskie (PL) | `hydro` | `download_collection` | CUZK; PGW Wody Polskie (no licence named) |
+| Water network HY-NET (CZ); water management plan layers of PGW Wody Polskie (PL); catchments and gauging stations of CAMELS-PL (PL) | `hydro` | `download_collection` | CUZK; PGW Wody Polskie (no licence named); CAMELS-PL: CC BY 4.0 |
 | Geographic names (PRNG, Geonames, world) | `names` | `download_collection` | GUGiK, CUZK |
 | Topographic maps (BDOT10k visualisations, ZTM) | `maps` | `download_collection` | GUGiK, CUZK |
 | Geodetic control networks, quasi-geoid models | `geodesy` | `download_collection` | GUGiK, CUZK |
@@ -242,12 +242,13 @@ Sources, as in the [Nogat registry](https://github.com/Daldek/Nogat/blob/main/ec
 | GUGiK (Poland) | NMT, NMPT, orthophoto, LAZ, BDOT10k, PRG, EGiB, 3D models, geodesy | free reuse with attribution (Prawo geodezyjne i kartograficzne) |
 | CUZK (Czechia) | DMR, DMP, orthophoto, LAZ, ZABAGED, RUIAN, HY-NET | CC BY 4.0 |
 | PGW Wody Polskie (Poland) | IIaPGW geodatabase of the water management plans, 2022-2027 | no licence named; auxiliary materials, the plans in Dziennik Ustaw are binding |
+| CAMELS-PL (Zenodo) | catchment boundaries and gauging stations of the gauges of IMGW-PIB | CC BY 4.0; the files carry the provider lines of IMGW-PIB and CAMELS-PL (Nogat DEV §20) |
 | Copernicus CLMS | CORINE Land Cover | Copernicus data policy, attribution required |
 | ISRIC SoilGrids | soil properties, input of HSG | CC BY 4.0 |
 
-Every file of the store has a sidecar `<file>.meta.json` (`kartograf-meta/1`) with the CRS, the source, the request, the SHA-256 and the licence with a ready-made attribution text; pass it on when you publish results. A plain file (`-o`) has no sidecar: its licence is the one of its source in the table above.
+Every file of the store has a sidecar `<file>.meta.json` (`kartograf-meta/1`) with the CRS, the source, the request, the SHA-256 and the licence with a ready-made attribution text; pass it on when you publish results. A plain file (`-o`) has no sidecar: its licence is the one of its source in the table above, and a plain write of CAMELS-PL adds `ATTRIBUTION.txt` with its provider lines.
 
-Files go to the directory of `--root` (`root`), one directory per product: `<root>/<product>/<country>_<system>[_<variant>]/...`. A version is a file in `versions/<label>_<sha8>/`; the standard path and `full_sheet/` are hard links to the newest local version ([ARCHITECTURE.md](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md), section 3). With `-o DIR` the same file names lie flat in `DIR` (`N-34-139-C-a-3-1.asc`), with nothing else.
+Files go to the directory of `--root` (`root`), one directory per product: `<root>/<product>/<country>_<system>[_<variant>]/...`. A version is a file in `versions/<label>_<sha8>/`; the standard path and `full_sheet/` are hard links to the newest local version ([ARCHITECTURE.md](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md), section 3). With `-o DIR` the same file names lie flat in `DIR` (`N-34-139-C-a-3-1.asc`), with nothing else but the `ATTRIBUTION.txt` of CAMELS-PL.
 
 ### Settings, directories and backup
 

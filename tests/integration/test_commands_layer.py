@@ -156,6 +156,30 @@ def test_parse_command_puts_the_flags_of_the_run_apart_from_the_options():
     assert call.run == {"upgrade": True, "plan": "p.json", "quiet": True, "json": True}
 
 
+def test_parse_command_reads_the_version_of_a_release_after_the_group():
+    """After the group ``--version`` is an option of ``hydro download`` (ADR-062),
+    not the program's flag."""
+    line = (
+        "hydro download --product camels --country pl --whole-country --version 2.0.0"
+    )
+    expected = CommandCall(
+        "hydro download",
+        {
+            "product": "camels",
+            "country": "pl",
+            "whole_country": True,
+            "version": "2.0.0",
+        },
+        {},
+    )
+
+    assert parse_command(line) == expected
+    assert parse_command(f"kartograf {line}") == expected
+
+
+CAMELS = "hydro download --product camels --country pl --whole-country"
+
+
 @pytest.mark.parametrize(
     "line",
     [
@@ -168,6 +192,9 @@ def test_parse_command_puts_the_flags_of_the_run_apart_from_the_options():
         "elevation download --check --upgrade",
         f"{NMT} --help",
         "--version",
+        f"--version {CAMELS}",
+        f"{CAMELS} --version 2.0.0 --help",
+        f"{CAMELS} -h --version 2.0.0",
         "download --product nmt",
         "elevation download 'unclosed",
     ],
@@ -181,6 +208,9 @@ def test_parse_command_puts_the_flags_of_the_run_apart_from_the_options():
         "exclusive-flags",
         "help",
         "version",
+        "version-before-the-group",
+        "help-after-a-release",
+        "short-help-before-a-release",
         "removed-command",
         "unbalanced-quote",
     ],

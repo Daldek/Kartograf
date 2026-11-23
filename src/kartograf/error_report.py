@@ -170,6 +170,17 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "of the sheet (--year, --max-year) may have the declared grid",
     ),
     ErrorCodeSpec(
+        "ReleaseLayoutError",
+        "data_error",
+        "release_layout",
+        7,
+        "the ZIP of a release of a published data set (CAMELS-PL) differs from what "
+        "the registry pins for it (its length, a file not found by its path pattern "
+        "or one of another size, CRC, method or SHA-256; details.version, "
+        "details.member): nothing is written; a Kartograf release that checked the "
+        "new layout reads it",
+    ),
+    ErrorCodeSpec(
         "ConflictError",
         "conflict",
         None,
