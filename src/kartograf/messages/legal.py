@@ -20,11 +20,12 @@ _PGW_ATTRIBUTION = (
     "prawnie obowiazuja plany gospodarowania wodami ogloszone w Dzienniku Ustaw"
 )
 # The descriptor's text of CAMELS-PL (``list-sources``): the sidecar of a file carries
-# the provider lines of its release instead (DEV-20.12, ADR-062).
+# the provider lines and the terms line of its release instead (DEV-20.7, DEV-20.12,
+# ADR-062).
 _CAMELS_ATTRIBUTION = (
     "CAMELS-PL (Brzezinska et al.), Zenodo, CC BY 4.0; catchment boundaries of the "
-    "gauges of IMGW-PIB; the sidecar of a file carries the provider lines L, S and P "
-    "of its release"
+    "gauges of IMGW-PIB; the sidecar of a file carries the provider lines S, P and L "
+    "and the terms line RD of its release"
 )
 
 MESSAGES = {

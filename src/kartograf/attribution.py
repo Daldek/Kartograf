@@ -6,14 +6,17 @@ standard into ``_data/provider_lines.json`` (the lines are Polish with diacritic
 which the code of the package never holds as literals): every surface takes them
 from here. ``provider_lines`` gives the lines of a product in the order of
 DEV-20.4, each text before its processed text, the terms lines after them, each
-line once; ``merge_lines`` merges the lines of two products in that order, for
+line once; ``split_terms`` parts them into the attribution lines and the terms
+lines (``attribution`` and ``terms_notice`` of a JSON document, DEV-20.6,
+DEV-20.7); ``merge_lines`` merges the lines of two products in that order, for
 ``ATTRIBUTION.txt`` of a plain write (DEV-20.5), which ``plan_attribution`` and
 ``write_attribution`` keep: a later write into the same directory merges its lines
 in, none is removed.
 
-Kartograf carries the lines of CAMELS-PL (``L`` with ``S`` and ``P``, DEV-20.12) in
-the sidecars of its files and in ``ATTRIBUTION.txt``; the products of GUGiK, ISRIC
-and ČÚZK keep their own attribution text (``CLAUDE.md``, Deviations).
+Kartograf carries the lines of CAMELS-PL (``L`` with ``S`` and ``P``, and the terms
+line ``RD``; DEV-20.7, DEV-20.12) in the sidecars of its files and in
+``ATTRIBUTION.txt``; the products of GUGiK, ISRIC and ČÚZK keep their own
+attribution text (``CLAUDE.md``, Deviations).
 """
 
 import functools
@@ -34,6 +37,7 @@ __all__ = [
     "merge_lines",
     "plan_attribution",
     "provider_lines",
+    "split_terms",
     "write_attribution",
 ]
 
@@ -42,6 +46,7 @@ ATTRIBUTION_FILE: Final = "ATTRIBUTION.txt"
 
 _DATA = "provider_lines.json"
 _PLACEHOLDER = re.compile(r"\{([a-z]+)\}")
+_TERMS = 2  # the first item of the rank of a terms line (``_Line``)
 
 
 @dataclass(frozen=True)
@@ -91,7 +96,7 @@ def _table() -> Mapping[str, _Line]:
             code = row["processed_code"]
             lines[code] = _Line(code, row["processed"], (0, order, 1))
     for position, row in enumerate(data["terms"]):
-        lines[row["code"]] = _Line(row["code"], row["text"], (2, position, 0))
+        lines[row["code"]] = _Line(row["code"], row["text"], (_TERMS, position, 0))
     return lines
 
 
@@ -142,6 +147,19 @@ def merge_lines(*groups: Sequence[str]) -> tuple[str, ...]:
     found = list(dict.fromkeys(line for group in groups for line in group))
     ranked = [(_rank(line, number), number, line) for number, line in enumerate(found)]
     return tuple(line for _, _, line in sorted(ranked))
+
+
+def split_terms(lines: Sequence[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Part ``lines`` into the attribution lines and the terms lines (DEV-20.7).
+
+    A JSON document carries the first as ``attribution`` (DEV-20.6) and the
+    second as ``terms_notice``; each part keeps the order ``lines`` came in.
+    """
+    ranks = [_rank(line, number)[0] for number, line in enumerate(lines)]
+    return (
+        tuple(line for line, rank in zip(lines, ranks, strict=True) if rank != _TERMS),
+        tuple(line for line, rank in zip(lines, ranks, strict=True) if rank == _TERMS),
+    )
 
 
 def _content(path: Path, lines: Sequence[str]) -> bytes | None:

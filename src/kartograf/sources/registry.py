@@ -2641,7 +2641,7 @@ _PL_CAMELS = SourceDescriptor(
                 ),
                 concept=f"{_ZENODO_RECORDS}/20133182",
                 concept_doi="10.5281/zenodo.20133182",
-                lines=("S", "P", "L"),
+                lines=("S", "P", "L", "RD"),
             ),
         ),
     ),

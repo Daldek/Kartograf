@@ -79,7 +79,8 @@ RELEASE_21 = {
     "doi": "10.5281/zenodo.23275336",
     "published": "2026-10-11",
 }
-# The provider lines S and P of IMGW-PIB and L of each release (DEV §20).
+# The provider lines S and P of IMGW-PIB and L of each release, and the terms line
+# RD of IMGW-PIB (DEV §20, DEV-20.7, DEV-20.12).
 S = (
     "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej – "
     "Państwowy Instytut Badawczy"
@@ -98,6 +99,7 @@ L_20 = (
     "https://doi.org/10.5281/zenodo.23102156, licencja CC BY 4.0 "
     "(https://creativecommons.org/licenses/by/4.0/)"
 )
+RD = "Regulamin danych IMGW-PIB: https://danepubliczne.imgw.pl/regulations"
 LICENSE_URL = "https://creativecommons.org/licenses/by/4.0/"
 
 
@@ -194,7 +196,8 @@ def test_sidecar_names_the_release_its_twin_and_the_provider_lines(
 ):
     """``request`` and ``extra.release`` name the release read, ``extra.releases``
     every release with these bytes (both), the attribution is S, P and the L of
-    the release read, ``extra.source`` the published member read by ranges."""
+    the release read with the terms line RD after them (``extra.terms_notice``),
+    ``extra.source`` the published member read by ranges."""
     server = _serve(monkeypatch, zenodo(fixture))
 
     report = download_collection(**CHOICE, root=tmp_path, version=version)
@@ -212,7 +215,7 @@ def test_sidecar_names_the_release_its_twin_and_the_provider_lines(
         assert meta["request"] == {"whole_country": True, "version": pinned.version}
         assert meta["license"] == {
             "id": "CC-BY-4.0",
-            "attribution": f"{S}\n{P}\n{line}",
+            "attribution": f"{S}\n{P}\n{line}\n{RD}",
             "url": LICENSE_URL,
         }
         assert meta["extra"] == {
@@ -225,6 +228,7 @@ def test_sidecar_names_the_release_its_twin_and_the_provider_lines(
             "release": release,
             "releases": [RELEASE_20, RELEASE_21],
             "attribution": [S, P, line],
+            "terms_notice": [RD],
             "version": {"label": "2026-10-07", "label_source": "edition"},
         }
         assert (meta["sha256"], meta["size_bytes"]) == (member.sha256, member.size)
@@ -609,7 +613,7 @@ def test_plain_write_writes_both_files_and_the_provider_lines(
     ]
     for unit, theme in zip(UNITS, THEMES, strict=True):
         assert (out / f"{unit}.gpkg").read_bytes() == _camels_gpkg(theme)
-    assert (out / "ATTRIBUTION.txt").read_text("utf-8") == f"{S}\n{P}\n{L_21}\n"
+    assert (out / "ATTRIBUTION.txt").read_text("utf-8") == f"{S}\n{P}\n{L_21}\n{RD}\n"
 
 
 def test_second_plain_write_of_another_release_merges_its_line(
@@ -643,7 +647,7 @@ def test_second_plain_write_of_another_release_merges_its_line(
         ("ATTRIBUTION.txt", "replaced"),
     ]
     assert (out / "ATTRIBUTION.txt").read_text("utf-8") == (
-        f"{S}\n{P}\n{L_21}\n{L_20}\n"
+        f"{S}\n{P}\n{L_21}\n{L_20}\n{RD}\n"
     )
 
 
@@ -676,7 +680,7 @@ def test_plain_write_beside_an_unreadable_attribution_needs_force(
         ("pl_gauging-stations", "written"),
         ("ATTRIBUTION.txt", "replaced"),
     ]
-    assert (out / "ATTRIBUTION.txt").read_text("utf-8") == f"{S}\n{P}\n{L_21}\n"
+    assert (out / "ATTRIBUTION.txt").read_text("utf-8") == f"{S}\n{P}\n{L_21}\n{RD}\n"
 
 
 # --- --check -------------------------------------------------------------------------

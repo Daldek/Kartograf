@@ -2053,7 +2053,8 @@ from kartograf import download_collection, read_sidecar
 report = download_collection(product="camels", country="pl", whole_country=True, root=out)
 meta = read_sidecar(report.files[0].file.path)  # hydro/pl_camels/country/pl_catchments.gpkg
 meta.request                  # {"whole_country": True, "version": "2.1.0"}: the release read
-meta.license["attribution"]   # the provider lines S, P and L, one per line
+meta.license["attribution"]   # the provider lines S, P and L and the terms line RD, one per line
+meta.extra["terms_notice"]    # ["Regulamin danych IMGW-PIB: https://danepubliczne.imgw.pl/regulations"]
 meta.extra["releases"]        # every release with these bytes: 2.0.0 and 2.1.0
 ```
 
@@ -2092,14 +2093,17 @@ file, `do zastapienia (--force)`; a file that holds every line is not listed. An
 not a UTF-8 text file is a conflict (`output_exists`, exit 4) before any request; with `--force` the provider lines
 alone replace it.
 
-**Rights.** CC BY 4.0, the licence of the records of 2.0.0 and 2.1.0. The sidecar (`license.attribution` and
-`extra.attribution`) and `ATTRIBUTION.txt` carry the lines Nogat DEV-20.12 asks for: S and P of IMGW-PIB, whose
-data the catchment boundaries are, and L, the citation of the release read:
+**Rights.** CC BY 4.0, the licence of the records of 2.0.0 and 2.1.0. The sidecar (`license.attribution`,
+`extra.attribution` and `extra.terms_notice`) and `ATTRIBUTION.txt` carry the lines Nogat DEV-20.12 asks for: S and
+P of IMGW-PIB, whose data the catchment boundaries are, and L, the citation of the release read; and after them RD,
+the terms line of IMGW-PIB (DEV-20.7), since CC BY 4.0 of CAMELS-PL does not lift IMGW-PIB's terms
+(`extra.terms_notice` holds it alone):
 
 ```text
 Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej – Państwowy Instytut Badawczy
 Dane Instytutu Meteorologii i Gospodarki Wodnej – Państwowego Instytutu Badawczego zostały przetworzone
 Źródło danych: CAMELS-PL 2.1.0 (Brzezińska i in., 2026), https://doi.org/10.5281/zenodo.23275336, licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+Regulamin danych IMGW-PIB: https://danepubliczne.imgw.pl/regulations
 ```
 
 Pass them on with the data and with what you derive from it. Kartograf's other products do not carry such lines

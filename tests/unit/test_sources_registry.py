@@ -1066,7 +1066,7 @@ class TestCollectionChannels:
         assert (params.concept, params.concept_doi, params.lines) == (
             f"{records}/20133182",
             "10.5281/zenodo.20133182",
-            ("S", "P", "L"),
+            ("S", "P", "L", "RD"),
         )
         assert choose_release(params, None, product="camels").version == "2.1.0"
         with pytest.raises(ValidationError) as raised:

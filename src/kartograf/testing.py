@@ -1420,11 +1420,12 @@ def build_camels_store(
     ``hydro/pl_camels/country/pl_catchments.gpkg`` and of
     ``pl_gauging-stations.gpkg``, the standard paths linked to them, each with the
     sidecar that command writes: ``request`` ``{"whole_country": true, "version":
-    ...}``, ``license.attribution`` the provider lines S, P and L of the release one
-    per line, ``extra.release`` (``version``, ``record``, ``doi``, ``published``),
-    ``extra.releases`` (2.0.0 and 2.1.0, which hold these bytes),
-    ``extra.attribution`` (the lines as a list), ``extra.source`` (``url``,
-    ``member``, ``crc32``, ``read`` ``range``) and ``extra.version``.
+    ...}``, ``license.attribution`` the provider lines S, P and L of the release and
+    the terms line RD, one per line, ``extra.release`` (``version``, ``record``,
+    ``doi``, ``published``), ``extra.releases`` (2.0.0 and 2.1.0, which hold these
+    bytes), ``extra.attribution`` (S, P and L as a list), ``extra.terms_notice``
+    (``[RD]``), ``extra.source`` (``url``, ``member``, ``crc32``, ``read``
+    ``range``) and ``extra.version``.
 
     Parameters
     ----------
