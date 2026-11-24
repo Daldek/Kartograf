@@ -827,7 +827,8 @@ from kartograf import (
   ReleaseLayoutError (data_error) and nothing is written
 - label = the date of the first release with the bytes (2026-10-07), signal metadata: --check without a transfer;
   the record of the concept DOI tells of a newer release (Info newer_release)
-- the provider lines S, P and L (Nogat DEV-20.12) in the sidecar and in ATTRIBUTION.txt of a plain write
+- the provider lines S, P and L and the terms line RD (Nogat DEV-20.7, DEV-20.12) in the sidecar and in
+  ATTRIBUTION.txt of a plain write
 - out of scope: the rest of CAMELS-PL (attributes, signatures, forcing, simulations: Obserwator's provider CAMELS)
 
 # Source: CAMELS-PL (Brzezinska et al.), Zenodo; CC BY 4.0 (the record licence of 2.0.0 and 2.1.0)

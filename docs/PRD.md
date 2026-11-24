@@ -1241,7 +1241,8 @@ store to show a gauge's catchment (Nogat plan step 3).
 - One version per content, labelled by the date of the first release with these bytes (`2026-10-07`); `--check`
   without a transfer.
 - The sidecar names the release read, every release with these bytes and the published member; the files carry the
-  provider lines S, P and L of Nogat DEV §20 in the sidecar and in `ATTRIBUTION.txt` of a plain write.
+  provider lines S, P and L and the terms line RD of Nogat DEV §20 in the sidecar (RD in `extra.terms_notice`) and
+  in `ATTRIBUTION.txt` of a plain write.
 - Licence: CC BY 4.0 (the record licence of 2.0.0 and 2.1.0).
 
 #### CLI Commands

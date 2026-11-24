@@ -233,3 +233,15 @@ and the consumer fixtures of `kartograf.testing` (DEV-10.6). No file of Kartogra
   Obserwator's.
 - Out of scope: the shapefiles, the attributes, the signatures, the forcing and the simulations of CAMELS-PL, and
   release 1.0.0.
+
+**Erratum 1 (2026-11-24, the author's decisions on CAMELS-PL, 2 and 3):** what CAMELS-PL took from IMGW-PIB
+(discharge, water levels, catchment boundaries) and what is derived from it carry the terms line RD of DEV-20.7 as
+well as S and P: CAMELS-PL's CC BY 4.0 cannot lift IMGW-PIB's terms, and the same series read straight from IMGW-PIB
+carry RD. Both files of a release therefore carry `Regulamin danych IMGW-PIB: https://danepubliczne.imgw.pl/regulations`
+(the RD row of `_data/provider_lines.json`, byte for byte the table of DEV §20) after S, P and L: the codes of
+`ReleaseFilesParams.lines` are `("S", "P", "L", "RD")`; decision 7 reads `license.attribution` `"<S>\n<P>\n<L>\n<RD>"`
+(the lines of `ATTRIBUTION.txt`, one per line), `extra.attribution` `[S, P, L]` and a new `extra.terms_notice` `[RD]`
+(DEV-20.6, DEV-20.7; `kartograf.attribution.split_terms` parts the lines); decision 9's `ATTRIBUTION.txt` holds RD
+after the attribution lines, and one written before gets it merged in. Decision 8's "no JSON document carries
+`attribution` or `terms_notice`" holds for the result documents only. The licence stays CC BY 4.0 (decision 1): the
+Zenodo record of the release governs, not the listing of CC BY-NC 4.0 in the data description.

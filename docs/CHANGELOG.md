@@ -50,13 +50,15 @@ renames this heading to `[0.9.0] - <date>` (REL-2.1).
   removes it (`extra.source.read` `archive` instead of `range`).
 - The provider lines of Nogat DEV §20 (`kartograf.attribution`; `_data/provider_lines.json`,
   the table of provider lines and the terms lines copied byte for byte): the CAMELS-PL files
-  carry S and P of IMGW-PIB and L of their release (DEV-20.12) in the sidecar
-  (`license.attribution`, one line each, and `extra.attribution`), and a plain write
-  (`-o DIR`) of them writes `DIR/ATTRIBUTION.txt` beside the two files, listed in `files[]`:
-  the lines merged into an existing file in the order of DEV-20.4, none removed. An existing
-  `ATTRIBUTION.txt` that is no readable UTF-8 file is a `conflict` (`output_exists`) before any
-  request, and `--force` replaces it with the lines alone; `--check -o DIR` lists the file as
-  `write`, `replace` or `conflict`.
+  carry S and P of IMGW-PIB and L of their release (DEV-20.12), and after them the terms line
+  RD of IMGW-PIB, `Regulamin danych IMGW-PIB: https://danepubliczne.imgw.pl/regulations`
+  (DEV-20.7; the author's decision of 2026-11-24, ADR-062 erratum 1), in the sidecar
+  (`license.attribution`, one line each; `extra.attribution` S, P and L, `extra.terms_notice`
+  RD, parted by `split_terms`), and a plain write (`-o DIR`) of them writes `DIR/ATTRIBUTION.txt`
+  beside the two files, listed in `files[]`: the lines merged into an existing file in the order
+  of DEV-20.4 and DEV-20.7, none removed. An existing `ATTRIBUTION.txt` that is no readable UTF-8
+  file is a `conflict` (`output_exists`) before any request, and `--force` replaces it with the
+  lines alone; `--check -o DIR` lists the file as `write`, `replace` or `conflict`.
 - `ReleaseLayoutError` (`kartograf.ReleaseLayoutError`, a `DownloadError`; registry code
   `data_error`, `details.reason` `release_layout`, exit 7; `details.version`, `record`, `url`,
   `member`; the hint names the DOI of the release): the ZIP of a release differs from what the
@@ -89,11 +91,11 @@ renames this heading to `[0.9.0] - <date>` (REL-2.1).
   `--whole-country` and `--check` name CAMELS-PL.
 - `emit_sidecar` and `build_metadata` take `attribution=`: the `license.attribution` of a file
   whose lines depend on it (the lines of a CAMELS-PL release); without it the descriptor's text.
-- Documentation: ADR-062 (amends ADR-042 D1, D2 and D6 and ADR-054 decisions 3 and 6) and the
-  plan `docs/plans/2026-11-23-camels-pl-catchments.md`; `CLAUDE.md` words the deviation from
-  Nogat DEV-20 anew: the GUGiK, ISRIC and ČÚZK products keep Kartograf's own
-  `license.attribution` and no `ATTRIBUTION.txt`, while the CAMELS-PL files carry S, P and L;
-  USAGE 1.14 describes the product.
+- Documentation: ADR-062 (amends ADR-042 D1, D2 and D6 and ADR-054 decisions 3 and 6; erratum 1:
+  the terms line RD) and the plan `docs/plans/2026-11-23-camels-pl-catchments.md`; `CLAUDE.md`
+  words the deviation from Nogat DEV-20 anew: the GUGiK, ISRIC and ČÚZK products keep
+  Kartograf's own `license.attribution` and no `ATTRIBUTION.txt`, while the CAMELS-PL files
+  carry S, P, L and RD; USAGE 1.14 describes the product.
 
 ## [0.8.2] - 2026-11-18
 

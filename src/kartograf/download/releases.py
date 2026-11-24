@@ -22,8 +22,10 @@ before any request. ``run_release`` gives every file of the release:
 
 The sidecar of a version names the release it was read from (``extra.release``),
 every release the registry knows with these bytes (``extra.releases``) and the
-provider lines of the release (``extra.attribution``; ``license.attribution`` holds
-them one per line): ``S``, ``P`` and ``L`` for CAMELS-PL (DEV-20.12).
+lines of the release: its attribution lines (``extra.attribution``), its terms
+lines (``extra.terms_notice``, DEV-20.7) and both in that order, one per line
+(``license.attribution``, as in ``ATTRIBUTION.txt``): ``S``, ``P`` and ``L``, and
+``RD`` for CAMELS-PL (DEV-20.12, the author's decision 2 of 2026-11-24).
 ``plan_release`` (``--check``) judges the same files without a transfer. Both ask
 the record of the concept DOI for the newest release (one request) and report a
 release newer than every one the registry knows (``NEWER_RELEASE``); a run asks it
@@ -43,6 +45,7 @@ from kartograf.attribution import (
     ATTRIBUTION_FILE,
     plan_attribution,
     provider_lines,
+    split_terms,
     write_attribution,
 )
 from kartograf.download.data import UnitFile
@@ -401,6 +404,7 @@ def _sidecar(
     source: dict[str, Any],
 ) -> WriteSidecar:
     """Return the sidecar writer of one file of ``release`` (module docstring)."""
+    attribution, terms = split_terms(lines)
 
     def write(
         data: Path, ref: VersionRef, digest: ContentDigest, http: dict[str, Any] | None
@@ -412,7 +416,8 @@ def _sidecar(
                 _release_document(other)
                 for other in holders(params, job.file.theme, digest.sha256)
             ],
-            "attribution": list(lines),
+            "attribution": list(attribution),
+            "terms_notice": list(terms),
         }
         emit_sidecar(
             descriptor.key,

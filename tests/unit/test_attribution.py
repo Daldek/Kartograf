@@ -14,6 +14,7 @@ from kartograf.attribution import (
     merge_lines,
     plan_attribution,
     provider_lines,
+    split_terms,
     write_attribution,
 )
 from kartograf.exceptions import ConflictError
@@ -59,6 +60,14 @@ def test_provider_lines_put_a_processed_text_after_its_text_and_terms_last():
     lines = provider_lines(["RE", "LP", "RD", "P", "L", "S"], **RELEASE_21)
 
     assert lines == (S, P, L_21, LP, RD, RE)
+
+
+def test_split_terms_parts_the_terms_lines_from_the_attribution_lines():
+    own = "Źródło: sieć operatora"  # a line the table does not hold (DEV-20.4)
+
+    parts = split_terms([S, P, L_21, own, RD, RE])
+
+    assert parts == ((S, P, L_21, own), (RD, RE))
 
 
 def test_provider_lines_fill_l_with_the_version_year_and_doi_of_a_release():

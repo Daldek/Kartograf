@@ -439,7 +439,8 @@ class ReleaseFilesParams:
     in messages, ``concept`` is the record that resolves to the newest release
     (its API address) and ``concept_doi`` its DOI: they only tell that a newer
     release exists (a notice), never which one is read. ``lines``: the codes of
-    the provider lines of the files (DEV §20; ``L`` names the release).
+    the provider lines and the terms lines of the files (DEV §20; ``L`` names the
+    release).
     """
 
     dataset: str
