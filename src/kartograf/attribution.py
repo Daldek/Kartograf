@@ -165,6 +165,10 @@ def split_terms(lines: Sequence[str]) -> tuple[tuple[str, ...], tuple[str, ...]]
 def _content(path: Path, lines: Sequence[str]) -> bytes | None:
     """Return the file with ``lines`` merged in; ``None`` when it holds them all.
 
+    The file is compared line by line, so its line endings (``CRLF`` of a file
+    written on Windows, a missing final newline) do not make it differ; a file
+    it returns is UTF-8 with ``LF`` (DEV-14.1).
+
     Raises
     ------
     OSError, UnicodeDecodeError
@@ -174,9 +178,11 @@ def _content(path: Path, lines: Sequence[str]) -> bytes | None:
         existing: bytes | None = path.read_bytes()
     except FileNotFoundError:
         existing = None
-    old = existing.decode("utf-8").splitlines() if existing is not None else []
-    content = "".join(f"{line}\n" for line in merge_lines(old, lines)).encode("utf-8")
-    return None if content == existing else content
+    old = tuple(existing.decode("utf-8").splitlines()) if existing is not None else ()
+    merged = merge_lines(old, lines)
+    if existing is not None and merged == old:
+        return None
+    return "".join(f"{line}\n" for line in merged).encode("utf-8")
 
 
 def plan_attribution(write: Staging, lines: Sequence[str]) -> PlanEntry | None:
