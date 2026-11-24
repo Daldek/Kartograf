@@ -155,9 +155,12 @@ def test_write_attribution_merges_new_lines_into_a_file_and_removes_none(tmp_pat
     )
 
 
-def test_attribution_that_holds_every_line_is_left_as_it_is(tmp_path):
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_attribution_that_holds_every_line_is_left_as_it_is(tmp_path, newline):
+    """A file written with ``CRLF`` (``write_text`` on Windows) holds its lines too."""
     target = tmp_path / ATTRIBUTION_FILE
-    target.write_text(f"{S}\n{P}\n{L_21}\n", "utf-8")
+    content = f"{S}{newline}{P}{newline}{L_21}{newline}".encode()
+    target.write_bytes(content)
     before = target.stat().st_mtime_ns
 
     with Staging(tmp_path) as write:
@@ -166,7 +169,7 @@ def test_attribution_that_holds_every_line_is_left_as_it_is(tmp_path):
 
     assert (planned, written) == (None, None)
     assert target.stat().st_mtime_ns == before
-    assert target.read_text("utf-8") == f"{S}\n{P}\n{L_21}\n"
+    assert target.read_bytes() == content
 
 
 def test_attribution_without_lines_is_not_written(tmp_path):

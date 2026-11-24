@@ -97,6 +97,14 @@ renames this heading to `[0.9.0] - <date>` (REL-2.1).
   Kartograf's own `license.attribution` and no `ATTRIBUTION.txt`, while the CAMELS-PL files
   carry S, P, L and RD; USAGE 1.14 describes the product.
 
+### Fixed
+
+- An `ATTRIBUTION.txt` that holds every line is left as it is whatever its line endings:
+  `plan_attribution` and `write_attribution` compared its bytes with the LF text, so a file
+  with CRLF (written on Windows) or without a final newline was replaced by the same lines
+  (`replace`/`replaced` instead of none). They now compare its lines; a file they write stays
+  UTF-8 with LF (DEV-14.1).
+
 ## [0.8.2] - 2026-11-18
 
 An urgent patch of a gross formula defect (Nogat CMP-9.1, CMP-9.2), released outside the
