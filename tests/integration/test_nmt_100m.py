@@ -15,9 +15,11 @@ from pathlib import Path
 
 import pytest
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
 from kartograf.download import collections as col
 from kartograf.download.data import check_data, download_data
+from kartograf.download.plan import Fetch
 from kartograf.exceptions import ValidationError
 from kartograf.notices import DOWNLOAD_SIZE, UNIT_LIST, WHOLE_COUNTRY_SIZE
 from kartograf.providers.pl.prg import PRG_WFS_ENDPOINT
@@ -224,6 +226,31 @@ def test_https_for_gugik_atom(tmp_path, gugik, frozen_clock):
     plain = dataclasses.replace(params, force_https=False)
     with pytest.raises(AssertionError, match="Nieoczekiwane zapytanie: http://"):
         resolve_atom_file(gugik, plain, key="12", crs=None, cache=None)
+
+
+def test_a_plain_plan_names_the_file_of_the_feed_the_cache_holds(tmp_path, gugik):
+    """A plain plan asks no ATOM feed (ADR-063 erratum 2): without the feed in the
+    cache the file has a fetch without a URL, ``feed_not_cached``; once a store
+    check has read the feed, the plain plan names the URL and the length of the
+    file from the cache, still without a request to the feeds."""
+    cache = MetadataCache(tmp_path / "metadata.db")
+    area = {**CHOICE, "bbox": KRAKOW, "country": "pl", "cache": cache}
+    feeds = {SERVICE, DATASET.format(woj="12")}
+
+    (before,) = check_data(output_dir=tmp_path / "out", **area).items
+    assert (before.fetch, before.fetch_reason) == (Fetch(None), "feed_not_cached")
+    assert not feeds & set(gugik.calls)
+
+    check_data(root=tmp_path / "store", **area)
+    asked = len(gugik.calls)
+    (after,) = check_data(output_dir=tmp_path / "out", **area).items
+    cache.close()
+
+    assert (after.fetch, after.fetch_reason) == (
+        Fetch(FILES["12"], len(gugik.body)),
+        None,
+    )
+    assert not feeds & set(gugik.calls[asked:])
 
 
 @pytest.mark.parametrize(

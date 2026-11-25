@@ -22,6 +22,7 @@ from kartograf.transport.atom import (
     SERVICE_FEED_TIMEOUT,
     _index,
     atom_segment_tokens,
+    cached_atom_file,
     fetch_atom_file,
     resolve_atom_file,
     unpack_members,
@@ -315,6 +316,24 @@ def test_stale_index_refreshed_when_dataset_feed_gone(cache):
 
     assert file.edition == "2025_2025-02-06"
     assert service.urls()[1:] == [CTES96_FEED, ORTO_SERVICE, new_feed]
+
+
+def test_the_file_of_a_dataset_feed_is_read_from_the_cache_without_a_request(cache):
+    """``resolve_atom_file`` stores the file it picks; ``cached_atom_file`` gives it
+    back with no request, in refresh mode too (a plain plan, ADR-063 erratum 2), per
+    dataset and CRS, and not once it is older than the TTL of the cache."""
+    service = FakeService()
+    file = resolve_atom_file(service, ZABAGED, key="", crs="EPSG:5514", cache=cache)
+    asked = len(service.calls)
+
+    refreshing = MetadataCache(db_path=cache.db_path, refresh=True)
+    assert cached_atom_file(ZABAGED, key="", crs="EPSG:5514", cache=refreshing) == file
+    assert cached_atom_file(ZABAGED, key="", crs="EPSG:3045", cache=refreshing) is None
+    refreshing.close()
+    expired = MetadataCache(db_path=cache.db_path, ttl_seconds=0)
+    assert cached_atom_file(ZABAGED, key="", crs="EPSG:5514", cache=expired) is None
+    expired.close()
+    assert len(service.calls) == asked
 
 
 def test_unknown_sheet_is_no_coverage(cache):

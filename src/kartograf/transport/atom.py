@@ -24,6 +24,9 @@ conditional GET (``If-None-Match``) and ``304`` keeps the stored index.
 is small and its entry carries the edition - and picks the file by its CRS
 category. A key missing from a cached index, or a dataset feed answering
 404, refreshes the index once (a stale index must not hide a new release).
+The file it picks is stored in the same cache (``atom_cache``, a key of its
+own), never read back by it: ``cached_atom_file`` gives it, with no request, to
+a plan that asks no feed (a plain check, ADR-063 erratum 2).
 The edition label is the date of the file entry's ``updated``, prefixed by
 the ``year`` group when the pattern has one (``2024_2025-02-06``,
 ``2026-10-04``): the ``metadata`` freshness signal of the versioned store
@@ -40,6 +43,7 @@ cut transfer = ``DownloadError``; a CRS choice the channel does not publish
 """
 
 import io
+import json
 import logging
 import re
 import xml.etree.ElementTree as ET
@@ -334,6 +338,62 @@ def _cache_key(params: AtomFilesParams) -> str:
     return f"{params.service_feed}|{params.entry_pattern}"
 
 
+def _file_key(params: AtomFilesParams, key: str, crs: str | None) -> str:
+    """Return the cache key of the file of dataset ``key`` in ``crs``.
+
+    A JSON list, which no key of an index (a feed URL first) can be.
+    """
+    return json.dumps(["file", params.service_feed, params.entry_pattern, key, crs])
+
+
+def _file_payload(file: AtomFile) -> dict[str, Any]:
+    return {
+        "url": file.url,
+        "length": file.length,
+        "updated": file.updated,
+        "edition": file.edition,
+        "crs": file.crs,
+        "dataset_feed": file.dataset_feed,
+        "groups": dict(file.groups),
+    }
+
+
+def cached_atom_file(
+    params: AtomFilesParams,
+    *,
+    key: str,
+    crs: str | None,
+    cache: MetadataCache | None,
+) -> AtomFile | None:
+    """Return the file of dataset ``key`` in ``crs`` as the cache holds it, no request.
+
+    The file the last ``resolve_atom_file`` of this dataset and CRS picked from its
+    dataset feed, while it is younger than the TTL of the cache, in refresh mode too:
+    a plan that may ask no feed (a plain check, ADR-063 erratum 2) names the URL and
+    the length of the file from it. ``None``: no cache, no such file, an older one or
+    an entry that cannot be read.
+    """
+    if cache is None:
+        return None
+    stored = cache.peek_atom_entries(_file_key(params, key, crs))
+    if stored is None or not stored[2]:
+        return None
+    payload = stored[1]
+    try:
+        length = payload["length"]
+        return AtomFile(
+            url=str(payload["url"]),
+            length=length if isinstance(length, int) else None,
+            updated=str(payload["updated"]),
+            edition=str(payload["edition"]),
+            crs=None if payload["crs"] is None else str(payload["crs"]),
+            dataset_feed=str(payload["dataset_feed"]),
+            groups=dict(payload["groups"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def _index(
     session: requests.Session,
     params: AtomFilesParams,
@@ -525,7 +585,10 @@ def resolve_atom_file(
         entry = renewed
         context = f"ATOM {entry.dataset_feed}"
         entries = _dataset_entries(session, entry.dataset_feed, timeout)
-    return _select(entries, entry, crs, context, params)
+    found = _select(entries, entry, crs, context, params)
+    if cache is not None:
+        cache.set_atom_entries(_file_key(params, key, crs), None, _file_payload(found))
+    return found
 
 
 def fetch_atom_file(

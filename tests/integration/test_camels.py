@@ -27,6 +27,7 @@ from kartograf import (
 )
 from kartograf.download import collections as col
 from kartograf.download.collections import check_collection, download_collection
+from kartograf.download.plan import ArchiveMember
 from kartograf.download.releases import release_params
 from kartograf.exceptions import ConflictError, ReleaseLayoutError, ValidationError
 from kartograf.messages import message
@@ -599,6 +600,16 @@ def test_plain_write_writes_both_files_and_the_provider_lines(
         ("pl_catchments.gpkg", "write"),
         ("pl_gauging-stations.gpkg", "write"),
         ("ATTRIBUTION.txt", "write"),
+    ]
+    # members of the ZIP: no URL serves them, the plan names the pinned ZIP and
+    # the SHA-256 of each file instead (ADR-063 erratum 1)
+    release = fixture.releases[-1]
+    assert [(item.fetch, item.fetch_reason, item.archive) for item in plan.items] == [
+        *(
+            (None, "built", ArchiveMember(release.url, release.size, m.path, m.sha256))
+            for m in release.members
+        ),
+        (None, "built", None),
     ]
     assert report.ok
     assert [(item.unit, item.file.status) for item in report.files] == [

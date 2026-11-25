@@ -13,7 +13,8 @@ no coverage)
   the caller -> JSON payload: WFS index records with footprints, feature
   types, PRG land masks)
 - Indexes of CUZK ATOM service feeds (``atom_cache``: feed key -> the
-  ``ETag`` of the feed and its entries; ADR-042 D12)
+  ``ETag`` of the feed and its entries; ADR-042 D12) and the file a dataset
+  feed named last (a key of its own -> the file; ADR-063 erratum 2)
 
 The cache uses SQLite with WAL mode for concurrent access support and
 supports time-based TTL for cache expiration. All reads and writes on the
@@ -100,8 +101,9 @@ class MetadataCache:
     (campaign lists), ``teryt_cache`` (point -> powiat TERYT),
     ``teryt_bbox_cache`` (EPSG:2180 area -> powiat TERYT codes, PRG WFS),
     ``index_area_cache`` (availability report), ``atom_cache`` (ATOM service
-    feed indexes with their ``ETag``) - all with the TTL (default 7 days) -
-    and ``sheet_cache`` (CZ sheet index, SM5, fixed TTL of 30 days).
+    feed indexes with their ``ETag``, and the file a dataset feed named last) -
+    all with the TTL (default 7 days) - and ``sheet_cache`` (CZ sheet index,
+    SM5, fixed TTL of 30 days).
     ``refresh=True`` turns every read into a miss while writes still happen
     (CLI ``--force``), except for entries younger than ``refresh_ttl_seconds``.
 
@@ -849,7 +851,8 @@ class MetadataCache:
         return []  # disabled by an SQLite error (_db_errors)
 
     # =========================================================================
-    # ATOM feed cache (index of a CUZK ATOM service feed, ADR-042 D12)
+    # ATOM feed cache (index of a CUZK ATOM service feed, ADR-042 D12; the file a
+    # dataset feed named, ADR-063 erratum 2)
     # =========================================================================
 
     def get_atom_entries(
@@ -865,6 +868,32 @@ class MetadataCache:
         max_age = self._max_age(self._ttl_seconds)
         if self._refresh and max_age <= 0:
             return None
+        stored = self._atom_row(feed)
+        if stored is None:
+            return None
+        etag, entries, age = stored
+        if age >= max_age and self._refresh:
+            return None
+        return etag, entries, age < self._ttl_seconds
+
+    def peek_atom_entries(
+        self, feed: str
+    ) -> tuple[str | None, dict[str, Any], bool] | None:
+        """Return the stored entry of ``feed``, in refresh mode too.
+
+        ``(etag, entries, fresh)`` as ``get_atom_entries``, ``fresh`` = younger than
+        the TTL; ``None``: nothing stored. For a plan that may ask no source (the file
+        of an ATOM feed in a plain check, ADR-063 erratum 2): it judges no version by
+        the entry, it only names the URL the feed last gave.
+        """
+        stored = self._atom_row(feed)
+        if stored is None:
+            return None
+        etag, entries, age = stored
+        return etag, entries, age < self._ttl_seconds
+
+    def _atom_row(self, feed: str) -> tuple[str | None, dict[str, Any], float] | None:
+        """Return the ``ETag``, the entries and the age (s) of ``feed``, or None."""
         # Lock guards the read too - see comment in get_record().
         with self._write_lock, self._db_errors():
             conn = self._existing_connection()
@@ -876,11 +905,7 @@ class MetadataCache:
             if row is None:
                 return None
             etag, payload, cached_at = row
-            age = time.time() - cached_at
-            if age >= max_age and self._refresh:
-                return None
-            fresh = age < self._ttl_seconds
-            return etag, json.loads(payload), fresh
+            return etag, json.loads(payload), time.time() - cached_at
         return None  # disabled by an SQLite error (_db_errors)
 
     def set_atom_entries(
@@ -943,7 +968,8 @@ class MetadataCache:
             - sheet_count: number of cached sheet entries
             - index_area_count: number of cached index areas (availability
               report: index records, feature types, land masks)
-            - atom_feed_count: number of cached ATOM service feed indexes
+            - atom_feed_count: number of cached ATOM feed entries (service feed
+              indexes and the files dataset feeds named)
             - db_size_bytes: size of the database file in bytes
             - db_path: path to the database file
             - db_exists: whether the database file exists (it is created

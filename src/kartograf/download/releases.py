@@ -65,6 +65,7 @@ from kartograf.download.fetch import (
 )
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import (
+    ArchiveMember,
     PlanItem,
     Track,
     UpdatePlan,
@@ -777,9 +778,16 @@ def _item(
     available label is the version label of the release's bytes and the signal names
     the release and their SHA-256. In a plain write: the position of its target. The
     file is a member read out of the ZIP of the release (``fetch_reason`` ``built``):
-    no URL serves its bytes alone.
+    no URL serves its bytes alone, so the position names the ZIP and the SHA-256 of
+    the file as the registry pins them (``archive``, ADR-063 erratum 1).
     """
     fetch, why = fetch_fields(source, None)
+    archive = ArchiveMember(
+        url=release.url,
+        size_bytes=release.size,
+        member=job.member.path,
+        sha256=job.member.sha256,
+    )
     plain = plain_of(job.slot.root)
     if plain is not None:  # the position of a plain target: judged by `new_plan`
         return PlanItem(
@@ -798,6 +806,7 @@ def _item(
             source=source,
             fetch=fetch,
             fetch_reason=why,
+            archive=archive,
         )
     lenient_store(job.slot.root)
     stored = _stored(job)
@@ -822,6 +831,7 @@ def _item(
         source=source,
         fetch=fetch,
         fetch_reason=why,
+        archive=archive,
     )
 
 

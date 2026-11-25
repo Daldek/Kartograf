@@ -38,7 +38,13 @@ from kartograf.download.availability import (
 from kartograf.download.collections import CollectionReport
 from kartograf.download.data import DataReport, SkippedUnit, UnitFailure, UnitFile
 from kartograf.download.fetch import VersionedFile
-from kartograf.download.plan import Fetch, PlanItem, PlanSource, UpdatePlan
+from kartograf.download.plan import (
+    ArchiveMember,
+    Fetch,
+    PlanItem,
+    PlanSource,
+    UpdatePlan,
+)
 from kartograf.envelope import ResultItem, wrap
 from kartograf.error_report import error_report
 from kartograf.exceptions import ValidationError
@@ -103,6 +109,10 @@ def _fetch() -> Fetch:
     return Fetch("https://example.test/a.asc", 48, SHA256)
 
 
+def _archive() -> ArchiveMember:
+    return ArchiveMember("https://example.test/r.zip", 4096, "r/a.gpkg", SHA256)
+
+
 def _plan_source() -> PlanSource:
     return PlanSource(
         "pl.gugik.nmt_1m",
@@ -130,6 +140,7 @@ def _plan_item() -> PlanItem:
         source="pl.gugik.nmt_1m",
         fetch=_fetch(),
         fetch_reason="built",
+        archive=_archive(),
     )
 
 
@@ -763,9 +774,11 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "source",
             "fetch",
             "fetch_reason",
+            "archive",
         ],
     ),
     "Fetch": (_fetch, ["url", "size_bytes", "sha256"]),
+    "ArchiveMember": (_archive, ["url", "size_bytes", "member", "sha256"]),
     "PlanSource": (_plan_source, ["key", "provider", "license", "auth"]),
     "LicenseInfo": (
         lambda: _plan_source().license,

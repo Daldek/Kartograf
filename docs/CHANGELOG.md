@@ -47,7 +47,7 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   commit of each file); `tests/contract/test_commands_schema.py` validates both pages of every
   command against commands-1 and the list against command-list-1.
 
-#### Where the files of a plan come from, and the detached plan (ADR-063 decisions 3 and 4)
+#### Where the files of a plan come from, and the detached plan (ADR-063 decisions 3 and 4, errata 1 and 2)
 
 - `kartograf-plan/1` grows additive keys (store and plain plans alike), filled from what the
   check already reads and with no request more (no `HEAD` for a size): each item has `source`
@@ -55,20 +55,27 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `{url, size_bytes, sha256}` when the file is the bytes at `url` unchanged (a field `null` when
   the check does not know it: the size comes from the `Content-Length` of the probe of an `http`
   channel in a store plan or the length of an ATOM feed; the GUGiK and WFS index records name
-  none, and the only SHA-256 the registry pins, those of the CAMELS-PL members, belong to files
-  read out of a ZIP), otherwise `fetch_reason`: `credentials` for a source whose `auth` is not
-  `none` (CORINE of CLMS, the WMS preview too; before `built`) or `built` for a file Kartograf
-  builds. The plan lists `sources`, one `{key, provider, license: {id, attribution, url}, auth}`
-  per source in the order of its first item, as `<group> list-sources` writes them; `merge`
-  joins them without repeats; a 0.9.0 plan without them still loads (`UpdatePlan.from_dict`).
-  Library types `kartograf.download.plan.Fetch` and `PlanSource`; `PlanItem.source`, `fetch`,
-  `fetch_reason`, `UpdatePlan.sources`.
+  none, and `sha256` is for a file downloaded whole whose SHA-256 the registry pins, which none
+  is yet), otherwise `fetch_reason`: `credentials` for a source whose `auth` is not `none`
+  (CORINE of CLMS, the WMS preview too; before `built`) or `built` for a file Kartograf builds.
+  The plan lists `sources`, one `{key, provider, license: {id, attribution, url}, auth}` per
+  source in the order of its first item, as `<group> list-sources` writes them; `merge` joins
+  them without repeats; a 0.9.0 plan without them still loads (`UpdatePlan.from_dict`). Library
+  types `kartograf.download.plan.Fetch`, `PlanSource` and `ArchiveMember`; `PlanItem.source`,
+  `fetch`, `fetch_reason`, `archive`, `UpdatePlan.sources`.
+- A file read out of an archive the registry pins names it instead of a `fetch` (ADR-063
+  erratum 1): the members of a CAMELS-PL release stay `built` with no `fetch.sha256`, and their
+  items carry `archive` `{url, size_bytes, member, sha256}` (the ZIP of the release and its size,
+  the path of the member, the SHA-256 of the file), store and plain plans alike; `archive` is
+  `null` for every other file.
 - The tracks, classified by what they store: `fetch` for a PL sheet (`pl_sheet`: the URL of its
   index record; a sheet whose index failed has a `fetch` without a URL), a PL LAZ tile
   (`laz_tile`), a CZ contour ZIP (`cz_sheet` of `cz_contours`), a package of `unit_package`
   stored as published (a URL template or the record of an index), a file of an ATOM feed (its
-  URL and length from the feed in a store plan; in a plain plan, whose check reads no feed, a
-  `fetch` without a URL), the SHP package and the raw GPKG package (`keep_raw`) of BDOT10k;
+  URL and length from the feed in a store plan; a plain or detached plan asks no feed and names
+  the file the metadata cache holds from the last read of its dataset feed, younger than the TTL
+  of the cache, else a `fetch` without a URL and `fetch_reason` `feed_not_cached`; ADR-063
+  erratum 2), the SHP package and the raw GPKG package (`keep_raw`) of BDOT10k;
   `built` for a CZ sheet (`cz_sheet`: the GeoTIFF unpacked from the openzu ZIP with its CRS
   written, or an ImageServer export), a CZ LAZ file (`cz_laz`: unpacked from its ZIP), a PL or
   CZ cutout (`pl_cutout`, `cz_cutout`), the GeoPackage merged from a BDOT10k package, a
@@ -94,6 +101,10 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `kartograf.download.fetch.inspect_version` takes the `source` and the `fetch` of its position
   (keyword-only, required); the callable type of a download of `fetch_version` is `Download`
   (was `Fetch`, now the type of the plan).
+- `resolve_atom_file` also stores the file it picks from a dataset feed in the metadata cache
+  (`atom_cache`, under a key of its own; `cached_atom_file` reads it back without a request,
+  `MetadataCache.peek_atom_entries` in refresh mode too), and `cache stats` counts these entries
+  with the feed indexes: its line is `ATOM feed entries` (was `ATOM feed indexes`).
 
 ## [0.9.0] - 2026-11-25
 

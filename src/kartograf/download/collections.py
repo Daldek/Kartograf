@@ -217,6 +217,7 @@ from kartograf.sources.sidecar import emit_sidecar
 from kartograf.transport.atom import (
     AtomFile,
     atom_segment_tokens,
+    cached_atom_file,
     check_atom_crs,
     fetch_atom_file,
     resolve_atom_file,
@@ -3277,6 +3278,19 @@ def _job_fetch(job: UnitJob) -> Fetch | None:
     return Fetch(job.url, job.size)
 
 
+def _cached_fetch(job: UnitJob, cache: MetadataCache | None) -> Fetch:
+    """Return the ``fetch`` of the file of an ATOM job in a plain plan, no request.
+
+    A plain plan asks no feed: the URL and the length are those of the file the cache
+    holds from the last read of its dataset feed (ADR-063 erratum 2); without it the
+    URL is not known.
+    """
+    params = job.channel.params
+    assert isinstance(params, AtomFilesParams)
+    found = cached_atom_file(params, key=job.atom_key, crs=job.atom_crs, cache=cache)
+    return Fetch(None) if found is None else Fetch(found.url, found.length)
+
+
 def inspect_job(
     job: UnitJob,
     *,
@@ -3293,7 +3307,10 @@ def inspect_job(
     a new edition). A file of an index record is compared by the record's
     label (signal ``index``), never downloaded. The ``fetch`` of the position
     (`_job_fetch`) takes the URL and the length of a feed file from the answer the
-    edition read, never from a request of its own.
+    edition read, never from a request of its own. A plain plan reads no feed: the
+    file of an ATOM feed has the URL and the length of the file the cache holds
+    (`_cached_fetch`), else a ``fetch`` without URL and ``fetch_reason``
+    ``feed_not_cached`` (ADR-063 erratum 2).
     """
     edition: Callable[[], Edition] | None
     found: list[AtomFile] = []
@@ -3311,19 +3328,25 @@ def inspect_job(
     available: tuple[str | None, dict[str, Any] | None] = (None, None)
     if job.record is not None and edition is not None:
         available = (job.record.label, {"url": job.url, **job.record.raw})
+    fetch = _job_fetch(job)
+    plain_atom = job.atom and plain_of(job.slot.root) is not None
+    if plain_atom and fetch is not None and fetch.url is None:
+        fetch = _cached_fetch(job, cache)
     item = inspect_version(
         job.slot,
         track=track,
         unit=job.unit,
         signal=job.signal,
         source=job.descriptor.key,
-        fetch=_job_fetch(job),
+        fetch=fetch,
         probe=_probe(job, session),
         edition=edition,
         available=available,
     )
     if found and item.fetch is not None:
         item = replace(item, fetch=Fetch(found[-1].url, found[-1].length))
+    elif plain_atom and item.fetch is not None and item.fetch.url is None:
+        item = replace(item, fetch_reason="feed_not_cached")
     return item
 
 

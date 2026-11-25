@@ -4,7 +4,7 @@ The metadata cache as a document (``kartograf-cache/1``, spec 5.4.9).
 The default cache of the library and the CLI is the SQLite database
 ``<cache_dir>/kartograf/metadata.db``, in the user cache directory of ``nogat``
 and never in the current directory (DEV-18.2; the index records, campaign lists,
-TERYT codes, sheet indexes, index areas and ATOM feed indexes it keeps are
+TERYT codes, sheet indexes, index areas and ATOM feed entries it keeps are
 lookups that save network requests, never downloaded data). ``get_cache_info``
 reports it, ``get_cache_path`` only says where it is, ``clear_cache`` empties
 it. None of them creates a missing database.

@@ -283,3 +283,8 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
   reaches a `fetch`. A plain or detached plan of an ATOM file has a `fetch` without a URL because its check reads no
   feed, so (c) cannot download those files. Per-track tests for collections, land cover, HSG, releases and the CZ
   tracks are still missing.
+- ADR-063 errata 1 and 2 (2026-11-25, the coordinator's decisions on K2's two open points): a CAMELS-PL member stays
+  `built` with no `fetch.sha256`, its item naming the pinned ZIP and the file's SHA-256 in the new key `archive`; a
+  plain or detached check names the file of an ATOM feed from the feed the metadata cache holds (the file a dataset
+  feed named last, now stored by `resolve_atom_file`), else `fetch {url: null}` with `fetch_reason`
+  `feed_not_cached`, the reason (c) gives when it leaves the file out.

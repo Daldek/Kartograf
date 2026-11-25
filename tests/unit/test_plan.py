@@ -8,6 +8,7 @@ import pytest
 from kartograf.download.plan import (
     DETACHED,
     TRACKS,
+    ArchiveMember,
     Fetch,
     PlanItem,
     PlanSource,
@@ -338,37 +339,62 @@ def test_plan_round_trip_keeps_the_source_and_the_fetch_of_each_position(tmp_pat
     )
     built = _item(name="b.tif", source=NMT, fetch_reason="built")
     keyed = _item(name="c.tif", source=CORINE, fetch_reason="credentials")
-    plan = new_plan(tmp_path, [fetched, built, keyed])
+    member = _item(
+        name="d.gpkg",
+        source=NMT,
+        fetch_reason="built",
+        archive=ArchiveMember(
+            "https://example.test/r.zip", 4096, "r/d.gpkg", "cd" * 32
+        ),
+    )
+    unnamed = _item(
+        name="e.zip", source=NMT, fetch=Fetch(None), fetch_reason="feed_not_cached"
+    )
+    plan = new_plan(tmp_path, [fetched, built, keyed, member, unnamed])
 
     again = UpdatePlan.from_json(plan.to_json())
 
     assert again == plan
     assert again.items[0].fetch == Fetch("https://example.test/a.laz", 1024, "ab" * 32)
-    assert [item.fetch_reason for item in again.items] == [None, "built", "credentials"]
+    assert [item.fetch_reason for item in again.items] == [
+        None,
+        "built",
+        "credentials",
+        "built",
+        "feed_not_cached",
+    ]
     assert [s.key for s in again.sources] == [LAZ, NMT, CORINE]
-    assert json.loads(plan.to_json())["items"][0]["fetch"] == {
+    items = json.loads(plan.to_json())["items"]
+    assert items[0]["fetch"] == {
         "url": "https://example.test/a.laz",
         "size_bytes": 1024,
         "sha256": "ab" * 32,
     }
+    assert items[3]["archive"] == {
+        "url": "https://example.test/r.zip",
+        "size_bytes": 4096,
+        "member": "r/d.gpkg",
+        "sha256": "cd" * 32,
+    }
+    assert items[4]["fetch"] == {"url": None, "size_bytes": None, "sha256": None}
 
 
 def test_a_plan_of_0_9_0_without_sources_and_fetch_still_loads():
-    """A plan written by 0.9.0: no ``sources``, no ``source``, ``fetch`` or
-    ``fetch_reason`` in its positions."""
+    """A plan written by 0.9.0: no ``sources``, no ``source``, ``fetch``,
+    ``fetch_reason`` or ``archive`` in its positions."""
     plan = _plan(_item(), _item(name="b.laz", status="current", local_label="x"))
     old = plan.to_dict()
     del old["sources"]
     for item in old["items"]:  # type: ignore[attr-defined]
-        for key in ("source", "fetch", "fetch_reason"):
+        for key in ("source", "fetch", "fetch_reason", "archive"):
             del item[key]
 
     loaded = UpdatePlan.from_dict(old)
 
     assert loaded == plan
     assert loaded.sources == ()
-    assert {(i.source, i.fetch, i.fetch_reason) for i in loaded.items} == {
-        (None, None, None)
+    assert {(i.source, i.fetch, i.fetch_reason, i.archive) for i in loaded.items} == {
+        (None, None, None, None)
     }
 
 
@@ -380,6 +406,16 @@ def test_a_plan_of_0_9_0_without_sources_and_fetch_still_loads():
         (
             "fetch",
             {"url": None, "size_bytes": "10", "sha256": None},
+            "Incomplete update plan",
+        ),
+        (
+            "archive",
+            {
+                "url": "https://example.test/r.zip",
+                "size_bytes": "10",
+                "member": "m",
+                "sha256": "ab",
+            },
             "Incomplete update plan",
         ),
     ],

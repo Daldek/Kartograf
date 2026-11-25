@@ -142,8 +142,8 @@ MESSAGES = {
         "  Wpisy obszarow skorowidza: {index_areas}",
     ),
     "stats_atom_feeds": Text(
-        "  ATOM feed indexes: {atom_feeds}",
-        "  Indeksy feedow ATOM: {atom_feeds}",
+        "  ATOM feed entries: {atom_feeds}",
+        "  Wpisy feedow ATOM: {atom_feeds}",
     ),
     "stats_size_no_file": Text(
         "  Database size: - (file not created yet)",

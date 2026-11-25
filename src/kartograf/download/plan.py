@@ -19,7 +19,10 @@ Every position also says where its file comes from (ADR-063 decision 3), from wh
 the check reads and no request more: ``source``, the registry key of its source;
 ``fetch``, the URL whose bytes the file is unchanged, with the size and the SHA-256
 the check knows (`Fetch`), or ``fetch_reason`` when no URL serves the file
-(`fetch_fields`); and the plan lists its sources once (``sources``, `PlanSource`).
+(`fetch_fields`) or the plan cannot name it (``feed_not_cached``, ADR-063 erratum
+2); a file read out of an archive the registry pins names that archive
+(``archive``, erratum 1); and the plan lists its sources once (``sources``,
+`PlanSource`).
 A detached plan (`detached_plan`) is the plan of a plain write into a directory
 that does not exist, answered as the write into ``.``.
 """
@@ -61,8 +64,9 @@ Track = Literal[
 TRACKS: tuple[Track, ...] = get_args(Track)
 # Statuses a plan executes.
 TODO_STATUSES: tuple[ItemStatus, ...] = ("newer", "missing")
-# Why a planned file has no URL that serves it (ADR-063 decision 3).
-FetchReason = Literal["credentials", "built"]
+# Why a planned file has no URL that serves it (ADR-063 decision 3), or why a plain
+# plan cannot name it (``feed_not_cached``: no ATOM feed in the cache, erratum 2).
+FetchReason = Literal["credentials", "built", "feed_not_cached"]
 FETCH_REASONS: tuple[FetchReason, ...] = get_args(FetchReason)
 # The ``output_dir`` of a detached plan: its paths are relative to it.
 DETACHED = "."
@@ -74,15 +78,34 @@ class Fetch:
     """The URL whose bytes a planned file is, unchanged (ADR-063 decision 3).
 
     ``size_bytes`` is the size the check read (an index record, the ``Content-Length``
-    of a probe, an ATOM feed) and ``sha256`` the SHA-256 the registry pins; each is
-    ``None`` when the check does not know it, ``url`` too: the file of an ATOM feed in
-    a plain plan, whose feed only the run reads, or the file of a sheet whose index
-    could not be checked.
+    of a probe, an ATOM feed) and ``sha256`` the SHA-256 the registry pins for a file
+    downloaded whole (no file has one yet: the files of a release are members read out
+    of its ZIP, ADR-063 erratum 1); each is ``None`` when the check does not know it,
+    ``url`` too: the file of an ATOM feed in a plain plan whose feed the cache does not
+    hold (``fetch_reason`` ``feed_not_cached``, erratum 2), or the file of a sheet
+    whose index could not be checked.
     """
 
     url: str | None
     size_bytes: int | None = None
     sha256: str | None = None
+
+
+@dataclass(frozen=True)
+class ArchiveMember:
+    """The archive the registry pins that a planned file is a member of.
+
+    A file read out of a ZIP by range requests (the files of a release of CAMELS-PL)
+    is built (``fetch_reason`` ``built``), so its ``fetch`` names no SHA-256; the
+    position names the archive and the file's SHA-256 here instead (ADR-063 erratum
+    1): ``url`` and ``size_bytes`` of the archive, ``member`` the path of the file
+    in it, ``sha256`` the SHA-256 of the file's bytes, all as the registry pins them.
+    """
+
+    url: str
+    size_bytes: int
+    member: str
+    sha256: str
 
 
 @dataclass(frozen=True)
@@ -129,7 +152,11 @@ class PlanItem:
     position of the track ``store``); ``fetch`` the URL whose bytes the file is,
     unchanged, or ``None`` with ``fetch_reason`` saying why no URL serves it:
     ``credentials`` (a source whose ``auth`` is not ``none``) or ``built`` (a file
-    Kartograf builds; `fetch_fields`).
+    Kartograf builds; `fetch_fields`). A plain plan of the file of an ATOM feed that
+    the cache does not hold has a ``fetch`` without ``url`` and ``fetch_reason``
+    ``feed_not_cached`` (ADR-063 erratum 2). ``archive`` names the archive the
+    registry pins of a file read out of it (``ArchiveMember``, erratum 1), ``None``
+    for every other file.
     """
 
     track: Track
@@ -149,6 +176,7 @@ class PlanItem:
     source: str | None = None
     fetch: Fetch | None = None
     fetch_reason: FetchReason | None = None
+    archive: ArchiveMember | None = None
 
     @property
     def store_path(self) -> str:
@@ -237,9 +265,9 @@ class UpdatePlan(Document):
         """Read a plan document (``to_dict`` or a plan file of 0.8.0-dev).
 
         A plan without ``notices`` and ``ok`` loads; ``ok`` is ignored (it is
-        computed). A plan without ``sources`` and without the ``source``, ``fetch``
-        and ``fetch_reason`` of its positions (0.9.0) loads with none of them. An
-        unknown schema or a malformed plan = ``ValidationError``.
+        computed). A plan without ``sources`` and without the ``source``, ``fetch``,
+        ``fetch_reason`` and ``archive`` of its positions (0.9.0) loads with none of
+        them. An unknown schema or a malformed plan = ``ValidationError``.
         """
         if not isinstance(payload, Mapping) or payload.get("schema") != PLAN_SCHEMA:
             schema = payload.get("schema") if isinstance(payload, Mapping) else None
@@ -323,6 +351,7 @@ def _item(raw: dict[str, Any]) -> PlanItem:
             message("download.plan_unknown_fetch_reason", fetch_reason=fetch_reason)
         )
     fetch = raw.get("fetch")
+    archive = raw.get("archive")
     return PlanItem(
         track=cast(Track, track),
         segment=str(raw["segment"]),
@@ -341,6 +370,7 @@ def _item(raw: dict[str, Any]) -> PlanItem:
         source=raw.get("source"),
         fetch=None if fetch is None else _fetch(fetch),
         fetch_reason=cast(FetchReason | None, fetch_reason),
+        archive=None if archive is None else _archive(archive),
     )
 
 
@@ -352,6 +382,20 @@ def _fetch(raw: Mapping[str, object]) -> Fetch:
         url=None if url is None else str(url),
         size_bytes=size,
         sha256=None if sha256 is None else str(sha256),
+    )
+
+
+def _archive(raw: Mapping[str, object]) -> ArchiveMember:
+    url, size, member, sha256 = (
+        raw["url"],
+        raw["size_bytes"],
+        raw["member"],
+        raw["sha256"],
+    )
+    if not isinstance(size, int) or isinstance(size, bool):
+        raise ValueError(f"size_bytes {size!r} is not a whole number")
+    return ArchiveMember(
+        url=str(url), size_bytes=size, member=str(member), sha256=str(sha256)
     )
 
 

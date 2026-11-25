@@ -378,7 +378,8 @@ Notes that are easy to overlook:
   import `transport`.
 - `transport ──> cache`: `transport/atom.py` keeps the index of the ATOM service
   feed in `MetadataCache` (the `atom_cache` table with the feed `ETag`, ADR-042
-  D12), and `transport/index_records.py` the records of a WFS tile index of an area
+  D12) and the file a dataset feed named last (ADR-063 erratum 2), and
+  `transport/index_records.py` the records of a WFS tile index of an area
   (`index_area_cache`); `cache` does not import `transport`.
 - `transport ──> notices`: `transport/unit_package.py` takes `cli_flag` from `notices`
   (the flag of a parameter in a message); `notices` imports only `messages`.
@@ -684,8 +685,8 @@ kartograf/
 ├── cache/metadata.py    # MetadataCache — SQLite WAL, thread-safe; tables record_cache,
 │                        # campaigns_cache, teryt_cache, teryt_bbox_cache, index_area_cache
 │                        # (availability report; area records of the WFS tile index),
-│                        # atom_cache (ATOM feed indexes with ETag;
-│                        # TTL 7 d, DEFAULT_TTL_SECONDS)
+│                        # atom_cache (ATOM feed indexes with ETag, the files of
+│                        # dataset feeds; TTL 7 d, DEFAULT_TTL_SECONDS)
 │                        # and sheet_cache (30 d, SHEET_TTL_SECONDS); the database file is
 │                        # opened lazily, created on first write
 ├── cache/defaults.py    # open_cache(cache: MetadataCache | bool, force) — shared cache of the
@@ -2131,19 +2132,25 @@ position whose source could not be checked: it stays `check_failed` without them
 and the plan is not `ok`; the one position of a store root that is a conflict has the track
 `store` and the same three fields.
 
-**Where the files of a plan come from (ADR-063 decisions 3 and 4).** Every item of a plan, store
-or plain, says it from what the check reads, with no request more (`download/plan.py`): `source`
-is the registry key of its source (`null` for the track `store`), `fetch` (`Fetch`) the URL whose
-bytes the file is, unchanged, with `size_bytes` (the `Content-Length` of the probe of an `http`
-channel in a store plan, the length of an ATOM feed) and `sha256` (only where the registry pins it)
-each `null` when unknown, and otherwise `fetch_reason`: `credentials` for a source whose `auth` is
-not `none` (CORINE, its WMS preview too, before `built`) or `built` for a file Kartograf builds
-(`fetch_fields`). The plan lists `sources` (`PlanSource`: `key, provider, license, auth` as
-`list-sources`) in the order of their first item; `merge` joins them by key. Per track: `fetch` for
-`pl_sheet` (the URL of the index record), `laz_tile` (the OpenData URL), the ZIP of `cz_contours`
-(track `cz_sheet`), a package of `unit_package` stored as published, a file of an ATOM feed (in a
-plain plan its URL is unknown: only the run reads the feed) and the BDOT10k SHP package and raw
-GPKG package; `built` for `cz_sheet` of `cz_sheets` (the GeoTIFF unpacked from openzu with its
+**Where the files of a plan come from (ADR-063 decisions 3 and 4, errata 1 and 2).** Every item
+of a plan, store or plain, says it from what the check reads, with no request more
+(`download/plan.py`): `source` is the registry key of its source (`null` for the track `store`),
+`fetch` (`Fetch`) the URL whose bytes the file is, unchanged, with `size_bytes` (the
+`Content-Length` of the probe of an `http` channel in a store plan, the length of an ATOM feed)
+and `sha256` (only where the registry pins the SHA-256 of a file downloaded whole; none does
+yet) each `null` when unknown, and otherwise `fetch_reason`: `credentials` for a source whose
+`auth` is not `none` (CORINE, its WMS preview too, before `built`) or `built` for a file
+Kartograf builds (`fetch_fields`). A file read out of an archive the registry pins (the
+CAMELS-PL members) names it in `archive` (`ArchiveMember`: `url`, `size_bytes`, `member`,
+`sha256` of the file; erratum 1). The plan lists `sources` (`PlanSource`: `key, provider,
+license, auth` as `list-sources`) in the order of their first item; `merge` joins them by key.
+Per track: `fetch` for `pl_sheet` (the URL of the index record), `laz_tile` (the OpenData URL),
+the ZIP of `cz_contours` (track `cz_sheet`), a package of `unit_package` stored as published, a
+file of an ATOM feed and the BDOT10k SHP package and raw GPKG package. A plain plan reads no
+ATOM feed: the file of a feed has the URL and length of the file the metadata cache holds from
+the last read of its dataset feed (`transport/atom.py` `cached_atom_file`, younger than the TTL,
+read in refresh mode too), else a `fetch` without `url` and `fetch_reason` `feed_not_cached`
+(erratum 2). `built` for `cz_sheet` of `cz_sheets` (the GeoTIFF unpacked from openzu with its
 CRS written, or an ImageServer export), `cz_laz` (unpacked), `pl_cutout`, `cz_cutout`, `cz_orto`
 (members of the sheet ZIP), the merged BDOT10k GeoPackage, SoilGrids, `hsg`, `feature_bbox` and
 the GeoPackage of an archive area, a member unpacked from a package or the ZIP of chosen classes,
@@ -4051,7 +4058,10 @@ and `--check` (cache in refresh mode) read the feed anew.
 `resolve_atom_file` always reads the dataset feed fresh (small, carries the
 release) and selects the file by CRS category (`check_atom_crs` - without a
 network); a key missing from the cached index or a 404 of the dataset feed = ONE
-index refresh. Release = the `updated` date of the file entry, with the year
+index refresh. The file it selects is stored in `atom_cache` too (a key of its own) and
+never read back by it: `cached_atom_file` gives it without a request to a plain plan,
+which asks no feed (younger than the TTL, in refresh mode too; ADR-063 erratum 2).
+Release = the `updated` date of the file entry, with the year
 of the `year` group when present (`2024_2025-02-06`, `2026-10-04`) - the version
 label and the `metadata` signal. `fetch_atom_file` downloads atomically and compares
 the size with the feed `length` and `Content-Length`; `unpack_members` copies

@@ -199,3 +199,28 @@ logs; SCOPE's „REST API server” (1.0+) and „web GUI = Archiwista” lines 
 and the service `kartograf-server` stop being planned with the release that brings them (Nogat N2). Decisions 1 to 9
 are implemented on `feat/gui` in slices: the form's fields (1), the plan (3, 4; step K2), the script (5; K3), the
 server (2, 6 to 8; K4) and the GUI (9; K5); Latarnik's L1 and Archiwista's A1 follow in their repositories.
+
+**Erratum 1 (2026-11-25, step K2, the coordinator's decision on its first open point):** decision 3 puts in
+`fetch.sha256` the SHA-256 the registry pins (CAMELS-PL), but the files of a CAMELS-PL release are members read out
+of its ZIP by range requests: `built`, as every file no URL serves alone, so their `fetch` is `null` and no pinned
+SHA-256 reached a plan. They stay `built` and carry no `fetch.sha256`; the `sha256` of a `fetch` is for a file
+downloaded whole whose SHA-256 the registry pins (none yet). The planned file names the pinned archive and its
+SHA-256 instead: since the item's `source` is the registry key that `sources` is built from (decision 3), they go
+into an additive key of the item, `archive` (`{url, size_bytes, member, sha256}`: the ZIP of the release and its
+size, the path of the member in it and the SHA-256 of its bytes, as the registry pins them; `null` for every other
+file), in store and plain plans alike and with no request (B2). (c) leaves these files out (`built`), so the
+provider lines of decision 5 never reach its `ATTRIBUTION.txt`: it holds the registry's `license.attribution` of the
+sources of the files it downloads.
+
+**Erratum 2 (2026-11-25, step K2, the coordinator's decision on its second open point):** a plain check reads no
+ATOM feed and B2 forbids a request for one, so in a plain or detached plan the file of an ATOM feed (GUGiK NMT
+100 m, the national files of ČÚZK) had a `fetch` without a URL and (c) could not download it. A plain or detached
+check now reads the feed the local metadata cache already holds, with no request, so B2 holds: `resolve_atom_file`
+also stores the file it picks from a dataset feed (`atom_cache`, under a key of its own), and a plain plan names the
+URL and the length of that file while it is younger than the TTL of the cache (7 days; in refresh mode too, since
+the plan judges no version by it). Without such a feed in the cache the item keeps `fetch {url: null}` and has
+`fetch_reason` `feed_not_cached`, a third reason beside `credentials` and `built` and the only one that comes with a
+`fetch` (the file is the bytes at a URL; the plan cannot name it). (c) leaves such a file out with that reason; (b),
+or a store check or a run of the same request on that machine first, gets it. The server's detached plans read the
+server's cache the same way. `cache stats` counts these entries with the feed indexes (`atom_feeds`, „ATOM feed
+entries”).
