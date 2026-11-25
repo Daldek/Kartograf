@@ -12,8 +12,8 @@ The status is the verdict of the domain document (its ``ok``): ``ok``; ``partial
 it is false and a unit succeeded; ``failed`` when it is false and no unit did. The
 process exit code follows the status (``kartograf._errors.OUTCOMES``: 0, 10, 11).
 Every document with a verdict has a reader in ``_READERS`` that gives its units; a
-document without a verdict (a sheet, a list of sources, a store overview, ...) is ``ok``
-with no items.
+document without a verdict (a sheet, a list of sources, a store overview, a script, ...)
+is ``ok`` with no items and the ``notices`` it carries, if any.
 
 Examples
 --------
@@ -252,6 +252,10 @@ _READERS: Mapping[type[Document], Callable[[Any], _Reading]] = {
 def outcome_of(document: Document | None, *, command: str = "") -> Outcome:
     """Return the status, the units and the notices of the document of a command.
 
+    A document without a verdict is ``ok``, without units, with its own ``notices``
+    (a script of a plan); it is read by its attributes, since the modules of such
+    documents import this one through the command layer.
+
     Parameters
     ----------
     document : Document or None
@@ -274,7 +278,7 @@ def outcome_of(document: Document | None, *, command: str = "") -> Outcome:
                 f"{type(document).__name__} has a verdict (ok) and no reader in "
                 "kartograf.envelope"
             )
-        return Outcome("ok", (), ())
+        return Outcome("ok", (), tuple(getattr(document, "notices", ())))
     ok, items, notices = reader(document)
     if ok:
         return Outcome("ok", items, notices)

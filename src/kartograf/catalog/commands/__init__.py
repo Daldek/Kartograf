@@ -33,6 +33,7 @@ MODULE_ORDER = (
     "names",
     "maps",
     "geodesy",
+    "script",
     "misc",
     "config",
 )

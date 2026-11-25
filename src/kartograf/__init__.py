@@ -37,7 +37,11 @@ and allowed values);
 ``parse_command``, ``validate_command``, ``format_command``, ``run_command``
 and ``check_command`` work on every command of the catalog as data: the last two
 return the ``kartograf-result/1`` envelope (``CommandResult``: ``status``, ``items``,
-``notices`` and the report as ``result``), as the CLI ``--json`` prints it. Other
+``notices`` and the report as ``result``), as the CLI ``--json`` prints it.
+``generate_script`` writes the bash or PowerShell script of a data command for the
+user's own machine (``script generate``, ADR-063): the one that runs its line with a
+released Kartograf, or the one that downloads the files of its plan directly
+(``ScriptResult``, ``kartograf-script/1``). Other
 reports of the document family: ``describe_sheet``, ``find_sheets``, ``list_sources``,
 ``list_layers``, ``get_cache_info``, ``get_cache_path``, ``clear_cache``,
 ``get_config``, ``store_root`` (the default store root with its source and marker,
@@ -223,6 +227,7 @@ from kartograf.exceptions import (
     ReleaseLayoutError,
     ResolutionMismatchError,
     StoreUnavailableError,
+    UnsupportedError,
     UsageError,
     ValidationError,
     YearRangeError,
@@ -264,6 +269,7 @@ from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.pl.prg import discover_teryts_for_bbox, teryt_for_point
 from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.script import ScriptResult, generate_script
 from kartograf.sheet_info import SheetInfo, SheetList, describe_sheet, find_sheets
 from kartograf.source_info import (
     LayerList,
@@ -463,6 +469,7 @@ __all__ = [
     "ForbiddenError",
     "MissingDependencyError",
     "CommandNotRebuildableError",
+    "UnsupportedError",
     # Sources, layers and the metadata cache as data (spec 5.4.6-5.4.9)
     "list_sources",
     "SourceList",
@@ -498,6 +505,9 @@ __all__ = [
     "command_for_file",
     "CommandResult",
     "ResultItem",
+    # Scripts of a request for the user's own machine (`script generate`, ADR-063)
+    "generate_script",
+    "ScriptResult",
     # Errors as data (`kartograf-error/1`, spec 6)
     "ErrorReport",
     "error_report",

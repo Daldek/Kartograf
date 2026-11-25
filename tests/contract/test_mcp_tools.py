@@ -81,7 +81,7 @@ def _text(spec) -> str:
 def test_every_command_with_a_family_is_one_tool_in_the_order_of_the_catalog():
     expected = [command.operation_id for command in TOOL_COMMANDS]
 
-    assert len(expected) == 34
+    assert len(expected) == 35
     assert list(WRITES) == expected
     # the commands of the cache and the settings are no tools
     assert {c.id for c in CATALOG.values() if not c.family} == {
@@ -123,7 +123,7 @@ def test_the_families_are_those_of_the_catalog_with_core_apart():
     assert counts == {
         "discovery": 17,
         "availability": 1,
-        "data": 12,
+        "data": 13,
         "store": 4,
         "core": 10,
     }
@@ -150,7 +150,7 @@ def test_the_family_filter_keeps_the_order_of_the_catalog():
     ]
     assert tool_specs(None, allow_writes=True) == tool_specs(allow_writes=True)
     assert (
-        len(tool_specs(("discovery", "availability", "data"), allow_writes=True)) == 30
+        len(tool_specs(("discovery", "availability", "data"), allow_writes=True)) == 31
     )
 
 
@@ -172,7 +172,7 @@ def test_an_unknown_or_empty_family_is_a_validation_error(names):
 
 
 def test_a_server_without_writes_offers_every_tool_and_hides_none():
-    assert len(PLANS) == 34
+    assert len(PLANS) == 35
     assert set(PLANS) == set(WRITES)
     assert hidden_tools(allow_writes=False) == {}
     assert hidden_tools(allow_writes=True) == {}
@@ -496,7 +496,7 @@ def test_tools_module_needs_neither_mcp_nor_jsonschema():
         "import sys\n"
         "sys.modules['mcp'] = None\n"
         "import kartograf.catalog.tools as tools\n"
-        "assert len(tools.tool_specs(allow_writes=True)) == 34\n"
+        "assert len(tools.tool_specs(allow_writes=True)) == 35\n"
         "assert 'jsonschema' not in sys.modules\n"
     )
 

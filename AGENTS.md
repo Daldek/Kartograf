@@ -6,7 +6,7 @@
 
 Kartograf downloads official spatial data of Poland (GUGiK) and Czechia (CUZK), with Copernicus (CORINE land cover) and ISRIC (SoilGrids soils): digital elevation models (DEM, Polish NMT) and surface models (NMPT), LAZ point clouds, orthophotos, land cover (BDOT10k, CORINE), soils and hydrologic soil groups (HSG), administrative boundaries, cadastre, 3D models and more. Every file is saved as an immutable version in a store, next to a `kartograf-meta/1` sidecar with its CRS, source and licence. Interfaces: a Python library, a CLI and an MCP server, all from one command catalog.
 
-Use it to get the data of an area (a sheet code, a bbox, a geometry file, a TERYT code or a whole country) and to read what it has already downloaded. Command groups: `boundaries`, `cadastre`, `elevation`, `geodesy`, `hydro`, `imagery`, `landcover`, `maps`, `models3d`, `names`, `sheet`, `soil`, `store`, `cache`, `commands`, `config`.
+Use it to get the data of an area (a sheet code, a bbox, a geometry file, a TERYT code or a whole country) and to read what it has already downloaded. Command groups: `boundaries`, `cadastre`, `elevation`, `geodesy`, `hydro`, `imagery`, `landcover`, `maps`, `models3d`, `names`, `sheet`, `soil`, `store`, `cache`, `commands`, `config`, `script`.
 
 Not for:
 
@@ -99,6 +99,7 @@ One line per command: name, `operation_id`, summary. Options, allowed values, un
 - `maps list-sources` (`kartograf_maps_list_sources`): List the registered data sources of the maps group (offline)
 - `geodesy download` (`kartograf_geodesy_download`): Download control points, county packages, sheet archives or a quasi-geoid
 - `geodesy list-sources` (`kartograf_geodesy_list_sources`): List the registered data sources of the geodesy group (offline)
+- `script generate` (`kartograf_script_generate`): Write a bash or PowerShell script that runs a data command or downloads its files
 - `sheet parse` (`kartograf_sheet_parse`): Recognise a PL or CZ sheet code and show its properties
 - `commands list` (`kartograf_commands_list`): List the commands with their groups, products and MCP families
 - `commands schema` (`kartograf_commands_schema`): Describe one command: its options, result, effects, rules and examples

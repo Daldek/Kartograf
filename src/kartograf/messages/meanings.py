@@ -429,6 +429,15 @@ MESSAGES = {
         "Fetch every file again; nothing is overwritten.",
         "Pobiera kazdy plik ponownie; nic nie jest nadpisywane.",
     ),
+    # ``shell``
+    "shell_bash": Text(
+        "A bash script (Linux, macOS; Git Bash or WSL on Windows).",
+        "Skrypt bash (Linux, macOS; Git Bash albo WSL w Windows).",
+    ),
+    "shell_powershell": Text(
+        "A PowerShell script, in ASCII (Windows PowerShell 5.1 or PowerShell 7).",
+        "Skrypt PowerShell, w ASCII (Windows PowerShell 5.1 albo PowerShell 7).",
+    ),
     # values of a regular form
     "resolution": Text(
         "Cell or pixel size {value} (metres).",

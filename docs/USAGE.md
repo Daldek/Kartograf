@@ -26,6 +26,7 @@ list of the public API: `src/kartograf/__init__.py` (`__all__`).
    - [1.12 Plain files or the store (`--output-dir`, `--root`)](#112-plain-files-or-the-store---output-dir---root)
    - [1.13 PGW water management plans: the geodatabase and the layers of an area (Poland)](#113-pgw-water-management-plans-the-geodatabase-and-the-layers-of-an-area-poland)
    - [1.14 CAMELS-PL: catchments and gauging stations (Poland)](#114-camels-pl-catchments-and-gauging-stations-poland)
+   - [1.15 Scripts for another machine (`script generate`)](#115-scripts-for-another-machine-script-generate)
 2. [Python library](#2-python-library)
 3. [Download result](#3-download-result)
 4. [GUGiK campaigns](#4-gugik-campaigns)
@@ -62,7 +63,8 @@ Commands are grouped by data type (`kartograf <group> <command>`, ADR-039):
 | `geodesy` | `download`, `list-sources` | geodetic control networks (`control`): PL (GUGiK) and CZ (Bodove pole); quasi-geoids (`geoid`): PL-geoid2021 and QGZU-2013 |
 | `store` | `overview`, `entries`, `sidecar`, `init` | store reads (no network, no writes): segments, entries with sidecars, the sidecar of one file; `init` writes the marker `kartograf-store.json` of a store (section 1.12) |
 
-Outside the data groups there are `kartograf sheet parse` and `kartograf sheet find` (group `sheet`), `kartograf cache`, `kartograf config` (settings, section 9)
+Outside the data groups there are `kartograf sheet parse` and `kartograf sheet find` (group `sheet`), `kartograf cache`, `kartograf config` (settings, section 9),
+`kartograf script generate` (group `script`: a bash or PowerShell script of a data command for another machine, section 1.15)
 and `kartograf commands list`, `kartograf commands schema` and `kartograf commands guide` (group `commands`: the command catalog and the guide for agents, sections 8.4 and 8.7). `kartograf <group>
 --help` prints the group's commands, `<group> <command> --help` — options and command
 examples, `list-sources` — the group's sources from the registry (no network): `WYBOR` (the complete
@@ -2109,6 +2111,70 @@ Regulamin danych IMGW-PIB: https://danepubliczne.imgw.pl/regulations
 Pass them on with the data and with what you derive from it. Kartograf's other products do not carry such lines
 (`CLAUDE.md`, Deviations).
 
+### 1.15 Scripts for another machine (`script generate`)
+
+`kartograf script generate` writes a bash or PowerShell script of the line of a data command, for a machine where
+the request is to run later (ADR-063 decision 5). It prints the script on stdout (`> kartograf.sh`), writes nothing
+and resolves nothing: a path of the line or of `--target` is text of the script, and a leading `~` is the home
+directory of the machine that runs it. `--shell bash|powershell` is required; the request is `--command LINE` (with
+or without the leading `kartograf`) or, for a direct script, `--plan FILE`, a saved `kartograf-plan/1`.
+
+```bash
+# (b) the Kartograf script: it runs the line with the released Kartograf it pins
+kartograf script generate --shell bash \
+  --command "elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 -o ~/dem" > nmt.sh
+# (c) the direct script: curl of the URLs of the plan of the line (the plan is the only use of the network)
+kartograf script generate --shell bash --direct --target ~/dem \
+  --command "elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007" > nmt-direct.sh
+# (c) of a saved plan, for Windows: the file of --check --plan FILE (a store plan) or UpdatePlan.to_json() of the library
+kartograf script generate --shell powershell --direct --plan plan.json --target C:/dane/nmt > nmt.ps1
+```
+
+**The Kartograf script** (`kind` `kartograf`) pins the running release, `kartograf @
+git+https://github.com/Daldek/Kartograf.git@v<version>`. It stops with the address of uv's installation guide when
+`uv` is missing, installs the pinned tag with `uv tool install` when `kartograf` is missing, runs the line with the
+installed `kartograf` when its version is the pinned one and otherwise with `uvx --from` (the other version stays as
+it is). Kartograf's retries, checks, sidecars, store and `ATTRIBUTION.txt` apply. A line of a source with a key
+exchange (CORINE of CLMS) first checks that `CLMS_CREDENTIALS` is set or, on macOS, that the Keychain holds the item
+`clms-token` the Auth Proxy reads (section 6); else it stops naming the variable. The script reads no key and
+writes none. A development version pins no tag: `unsupported` (exit 15, `details.reason` `development_version`,
+`details.version`), whose hint names the direct script.
+
+**The direct script** (`--direct`, `kind` `direct`) downloads every file of the plan that is the bytes of a URL
+(`fetch` of the plan, section 4.3) with `curl` (bash) or `Invoke-WebRequest` (PowerShell) into the target under
+its plain name, through a `.part` file; it checks the size the plan knows and the SHA-256 the registry pins, removes
+the file and stops on a difference or a failed download, and merges the attribution of the sources of the files
+into `ATTRIBUTION.txt` of the target (the plan's `sources`, else the registry; a line already there is not added
+again, so a rerun changes nothing). It has no retries, format checks, sidecars, store or versions, and no cutout,
+merge or reprojection. The plan of `--command` is its detached plan (`check_command(..., detached=True)`, the plain
+write into `.`), and the default target is the line's `-o` or `--root` as typed, else `.`. A saved plan is checked
+first: a plan of 0.9.0, which does not say where its files come from, a name that is no plain file name, a URL that
+is not `http` or `https`, or a SHA-256 that is not 64 hexadecimal digits is a `validation_error` of `plan`.
+
+The header of a direct script lists the files it leaves out, each with why; `left_out` of the document names them
+with their `reason`:
+
+| `reason` | The file |
+|---|---|
+| `credentials` | its source needs a key exchange only Kartograf makes (CORINE GeoTIFF of CLMS) |
+| `built` | Kartograf builds it: a cutout, an unpacked, merged or reprojected file, a member of an archive (the files of CAMELS-PL) |
+| `feed_not_cached` | its URL is in an ATOM feed the plain plan did not read (plan again where the metadata cache holds the feed) |
+| `no_url` | the plan names no URL of it (a PL sheet whose index record was missing when the plan was made) |
+| `check_failed` | its source could not be checked when the plan was made |
+| `duplicate_output_name`, `output_exists`, ... | a conflict of its target; two files of one name in a store plan are both left out |
+
+The plan's own `ATTRIBUTION.txt` is neither downloaded nor left out: the script writes its own. A plan none of whose
+files a URL serves has no direct script: `unsupported` (exit 15, `details.reason` `no_direct_files`,
+`details.files` each `{name, unit, reason}`). With `--json` the CLI prints the envelope of `kartograf-script/1`
+(`shell`, `kind`, `text`, `files` `{name, unit, url, size_bytes, sha256, source}`, `left_out`, `notices`: the notices
+of the plan); the notices of the plan of a line also go to stderr as it is made.
+
+A PowerShell script is ASCII (Windows PowerShell 5.1 reads a file without a byte order mark in the code page of the
+system): a character of a value outside ASCII is its `[char]` code, and `ATTRIBUTION.txt` is written as UTF-8
+without a BOM. In the library: `generate_script(shell=..., command=... | plan=..., direct=False, target=None)`
+returns `ScriptResult`. The MCP tool `kartograf_script_generate` is read-only; the input paths of a line it plans
+with `direct: true` (`geometry`) are held to the rule of its own paths (absolute, inside `--allow-dir`).
+
 ---
 
 ## 2. Python library
@@ -3376,7 +3442,8 @@ the error line. In MCP only an error is `isError`. The units, by document:
 | `-availability/1` | a country | a country that could not be checked |
 
 A document with no verdict (a sheet, sources, layers, the cache, the settings, the store,
-the catalog) is `ok` with no items. The documents:
+the catalog, a script) is `ok` with no items, and the envelope carries the `notices` it has
+(those of the plan of a direct script). The documents:
 
 | Document (`schema`) | CLI command (MCP tool) | Library function | Status `partial` or `failed` when |
 |---|---|---|---|
@@ -3393,6 +3460,7 @@ the catalog) is `ok` with no items. The documents:
 | `kartograf-command-list/1` | `commands list` (MCP: `kartograf_commands_list`) | `list_commands` | - |
 | `kartograf-commands/1` | `commands schema --command` (MCP: `kartograf_commands_schema`) | `command_schema` | - |
 | `kartograf-guide/1` | `commands guide` (no MCP tool) | `agent_guide` | - |
+| `kartograf-script/1` | `script generate` (MCP: `kartograf_script_generate`) | `generate_script` | - |
 | `kartograf-store-overview/1` | `store overview` (MCP: `kartograf_store_overview`) | `describe_store` | - |
 | `kartograf-store-entries/1` | `store entries` (MCP: `kartograf_store_entries`) | `list_store_entries` | - |
 | `kartograf-store-sidecar/1` | `store sidecar` (MCP: `kartograf_store_sidecar`) | `read_store_sidecar` | - |
@@ -3424,7 +3492,7 @@ Common rules of the documents:
 
 ### 8.2 The `--json` contract
 
-The `--json` flag (no short form) is in every leaf command of the CLI (39 commands),
+The `--json` flag (no short form) is in every leaf command of the CLI (40 commands),
 after the command: `kartograf elevation availability --json ...`; `kartograf --json ...` does not
 exist.
 
@@ -3591,6 +3659,7 @@ failed units; the result lists them (`items`) and no error document is written.
 | `calculation_error` | `transform_failed` | `TransformError` | 13 | coordinate transformation failed (for example an infinite result) |
 | `unsupported` | `transform_unavailable` | `TransformUnavailableError` | 15 | no safe operation for the pair of coordinate systems |
 | `unsupported` | `command_not_rebuildable` | `CommandNotRebuildableError` | 15 | command_for_file: no command selects the stored file again (details.family; details.field names a missing sidecar field): a land cover, soil or collection file chosen by an area, soil hsg, a reprojected PL cutout |
+| `unsupported` | - | `UnsupportedError` | 15 | script generate cannot write the script asked for (reasons: development_version, a Kartograf script of a development version, which no released tag pins; no_direct_files, a direct script of a plan none of whose files a URL serves, details.files naming each with its reason) |
 | `io_error` | - | `OSError` | 9 | directory or file unavailable: missing, permissions, no space, disconnected share |
 | `cancelled` | - | `KeyboardInterrupt` | 130 | cancelled by the user (Ctrl-C); versions are committed atomically, so units unfinished at the interrupt (also those queued with --workers > 1) do not exist and no half-written file is left |
 | `terminated` | - | `Terminated` | 143 | terminated by SIGTERM (timeout, docker stop, kill): cleanup as after Ctrl-C |
@@ -3856,14 +3925,14 @@ failure to start prints `Error: ...` and the `kartograf-error/1` document as the
 | `--no-cache` | no metadata cache (exclusive with `--cache-file`) |
 | `--version` | the version |
 
-**Read only by default (AGI-1.3).** Without `--allow-writes` the 21 tools that only read work
+**Read only by default (AGI-1.3).** Without `--allow-writes` the 22 tools that only read work
 as usual, and each of the 13 tools that write and have a plan (the twelve data commands and
 `store init`) is offered as its **plan-only variant**: its input schema has no `update`,
 `plan`, `workers` or `summary`, `check` is fixed to `true` (the call may leave it
 out), its hints say `readOnlyHint: true`, and every call is the plan (`check: true` in the
 envelope, the document `kartograf-plan/1`).
 An argument of a run, or `check: false`, answers `forbidden` (12) with `details.option`
-and the hint to start the server with `--allow-writes`. With `--allow-writes` all 34
+and the hint to start the server with `--allow-writes`. With `--allow-writes` all 35
 tools are offered as declared, and `check: true` still plans.
 
 #### MCP server tools
@@ -3904,6 +3973,7 @@ not write does with the tool.
 | `kartograf_maps_list_sources` | `maps list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
 | `kartograf_geodesy_download` | `geodesy download` | `download_collection` | `data` | `kartograf-download/1` | I, OW | plan |
 | `kartograf_geodesy_list_sources` | `geodesy list-sources` | `list_sources` | `discovery` | `kartograf-sources/1` | RO, I | same |
+| `kartograf_script_generate` | `script generate` | `generate_script` | `data` | `kartograf-script/1` | RO, I, OW | same |
 | `kartograf_sheet_parse` | `sheet parse` | `describe_sheet` | `discovery` | `kartograf-sheet/1` | RO, I | same |
 | `kartograf_commands_list` | `commands list` | `list_commands` | `discovery`, `core` | `kartograf-command-list/1` | RO, I | same |
 | `kartograf_commands_schema` | `commands schema` | `command_schema` | `discovery`, `core` | `kartograf-commands/1` | RO, I | same |
@@ -3988,10 +4058,10 @@ them with the meaning of every allowed value. The same task, run and then planne
   client cancels does not stop a running download (versions are committed atomically, the
   result is dropped); closing stdio ends the server process.
 - Cost for the context of the agent: `tools/list` is long, because every property has its
-  catalog description and every tool the 3,000-character `outputSchema`: about 195,000
-  characters of compact JSON for the 34 tools of a server that writes (91,000 without the
-  `outputSchema`), 190,000 (85,000) for the same 34 tools of a server that does not, and 66,000
-  (35,000) for `--tools core`; the answer of `kartograf_commands_list` is about 10,000
+  catalog description and every tool the 3,000-character `outputSchema`: about 204,000
+  characters of compact JSON for the 35 tools of a server that writes (94,000 without the
+  `outputSchema`), 198,000 (88,000) for the same 35 tools of a server that does not, and 67,000
+  (35,000) for `--tools core`; the answer of `kartograf_commands_list` is about 17,000
   characters, and `structuredContent` repeats `content`. Claude Code defers the definitions
   and loads only the names and the `alwaysLoad` tools; for a client that loads all of them,
   start with `--tools core` or fewer families. The limit of 30,000 characters of ADR-046 (D22)

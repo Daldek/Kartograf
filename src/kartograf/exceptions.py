@@ -584,6 +584,54 @@ class CommandNotRebuildableError(KartografError):
         self.field = field
 
 
+class UnsupportedError(KartografError):
+    """
+    A valid request Kartograf does not do (ERR registry ``unsupported``).
+
+    The request is well formed, but this combination is outside what Kartograf
+    supports; ``reason`` says which (``details.reason``): ``script generate`` cannot pin
+    a development version in a script that installs Kartograf
+    (``development_version``), or no file of the plan has a URL a direct script can
+    download (``no_direct_files``; ADR-063 decision 5).
+
+    Attributes
+    ----------
+    option : str, optional
+        The argument of the call that asked for it (``direct``).
+    version : str, optional
+        The version that cannot be pinned (``development_version``).
+    files : tuple, optional
+        The files a direct script leaves out, each with its ``name``, ``unit`` and
+        ``reason`` (``no_direct_files``).
+
+    Examples
+    --------
+    >>> raise UnsupportedError(
+    ...     "Kartograf 0.10.0.dev0 is no release",
+    ...     reason="development_version",
+    ...     version="0.10.0.dev0",
+    ... )
+    """
+
+    code = "unsupported"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("option", "version", "files")
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str,
+        option: str | None = None,
+        version: str | None = None,
+        files: Sequence[object] = (),
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint, reason=reason)
+        self.option = option
+        self.version = version
+        self.files = tuple(files)
+
+
 class ForbiddenError(KartografError):
     """
     A call the server refuses (AGI-5.8, ERR registry ``forbidden``).

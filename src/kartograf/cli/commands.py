@@ -68,9 +68,12 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
         return emit_error(error_report(UsageError(message("cli.no_command"))))
     if command != _CONFIG_SHOW:  # `config show` reports unusable settings itself
         check_config()
-    # --plan needs a mode in every store command
-    if getattr(parsed_args, "plan", None) is not None and not (
-        parsed_args.check or parsed_args.upgrade
+    # --plan needs a mode in every store command (those with --upgrade; the plan of
+    # `script generate` is its input)
+    if (
+        getattr(parsed_args, "plan", None) is not None
+        and hasattr(parsed_args, "upgrade")
+        and not (parsed_args.check or parsed_args.upgrade)
     ):
         raise ValidationError(message("cli.plan_needs_mode"), option="plan")
     return HANDLERS[command](parsed_args)

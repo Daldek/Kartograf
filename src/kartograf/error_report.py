@@ -230,6 +230,16 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "collection file chosen by an area, soil hsg, a reprojected PL cutout",
     ),
     ErrorCodeSpec(
+        "UnsupportedError",
+        "unsupported",
+        None,
+        15,
+        "script generate cannot write the script asked for (reasons: "
+        "development_version, a Kartograf script of a development version, which no "
+        "released tag pins; no_direct_files, a direct script of a plan none of whose "
+        "files a URL serves, details.files naming each with its reason)",
+    ),
+    ErrorCodeSpec(
         "OSError",
         "io_error",
         None,

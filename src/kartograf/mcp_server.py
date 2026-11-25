@@ -62,7 +62,12 @@ from kartograf.catalog.tools import (
     parse_families,
     tool_specs,
 )
-from kartograf.commands import check_command, run_command, validate_command
+from kartograf.commands import (
+    check_command,
+    parse_command,
+    run_command,
+    validate_command,
+)
 from kartograf.config import check_config, store_root
 from kartograf.download.manager import DownloadProgress
 from kartograf.envelope import CommandResult, wrap
@@ -99,6 +104,10 @@ _WRITES_HINT = (
     "Start kartograf-mcp with --allow-writes and --allow-dir DIR to run and write; "
     "check=true plans without writing."
 )
+# The option of a tool whose value is the command line its call plans, and the switch
+# that makes it plan: the plan of a direct script reads the input files of the line
+# (``geometry``), which the rule of paths covers as the tool's own options.
+_PLANNED_LINES: dict[str, tuple[str, str]] = {"script generate": ("command", "direct")}
 
 
 def _tool(command: str) -> str:
@@ -459,8 +468,9 @@ class _Toolbox:
         """Check the arguments of a call and prepare its library call.
 
         The order of the checks: the writes a plan-only tool refuses, the input
-        schema, the paths (absolute; ``--allow-dir``), the options a plan has none of;
-        the checks of the library come in ``_execute``.
+        schema, the paths (absolute; ``--allow-dir``) of the call and of the input files
+        of a line it plans, the options a plan has none of; the checks of the library
+        come in ``_execute``.
 
         Raises
         ------
@@ -473,6 +483,7 @@ class _Toolbox:
         self._refuse_writes(spec, arguments)
         self._check_schema(self._validators[spec.name], arguments)
         self._check_paths(spec.paths, arguments)
+        self._check_planned_line(spec, arguments)
         self._check_default_root(spec, arguments)
         check = spec.plan_only or arguments.get(CHECK_OPTION) is True
         if check:
@@ -530,6 +541,29 @@ class _Toolbox:
                     hint=f"Allowed directories: {', '.join(directories)}.",
                     reason="outside_allowed_dirs",
                 )
+
+    def _check_planned_line(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> None:
+        """Check the input paths of the command line a call plans (``_PLANNED_LINES``).
+
+        As the paths of the call itself: absolute, inside ``--allow-dir``. A line the
+        parser refuses is the library's to report.
+        """
+        planned = _PLANNED_LINES.get(spec.command)
+        if planned is None or arguments.get(planned[1]) is not True:
+            return
+        line = arguments.get(planned[0])
+        if not isinstance(line, str):
+            return
+        try:
+            call = parse_command(line)
+        except ValidationError:
+            return
+        inputs: dict[str, PathRole] = {
+            param.name: param.path_role
+            for param in declared_commands()[call.command].params
+            if param.path_role == "input"
+        }
+        self._check_paths(inputs, {**call.options, **call.run})
 
     def _check_default_root(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> None:
         """Check the default store of a call that names no target (ADR-054, AGI-5.8).

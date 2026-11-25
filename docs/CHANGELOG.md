@@ -91,10 +91,49 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `detached` with `output_dir` or `root` is a `validation_error` naming the option
   (`exclusive_options`); the options a plain write refuses (`all_campaigns`) stay refused.
 
+#### Scripts for another machine: `script generate` (ADR-063 decision 5)
+
+- `kartograf script generate --shell bash|powershell` (group `script`, MCP tool
+  `kartograf_script_generate`, read-only, family `data`; library `generate_script` ->
+  `ScriptResult`, the new document `kartograf-script/1` `{shell, kind, text, files, left_out,
+  notices}` with `ScriptFile` `{name, unit, url, size_bytes, sha256, source}` and `LeftOutFile`
+  `{name, unit, reason}`): the script of a data command for the user's own machine, printed on
+  stdout and never written; a path of the line or `--target` is text, and a leading `~` is the
+  home directory of the machine that runs it (USAGE 1.15).
+- `--command LINE` alone is the Kartograf script (`kind` `kartograf`): it pins
+  `kartograf @ git+https://github.com/Daldek/Kartograf.git@v<version>`, stops with uv's
+  installation guide when `uv` is missing, installs the tag with `uv tool install` when
+  `kartograf` is missing, runs the line with `kartograf` of the pinned version or else with
+  `uvx --from`, and first stops naming `CLMS_CREDENTIALS` when a keyed source of the line has
+  neither the variable nor, on macOS, the Keychain item `clms-token`; the script reads no key.
+- `--direct` is the direct script (`kind` `direct`): `curl` or `Invoke-WebRequest` of each file
+  of the plan that is the bytes of a URL, into the target (`--target`, by default the line's
+  `-o` or `--root` as typed, else `.`) through a `.part` file, with the size the plan knows and
+  the SHA-256 the registry pins checked, and the attribution of the sources of the files merged
+  into `ATTRIBUTION.txt` (the plan's `sources`, else the registry; no line twice). The plan is the
+  detached plan of `--command` or a saved plan of `--plan FILE`, whose names, URLs and SHA-256
+  are checked first (a plan of 0.9.0 without the fetch fields is refused). The header and
+  `left_out` name each file left out with its reason: `credentials`, `built`,
+  `feed_not_cached`, `no_url` (a `fetch` without a URL), `check_failed`, or the conflict of its
+  target (`duplicate_output_name` for two files of one name in a store plan, `output_exists`,
+  ...). A PowerShell script is ASCII, its non-ASCII characters written as `[char]` codes.
+- `UnsupportedError` (registry `unsupported`, exit 15): `development_version` (a Kartograf script
+  of a version that is not `X.Y.Z`, which no tag pins; `details.version`) and `no_direct_files`
+  (a plan none of whose files a URL serves; `details.files` with their reasons).
+- The MCP server holds the input paths of a line `kartograf_script_generate` plans with
+  `direct: true` (`geometry`) to the rule of its own paths: absolute, inside `--allow-dir`.
+
 ### Changed
 
 - `src/kartograf/_output_schema.py` is regenerated from the new commands-1, whose `command_name`
   reserves the groups `server` and `jobs` (AGI-6.1).
+- The command layer converts each value a call gives beside its options by the kind of its
+  parameter (`check_call`): the `plan` of `script generate` is the document of a plan, as the
+  targets are paths. `--plan` needs `--check` or `--upgrade` only in the commands that have
+  `--upgrade`. A document without a verdict passes its `notices` to the envelope
+  (`outcome_of`), so `--json` of a direct script carries the notices of its plan.
+- The MCP server serves 35 tools (`kartograf_script_generate`), the catalog has 40 commands and
+  the group `script`; `AGENTS.md`, `llms.txt` and the USAGE tables 8.3 and 8.6 are regenerated.
 - The description of `commands schema` names the rules of the options and the server route, and
   the command has a third example, `--form --json`; USAGE 8.4 and ARCHITECTURE 4.11 describe the
   fields, `--form` and `rest`.

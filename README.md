@@ -169,7 +169,7 @@ The full list is `kartograf commands list --json`. Python names are keyword-only
 
 ## MCP server
 
-`kartograf-mcp` serves 34 tools named `kartograf_<group>_<verb>` over stdio. Each client below starts it as in the Install section:
+`kartograf-mcp` serves 35 tools named `kartograf_<group>_<verb>` over stdio. Each client below starts it as in the Install section:
 
 ```bash
 claude mcp add kartograf -- uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0" kartograf-mcp

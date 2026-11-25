@@ -40,7 +40,7 @@ from kartograf.exceptions import (
 )
 from kartograf.marker import MARKER, store_refusal
 from kartograf.testing import build_fixture_store
-from tests.contract.test_cli_json import OFFLINE, _offline_lines
+from tests.contract.test_cli_json import OFFLINE, _offline_lines, released
 
 CATALOG = {command.id: command for command in declared().commands}
 # What runs offline has a command line in the CLI tests of ``--json``. The other
@@ -98,6 +98,7 @@ def test_run_command_gives_the_envelope_the_cli_prints(
     ``run_command`` of the line the CLI is given has the envelope ``--json`` prints
     (two copies of the store)."""
     monkeypatch.chdir(tmp_path)
+    released(monkeypatch)
     cli_lines = _environment(tmp_path / "cli")
     api_lines = _environment(tmp_path / "api")
     argv = cli_lines[command]

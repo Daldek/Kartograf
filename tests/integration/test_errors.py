@@ -57,6 +57,7 @@ SPEC_ERROR_TABLE = [
     ("TransformError", "calculation_error", "transform_failed", 13),
     ("TransformUnavailableError", "unsupported", "transform_unavailable", 15),
     ("CommandNotRebuildableError", "unsupported", "command_not_rebuildable", 15),
+    ("UnsupportedError", "unsupported", None, 15),
     ("OSError", "io_error", None, 9),
     ("KeyboardInterrupt", "cancelled", None, 130),
     ("Terminated", "terminated", None, 143),

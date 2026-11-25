@@ -184,6 +184,10 @@ MEANINGS: Final[Mapping[str, Mapping[str, Message]]] = {
         "upgrade": message("meanings.update_upgrade"),
         "force": message("meanings.update_force"),
     },
+    "shell": {
+        "bash": message("meanings.shell_bash"),
+        "powershell": message("meanings.shell_powershell"),
+    },
 }
 
 # Values of a regular form: (the options, the form, the message of the meaning, whose

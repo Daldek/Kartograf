@@ -288,3 +288,18 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
   plain or detached check names the file of an ATOM feed from the feed the metadata cache holds (the file a dataset
   feed named last, now stored by `resolve_atom_file`), else `fetch {url: null}` with `fetch_reason`
   `feed_not_cached`, the reason (c) gives when it leaves the file out.
+- K3 (2026-11-25, ADR-063 decision 5): `script generate` (`generate_script` -> `ScriptResult`,
+  `kartograf-script/1` with `shell`, `kind`, `text`, `files`, `left_out`, `notices`; group `script`, MCP tool
+  `kartograf_script_generate`, read-only, family `data`; route `POST /api/v1/script/generate`). (b) pins
+  `kartograf @ git+…@v<version>` and refuses a development version (`unsupported`, `development_version`; the new
+  `UnsupportedError`); (c) is the detached plan of the line or a saved plan, whose names, URLs and SHA-256 are
+  checked first, and a plan with nothing to download is `unsupported`, `no_direct_files`. `ATTRIBUTION.txt` of (c)
+  takes `license.attribution` of the plan's `sources`, else the registry's (no file with provider lines reaches (c):
+  the CAMELS-PL members are `built`). Three things beyond this plan: a fifth left-out reason `no_url` (a `fetch`
+  without a URL and no `fetch_reason`, such as a PL sheet whose index record was missing), with
+  `duplicate_output_name` for two files of one name in a store plan; (b) also accepts the macOS Keychain item
+  `clms-token` the Auth Proxy reads when `CLMS_CREDENTIALS` is not set (D4 names the variable only; the script still
+  reads no key); and the MCP server holds the input paths of a line it plans with `direct` (`geometry`) to the rule
+  of its own paths. The PowerShell scripts are ASCII and were checked by structure only: `pwsh` was not installed, so
+  none was parsed or run (`tests/unit/test_script.py` parses them where it is); the bash (c) ran against a stub
+  `curl`. Open: a run of (b) and (c) on the author's machine (K7).

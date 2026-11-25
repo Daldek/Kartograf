@@ -288,6 +288,26 @@ def _ran_nothing(document: Document | None) -> bool:
     return document is not None and not any(getattr(document, n, None) for n in names)
 
 
+def read_plan_file(plan_file: str) -> UpdatePlan:
+    """Return the plan of the file of ``--plan``.
+
+    Raises
+    ------
+    ValidationError
+        The file cannot be read or holds no plan (``option`` ``plan``).
+    """
+    try:
+        return UpdatePlan.from_json(Path(plan_file).read_text(encoding="utf-8"))
+    except OSError as e:
+        raise ValidationError(
+            message("cli.plan_read_failed", plan_file=plan_file, error=reason(e)),
+            option="plan",
+        ) from e
+    except ValidationError as e:
+        e.option = "plan"
+        raise
+
+
 def run_with_plan_file(
     args: argparse.Namespace, body: Callable[[argparse.Namespace], int]
 ) -> int:
@@ -312,18 +332,7 @@ def run_with_plan_file(
     args.plan_ctx = ctx
     plan_file = getattr(args, "plan", None)
     if getattr(args, "upgrade", False) and plan_file:
-        try:
-            ctx.loaded = UpdatePlan.from_json(
-                Path(plan_file).read_text(encoding="utf-8")
-            )
-        except OSError as e:
-            raise ValidationError(
-                message("cli.plan_read_failed", plan_file=plan_file, error=reason(e)),
-                option="plan",
-            ) from e
-        except ValidationError as e:
-            e.option = "plan"
-            raise
+        ctx.loaded = read_plan_file(plan_file)
     if getattr(args, "check", False) and plan_file:
         if Path(plan_file).is_dir():
             raise ValidationError(

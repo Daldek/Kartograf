@@ -406,7 +406,7 @@ def test_list_tools_equals_tool_specs(mode, tmp_path):
     tools = run_session(scenario, **arguments)
     specs = tool_specs(allow_writes=mode == "writes")
 
-    assert len(tools) == 34
+    assert len(tools) == 35
     assert [t.name for t in tools] == [s.name for s in specs]
     for tool, spec in zip(tools, specs, strict=True):
         assert tool.title == spec.title
@@ -1107,6 +1107,49 @@ def test_output_dir_is_confined_like_every_path_and_excludes_root(tmp_path):
     assert list(tmp_path.iterdir()) == [allowed] and list(allowed.iterdir()) == []
 
 
+def _scripted(geometry: str) -> str:
+    """A line of a data command that reads the geometry file ``geometry``."""
+    return (
+        f"elevation download --product nmt --country pl --geometry {geometry}"
+        " --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992"
+    )
+
+
+@needs_mcp
+def test_the_line_a_script_plans_has_its_input_paths_confined(tmp_path, monkeypatch):
+    """``script generate`` with ``direct`` plans the line, which reads its geometry:
+    that path is held to the rule of the tool's own paths before any request. The
+    Kartograf script only writes the line as text and reads nothing."""
+    monkeypatch.setattr(kartograf, "__version__", "0.9.0")
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    tool = "kartograf_script_generate"
+
+    relative = call(
+        tool, {"shell": "bash", "command": _scripted("area.gpkg"), "direct": True}
+    )
+    outside = call(
+        tool,
+        {
+            "shell": "bash",
+            "command": _scripted(str(tmp_path / "area.gpkg")),
+            "direct": True,
+        },
+        **writing(allowed),
+    )
+    text = call(
+        tool,
+        {"shell": "bash", "command": _scripted("area.gpkg")},
+        **writing(allowed),
+    )
+
+    assert error_of(relative)["details"]["option"] == "geometry"
+    forbidden = error_of(outside, code="forbidden", reason="outside_allowed_dirs")
+    assert forbidden["details"]["option"] == "geometry"
+    assert text.is_error is False
+    assert text.structured_content["result"]["kind"] == "kartograf"
+
+
 @needs_mcp
 def test_progress_is_strictly_increasing(tmp_path):
     """Events from four threads with the same ``current`` reach the client as
@@ -1411,7 +1454,7 @@ def test_tools_flag_selects_families(monkeypatch):
 
     names = run_session(scenario, server=server)
 
-    assert len(names) == 34  # 17 + 1 + 12 + 4: the plans of the data tools
+    assert len(names) == 35  # 17 + 1 + 13 + 4: the plans of the data tools
     assert names == [s.name for s in tool_specs(families, allow_writes=False)]
 
 
@@ -1542,7 +1585,7 @@ def test_allow_writes_flag_lists_the_tools_that_write(tmp_path, monkeypatch):
 
     tools = run_session(scenario, server=server)
 
-    assert len(tools) == 34
+    assert len(tools) == 35
     download = tools["kartograf_elevation_download"]
     assert download.annotations.read_only_hint is False
     assert download.annotations.destructive_hint is False
@@ -1619,7 +1662,7 @@ def test_the_gate_of_agi_5_13_over_stdio(tmp_path):
     names = [tool.name for tool in listed]
     assert names == [tool.name for tool in again]  # deterministic (AGI-5.2)
     assert names == [s.name for s in tool_specs(allow_writes=False)]
-    assert len(set(names)) == len(names) == 34
+    assert len(set(names)) == len(names) == 35
     for tool in listed:
         assert re.fullmatch(r"kartograf_[a-z0-9_]+", tool.name) and len(tool.name) <= 48
         hints = tool.annotations  # AGI-5.4: the title and the four hints are set
@@ -1703,7 +1746,7 @@ def test_stdio_server_with_writes_downloads_inside_its_directory(tmp_path):
 
     tools, refused, created = anyio.run(scenario)
 
-    assert len(tools) == 34
+    assert len(tools) == 35
     assert error_of(refused, code="forbidden")["details"]["allowed"] == [
         inside.resolve().as_posix()
     ]
@@ -1790,7 +1833,7 @@ def test_stdio_stdout_has_only_protocol_frames(monkeypatch):
     assert by_id[1]["instructions"] == INSTRUCTIONS
     # the keys of the protocol are camelCase; the five hints are always set
     tools = {t["name"]: t for t in by_id[2]["tools"]}
-    assert len(tools) == 34
+    assert len(tools) == 35
     plan = tools["kartograf_elevation_download"]
     assert plan["annotations"] == {
         "title": plan["title"],

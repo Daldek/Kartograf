@@ -53,6 +53,7 @@ from kartograf.landcover.manager import LandCoverReport, SoilReport
 from kartograf.marker import StoreInit
 from kartograf.notices import Notice
 from kartograf.providers.pl.gugik_laz import LazTile, SupersededLazTile
+from kartograf.script import LeftOutFile, ScriptFile, ScriptResult
 from kartograf.serialization import SCHEMAS, Document, encode
 from kartograf.sheet_info import (
     SheetDescendants,
@@ -517,6 +518,32 @@ def _command_schema() -> Document:
     return command_schema("elevation download")
 
 
+def _script_file() -> ScriptFile:
+    return ScriptFile(
+        f"{SHEET}.asc",
+        SHEET,
+        "https://example.test/a.asc",
+        48,
+        SHA256,
+        "pl.gugik.nmt_1m",
+    )
+
+
+def _left_out_file() -> LeftOutFile:
+    return LeftOutFile("N-34-130-D-d-2-3.asc", "N-34-130-D-d-2-3", "no_url")
+
+
+def _script() -> Document:
+    return ScriptResult(
+        "bash",
+        "direct",
+        "#!/usr/bin/env bash\n",
+        (_script_file(),),
+        (_left_out_file(),),
+        (_notice(),),
+    )
+
+
 def _command_entry() -> object:
     return command_schema("elevation download").commands[0]
 
@@ -582,6 +609,7 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-command-list/1": (_command_list,),
     "kartograf-commands/1": (_command_schema,),
     "kartograf-guide/1": (_agent_guide,),
+    "kartograf-script/1": (_script,),
 }
 
 # schema -> the keys of the document in order (``schema`` first)
@@ -717,6 +745,15 @@ CONTRACT: dict[str, list[str]] = {
     "kartograf-command-list/1": ["schema", "tool", "version", "groups", "commands"],
     "kartograf-commands/1": ["schema", "tool", "version", "commands"],
     "kartograf-guide/1": ["schema", "format", "text"],
+    "kartograf-script/1": [
+        "schema",
+        "shell",
+        "kind",
+        "text",
+        "files",
+        "left_out",
+        "notices",
+    ],
 }
 
 # type name -> (a value, the keys of its object in order); spec 5.3 and 5.4
@@ -780,6 +817,11 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
     "Fetch": (_fetch, ["url", "size_bytes", "sha256"]),
     "ArchiveMember": (_archive, ["url", "size_bytes", "member", "sha256"]),
     "PlanSource": (_plan_source, ["key", "provider", "license", "auth"]),
+    "ScriptFile": (
+        _script_file,
+        ["name", "unit", "url", "size_bytes", "sha256", "source"],
+    ),
+    "LeftOutFile": (_left_out_file, ["name", "unit", "reason"]),
     "LicenseInfo": (
         lambda: _plan_source().license,
         ["id", "attribution", "url"],

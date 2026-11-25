@@ -575,9 +575,23 @@ def test_json_availability_cz_has_its_notices_in_the_document(tmp_path, monkeypa
 # -- the query and management commands: the document of the library function -
 
 
+# A line of a data command, which the Kartograf script of ``script generate`` runs.
+SCRIPTED_LINE = (
+    "elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m"
+    " --vertical-crs EVRF2007 -o ./dem"
+)
+
+
+def released(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run as a released version, whose tag the Kartograf script of ``script
+    generate`` pins (a development version has none: ``development_version``)."""
+    monkeypatch.setattr("kartograf.__version__", "0.9.0")
+
+
 def _offline_lines(base: Path) -> dict[str, list[str]]:
     """The command line of every leaf command that runs offline, by command id
-    (the store commands read ``base/store``; ``store init`` makes ``base/marked``)."""
+    (the store commands read ``base/store``; ``store init`` makes ``base/marked``;
+    ``script generate`` needs a released version, `released`)."""
     store = base / "store"
     return {
         **{f"{group} list-sources": [group, "list-sources"] for group in SOURCE_GROUPS},
@@ -605,6 +619,9 @@ def _offline_lines(base: Path) -> dict[str, list[str]]:
         "cache path": ["cache", "path"],
         "cache clear": ["cache", "clear"],
         "config show": ["config", "show"],
+        "script generate": [
+            *("script", "generate", "--shell", "bash", "--command", SCRIPTED_LINE)
+        ],
     }
 
 
@@ -618,6 +635,7 @@ def test_query_and_management_commands_print_one_document(
     """``--json``: all of stdout is one envelope whose result has the schema of the
     command, stderr is empty, the exit code is that of its status."""
     monkeypatch.chdir(tmp_path)
+    released(monkeypatch)
     build_fixture_store(tmp_path / "store")  # what the store commands read
     argv = _offline_lines(tmp_path)[command]
     declaration = next(c for c in declared().commands if c.id == command)

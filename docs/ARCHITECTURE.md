@@ -645,6 +645,9 @@ kartograf/
 │                        # validation without network, download and check_*; no per-product logic)
 ├── stored_command.py    # command_for_file -> CommandCall: the command that selects a stored file
 │                        # again, from its sidecar (KB-6, ADR-057); refusals by family
+├── script.py            # generate_script -> ScriptResult (kartograf-script/1, ADR-063 decision 5): the
+│                        # bash/PowerShell script of a data command line (Kartograf script) or of
+│                        # the URLs of its plan (direct script); writes text only
 ├── mcp_server.py        # MCP server (stdio; extra `mcp`, script kartograf-mcp): create_server,
 │                        # main, build_instructions, INSTRUCTIONS; the only module touching the SDK
 ├── guide.py             # guide for agents from the catalog (AGI 8): agent_guide -> AgentGuide
@@ -781,7 +784,8 @@ kartograf/
                          # sources_cmd.py (list-sources), parse_cmd.py (describe_sheet),
                          # cache_cmd.py (cache_info), catalog_cmd.py (list_commands, command_schema,
                          # agent_guide), config_cmd.py (config show: get_config), store_cmd.py (store
-                         # overview/entries/sidecar/init: store_documents, marker),
+                         # overview/entries/sidecar/init: store_documents, marker), script_cmd.py
+                         # (script generate: generate_script, the plan file of --plan),
                          # commands.py (main entry point: exceptions -> error_report, the exit codes of the registry)
 ```
 
@@ -2028,6 +2032,7 @@ schema, and that every `result_schema` of the catalog is in the registry.
 | `kartograf-command-list/1` | `CommandList` | `catalog.model` | `tool, version, groups, commands` |
 | `kartograf-commands/1` | `CommandCatalog` | `catalog.model` | `tool, version, commands` |
 | `kartograf-guide/1` | `AgentGuide` | `guide` | `format, text` |
+| `kartograf-script/1` | `ScriptResult` | `script` | `shell, kind, text, files, left_out, notices` |
 | `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `root, segments` |
 | `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `root, segment, units, limit, truncated, entries` |
 | `kartograf-store-sidecar/1` | `StoreSidecar` | `store_documents` | `path, sidecar` |
@@ -4392,7 +4397,7 @@ SIGTERM: `sigterm_interrupts()` (CLI `main`) raises `Terminated` in the main thr
 `terminated`/143. Outside `main` (library, MCP server) the signal is not intercepted.
 
 **MCP server (`src/kartograf/mcp_server.py`, `catalog/tools.py`, `_output_schema.py`).** One tool per
-command of the catalog that has a family (34), named by the `operation_id` (`kartograf_<group>_<command>`, AGI-5.2).
+command of the catalog that has a family (35), named by the `operation_id` (`kartograf_<group>_<command>`, AGI-5.2).
 `catalog/tools.py` builds them from the declarations and `command_entries()` (descriptions, `enum` values, bounds,
 examples, `dependentRequired` `bbox` -> `bbox_crs`, JSON Schema 2020-12 with
 `additionalProperties: false`; `anyOf` for a value per country) and from the mode of the server:

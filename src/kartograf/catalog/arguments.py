@@ -139,14 +139,16 @@ def check_call(
         The options of the call in the JSON form, by name (``Command.call_options``):
         ``bbox`` with ``bbox_crs``, a path as a text, a list as a list.
     targets : Mapping, optional
-        The write targets the call gave (``root``, ``output_dir``): paths.
+        The values the call gave by name beside its options: the write targets
+        (``root``, ``output_dir``: paths) and the options of a run (``plan``, ...),
+        each converted by the kind of its parameter.
 
     Returns
     -------
     dict
         The library arguments: the options and the targets in the form the function
-        takes (a ``BBox``, ``Path`` values, a tuple for a list), and the constants of
-        the command (``fixed``).
+        takes (a ``BBox``, ``Path`` values, a tuple for a list, an ``UpdatePlan``), and
+        the constants of the command (``fixed``).
 
     Raises
     ------
@@ -164,15 +166,16 @@ def check_call(
     declared = {param.name: param for param in command.call_options}
     arguments = convert_arguments({n: p.kind for n, p in declared.items()}, options)
     given = dict(targets or {})
+    kinds = {p.name: p.kind for p in command.params if p.api_argument is not None}
     for name in given:
-        if not any(p.name == name and p.api_argument for p in command.params):
+        if name not in kinds:
             raise ValidationError(
                 message(
                     "commands.option_not_of_command", name=name, command=command.id
                 ),
                 option=name,
             )
-    arguments.update(convert_arguments(dict.fromkeys(given, "path"), given))
+    arguments.update(convert_arguments({name: kinds[name] for name in given}, given))
     entries = _entry_options(command)
     for name, param in declared.items():
         if param.kind == "bbox_crs":

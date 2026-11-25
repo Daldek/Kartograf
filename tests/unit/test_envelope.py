@@ -23,6 +23,7 @@ from tests.contract.test_json_contract import (
     _area,
     _notice,
     _plan_item,
+    _script,
     _sources,
     _unit_file,
 )
@@ -213,6 +214,17 @@ def test_a_document_with_no_verdict_is_ok_with_no_items():
     assert _summary(_sources()) == ("ok", [])
     assert _summary(None) == ("ok", [])
     assert outcome_of(_sources()).notices == ()
+
+
+def test_a_document_with_no_verdict_keeps_its_notices_in_the_envelope():
+    """A direct script carries the notices of its plan (``script generate``)."""
+    script = _script()
+
+    envelope = wrap("script generate", script)
+
+    assert _summary(script) == ("ok", [])
+    assert envelope.notices == (_notice(),)
+    assert envelope.exit_code == 0
 
 
 def test_a_document_with_a_verdict_and_no_reader_is_a_program_error():
