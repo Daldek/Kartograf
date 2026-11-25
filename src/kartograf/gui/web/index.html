@@ -10,8 +10,12 @@
 <link rel="stylesheet" href="vendor/maplibre-gl/maplibre-gl.css">
 <link rel="stylesheet" href="nogat/nogat-basemaps.css">
 <link rel="stylesheet" href="nogat/nogat-app-menu.css">
+<link rel="stylesheet" href="nogat/nogat-command-form.css">
+<link rel="stylesheet" href="nogat/nogat-sources.css">
 <link rel="stylesheet" href="css/app.css">
 <script type="module" src="nogat/nogat-app-menu.js"></script>
+<script type="module" src="nogat/nogat-command-form.js"></script>
+<script type="module" src="nogat/nogat-sources.js"></script>
 <script type="module" src="src/main.js"></script>
 </head>
 <body>
@@ -51,19 +55,87 @@
   <main class="view-layout" id="data">
     <aside class="panel" id="left">
       <p class="banner bad" id="server-missing" data-text="serverMissing" hidden></p>
-      <section>
-        <h3 data-text="basemapsHeading">Podkłady kartograficzne</h3>
-        <nogat-basemaps></nogat-basemaps>
+      <section class="data" id="data-form">
+        <h2 data-text="dataHeading">Dane</h2>
+        <fieldset class="choices" id="command-choice">
+          <legend data-text="dataChoice">Rodzaj danych</legend>
+          <label class="choice">
+            <input type="radio" name="command" value="elevation download" checked>
+            <strong data-text="elevation">Model wysokościowy</strong>
+            <span data-text="elevationNote">NMT, NMPT, chmury punktów LAZ</span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="command" value="imagery download">
+            <strong data-text="imagery">Ortofotomapa</strong>
+            <span data-text="imageryNote">ortofotomapa GUGiK i ČÚZK</span>
+          </label>
+        </fieldset>
+        <p class="note" id="form-status" role="status"></p>
+        <nogat-command-form id="form"></nogat-command-form>
       </section>
       <p class="note" data-text="keys">Strona nie pyta o klucze API i żadnego nie wysyła.</p>
+      <div class="panel-foot">
+        <button type="button" class="btn primary" id="check" data-text="check" disabled>Sprawdź plan</button>
+        <span class="note" id="check-status" role="status"></span>
+      </div>
     </aside>
     <button type="button" class="resizer" data-side="left" aria-controls="left" aria-orientation="vertical"></button>
     <section class="centre">
       <div class="map-bar">
-        <span class="hint" data-text="mapLabel">Mapa</span>
+        <button type="button" class="btn sm" id="draw" aria-pressed="false" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+            <rect x="4" y="6" width="16" height="12" stroke-dasharray="3 2"></rect>
+          </svg>
+          <span data-text="draw">Zaznacz prostokąt</span>
+        </button>
+        <button type="button" class="btn sm" id="sheets" aria-pressed="false" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4 4h16v16H4z"></path><path d="M12 4v16"></path><path d="M4 12h16"></path>
+          </svg>
+          <span data-text="sheets">Arkusze widoku</span>
+        </button>
+        <button type="button" class="btn sm ghost" id="clear-area" data-title="clearArea" data-label="clearArea" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M6 6l12 12"></path><path d="M18 6L6 18"></path>
+          </svg>
+        </button>
+        <span class="hint" id="map-hint" data-text="areaHint">Zaznacz prostokąt na mapie, wybierz arkusz albo wpisz obszar w formularzu.</span>
       </div>
       <div class="map" id="map" data-label="mapLabel"></div>
     </section>
+    <button type="button" class="resizer" data-side="right" aria-controls="right" aria-orientation="vertical"></button>
+    <aside class="panel" id="right">
+      <section class="plan" id="plan" aria-labelledby="plan-heading">
+        <h2 id="plan-heading" data-text="planHeading">Plan</h2>
+        <p class="note" id="plan-empty" data-text="planEmpty"></p>
+        <p class="banner warn" id="plan-stale" data-text="planStale" hidden></p>
+        <div class="banner bad" id="plan-error" role="alert" hidden></div>
+        <div class="plan-body" id="plan-body" hidden>
+          <p class="plan-summary" id="plan-summary"></p>
+          <p class="banner warn" id="plan-incomplete" hidden></p>
+          <ul class="notices" id="plan-notices" data-label="noticesHeading" hidden></ul>
+          <div class="plan-table-wrap">
+            <table class="plan-table" id="plan-table">
+              <thead>
+                <tr>
+                  <th scope="col" data-text="colUnitFile">Jednostka i plik</th>
+                  <th scope="col" class="size" data-text="colSize">Rozmiar</th>
+                  <th scope="col" data-text="colSourceLicence">Źródło i licencja</th>
+                  <th scope="col" data-text="colStatus">Stan</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="note" id="plan-footprints"></p>
+          <nogat-sources id="plan-sources"></nogat-sources>
+        </div>
+      </section>
+      <section class="basemaps">
+        <h3 data-text="basemapsHeading">Podkłady kartograficzne</h3>
+        <nogat-basemaps></nogat-basemaps>
+      </section>
+    </aside>
   </main>
 </div>
 <dialog class="about" id="about">

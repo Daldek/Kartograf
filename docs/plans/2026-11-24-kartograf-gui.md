@@ -331,6 +331,21 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
   over the kit's shared base maps with the settings `basemaps`, `basemap_mirrors` and `basemap_extra`; its settings
   are `site.json` beside it, its API found by `GET /api/v1/server`. Kit 1.3.0 copied from Nogat `1a68cc7`. Read
   differently: without a server the page builds nothing (F3 makes the line the server's `commands format`; D5's
-  page that builds (a) and (b) alone would need F1, which ADR-063 rejects). Open: the form, the plan table and the
-  footprints (second slice), the outputs and the Playwright test of the main flow (third slice); the regulamin's
-  „Zgłoś uwagę” (DEV-15.12) and the admin panel (DEV-15.13), which the kit's text describes, before a public launch.
+  page that builds (a) and (b) alone would need F1, which ADR-063 rejects).
+- K5, second slice (2026-11-25): the form, the area and the plan. `<nogat-command-form>` of `elevation download`
+  (NMT, NMPT, LAZ) or `imagery download` (`orto`), its line from `commands format`, a pasted line read by
+  `commands parse` (a line of the other command switches the form); `check`, `plan`, `geometry` and `layer` hidden;
+  the usual choices of each product preset (`pl`, 1992, 1 m, EVRF2007; LAZ without `resolution` and `sheet_system`,
+  which it refuses). The area: a rectangle drawn on the map, a 1:10 000 PL-1992 sheet picked among the sheets of the
+  view (`sheet find`, from zoom 11, at most 600) or typed. „Sprawdź plan” sends `result.options` of `commands format`
+  to `POST <group>/download?check=true`; the plan's notices, its table (unit and file, size where known, source and
+  provider, licence, state with `fetch_reason`), the incomplete mark (not `ok`, a check failed, `auth` not `none`),
+  the sources' lines in `<nogat-sources>` and the footprints of its units on the map; an error under the option it
+  names; an edit after the check marks the plan stale. The plan and the base maps stand in the right panel of
+  Nogat's layout. Read differently (D2): a PL-1992 footprint, and a sheet of the view, is the sheet's frame computed
+  by the page from its code, exactly as `core/sheet_parser.py` does, not the bounds of `sheet parse`, which are the
+  EPSG:2180 envelope of that frame (larger and turned); this also draws the GUGiK LAZ tiles, whose nine-member codes
+  `sheet parse` refuses. Other sheets (PL-2000, ČÚZK TM33) come from `sheet parse` (at most 100 per plan, 4 at a
+  time); an SM5 or ZTM sheet has no footprint, its frame being in ČÚZK's index. Open: the outputs and the Playwright
+  test of the main flow (third slice); the regulamin's „Zgłoś uwagę” (DEV-15.12) and the admin panel (DEV-15.13),
+  which the kit's text describes, before a public launch.

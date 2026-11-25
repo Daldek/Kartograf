@@ -212,9 +212,11 @@ export class MapView {
     repaintLayers(this.map, palette(this.map.getContainer()));
   }
 
-  /** @param {number[]|null} bbox the area in EPSG:4326, `null` for none */
-  setArea(bbox) {
-    this.map.getSource("area").setData(bbox ? collection([boxPolygon(bbox)]) : EMPTY);
+  /** @param {number[][]|null} ring the area: a closed ring in degrees, `null` for none */
+  setArea(ring) {
+    const polygon = { type: "Polygon", coordinates: [ring] };
+    const area = ring ? collection([{ type: "Feature", properties: {}, geometry: polygon }]) : EMPTY;
+    this.map.getSource("area").setData(area);
   }
 
   /** @param {object[]} features the footprints: polygons with `unit` and `failed` */
@@ -267,6 +269,16 @@ export class MapView {
     return [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].map(
       rounded,
     );
+  }
+
+  /** @returns {number} the zoom of the view */
+  zoom() {
+    return this.map.getZoom();
+  }
+
+  /** @param {() => void} callback what to do once the view has moved */
+  onMoveEnd(callback) {
+    this.map.on("moveend", callback);
   }
 
   /**
@@ -343,7 +355,8 @@ export class MapView {
   }
 
   /**
-   * Call back with the unit of a sheet or a footprint clicked.
+   * Call back with the unit of a sheet or a footprint clicked. While the sheets of the view
+   * are shown, a click picks a sheet, never the footprint under it.
    *
    * @param {"sheets"|"footprints"} source the layer's source
    * @param {(unit: string) => void} callback what to do with the unit
@@ -352,6 +365,10 @@ export class MapView {
     const layer = `${source}-fill`;
     this.map.on("click", layer, (event) => {
       if (this.drawing) return;
+      if (source === "footprints") {
+        const sheets = this.map.queryRenderedFeatures(event.point, { layers: ["sheets-fill"] });
+        if (sheets.length) return;
+      }
       const unit = event.features?.[0]?.properties?.unit;
       if (unit) callback(unit);
     });

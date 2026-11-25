@@ -213,12 +213,13 @@ body {
   text-decoration: underline;
 }
 
-/* --- the view: left panel and map ---------------------------------------------------------- */
+/* --- the view: the form, the map, the plan and the result ---------------------------------- */
 
 .view-layout {
   --left-w: 380px;
+  --right-w: 460px;
   display: grid;
-  grid-template-columns: var(--left-w) 10px minmax(480px, 1fr);
+  grid-template-columns: var(--left-w) 10px minmax(0, 1fr) 10px var(--right-w);
   min-height: 0;
   min-width: 0;
 }
@@ -252,6 +253,23 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+.panel-foot {
+  position: sticky;
+  bottom: calc(-1 * var(--space-4));
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: auto calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.panel-foot .note:empty {
+  display: none;
 }
 
 .resizer {
@@ -303,12 +321,19 @@ body {
   min-width: 0;
 }
 
+.map-bar .btn {
+  flex: none;
+}
+
 .map-bar .hint {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   color: var(--text-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: 1.25;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   min-width: 0;
 }
 
@@ -401,6 +426,15 @@ body {
   color: var(--bad-ink);
 }
 
+.notices summary {
+  cursor: pointer;
+}
+
+.notices details[open] {
+  max-height: 40vh;
+  overflow: auto;
+}
+
 /* --- data choice -------------------------------------------------------------------------- */
 
 .choices {
@@ -455,17 +489,16 @@ body {
   font-size: var(--text-xs);
 }
 
-.check-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
 /* --- plan --------------------------------------------------------------------------------- */
+
+.plan-summary {
+  margin: 0;
+  font-size: var(--text-sm);
+}
 
 .plan-table-wrap {
   overflow: auto;
+  max-height: 50vh;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
 }
@@ -493,16 +526,47 @@ body {
   white-space: nowrap;
 }
 
-.plan-table td.size {
+.plan-table .size {
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.plan-table td.file {
+.plan-table.no-size .size {
+  display: none;
+}
+
+.plan-table td.what {
+  min-width: 9em;
+}
+
+.plan-table td.what .unit {
+  display: block;
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.plan-table td.what .file {
+  display: block;
+  color: var(--text-2);
   overflow-wrap: anywhere;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+
+.plan-table td.source .provider {
+  display: block;
+}
+
+.plan-table td.source .provider a {
+  white-space: nowrap;
+}
+
+.plan-table td.source code {
+  display: block;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
 }
 
 .plan-table tr.selected td {
@@ -637,6 +701,15 @@ dialog.about p {
   margin: 0 0 var(--space-3);
 }
 
+/* --- a narrow desktop ---------------------------------------------------------------------- */
+
+@media (max-width: 1240px) and (min-width: 861px) {
+  .view-layout {
+    --left-w: 320px;
+    --right-w: 380px;
+  }
+}
+
 /* --- a phone (Nogat ECO-080: up to 860 px) ---------------------------------------------- */
 
 @media (max-width: 860px) {
@@ -704,6 +777,15 @@ dialog.about p {
 
   .choices {
     grid-template-columns: 1fr;
+  }
+
+  .map-bar .btn span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   input,

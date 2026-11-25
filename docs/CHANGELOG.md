@@ -30,6 +30,24 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `validation_error`, `invalid_config`). The settings of the page are `site.json` beside it;
   the page finds its API by `GET /api/v1/server`. Every answer carries a
   Content-Security-Policy that names no remote origin but those of the base maps offered.
+- The form, the area and the plan beside the map: Nogat's `<nogat-command-form>` of
+  `elevation download` (NMT, NMPT, LAZ) or `imagery download` (the orthophoto), generated from
+  `commands schema --form`, its line written by `commands format` and a pasted line read by
+  `commands parse` (a line of the other command switches the form). `check`, `plan`,
+  `geometry` and `layer` are not shown; each product starts with its usual choices (`pl`, the
+  1992 sheets, 1 m, EVRF2007; LAZ without a resolution or a sheet system), which a person may
+  change. The area is a rectangle drawn on the map (`--bbox … --bbox-crs EPSG:4326`), a 1:10 000
+  sheet picked among the sheets of the view (`sheet find`) or one typed, outlined on the map.
+  „Sprawdź plan” sends the options of the line (`commands format`) to
+  `POST <group>/download?check=true` and shows the plan before anything is generated: its
+  notices, a table of its files (the unit and the file, the size where known, the source with
+  its provider and licence, the state with the reason a file has no address of its own),
+  marked incomplete when it is not `ok` or holds a keyed source, the sources' lines in the
+  kit's `<nogat-sources>`, and the footprints of its units on the map (a PL-1992 sheet or a
+  GUGiK LAZ tile from its code, another sheet from `sheet parse`, a cutout as its area); a row
+  and a footprint select each other. A server's error stands under the option it names, and an
+  edit after the check marks the plan as stale. The view's right panel holds the plan and the
+  base maps.
 - Nogat's kit 1.3.0 (`design/kit/`), `tokens.css` and the marks copied from Nogat `1a68cc7`
   (`web/nogat/nogat.json`, `nogat-kit.json`); MapLibre GL JS 6.14.0 and the Noto Sans glyphs
   vendored with their licences (`web/vendor/vendor.json`), checked against npm and the
