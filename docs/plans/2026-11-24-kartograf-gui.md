@@ -2,7 +2,8 @@
 
 Approved: 2026-11-24, the author (in session: „Ok, podoba mi się ten plan. Zapisz to.”; the answers to the open questions: „GUI Kartografa: wszystkie podkłady mapowe powinny być wspólne między projektami. Wciąż jest to pewna niejednolitość, którą trzeba załatwić. Jako wzór: Hydrograf. Reszta ok.”)
 
-Status: approved on 2026-11-24, its open questions answered the same day (below); nothing started.
+Status: approved on 2026-11-24, its open questions answered the same day (below); N1 done in Nogat on 2026-11-25;
+K1 (ADR-063) and the steps after it on `feat/gui` from `develop` (results below).
 
 The author asked for a Kartograf GUI that „pozwalał na pobieranie danych przestrzennych wprost ze źródeł, generując
 skrypt do basha/powershella lub dając ich treść. Wszystkie ewentualne klucze API byłyby po stronie użytkownika”; after
@@ -268,3 +269,8 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
   commands-1 and AGI-2.3 gain the option fields the form reads; `nogat-server/1` (ECO-094) names Kartograf's
   capabilities `catalog`, `plan`, `script`; Kartograf's planned `kartograf server` routed by Latarnik at
   `/kartograf/v1/…` in the registry.
+- K1 (2026-11-25, `feat/gui`, `develop` with the release merge of `v0.9.0`): ADR-063, indexed in
+  `docs/DECISIONS.md`; it reads the plan differently in six places (its own section): `plan_max_units` is a
+  `validation_error`, (b) needs no plan, the server's plans are detached plain plans, the form's line goes through
+  the new catalog commands `commands format` and `commands parse`, the options' sections and Polish texts come with
+  `commands schema --form` (DOC-1.7), and the group `gui` and the port 8065 are its.
