@@ -1,0 +1,16 @@
+{
+ "type": "https://github.com/Daldek/Nogat/blob/main/standards/ERROR_REGISTRY.md#no_data",
+ "title": "No data",
+ "status": 404,
+ "detail": "GUGiK has no data for any of the 2 sheets of the area",
+ "instance": "/api/v1/elevation/download",
+ "code": "no_data",
+ "hint": "The GUGiK sheet index has this sheet in NMPT 0.5m EVRF2007 - use --resolution 0.5m; The GUGiK sheet index has this sheet in NMPT 0.5m KRON86 - use --resolution 0.5m --vertical-crs KRON86",
+ "details": {
+  "reason": "no_coverage",
+  "hints": [
+   "The GUGiK sheet index has this sheet in NMPT 0.5m EVRF2007 - use --resolution 0.5m",
+   "The GUGiK sheet index has this sheet in NMPT 0.5m KRON86 - use --resolution 0.5m --vertical-crs KRON86"
+  ]
+ }
+}

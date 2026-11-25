@@ -1,0 +1,111 @@
+{
+ "schema": "kartograf-result/1",
+ "tool": "kartograf",
+ "version": "0.9.0",
+ "command": "elevation download",
+ "check": true,
+ "status": "ok",
+ "result": {
+  "schema": "kartograf-plan/1",
+  "mode": "plain",
+  "root": null,
+  "output_dir": ".",
+  "checked_at": "2026-11-25T10:49:51+00:00",
+  "kartograf_version": "0.9.0",
+  "items": [
+   {
+    "track": "pl_sheet",
+    "segment": "",
+    "hierarchy": "",
+    "name": "N-34-139-A-c-1-3.asc",
+    "unit": "N-34-139-A-c-1-3",
+    "local_label": null,
+    "local_sha256": null,
+    "available_label": "2025-04-27_83233",
+    "available_signal": {
+     "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/83233_1744697_N-34-139-A-c-1-3.asc",
+     "date": "2025-04-27",
+     "pzgik_date": "2025-11-17"
+    },
+    "status": "missing",
+    "error": null,
+    "action": "write",
+    "path": "N-34-139-A-c-1-3.asc",
+    "reason": null,
+    "source": "pl.gugik.nmt_1m",
+    "fetch": {
+     "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/83233_1744697_N-34-139-A-c-1-3.asc",
+     "size_bytes": null,
+     "sha256": null
+    },
+    "fetch_reason": null,
+    "archive": null
+   },
+   {
+    "track": "pl_sheet",
+    "segment": "",
+    "hierarchy": "",
+    "name": "N-34-139-A-c-3-1.asc",
+    "unit": "N-34-139-A-c-3-1",
+    "local_label": null,
+    "local_sha256": null,
+    "available_label": "2025-04-27_83233",
+    "available_signal": {
+     "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/83233_1744703_N-34-139-A-c-3-1.asc",
+     "date": "2025-04-27",
+     "pzgik_date": "2025-11-17"
+    },
+    "status": "missing",
+    "error": null,
+    "action": "write",
+    "path": "N-34-139-A-c-3-1.asc",
+    "reason": null,
+    "source": "pl.gugik.nmt_1m",
+    "fetch": {
+     "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/83233_1744703_N-34-139-A-c-3-1.asc",
+     "size_bytes": null,
+     "sha256": null
+    },
+    "fetch_reason": null,
+    "archive": null
+   }
+  ],
+  "notices": [
+   {
+    "level": "info",
+    "code": "sheet_list",
+    "message": "Sheets found at scale 1:10000: 2 for bbox (resolution: 1m)\n  Sheets: N-34-139-A-c-1-3, N-34-139-A-c-3-1"
+   }
+  ],
+  "ok": true,
+  "sources": [
+   {
+    "key": "pl.gugik.nmt_1m",
+    "provider": "GUGiK",
+    "license": {
+     "id": "PL-PGiK-40a",
+     "attribution": "Dane: Glowny Urzad Geodezji i Kartografii (www.geoportal.gov.pl), art. 40a ust. 2 pkt 1 ustawy Prawo geodezyjne i kartograficzne",
+     "url": "https://www.geoportal.gov.pl"
+    },
+    "auth": "none"
+   }
+  ]
+ },
+ "items": [
+  {
+   "id": "N-34-139-A-c-1-3.asc",
+   "status": "ok"
+  },
+  {
+   "id": "N-34-139-A-c-3-1.asc",
+   "status": "ok"
+  }
+ ],
+ "notices": [
+  {
+   "level": "info",
+   "code": "sheet_list",
+   "message": "Sheets found at scale 1:10000: 2 for bbox (resolution: 1m)\n  Sheets: N-34-139-A-c-1-3, N-34-139-A-c-3-1"
+  }
+ ]
+}

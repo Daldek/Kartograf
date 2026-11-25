@@ -491,6 +491,13 @@ body {
 
 /* --- plan --------------------------------------------------------------------------------- */
 
+.plan-body,
+.outputs-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
 .plan-summary {
   margin: 0;
   font-size: var(--text-sm);
@@ -674,6 +681,12 @@ body {
   padding-left: var(--space-4);
   font-size: var(--text-sm);
   color: var(--text-2);
+}
+
+.left-out li.heading {
+  margin-left: calc(-1 * var(--space-4));
+  list-style: none;
+  font-weight: var(--weight-medium);
 }
 
 /* --- the dialog about the page ------------------------------------------------------------ */

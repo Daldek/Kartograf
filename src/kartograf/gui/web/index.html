@@ -131,6 +131,34 @@
           <nogat-sources id="plan-sources"></nogat-sources>
         </div>
       </section>
+      <section class="outputs" id="outputs" aria-labelledby="outputs-heading">
+        <h2 id="outputs-heading" data-text="outputsHeading">Wynik</h2>
+        <p class="note" id="outputs-empty" data-text="outputsEmpty">Polecenie i skrypty pojawią się po sprawdzeniu planu.</p>
+        <div class="outputs-body" id="outputs-body" hidden>
+          <div class="tabs" role="tablist" data-label="outputs">
+            <button type="button" role="tab" id="tab-line" aria-controls="output" aria-selected="true" data-kind="line" data-text="tabLine">Polecenie</button>
+            <button type="button" role="tab" id="tab-kartograf" aria-controls="output" aria-selected="false" tabindex="-1" data-kind="kartograf" data-text="tabKartograf">Skrypt Kartografa</button>
+            <button type="button" role="tab" id="tab-direct" aria-controls="output" aria-selected="false" tabindex="-1" data-kind="direct" data-text="tabDirect">Skrypt bezpośredni</button>
+          </div>
+          <div class="output" id="output" role="tabpanel" aria-labelledby="tab-line">
+            <div class="row" id="output-shell" hidden>
+              <span class="status" data-text="shell">Powłoka</span>
+              <div class="segmented" role="group" data-label="shell">
+                <button type="button" data-shell="bash" aria-pressed="true">bash</button>
+                <button type="button" data-shell="powershell" aria-pressed="false">PowerShell</button>
+              </div>
+            </div>
+            <p class="note" id="output-note"></p>
+            <ul class="left-out" id="output-left-out" hidden></ul>
+            <pre id="output-text" tabindex="0" aria-labelledby="tab-line"></pre>
+            <div class="row">
+              <button type="button" class="btn sm" id="output-copy" data-text="copy" disabled>Kopiuj</button>
+              <button type="button" class="btn sm" id="output-save" data-text="save" disabled>Zapisz</button>
+              <span class="status" id="output-status" role="status"></span>
+            </div>
+          </div>
+        </div>
+      </section>
       <section class="basemaps">
         <h3 data-text="basemapsHeading">Podkłady kartograficzne</h3>
         <nogat-basemaps></nogat-basemaps>

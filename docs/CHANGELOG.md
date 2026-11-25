@@ -48,6 +48,13 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and a footprint select each other. A server's error stands under the option it names, and an
   edit after the check marks the plan as stale. The view's right panel holds the plan and the
   base maps.
+- The outputs of a checked plan beside it, for bash or PowerShell: (a) the line, to copy or
+  save as `kartograf.txt`; (b) the script that runs the line (`POST script/generate`, saved as
+  `kartograf.sh` or `kartograf.ps1`); (c) the script that fetches the plan's files directly
+  (`POST script/generate` with the checked plan and `direct`, its target the output directory),
+  with the count of its files and the reasons for those left out. Each script is asked for once
+  per plan and shell; the outputs are hidden while the plan is stale. Browser tests of the main
+  flow (Playwright, marker `e2e`, `tests/e2e/`) run against the real server with recorded plans.
 - Nogat's kit 1.3.0 (`design/kit/`), `tokens.css` and the marks copied from Nogat `1a68cc7`
   (`web/nogat/nogat.json`, `nogat-kit.json`); MapLibre GL JS 6.14.0 and the Noto Sans glyphs
   vendored with their licences (`web/vendor/vendor.json`), checked against npm and the

@@ -349,3 +349,10 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
   time); an SM5 or ZTM sheet has no footprint, its frame being in ČÚZK's index. Open: the outputs and the Playwright
   test of the main flow (third slice); the regulamin's „Zgłoś uwagę” (DEV-15.12) and the admin panel (DEV-15.13),
   which the kit's text describes, before a public launch.
+- K5, third slice (2026-11-25): the outputs. (a) the line with copy and save (`kartograf.txt`); (b)
+  `POST script/generate {shell, command}`, saved as `kartograf.sh`/`kartograf.ps1`; (c) `{shell, plan, direct: true,
+  target}` with the checked plan and the output directory (or the root), the count of files and the reasons for
+  those left out. A bash/PowerShell toggle; tabs moved by the arrow keys; each script asked for once per plan and
+  shell; outputs hidden while the plan is stale. Playwright (dev dependency `playwright>=1.64,<2`, marker `e2e`,
+  `tests/e2e/`): 7 tests of the main flow against the real `create_gui_app`; only the plans are stubbed, from answers
+  recorded on 2026-11-25 (`tests/fixtures/gui/real_2026_11_25/`). Open: K6 docs, K7 live runs.

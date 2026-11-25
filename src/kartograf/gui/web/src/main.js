@@ -1,15 +1,17 @@
 // The page of `kartograf gui serve` (ADR-063 decision 9): Nogat's shell with Kartograf's
 // mark, the language and the theme, the app menu of the deployment's GUIs, the regulamin of
 // a public GUI, and the map over the ecosystem's shared base maps. Beside the map: the form of
-// a data command (form.js), its area drawn or picked on the map (area.js) and its plan,
-// checked by the server before anything is generated (plan.js). The deployment's settings
-// come from `site.json` beside the page; the API is found by GET /api/v1/server (api.js).
+// a data command (form.js), its area drawn or picked on the map (area.js), its plan, checked
+// by the server before anything is generated (plan.js), and the command line and the scripts
+// of the plan checked (outputs.js). The deployment's settings come from `site.json` beside
+// the page; the API is found by GET /api/v1/server (api.js).
 
 import { findApi } from "./api.js";
 import { AreaTools } from "./area.js";
 import { DataForm, callKey } from "./form.js";
 import { applyTexts, basemapTexts, lang, setLang, t } from "./i18n.js";
 import { createMap } from "./map.js";
+import { OutputsView } from "./outputs.js";
 import { PlanView } from "./plan.js";
 import { extentOf } from "./sheets.js";
 
@@ -170,7 +172,7 @@ function statusLine(element) {
 }
 
 /**
- * The data command: its choice, its form, its area on the map and its plan.
+ * The data command: its choice, its form, its area on the map, its plan and its outputs.
  *
  * @param {import("./api.js").Api} api the server
  * @param {import("./map.js").MapView} view the map
@@ -183,6 +185,7 @@ async function setupData(api, view, site) {
   const button = document.getElementById("check");
   const radios = [...document.querySelectorAll('input[name="command"]')];
   const plan = new PlanView(document.getElementById("plan"), { view, api, terms: site.terms });
+  const outputs = new OutputsView(document.getElementById("outputs"), api);
   let checked = null;
   let areaTimer = null;
   const form = new DataForm(document.getElementById("form"), api, {
@@ -196,7 +199,9 @@ async function setupData(api, view, site) {
   }
 
   function edited() {
-    plan.stale(checked !== null && checked.key !== callKey(form.command, form.options));
+    const stale = checked !== null && checked.key !== callKey(form.command, form.options);
+    plan.stale(stale);
+    outputs.stale(stale);
     clearTimeout(areaTimer);
     areaTimer = setTimeout(() => tools.sync(form.options), AREA_DELAY);
   }
@@ -231,11 +236,13 @@ async function setupData(api, view, site) {
       checked = { key: callKey(command, options), command, line, envelope };
       checkStatus(null);
       plan.show(envelope, area).catch((error) => console.warn(error));
+      outputs.show(checked);
     } catch (error) {
       checked = null;
       checkStatus(null);
       if (typeof error?.doc?.details?.option === "string") form.showError(error.doc);
       plan.failed(error);
+      outputs.reset();
       const extent = area ? extentOf([area]) : null;
       if (extent) view.fit(extent);
     } finally {
@@ -253,9 +260,10 @@ async function setupData(api, view, site) {
     form.relabel();
     plan.relabel();
     tools.relabel();
+    outputs.relabel();
   });
   await load(radios.find((radio) => radio.checked)?.value ?? radios[0].value);
-  return { form, plan, tools, checked: () => checked };
+  return { form, plan, outputs, tools, checked: () => checked };
 }
 
 async function main() {
