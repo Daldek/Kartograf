@@ -263,3 +263,8 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
 ## Results
 
 (filled in per step)
+
+- N1 done 2026-11-25 in Nogat (`40bae70` on develop): the kit's `<nogat-command-form>` (DEV-15.17, ECO-093);
+  commands-1 and AGI-2.3 gain the option fields the form reads; `nogat-server/1` (ECO-094) names Kartograf's
+  capabilities `catalog`, `plan`, `script`; Kartograf's planned `kartograf server` routed by Latarnik at
+  `/kartograf/v1/…` in the registry.
