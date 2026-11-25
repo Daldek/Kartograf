@@ -8,6 +8,11 @@ A plan queries the sources' sheet indexes, so the tests answer ``POST
 (NMT 1 m, EVRF2007, the 1992 sheets: two sheets), ``plan_laz.json`` (LAZ, EVRF2007:
 twelve tiles of nine-member codes) and ``plan_nmpt.json`` (NMPT 1 m: the problem
 document of ``no_data``, ``404``, with the hint of the resolution the index has).
+
+The ``attribution`` and ``terms_notice`` of the two plans and their last position,
+``ATTRIBUTION.txt`` of the plain write, were added by the code of the provider lines
+(ADR-064): they are what the server answers for the same positions; the rest is the
+server's answer of 2026-11-25.
 """
 
 import json

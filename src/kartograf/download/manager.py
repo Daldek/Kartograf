@@ -42,6 +42,7 @@ from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
     VersionedFile,
+    built_lines,
     committed_file,
     discard_staging,
     fetch_version,
@@ -1533,10 +1534,23 @@ class DownloadManager:
                     campaign=ref.dirname,
                     years=available,
                 )
+            digest = read_content(staged, ext=ext, coverage=False)
+            # the lines of the sidecar the flight would have in the store (ADR-064)
+            lines = built_lines(
+                lambda: self._write_campaign_sidecar(
+                    staged,
+                    sheet,
+                    record,
+                    ref,
+                    available=available,
+                    digest=digest,
+                    version=VersionRef(ref.dirname, "campaign"),
+                )
+            )
         except BaseException:
             discard_staging(staged, slot)
             raise
-        file = store_plain_file(slot, staged)
+        file = store_plain_file(slot, staged, lines=lines, digest=digest)
         return SheetFetch(
             sheet,
             file.path,

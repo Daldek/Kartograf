@@ -665,6 +665,8 @@ CONTRACT: dict[str, list[str]] = {
         "notices",
         "ok",
         "sources",
+        "attribution",
+        "terms_notice",
     ],
     "kartograf-availability/1": [
         "schema",
@@ -691,6 +693,8 @@ CONTRACT: dict[str, list[str]] = {
         "summary",
         "notices",
         "ok",
+        "attribution",
+        "terms_notice",
     ],
     "kartograf-sources/1": ["schema", "group", "products", "sources"],
     "kartograf-layers/1": [

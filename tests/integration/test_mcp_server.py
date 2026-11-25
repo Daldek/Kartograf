@@ -1042,6 +1042,10 @@ def test_a_server_that_does_not_write_plans_what_a_run_would_do(tmp_path):
 
 
 HSG = {"sheet": HSG_SHEET, "depth": "0-5cm"}
+SOILGRIDS_LINE = (
+    "Źródło: ISRIC – World Soil Information, SoilGrids, licencja CC BY 4.0 "
+    "(https://creativecommons.org/licenses/by/4.0/); dane przetworzone"
+)
 
 
 @needs_mcp
@@ -1059,9 +1063,18 @@ def test_a_writing_server_writes_plain_files_and_plans_the_replacement(tmp_path)
         None,
         out.as_posix(),
     )
-    (entry,) = report["files"]
+    entry, attribution = report["files"]
     assert entry["status"] == "written" and entry["path"].startswith(out.as_posix())
-    assert [p.suffix for p in out.iterdir()] == [".tif"]  # the raster and nothing else
+    assert (attribution["unit"], attribution["status"]) == (
+        "ATTRIBUTION.txt",
+        "written",
+    )
+    # the HSG's input rasters add no line: only the one of SoilGrids
+    assert report["attribution"] == [SOILGRIDS_LINE]
+    assert (out / "ATTRIBUTION.txt").read_text(
+        encoding="utf-8"
+    ) == f"{SOILGRIDS_LINE}\n"
+    assert sorted(p.suffix for p in out.iterdir()) == [".tif", ".txt"]
     # a server that does not write plans the call as it stands: the file is a conflict;
     # with update=force (a server that writes) the plan says replace
     with landcover_sources(soilgrids=RasterSoilGrids):
@@ -1074,11 +1087,14 @@ def test_a_writing_server_writes_plain_files_and_plans_the_replacement(tmp_path)
 
     plans = [r.structured_content["result"] for r in (plan, forced)]
     assert [p["mode"] for p in plans] == ["plain", "plain"]
-    assert [[i["action"] for i in p["items"]] for p in plans] == [
-        ["conflict"],
-        ["replace"],
+    # (the lines name no day, so the file that holds them adds no position)
+    assert [[(i["name"], i["action"]) for i in p["items"]] for p in plans] == [
+        [(Path(entry["path"]).name, "conflict")],
+        [(Path(entry["path"]).name, "replace")],
     ]
-    assert [p.name for p in out.iterdir()] == [Path(entry["path"]).name]
+    assert sorted(p.name for p in out.iterdir()) == sorted(
+        [Path(entry["path"]).name, "ATTRIBUTION.txt"]
+    )
 
 
 @needs_mcp

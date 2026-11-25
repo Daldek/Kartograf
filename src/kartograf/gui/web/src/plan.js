@@ -4,8 +4,11 @@
 // knows it, the source with its provider, the licence and the state, with the reason a file
 // has no address of its own (`fetch_reason`). A plan that is not `ok`, or that holds a source
 // whose files need a key (`auth` other than `none`), is marked incomplete and says why. The
-// map draws the footprints of its units (sheets.js) and the sources' lines stand in the
-// kit's <nogat-sources> strip. A row and a footprint select each other.
+// map draws the footprints of its units (sheets.js), but for `ATTRIBUTION.txt`, the file of
+// the providers' lines a plain write adds, which is no unit on the map. The plan's
+// `attribution` and `terms_notice` stand in the kit's <nogat-sources> strip (DEV-20.5): the
+// kit shows the lines of DEV §20 in their short forms, the GUI declares the rest, a source's
+// registry text. A row and a footprint select each other.
 
 import { lang, t } from "./i18n.js";
 import { extentOf, localOutline, pooled, ringFeature, sheetOutline } from "./sheets.js";
@@ -18,6 +21,8 @@ const CUTOUT_TRACKS = new Set(["pl_cutout", "cz_cutout"]);
 const PARSED_MAX = 100;
 const PARSED_AT_ONCE = 4;
 const SIZE_UNITS = ["B", "kB", "MB", "GB", "TB"];
+/** The file of the providers' lines a plain write adds: a row, but no unit on the map. */
+const ATTRIBUTION_FILE = "ATTRIBUTION.txt";
 const REASONS = {
   credentials: "reasonCredentials",
   built: "reasonBuilt",
@@ -119,19 +124,22 @@ export function incompleteReasons(plan, status) {
 }
 
 /**
- * The lines of the sources for the kit's strip: each source's `license.attribution` once,
- * declared for the strip with the words of its address linked to the licence's page.
+ * The lines of the plan for the kit's strip: its `attribution` and `terms_notice` as they are,
+ * and the lines the GUI declares for the strip: those of `attribution` that are the registry
+ * text of a source (`license.attribution` byte for byte; a provider DEV §20 holds no line for,
+ * such as CLMS or PGW), each with the words of its licence's host linked to the licence's page.
  *
- * @param {object[]} sources the plan's `sources`
- * @returns {{attribution: string[], screenLines: object[]}} the lines and their declarations
+ * @param {object} plan `kartograf-plan/1`
+ * @returns {{attribution: string[], termsNotice: string[], screenLines: object[]}} the lines
+ *   and their declarations
  */
-export function sourceLines(sources) {
-  const attribution = [];
+export function sourceLines(plan) {
+  const attribution = Array.isArray(plan.attribution) ? plan.attribution : [];
+  const termsNotice = Array.isArray(plan.terms_notice) ? plan.terms_notice : [];
   const screenLines = [];
-  for (const source of sources ?? []) {
-    const text = source?.license?.attribution;
-    if (typeof text !== "string" || !text || attribution.includes(text)) continue;
-    attribution.push(text);
+  for (const text of attribution) {
+    const source = (plan.sources ?? []).find((each) => each?.license?.attribution === text);
+    if (!source || screenLines.some((line) => line.text === text)) continue;
     let links = [];
     try {
       const host = new URL(source.license.url).host;
@@ -141,7 +149,7 @@ export function sourceLines(sources) {
     }
     screenLines.push({ text, short: null, links });
   }
-  return { attribution, screenLines };
+  return { attribution, termsNotice, screenLines };
 }
 
 /** The plan's section of the page: its notices, its table and the footprints on the map. */
@@ -267,8 +275,9 @@ export class PlanView {
     notices.hidden = notices.children.length === 0;
     const bySource = new Map((plan.sources ?? []).map((source) => [source.key, source]));
     rows.replaceChildren(...items.map((item) => this._row(item, bySource.get(item.source))));
-    const lines = sourceLines(plan.sources);
+    const lines = sourceLines(plan);
     sources.screenLines = lines.screenLines;
+    sources.termsNotice = lines.termsNotice;
     sources.attribution = lines.attribution;
   }
 
@@ -307,6 +316,7 @@ export class PlanView {
     const items = envelope.result.items ?? [];
     const units = new Map();
     for (const item of items) {
+      if (item.name === ATTRIBUTION_FILE && item.unit === ATTRIBUTION_FILE) continue;
       const known = units.get(item.unit);
       const failed = item.status === "check_failed";
       if (known) known.failed ||= failed;

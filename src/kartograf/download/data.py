@@ -58,6 +58,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Literal, cast
 
+from kartograf.attribution import (
+    ATTRIBUTION_FILE,
+    attribution_refusal,
+    merge_lines,
+    split_terms,
+)
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
 from kartograf.config import resolve_root
@@ -85,6 +91,7 @@ from kartograf.download.fetch import (
     UpdateMode,
     VersionedFile,
     emit_file_notices,
+    plain_file,
     refreshes_cache,
 )
 from kartograf.download.manager import (
@@ -116,7 +123,13 @@ from kartograf.download.options import (
     validate_request,
 )
 from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, ImageCutoutResult
-from kartograf.download.plan import PlanItem, UpdatePlan, conflict_plan, plain_items
+from kartograf.download.plan import (
+    PlanItem,
+    UpdatePlan,
+    conflict_plan,
+    is_attribution,
+    plain_items,
+)
 from kartograf.exceptions import (
     DownloadError,
     KartografError,
@@ -170,7 +183,8 @@ MAX_HINT_LINES = 5
 # ``kartograf-download/1``: the schema of the five command reports (``DataReport``,
 # ``CollectionReport``, ``LandCoverReport``, ``SoilReport``, ``HsgReport``; spec
 # 5.4.1). One key set in one order for all of them: a class without a field for a
-# key gives the value of ``DOWNLOAD_FILL`` (consumers read one shape).
+# key gives the value of ``DOWNLOAD_FILL`` (consumers read one shape); the provider
+# lines ``attribution`` and ``terms_notice`` are those of its files (``WriteTarget``).
 DOWNLOAD_SCHEMA = "kartograf-download/1"
 DOWNLOAD_KEYS = (
     "mode",
@@ -186,6 +200,8 @@ DOWNLOAD_KEYS = (
     "summary",
     "notices",
     "ok",
+    "attribution",
+    "terms_notice",
 )
 DOWNLOAD_FILL: Mapping[str, object] = {
     "raw": (),
@@ -261,7 +277,9 @@ class WriteTarget:
 
     ``output_dir`` is the directory of the plain files and ``root`` the store: one
     of them is set (``None`` for a report built by hand). ``mode`` follows from
-    ``output_dir``.
+    ``output_dir``. ``attribution`` and ``terms_notice`` are the provider lines of
+    its files (``files``, ``raw`` and ``inputs``; DEV-20.6, DEV-20.7, ADR-064),
+    merged in the order of DEV-20.4.
     """
 
     output_dir: Path | None
@@ -270,6 +288,41 @@ class WriteTarget:
     def mode(self) -> Mode:
         """Return ``plain`` for a write into a directory, else ``store``."""
         return "plain" if self.output_dir is not None else "store"
+
+    def _lines(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """Return the attribution and the terms lines of the files of the report."""
+        units: tuple[UnitFile, ...] = (
+            *getattr(self, "files", ()),
+            *getattr(self, "raw", ()),
+            *getattr(self, "inputs", ()),
+        )
+        return split_terms(merge_lines(*(unit.file.lines for unit in units)))
+
+    @property
+    def attribution(self) -> tuple[str, ...]:
+        """Return the attribution lines of the files (DEV-20.6)."""
+        return self._lines()[0]
+
+    @property
+    def terms_notice(self) -> tuple[str, ...]:
+        """Return the terms lines of the files (DEV-20.7)."""
+        return self._lines()[1]
+
+
+def attribution_files(
+    root: str | Path | None, files: Sequence[UnitFile]
+) -> tuple[UnitFile, ...]:
+    """Return ``ATTRIBUTION.txt`` of the plain write of ``root`` as a report file.
+
+    The file the write merged the lines of its files into (DEV-20.5), when it
+    changed it; ``unit`` is its name and ``country`` that of the first of ``files``.
+    None for a store or when the write left it as it was.
+    """
+    write = plain_of(root) if root is not None else None
+    if write is None or write.attribution is None:
+        return ()
+    country = files[0].country if files else ""
+    return (UnitFile(ATTRIBUTION_FILE, country, plain_file(write.attribution)),)
 
 
 # The registry code (and ``details.reason``) a failed unit of each ``kind`` stands
@@ -490,8 +543,9 @@ def _preflight(task: SimpleNamespace, run: _Run) -> None:
 
     The check run of the same request lists the target of every track (the names are
     known before the transfer) and one plan judges them all together: a name that
-    two tracks share, a store, a file that exists. Failures of the check run are not
-    reported here: the run reports them again when it fetches.
+    two tracks share, a store, a file that exists, and ``ATTRIBUTION.txt``, into
+    which the lines of the files are merged (``attribution_refusal``). Failures of
+    the check run are not reported here: the run reports them again when it fetches.
     """
     probe = _Run(
         sink=NoticeSink(None),
@@ -506,7 +560,14 @@ def _preflight(task: SimpleNamespace, run: _Run) -> None:
     _execute(task, probe)
     write = plain_of(task.root)
     assert write is not None  # only a plain write is checked
-    refuse(write.plan([item.name for plan in probe.plans for item in plan.items]))
+    names = [
+        item.name
+        for plan in probe.plans
+        for item in plan.items
+        if not is_attribution(item)
+    ]
+    refusal = attribution_refusal(write)
+    refuse([*write.plan(names), *([] if refusal is None else [refusal])])
 
 
 def _rejudged(write: Staging, plans: list[UpdatePlan]) -> list[UpdatePlan]:
@@ -585,6 +646,8 @@ def _start(
         rc = _execute(task, run)
         if write is not None and check:
             run.plans = _rejudged(write, run.plans)
+        elif write is not None:
+            run.files.extend(attribution_files(root, run.files))
     return run, rc
 
 

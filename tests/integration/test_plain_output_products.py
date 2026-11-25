@@ -34,9 +34,19 @@ from tests.integration.test_hsg import BBOX, COORDS, RasterSoilGrids, _hsg
 from tests.integration.test_landcover import _bdot_zip, _zip_session
 from tests.support.fake_packages import FakePackageSession
 
+# The line SG of ISRIC SoilGrids: it names no year and no day.
+SG = (
+    "Źródło: ISRIC – World Soil Information, SoilGrids, licencja CC BY 4.0 "
+    "(https://creativecommons.org/licenses/by/4.0/); dane przetworzone"
+)
+
 
 def listing(directory: Path) -> list[str]:
     return sorted(str(p.relative_to(directory)) for p in directory.rglob("*"))
+
+
+def attribution(directory: Path) -> list[str]:
+    return (directory / "ATTRIBUTION.txt").read_text(encoding="utf-8").splitlines()
 
 
 @pytest.fixture(autouse=True)
@@ -87,17 +97,25 @@ def test_a_plain_collection_is_one_file_per_unit_named_as_in_the_store(
     assert [(f.unit, f.file.path, f.file.status) for f in report.files] == [
         ("0208", out / "0208.zip", "written"),
         ("0224", out / "0224.zip", "written"),
+        ("ATTRIBUTION.txt", out / "ATTRIBUTION.txt", "written"),
     ]
-    for unit_file in report.files:
+    for unit_file in report.files[:2]:
         assert unit_file.file.label == "" and unit_file.file.version_path == (
             unit_file.file.path
         )
         assert unit_file.file.size_bytes == unit_file.file.path.stat().st_size
-    assert listing(out) == ["0208.zip", "0224.zip"]  # no sidecar, no versions/
+    # no sidecar, no versions/; one line G for both files of the year 2024
+    assert listing(out) == ["0208.zip", "0224.zip", "ATTRIBUTION.txt"]
+    assert attribution(out) == [
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, Modele 3D budynków "
+        "(wytworzono 2024, pozyskano 2026-10-12); dane przetworzone"
+    ]
     assert not default_root.exists()
     document = report.to_dict()
     assert document["mode"] == "plain" and document["root"] is None
     assert document["output_dir"] == out.as_posix()
+    assert document["attribution"] == attribution(out)
+    assert document["terms_notice"] == []
 
 
 def test_a_second_plain_collection_run_names_every_file_and_fetches_nothing(
@@ -119,8 +137,9 @@ def test_a_second_plain_collection_run_names_every_file_and_fetches_nothing(
     assert session.gets(URL_0208) == 1 and session.gets(URL_0224) == 1
     assert session.gets() == fetched + 1  # only the PRG query of the units again
     forced = download_collection(output_dir=out, update="force", **AREA_OF_TWO_POWIATS)
+    # the same line on the same day: ATTRIBUTION.txt is left and not reported
     assert [f.file.status for f in forced.files] == ["replaced", "replaced"]
-    assert listing(out) == ["0208.zip", "0224.zip"]
+    assert listing(out) == ["0208.zip", "0224.zip", "ATTRIBUTION.txt"]
 
 
 def test_the_plain_collection_plan_says_write_replace_or_conflict(
@@ -142,11 +161,16 @@ def test_the_plain_collection_plan_says_write_replace_or_conflict(
     assert [(i.name, i.action) for i in before.items] == [
         ("0208.zip", "write"),
         ("0224.zip", "write"),
+        ("ATTRIBUTION.txt", "write"),
     ]
     assert [(i.action, i.reason) for i in refused.items] == [
         ("conflict", "output_exists")
     ] * 2
-    assert [i.action for i in forced.items] == ["replace", "replace"]
+    # the line G names the day of the download: an existing file is replaced
+    assert [(i.name, i.action, i.status) for i in forced.items][2:] == [
+        ("ATTRIBUTION.txt", "replace", "unverifiable")
+    ]
+    assert [i.action for i in forced.items[:2]] == ["replace", "replace"]
     assert session.gets(URL_0208) == 1  # a plan fetches no data
     assert not out.joinpath(STAGING).exists()
 
@@ -183,19 +207,27 @@ def _bdot_manager(tmp_path, out):
     return manager, body
 
 
-def test_bdot10k_with_keep_raw_writes_the_gpkg_and_the_original_zip(tmp_path):
+def test_bdot10k_with_keep_raw_writes_the_gpkg_the_original_zip_and_the_lines(
+    tmp_path, frozen_clock
+):
     out = tmp_path / "out"
     manager, body = _bdot_manager(tmp_path, out)
 
     report = manager.download(teryt="0262", keep_raw=True)
 
     assert report.ok and (report.mode, report.root) == ("plain", None)
-    (data,) = report.files
+    data, lines = report.files
     (raw,) = report.raw
     assert (data.file.path, data.file.status) == (out / "0262.gpkg", "written")
     assert (raw.file.path, raw.file.status) == (out / "0262.zip", "written")
     assert raw.file.path.read_bytes() == body
-    assert listing(out) == ["0262.gpkg", "0262.zip"]  # no sidecar names the package
+    assert (lines.file.path, lines.file.status) == (out / "ATTRIBUTION.txt", "written")
+    # no sidecar names the package; one line G for the GeoPackage and its original
+    assert listing(out) == ["0262.gpkg", "0262.zip", "ATTRIBUTION.txt"]
+    assert attribution(out) == [
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, BDOT10k "
+        "(wytworzono b.d., pozyskano 2026-10-12); dane przetworzone"
+    ]
     plan = manager.check(teryt="0262", keep_raw=True)
     assert [(i.name, i.action, i.reason) for i in plan.items] == [
         ("0262.gpkg", "conflict", "output_exists"),
@@ -218,10 +250,11 @@ def test_bdot10k_plain_is_refused_whole_when_one_file_exists(tmp_path):
     assert listing(out) == ["0262.zip"]
     assert provider._sessions.get().get.call_count == 0  # nothing was fetched
     forced = manager.download(teryt="0262", keep_raw=True, update="force")
-    assert [f.file.status for f in (*forced.files, *forced.raw)] == [
-        "written",
-        "replaced",
+    assert [(f.unit, f.file.status) for f in forced.files] == [
+        ("0262", "written"),
+        ("ATTRIBUTION.txt", "written"),
     ]
+    assert [f.file.status for f in forced.raw] == ["replaced"]
 
 
 def test_land_cover_and_soil_take_output_dir_as_the_store_functions_take_root(
@@ -252,13 +285,16 @@ def test_land_cover_and_soil_take_output_dir_as_the_store_functions_take_root(
             cache=False,
         )
 
-    (raster,) = report.files
+    raster, lines = report.files
     assert (report.mode, raster.file.path, raster.file.status) == (
         "plain",
         out / f"{COORDS}.tif",
         "written",
     )
-    assert listing(out) == [f"{COORDS}.tif"]
+    assert lines.file.path == out / "ATTRIBUTION.txt"
+    assert listing(out) == [f"{COORDS}.tif", "ATTRIBUTION.txt"]
+    assert attribution(out) == [SG]
+    # the file holds the line SG, which names no day: the plan does not replace it
     assert [i.action for i in plan.items] == ["replace"]
     assert soil.capabilities == 0  # the edition labels a version: a plain file has none
     with pytest.raises(ValidationError) as error:
@@ -282,7 +318,9 @@ def test_land_cover_and_soil_take_output_dir_as_the_store_functions_take_root(
 # --------------------------------------------------------------------------
 
 
-def test_the_hsg_is_the_only_file_of_a_plain_write(tmp_path, default_root):
+def test_the_hsg_and_its_line_are_the_only_files_of_a_plain_write(
+    tmp_path, default_root
+):
     out = tmp_path / "out"
     soil = RasterSoilGrids()
 
@@ -290,7 +328,7 @@ def test_the_hsg_is_the_only_file_of_a_plain_write(tmp_path, default_root):
 
     assert report.ok and report.failed == () and report.inputs == ()
     assert (report.mode, report.root, report.output_dir) == ("plain", None, out)
-    (hsg,) = report.files
+    hsg, lines = report.files
     assert (hsg.file.path, hsg.file.status, hsg.file.label) == (
         out / f"{COORDS}.tif",
         "written",
@@ -298,7 +336,10 @@ def test_the_hsg_is_the_only_file_of_a_plain_write(tmp_path, default_root):
     )
     assert np.all(_hsg(hsg.file.path) == 2)  # loam -> B
     assert soil.downloads == ["clay", "sand", "silt"]
-    assert listing(out) == [f"{COORDS}.tif"]  # no input, no staging, no sidecar
+    assert lines.file.path == out / "ATTRIBUTION.txt"
+    # no input, no staging, no sidecar; the inputs add no line to the one of the HSG
+    assert listing(out) == [f"{COORDS}.tif", "ATTRIBUTION.txt"]
+    assert attribution(out) == [SG]
     assert not default_root.exists()
 
 
@@ -320,7 +361,7 @@ def test_a_second_hsg_run_is_refused_before_the_inputs_are_fetched(tmp_path):
     )
     assert [f.file.status for f in forced.files] == ["replaced"]
     assert (out / f"{COORDS}.tif").read_bytes() == before
-    assert listing(out) == [f"{COORDS}.tif"]
+    assert listing(out) == [f"{COORDS}.tif", "ATTRIBUTION.txt"]
 
 
 def test_a_failed_hsg_input_leaves_no_result_and_no_staging_directory(tmp_path):
@@ -356,7 +397,10 @@ def test_the_hsg_plan_has_one_target_and_asks_the_source_nothing(tmp_path):
         (f"{COORDS}.tif", "conflict", "output_exists")
     ]
     assert [i.action for i in forced.items] == ["replace"]
-    assert [i.action for i in new.items] == ["write"]
+    assert [(i.name, i.action) for i in new.items] == [
+        (f"{COORDS}.tif", "write"),
+        ("ATTRIBUTION.txt", "write"),
+    ]
     assert (refused.mode, new.items[0].track) == ("plain", "hsg")
     assert soil.capabilities == 0  # no edition is asked for a plan of plain files
     assert not (out / "new").exists()

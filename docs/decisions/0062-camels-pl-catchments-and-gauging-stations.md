@@ -5,7 +5,9 @@
 2; the store names by the decision of the coordinator of the plan; the author reviews it at the merge, DEV-3.3);
 amends ADR-042 (D1: the engine `release_files`; D2: `--whole-country` of a data set published in releases, chosen by
 `--version`; D6: the signal of the bytes the registry pins and the label of the first release with a file's bytes)
-and ADR-054 (decisions 3 and 6: `ATTRIBUTION.txt` in a plain write of CAMELS-PL and its plan position)
+and ADR-054 (decisions 3 and 6: `ATTRIBUTION.txt` in a plain write of CAMELS-PL and its plan position); amended by
+ADR-064 (decisions 8 and 9 and erratum 1: the result documents carry the lines, and `ATTRIBUTION.txt` is that of
+every plain write)
 **Standard:** Nogat 1.2 (in preparation on Nogat `develop`; ECO-086): DEV-17.4, DEV-19.5, DEV §20 (DEV-20.4,
 DEV-20.5, DEV-20.12), DEV-10.1, DEV-10.5, DEV-10.6, DEV-13.2, ERR-1; plan
 [`docs/plans/2026-11-23-camels-pl-catchments.md`](../plans/2026-11-23-camels-pl-catchments.md); Nogat plan

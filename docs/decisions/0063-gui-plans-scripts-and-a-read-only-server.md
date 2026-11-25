@@ -3,7 +3,9 @@
 **Date:** 2026-11-25
 **Status:** Accepted (the plan [`docs/plans/2026-11-24-kartograf-gui.md`](../plans/2026-11-24-kartograf-gui.md),
 approved by the author on 2026-11-24 with his answers to its seven questions, step K1; the author reviews it at the
-merge, DEV-3.3)
+merge, DEV-3.3); amended by ADR-064 (decision 5 (c) and erratum 1: the direct script writes the plan's provider
+lines into `ATTRIBUTION.txt`; decision 9: the strip `<nogat-sources>` reads the plan's `attribution` and
+`terms_notice`)
 **Standard:** Nogat `develop` `f5f6e67` (kit 1.3.0, ECO-093 to ECO-095): DEV-17.4, HUB-5.2, AGI-2.1 to AGI-2.4,
 AGI §6 (AGI-6.1 to AGI-6.10), DEV-12.4 to DEV-12.9, DEV-13.1, DEV §15 (DEV-15.1 to DEV-15.11, DEV-15.15,
 DEV-15.17), DEV-18.1, DEV-18.2, DEV-18.4, DEV-19.21, DEV §20 (DEV-20.5), DEV-3.3

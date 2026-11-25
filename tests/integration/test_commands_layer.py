@@ -614,11 +614,21 @@ def test_run_command_with_output_dir_writes_plain_files_and_check_command_plans_
         )
         direct = download_data(**PL_SHEET, output_dir=tmp_path / "b", cache=False)
 
-    assert [f.file.status for f in called.result.files] == ["written"]  # type: ignore[attr-defined]
+    assert [(f.unit, f.file.status) for f in called.result.files] == [  # type: ignore[attr-defined]
+        (G, "written"),
+        ("ATTRIBUTION.txt", "written"),
+    ]
     assert (called.status, called.result.mode) == ("ok", "plain")  # type: ignore[attr-defined]
     assert _normal(called.result, out) == _normal(direct, tmp_path / "b")
     assert fake.downloads == [REC["83233"].url] * 2  # the newest FULL flight
-    assert sorted(path.name for path in out.iterdir()) == [f"{G}.asc"]
+    assert sorted(path.name for path in out.iterdir()) == [
+        "ATTRIBUTION.txt",
+        f"{G}.asc",
+    ]
+    assert (out / "ATTRIBUTION.txt").read_text(encoding="utf-8") == (
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT "
+        "(wytworzono 2025, pozyskano 2026-10-12); dane przetworzone\n"
+    )
     with pl_sheets():
         refused = check_command(
             "elevation download", PL_SHEET, output_dir=out, cache=False
@@ -636,13 +646,20 @@ def test_run_command_with_output_dir_writes_plain_files_and_check_command_plans_
             cache=False,
         )
 
-    assert [(i.action, i.reason) for i in refused.result.items] == [  # type: ignore[attr-defined]
-        ("conflict", "output_exists")
+    # the file conflicts, so the plan writes no line; replacing it merges the same one
+    assert [(i.name, i.action, i.reason) for i in refused.result.items] == [  # type: ignore[attr-defined]
+        (f"{G}.asc", "conflict", "output_exists")
     ]
-    assert [i.action for i in replaced.result.items] == ["replace"]  # type: ignore[attr-defined]
+    assert [(i.name, i.action) for i in replaced.result.items] == [  # type: ignore[attr-defined]
+        (f"{G}.asc", "replace"),
+        ("ATTRIBUTION.txt", "replace"),
+    ]
     assert refused.status == replaced.status == "ok"  # a plan with a conflict is ok
     assert error.value.reason == "output_exists"
-    assert [f.file.status for f in forced.result.files] == ["replaced"]  # type: ignore[attr-defined]
+    # the same line of the same day is in the file already: it is left, not listed
+    assert [(f.unit, f.file.status) for f in forced.result.files] == [  # type: ignore[attr-defined]
+        (G, "replaced")
+    ]
 
 
 def test_run_command_with_output_dir_refuses_what_needs_a_store(tmp_path):

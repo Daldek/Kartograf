@@ -17,15 +17,13 @@ import pytest
 import kartograf
 from kartograf import UnsupportedError, generate_script
 from kartograf.auth.proxy import KEYCHAIN_SERVICE
-from kartograf.download.plan import Fetch, PlanItem, PlanSource, UpdatePlan
+from kartograf.download.plan import Fetch, PlanItem, UpdatePlan
 from kartograf.error_report import error_report
 from kartograf.exceptions import ValidationError
 from kartograf.messages.script import MESSAGES
 from kartograf.notices import Notice
 from kartograf.script import _KEYS, LeftOutFile, ScriptFile
 from kartograf.source_info import SOURCE_GROUPS, list_sources
-from kartograf.sources.descriptor import LicenseInfo
-from kartograf.sources.registry import get_source
 
 LINE = (
     "elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m"
@@ -41,6 +39,17 @@ DMR5G = "cz.cuzk.dmr5g"
 ASC = b"ncols 2\nnrows 2\n1 2\n3 4\n"
 ZIP = b"PK\x05\x06" + bytes(18)
 CHECKED_AT = "2026-11-25T09:00:00+00:00"
+DAY = "2026-11-25"  # the day a direct script runs, as the stub ``date`` says
+# The provider lines of DEV §20 of the NMT and DMR 5G files downloaded on ``DAY``.
+G_NMT = (
+    "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT"
+    f" (wytworzono b.d., pozyskano {DAY}); dane przetworzone"
+)
+Z_DMR5G = (
+    "Źródło: Český úřad zeměměřický a katastrální (ČÚZK), DMR 5G"
+    f" (pozyskano {DAY}), licencja CC BY 4.0"
+    " (https://creativecommons.org/licenses/by/4.0/); dane przetworzone"
+)
 # Texts a script prints between double quotes, where the shells expand ``${name}``.
 RUNTIME = (
     "uv_missing",
@@ -74,6 +83,7 @@ def _item(
     action: str | None = "write",
     reason: str | None = None,
     track: str = "pl_sheet",
+    signal: dict | None = None,
 ) -> PlanItem:
     return PlanItem(
         track=track,  # type: ignore[arg-type]
@@ -84,7 +94,7 @@ def _item(
         local_label=None,
         local_sha256=None,
         available_label=None,
-        available_signal=None,
+        available_signal=signal,
         status=status,  # type: ignore[arg-type]
         action=action,  # type: ignore[arg-type]
         reason=reason,
@@ -94,7 +104,7 @@ def _item(
     )
 
 
-def _plan(*items: PlanItem, sources=(), notices=(), output_dir=".") -> UpdatePlan:
+def _plan(*items: PlanItem, notices=(), output_dir=".") -> UpdatePlan:
     return UpdatePlan(
         root=None if output_dir else "/srv/store",
         checked_at=CHECKED_AT,
@@ -102,13 +112,7 @@ def _plan(*items: PlanItem, sources=(), notices=(), output_dir=".") -> UpdatePla
         items=items,
         notices=notices,
         output_dir=output_dir,
-        sources=sources,
     )
-
-
-def _nmt_source(attribution: str) -> PlanSource:
-    licence = LicenseInfo("pl-gugik", attribution, "https://www.geoportal.gov.pl")
-    return PlanSource(NMT, "GUGiK", licence, "none")
 
 
 def _direct(plan: UpdatePlan, shell: str = "bash", target: str | None = None):
@@ -520,6 +524,19 @@ def _stub_curl(tmp_path: Path, served: dict[str, bytes]) -> dict[str, str]:
     }
 
 
+def _stub_date(env: dict[str, str]) -> dict[str, str]:
+    """A ``date`` next to the stub ``curl`` that logs its arguments and says ``DAY``;
+    the environment of a run with both."""
+    stub = Path(env["PATH"].split(os.pathsep)[0]) / "date"
+    stub.write_text(
+        '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$DATE_LOG"\n'
+        f"printf '%s\\n' {DAY}\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    return {**env, "DATE_LOG": str(Path(env["STUB_LOG"]).with_name("date.log"))}
+
+
 def _run(text: str, env: dict[str, str], tmp_path: Path):
     script = tmp_path / "direct.sh"
     script.write_text(text, encoding="utf-8")
@@ -533,10 +550,10 @@ def _run(text: str, env: dict[str, str], tmp_path: Path):
     )
 
 
-def _saved_plan(tmp_path: Path, *items: PlanItem, sources=()) -> UpdatePlan:
+def _saved_plan(tmp_path: Path, *items: PlanItem) -> UpdatePlan:
     """The plan as ``--check --json`` saves it and ``--plan`` reads it back."""
     path = tmp_path / "plan.json"
-    path.write_text(_plan(*items, sources=sources).to_json(), encoding="utf-8")
+    path.write_text(_plan(*items).to_json(), encoding="utf-8")
     return UpdatePlan.from_json(path.read_text(encoding="utf-8"))
 
 
@@ -554,12 +571,13 @@ def test_the_bash_direct_script_downloads_checks_and_attributes_once(tmp_path):
         _item("CTES96.zip", url="https://example.test/cz/CTES96.zip", source=DMR5G),
         _item("c.tif", fetch=False, fetch_reason="built"),
         _item("ATTRIBUTION.txt", fetch=False, fetch_reason="built"),
-        sources=(_nmt_source("Dane GUGiK\nLinia druga\n"),),
     )
-    env = _stub_curl(tmp_path, {"N-34.asc": ASC, "odd.asc": ASC, "CTES96.zip": ZIP})
+    env = _stub_date(
+        _stub_curl(tmp_path, {"N-34.asc": ASC, "odd.asc": ASC, "CTES96.zip": ZIP})
+    )
     target = Path(env["HOME"]) / "data dir"
     target.mkdir(parents=True)
-    (target / "ATTRIBUTION.txt").write_text("Dane GUGiK\nown line\n", encoding="utf-8")
+    (target / "ATTRIBUTION.txt").write_text(f"own line\n{Z_DMR5G}\n", encoding="utf-8")
     script = _direct(plan, target="~/data dir")
     _bash_syntax(script.text, tmp_path)
 
@@ -572,9 +590,7 @@ def test_the_bash_direct_script_downloads_checks_and_attributes_once(tmp_path):
     assert (target / "N-34.asc").read_bytes() == ASC
     assert (target / odd).read_bytes() == ASC
     assert (target / "CTES96.zip").read_bytes() == ZIP
-    assert attribution == (
-        f"Dane GUGiK\nown line\nLinia druga\n{get_source(DMR5G).license.attribution}\n"
-    )
+    assert attribution == f"own line\n{Z_DMR5G}\n{G_NMT}\n"
     assert first.stdout.splitlines()[-1] == f"3 files downloaded into {target}"
     assert second.returncode == 0, second.stderr
     assert (target / "ATTRIBUTION.txt").read_text(encoding="utf-8") == attribution
@@ -587,6 +603,21 @@ def test_the_bash_direct_script_downloads_checks_and_attributes_once(tmp_path):
         "https://example.test/pl/odd.asc",
         "https://example.test/cz/CTES96.zip",
     ]
+    dates = Path(env["DATE_LOG"]).read_text(encoding="utf-8").splitlines()
+    assert dates == 2 * ["-u +%F"]
+
+
+def test_the_direct_script_names_the_year_the_plan_knows_in_the_g_line():
+    plan = _plan(
+        _item("a.asc", url="https://example.test/a.asc", signal={"date": "2022-05-01"})
+    )
+
+    script = _direct(plan)
+
+    assert (
+        "for line in 'Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT"
+        " (wytworzono 2022, pozyskano '\"$day\"'); dane przetworzone'; do"
+    ) in script.text.splitlines()
 
 
 @pytest.mark.parametrize(
@@ -633,7 +664,6 @@ def test_the_powershell_direct_script_is_ascii_and_keeps_every_value():
     plan = _plan(
         _item(name, url=url, size=24, sha256=sha256),
         _item("b.zip", url="https://example.test/b.zip", source=DMR5G),
-        sources=(_nmt_source("Dane: Główny Urząd\n"),),
     )
 
     script = _direct(plan, shell="powershell", target="~/dane/żółw")
@@ -649,9 +679,13 @@ def test_the_powershell_direct_script_is_ascii_and_keeps_every_value():
     assert _ps_values(first.replace(" 24 ", " ")) == [name, url, sha256]
     assert second == "'b.zip' 'https://example.test/b.zip' $null ''"
     lines = _ps_line(script.text, "foreach ($line in @(").removesuffix(")) {")
-    assert _ps_values(lines) == [
-        "Dane: Główny Urząd",
-        get_source(DMR5G).license.attribution,
+    assert _ps_line(script.text, "$day = ") == (
+        "[DateTime]::UtcNow.ToString('yyyy-MM-dd', "
+        "[Globalization.CultureInfo]::InvariantCulture)"
+    )
+    assert _ps_values(lines.replace(" + $day + ", f" + '{DAY}' + ")) == [
+        G_NMT,
+        Z_DMR5G,
     ]
 
 

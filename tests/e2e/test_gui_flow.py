@@ -89,14 +89,26 @@ def test_gui_rectangle_plan_and_its_three_outputs(open_page, answer_plan):
     expect(page.locator("#plan-body")).to_be_visible()
     assert asked == [options]
     rows = page.locator("#plan-table tbody tr")
-    expect(rows).to_have_count(2)
+    expect(rows).to_have_count(3)
     expect(rows.nth(0)).to_contain_text("N-34-139-A-c-1-3.asc")
     expect(rows.nth(0)).to_contain_text("GUGiK, PL-PGiK-40a")
     expect(rows.nth(0)).to_contain_text("do pobrania")
     expect(rows.nth(1)).to_contain_text("N-34-139-A-c-3-1.asc")
+    # ATTRIBUTION.txt of the write is a row, but no unit on the map
+    expect(rows.nth(2)).to_contain_text("ATTRIBUTION.txt")
     footprints = page.locator("#plan-footprints")
     expect(footprints).to_have_text("Zarysy na mapie: 2 z 2 jednostek.")
-    expect(page.locator("#plan-sources")).to_contain_text("Glowny Urzad Geodezji")
+    # The plan's G line: its short form in the strip, the full line in the dialog
+    strip = page.locator("#plan-sources")
+    expect(strip.locator(".nogat-sources-lines")).to_have_text("Źródło: GUGiK (NMT)")
+    strip.get_by_role("button", name="Źródła i warunki").click()
+    dialog = strip.get_by_role("dialog")
+    expect(dialog).to_contain_text(
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT (wytworzono 2025,"
+        " pozyskano b.d.); dane przetworzone"
+    )
+    dialog.get_by_role("button", name="Zamknij").click()
+    expect(dialog).to_be_hidden()
     # (a) the command line, copied and saved
     text = page.locator("#output-text")
     expect(text).to_contain_text("kartograf elevation download --product nmt")
@@ -151,12 +163,12 @@ def test_gui_plan_of_laz_tiles_draws_their_footprints_in_english(
     page.get_by_role("button", name="Check the plan").click()
 
     rows = page.locator("#plan-table tbody tr")
-    expect(rows).to_have_count(12)
+    expect(rows).to_have_count(13)
     footprints = page.locator("#plan-footprints")
     expect(footprints).to_have_text("Footprints on the map: 12 of 12 units.")
     assert page.evaluate("window.kartograf.view.footprints.length") == 12
     row = rows.nth(3)
-    row.click()
+    row.locator(".unit").click()  # not its licence's link, which opens the licence
     expect(row).to_have_attribute("aria-current", "true")
     chosen = page.evaluate(
         "window.kartograf.view.footprints[window.kartograf.view.selected].properties.unit"

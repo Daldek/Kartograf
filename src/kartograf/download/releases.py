@@ -18,7 +18,8 @@ before any request. ``run_release`` gives every file of the release:
   written. A server that does not answer a range request with the range gets the
   whole ZIP downloaded (``WHOLE_ARCHIVE``) and the members read from it.
 - in a plain write (``output_dir``) every file is read and written under its store
-  name, with ``ATTRIBUTION.txt`` (the provider lines, merged into an existing one).
+  name; the lines of its sidecar are merged into ``ATTRIBUTION.txt`` (the generic
+  plain write, ``kartograf.attribution.add_lines``).
 
 The sidecar of a version names the release it was read from (``extra.release``),
 every release the registry knows with these bytes (``extra.releases``) and the
@@ -35,19 +36,13 @@ only when it reads the ZIP or with ``update="upgrade"``.
 import logging
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import requests
 
-from kartograf.attribution import (
-    ATTRIBUTION_FILE,
-    plan_attribution,
-    provider_lines,
-    split_terms,
-    write_attribution,
-)
+from kartograf.attribution import provider_lines, split_terms
 from kartograf.download.data import UnitFile
 from kartograf.download.fetch import (
     FileSlot,
@@ -60,7 +55,6 @@ from kartograf.download.fetch import (
     local_file,
     local_only,
     new_staging,
-    plain_file,
     store_file,
 )
 from kartograf.download.manager import DownloadProgress
@@ -93,7 +87,7 @@ from kartograf.notices import (
     ascii_text,
     size_text,
 )
-from kartograf.output import plain_of, preflight, refuse, unit_of
+from kartograf.output import plain_of, preflight, unit_of
 from kartograf.sources.descriptor import (
     AccessChannel,
     DatasetRelease,
@@ -291,7 +285,8 @@ def run_release(
         A request failed, or a member was damaged on the way; nothing is written.
     ConflictError
         A target of a plain write exists (without ``force``), or its
-        ``ATTRIBUTION.txt`` is no readable UTF-8 file - before any request.
+        ``ATTRIBUTION.txt`` is no readable UTF-8 file - before any request
+        (``preflight``).
     """
     params = release_params(channel)
     country = descriptor.country
@@ -302,9 +297,6 @@ def run_release(
     lines = release_lines(params, release)
     if write is not None:
         preflight(root, [job.slot.name for job in jobs])
-        entry = plan_attribution(write, lines)
-        if entry is not None:
-            refuse([entry])
     planned: set[_SlotKey] | None = None
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
@@ -369,10 +361,6 @@ def run_release(
         if outcome is not None:
             files.append(UnitFile(job.unit, country, outcome))
             emit_file_notices(sink, unit_of(outcome.path, root), outcome, update)
-    if write is not None:
-        written = write_attribution(write, lines)
-        if written is not None:
-            files.append(UnitFile(ATTRIBUTION_FILE, country, plain_file(written)))
     return tuple(files), stale
 
 
@@ -850,11 +838,9 @@ def plan_release(
 ) -> UpdatePlan:
     """Return the update plan of the files of ``release`` (``--check``).
 
-    The positions of ``_item`` - no transfer, the registry pins the bytes - and, in a
-    plain write, the position of ``ATTRIBUTION.txt`` (``write``, ``replace`` when it
-    lacks a line, ``conflict`` when it is no readable UTF-8 file; written by
-    Kartograf: ``built``). The record of the concept DOI is asked for a newer release
-    (``newer_release``).
+    The positions of ``_item`` - no transfer, the registry pins the bytes; in a
+    plain write `new_plan` adds the position of ``ATTRIBUTION.txt``. The record of the
+    concept DOI is asked for a newer release (``newer_release``).
     """
     params = release_params(channel)
     jobs = release_jobs(
@@ -862,30 +848,4 @@ def plan_release(
     )
     items = [_item(job, release, track, descriptor.key) for job in jobs]
     newer_release(params, session, sink, check=True)
-    plan = new_plan(root, items)
-    write = plain_of(root)
-    if write is None:
-        return plan
-    entry = plan_attribution(write, release_lines(params, release))
-    if entry is None:
-        return plan
-    fetch, why = fetch_fields(descriptor.key, None)
-    attribution = PlanItem(
-        track=track,
-        segment="",
-        hierarchy="",
-        name=ATTRIBUTION_FILE,
-        unit=ATTRIBUTION_FILE,
-        local_label=None,
-        local_sha256=None,
-        available_label=None,
-        available_signal=None,
-        status="missing" if entry.action == "write" else "unverifiable",
-        action=entry.action,
-        path=entry.path,
-        reason=entry.reason,
-        source=descriptor.key,
-        fetch=fetch,
-        fetch_reason=why,
-    )
-    return replace(plan, items=(*plan.items, attribution))
+    return new_plan(root, items)

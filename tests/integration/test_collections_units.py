@@ -173,6 +173,9 @@ def source(
     subdir: str,
     *channels: AccessChannel,
 ) -> SourceDescriptor:
+    # A test source names no provider line: `_data/line_products.json` names the
+    # products of the registry's sources only.
+    licence = registry._GUGIK_LICENSE if country == "PL" else registry._CUZK_LICENSE
     return SourceDescriptor(
         key=key,
         country=country,
@@ -182,7 +185,7 @@ def source(
         channels=channels,
         storage_subdir=subdir,
         default_extension=".zip",
-        license=registry._GUGIK_LICENSE if country == "PL" else registry._CUZK_LICENSE,
+        license=dataclasses.replace(licence, line=None),
     )
 
 

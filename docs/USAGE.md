@@ -1857,16 +1857,17 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
   `<unit><ext>` for a package (`0208.zip`, `1465.gpkg`), `<coordinates>.tif` for a SoilGrids layer
   and the HSG raster, `<sheet>.laz` for a CZ point cloud. There is no sidecar, no `versions/`, no
   standard path, no `full_sheet/` and no hard link, so a plain write works on FAT, exFAT and SMB.
-  `landcover download --keep-raw` writes `<teryt>.gpkg` and the original `<teryt>.zip`. A plain write of
-  CAMELS-PL adds `ATTRIBUTION.txt` with the provider lines (section 1.14).
+  `landcover download --keep-raw` writes `<teryt>.gpkg` and the original `<teryt>.zip`. Every plain
+  write also keeps `ATTRIBUTION.txt` with the provider lines of its files (*Provider lines* below).
 - *Before the first request* the directory is looked at: one that is, or lies in, a store of
   Kartograf or Obserwator (its raw root or its data root) is `conflict` (`output_in_store`,
   `details.paths` the directory, the hint names `--root`), and nothing is asked of the source.
 - *Before the first byte* the whole list of targets is checked, and a failure writes nothing:
   a name two files share is `conflict` (`duplicate_output_name`), a subdirectory that a unit
   would enter and that holds a store marker is `conflict` (`output_in_store`), an existing file
-  without `--force` is `conflict` (`output_exists`). The error lists every path in
-  `details.paths`. A request over two countries (`--country auto`) is checked as one list.
+  without `--force` is `conflict` (`output_exists`), and so is a path `ATTRIBUTION.txt` that is no
+  readable UTF-8 file. The error lists every path in `details.paths`. A request over two countries
+  (`--country auto`) is checked as one list.
 - *Writing.* Each file goes to `DIR/.kartograf-incoming/<host>_<pid>_<token>/`, is verified
   there and moves into place with `os.replace`; the staging directory is removed after success,
   error, Ctrl-C (exit 130) and SIGTERM (exit 143), and leftovers older than 24 hours are removed
@@ -1878,6 +1879,7 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
   plan has no effect. A file whose source cannot be asked (an unreachable sheet index) is
   `nie udalo sie sprawdzic: ...` (`could not check: ...`), status `check_failed` with no action,
   as in the store: the plan is not `ok` and exits 11 (10 beside files that are fine), as the run.
+  `ATTRIBUTION.txt` is one position after the files (*Provider lines* below).
 - *Options that need a store.* `--upgrade`, `--plan` and `--all-campaigns` with `--output-dir`
   are `validation_error` (`store_only_option`) and name `--root`; `--full-sheet` is an `info`
   notice (it has no effect). The year options filter the flights as in the store.
@@ -1890,10 +1892,26 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
   (`skipped_incomplete`, exit 11 as a result, 14 as an error of the plan).
 - *HSG.* `soil hsg --output-dir` fetches the clay, sand and silt inputs into the staging
   directory and writes only the HSG raster; `inputs[]` is empty and nothing is reused.
+- *Provider lines (Nogat DEV §20, ADR-064).* Each file brings the lines its sidecar would carry
+  into `DIR/ATTRIBUTION.txt` as soon as it is in place: UTF-8, one line per line, the
+  attribution lines and then the terms lines, merged into the file that is there; nothing is
+  removed, so `--force` is not needed for it. A GUGiK file brings G, a SoilGrids file and the
+  HSG raster SG, a ČÚZK file Z, a CAMELS-PL file the lines of its release (section 1.14), a
+  CORINE or PGW file the registry's text of its source. The lines of one row merge into one:
+  `Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT, BDOT10k (wytworzono 2020–2025,
+  pozyskano 2026-03-24 – 2026-10-29); dane przetworzone` (the values: section 3, *Provider lines
+  in the sidecar*).
+  The HSG's input rasters add nothing. With `--force` an `ATTRIBUTION.txt` that is no readable
+  UTF-8 file is replaced by the lines alone. `--check` (the detached plan too) lists it after the
+  files, `write`, `replace` or `conflict` (`fetch_reason` `built`), when the lines of the files to
+  write or replace would change it; a file already there is `replace` whenever a G or Z line is
+  among them, since the run fills its download day.
 - *Result.* `files[]` = `{unit, country, path, size_bytes, sha256, status}` with the status
-  `written` or `replaced`; the report has `mode` `plain`, `root` `null` and `output_dir`. The
-  summary line is `Zapisane: N, zastapione: M, bledy: K (DIR)` (`Written: N, replaced: M,
-  errors: K (DIR)` with `--lang en`). Per-unit outcomes stay in `items[]` of the envelope.
+  `written` or `replaced`, `ATTRIBUTION.txt` last when the write changed it; the report has
+  `mode` `plain`, `root` `null` and `output_dir`, and the lines in `attribution` and
+  `terms_notice` (section 3). The summary line is `Zapisane: N, zastapione: M, bledy: K (DIR)`
+  (`Written: N, replaced: M, errors: K (DIR)` with `--lang en`). Per-unit outcomes stay in
+  `items[]` of the envelope.
 - *MCP.* `output_dir` is a path of the call like `root`: absolute and inside `--allow-dir`
   (`forbidden`, `outside_allowed_dirs`). A call that names neither target needs the default
   store inside `--allow-dir`. `check` with `update=force` plans the replacement on a server that
@@ -2089,12 +2107,8 @@ reads the files again (the same bytes: `bez zmian`); `--check` says `aktualne` w
 release, `nowsza` when the store holds other bytes only, and `do pobrania` without a version, and transfers nothing.
 
 **Plain files (`-o DIR`).** `DIR/pl_catchments.gpkg`, `DIR/pl_gauging-stations.gpkg` and `DIR/ATTRIBUTION.txt`,
-read from the ZIP on every run. `ATTRIBUTION.txt` holds the provider lines of Nogat DEV §20 (UTF-8, one per line);
-a later write into the same directory merges its lines in, keeps the lines it had and removes none, so `--force` is
-not needed for it. `--check` lists it as `do zapisania` or, when it lacks a line, with the text of every replaced
-file, `do zastapienia (--force)`; a file that holds every line is not listed. An existing `ATTRIBUTION.txt` that is
-not a UTF-8 text file is a conflict (`output_exists`, exit 4) before any request; with `--force` the provider lines
-alone replace it.
+read from the ZIP on every run. `ATTRIBUTION.txt` is that of every plain write (section 1.12, *Provider lines*):
+the lines below are merged into it, none removed, and `--check` lists it when they would change it.
 
 **Rights.** CC BY 4.0, the licence of the records of 2.0.0 and 2.1.0. The sidecar (`license.attribution`,
 `extra.attribution` and `extra.terms_notice`) and `ATTRIBUTION.txt` carry the lines Nogat DEV-20.12 asks for: S and
@@ -2109,8 +2123,8 @@ Dane Instytutu Meteorologii i Gospodarki Wodnej – Państwowego Instytutu Badaw
 Regulamin danych IMGW-PIB: https://danepubliczne.imgw.pl/regulations
 ```
 
-Pass them on with the data and with what you derive from it. Kartograf's other products do not carry such lines
-(`CLAUDE.md`, Deviations).
+Pass them on with the data and with what you derive from it. Kartograf's GUGiK, SoilGrids and ČÚZK files carry
+their own lines, G, SG and Z (section 3, *Provider lines in the sidecar*).
 
 ### 1.15 Scripts for another machine (`script generate`)
 
@@ -2144,13 +2158,16 @@ writes none. A development version pins no tag: `unsupported` (exit 15, `details
 **The direct script** (`--direct`, `kind` `direct`) downloads every file of the plan that is the bytes of a URL
 (`fetch` of the plan, section 4.3) with `curl` (bash) or `Invoke-WebRequest` (PowerShell) into the target under
 its plain name, through a `.part` file; it checks the size the plan knows and the SHA-256 the registry pins, removes
-the file and stops on a difference or a failed download, and merges the attribution of the sources of the files
-into `ATTRIBUTION.txt` of the target (the plan's `sources`, else the registry; a line already there is not added
-again, so a rerun changes nothing). It has no retries, format checks, sidecars, store or versions, and no cutout,
-merge or reprojection. The plan of `--command` is its detached plan (`check_command(..., detached=True)`, the plain
-write into `.`), and the default target is the line's `-o` or `--root` as typed, else `.`. A saved plan is checked
-first: a plan of 0.9.0, which does not say where its files come from, a name that is no plain file name, a URL that
-is not `http` or `https`, or a SHA-256 that is not 64 hexadecimal digits is a `validation_error` of `plan`.
+the file and stops on a difference or a failed download, and merges the provider lines of the files it downloads
+into `ATTRIBUTION.txt` of the target (the plan's lines of those files, ADR-064): the day of a G or Z line is the UTC
+day the script runs (bash `date -u +%F`, PowerShell the UTC date in the invariant culture), and each line the file
+lacks is appended, so a rerun on the same day changes nothing, while a rerun on another day adds its own G or Z
+line instead of joining it with the earlier one. It has no retries, format checks, sidecars, store or versions, and
+no cutout, merge or reprojection. The plan of `--command` is its detached plan (`check_command(..., detached=True)`,
+the plain write into `.`), and the default target is the line's `-o` or `--root` as typed, else `.`. A saved plan
+is checked first: a plan of 0.9.0, which does not say where its files come from, a name that is no plain file name,
+a URL that is not `http` or `https`, or a SHA-256 that is not 64 hexadecimal digits is a `validation_error` of
+`plan`.
 
 The header of a direct script lists the files it leaves out, each with why; `left_out` of the document names them
 with their `reason`:
@@ -2776,11 +2793,17 @@ update plan items, `notices` data notices also passed through
   `SoilReport` (`download_soil`) has the same contract without `raw`.
   `HsgReport` (`calculate_hsg`) adds `inputs` (clay/sand/silt inputs),
   and puts the result raster in `files`; input failures in `failed`, `ok=False`.
+  Each of these five reports (`kartograf-download/1`) also has `attribution` and
+  `terms_notice` (Nogat DEV-20.6, DEV-20.7; ADR-064): the provider lines of its
+  `files`, `raw` and `inputs`, merged in the order of DEV-20.4 (lines of one row
+  as one line), the terms lines apart; a listed version written before its source
+  had a line gets the line from the metadata of its sidecar.
 - `VersionedFile`: `path` (standard path = hard link), `status`
   (`new`/`unchanged`/`relabeled`/`local`, for HSG also `reused`), `label`, `sha256`,
   `version_path`, `newer` (the source has newer content, default mode),
   `unverified` (`"unchecked"` — the default mode did not ask the source about the local version,
-  `"none"` — no cheap signal, `"check_failed: ..."`).
+  `"none"` — no cheap signal, `"check_failed: ..."`), `lines` (the provider lines of the file,
+  which the report's `attribution` and `terms_notice` merge; not a key of `files[]`).
   `file` of single-file results is `None` only with `plan=`, when the plan
   does not execute that file and there is no local version.
 
@@ -2795,6 +2818,27 @@ linking the files of one task. Full table of fields: ARCHITECTURE 3.2,
 (PL and CZ) and CZ sheets in the library), and `FileStorage.delete()` removes the sidecar together with the data file.
 A direct call to a provider (e.g. `CuzkRasterProvider` from the library) writes
 only the data file, without a sidecar.
+
+**Provider lines in the sidecar (Nogat DEV §20, ADR-064).** `license` is
+`{id, attribution, url}`. The `license.attribution` of a GUGiK file is its line G,
+of a SoilGrids file and the HSG raster SG, of a ČÚZK file Z:
+
+```text
+Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT (wytworzono 2022, pozyskano 2026-11-25); dane przetworzone
+Źródło: ISRIC – World Soil Information, SoilGrids, licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); dane przetworzone
+Źródło: Český úřad zeměměřický a katastrální (ČÚZK), RÚIAN (pozyskano 2026-11-25), licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); dane przetworzone
+```
+
+The product is the one its provider names (`NMT`, `BDOT10k`, `PRG`, `DMR 5G`,
+`ZABAGED`, `RÚIAN`, ...); `wytworzono` is the year the data were created: the
+flight, the date of the index record, the edition or the year of the request,
+else the year of the file's `Last-Modified`, else `b.d.` (an area of a WCS, WFS or
+OGC API, an ImageServer cutout: built at the request); `pozyskano` is the UTC day
+of `downloaded_at`. A CAMELS-PL file carries the lines of its release (section
+1.14); CORINE (CLMS) and PGW keep the registry's text of their source, which
+`list-sources` and the `sources` of a plan show for every source. A version
+written before Kartograf had these lines keeps its old text: a sidecar is never
+rewritten.
 
 **Where the files are.** `data/<dir>/<segment>/<unit>`: the directory is the
 value of `--product` in `elevation` and `imagery` (`nmt/`, `true-orto/`,
@@ -3438,8 +3482,8 @@ the error line. In MCP only an error is `isError`. The units, by document:
 
 | Document (`kartograf` prefix left out) | A unit is | A failed unit |
 |---|---|---|
-| `-download/1` | a unit with a file | a failed unit (`no_data` with the reason `no_coverage` or `year_out_of_range`, else `source_unavailable`), or a planned position the source changed since the plan (`conflict`, reason `stale_plan`); a failed part of a successful report (`--country auto` with one country down) stays a notice |
-| `-plan/1` | a position, named by its path below the store | a position the source could not be asked about (`source_unavailable`, reason `check_failed`) |
+| `-download/1` | a unit with a file (not `ATTRIBUTION.txt` of a plain write, a file of the report but no unit) | a failed unit (`no_data` with the reason `no_coverage` or `year_out_of_range`, else `source_unavailable`), or a planned position the source changed since the plan (`conflict`, reason `stale_plan`); a failed part of a successful report (`--country auto` with one country down) stays a notice |
+| `-plan/1` | a position, named by its path below the store (not the position of `ATTRIBUTION.txt` of a plain write) | a position the source could not be asked about (`source_unavailable`, reason `check_failed`) |
 | `-availability/1` | a country | a country that could not be checked |
 
 A document with no verdict (a sheet, sources, layers, the cache, the settings, the store,
@@ -3480,6 +3524,10 @@ Common rules of the documents:
 - notices (`Info:` and `Warning:` of the text mode) are in the `notices` array as
   `{level, code, message}` (the text key is `message`, as in an error), with `i18n` `{"pl": …}` beside the
   English `message` when it is a catalog message, in the document of the command and in the envelope;
+- `attribution` and `terms_notice` (arrays of strings, the last keys) are present in the
+  documents `-download/1` and `-plan/1`: the provider lines of Nogat DEV §20 of the files of
+  the document and the terms lines (DEV-20.6, DEV-20.7; ADR-064), `[]` when no file has one.
+  Show them with the data and carry them on;
 - `ok` is present in the documents `-download/1`, `-plan/1` and `-availability/1`.
   `ok: false` is a **result** (units in
   `failed`, stale positions in `stale`, a `check_failed` position), not an error: the
@@ -3844,7 +3892,7 @@ knowing the per-product functions:
 | `validate_command(command, options, root=None, output_dir=None)` | validation without network and without writing: a data command gets the checks of its function, any other command is checked against its declaration (names, forms, required options, allowed values, bounds, rules among the options): `ValidationError` with `option`/`allowed` |
 | `format_command(command, options, run=None)` | canonical line `kartograf <group> <command> --flag ...` (the inverse of `parse_command`) |
 | `run_command(command, options, root=, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | calls the function of the command (`download_data`, `describe_sheet`, `init_store`, ...) and returns its envelope `CommandResult` (8.1; `result` is the document of the command, `kartograf-download/1` for a download); the mode is `update="upgrade"` or `"force"` (the caller makes it of `run`: `upgrade`/`force` -> `update`, `check` -> `check_command`), `plan` is `check_command(...).result`; an option the command does not have is refused |
-| `check_command(command, options, root=, output_dir=, force=, detached=, cache=, on_notice=)` | the `check_*` of a command that has a check, without downloading or writing (a data command, `store init`): the envelope with `check: true`, `result` is `kartograf-plan/1` (each item with its `source` and its `fetch` `{url, size_bytes, sha256}` or `fetch_reason` `credentials`/`built`; a plain plan names the file of an ATOM feed from the feed the metadata cache holds, else its `fetch` has no `url` and `fetch_reason` is `feed_not_cached`; a file read out of a ZIP the registry pins, CAMELS-PL, names it in `archive` `{url, size_bytes, member, sha256}`; the plan with its `sources`; ADR-063, errata 1 and 2); `detached=True` plans for another machine: the plain write into a directory that does not exist, answered as the write into `.` (`output_dir` `"."`, relative `path`s, every file `write`; with `root` or `output_dir` a `validation_error`); any other command is `validation_error`, `details.reason` `no_check` |
+| `check_command(command, options, root=, output_dir=, force=, detached=, cache=, on_notice=)` | the `check_*` of a command that has a check, without downloading or writing (a data command, `store init`): the envelope with `check: true`, `result` is `kartograf-plan/1` (each item with its `source` and its `fetch` `{url, size_bytes, sha256}` or `fetch_reason` `credentials`/`built`; a plain plan names the file of an ATOM feed from the feed the metadata cache holds, else its `fetch` has no `url` and `fetch_reason` is `feed_not_cached`; a file read out of a ZIP the registry pins, CAMELS-PL, names it in `archive` `{url, size_bytes, member, sha256}`; the plan with its `sources`; ADR-063, errata 1 and 2; and with `attribution` and `terms_notice`, the provider lines of its files as the plan knows them, the download day `b.d.`, ADR-064); `detached=True` plans for another machine: the plain write into a directory that does not exist, answered as the write into `.` (`output_dir` `"."`, relative `path`s, every file `write`; with `root` or `output_dir` a `validation_error`); any other command is `validation_error`, `details.reason` `no_check` |
 | `command_for_file(sidecar)` | the command that selects a stored file again (KB-6, ADR-057), read-only and without network: the `Sidecar` of `read_sidecar` -> the store-mode `CommandCall` (`run` empty: give `root` to `run_command`/`check_command`), rebuilt from `dataset`, `request` and `extra`, with the options that choose a version pinned (a PL sheet or LAZ tile: its data year and `all_campaigns`; the height system, resolution, format, CUZK model, view direction). Families (`details.family`): `sheet`, `cutout`, `laz`, `unit` (TERYT, KU, sheet, whole country) are rebuilt; `area` (a land cover, soil or collection file chosen by a box or an area tile, also CZ; a NMT 100 m voivodeship file), `hsg` (`soil hsg`), a PL WCS cutout reprojected to EPSG:5514/3045, an unknown dataset or a sidecar without a needed field (`details.field`) are `unsupported` with `details.reason` `command_not_rebuildable` (`CommandNotRebuildableError`); a field of a wrong form is `data_error` (`InvalidSidecarError`, `details.field`) |
 
 ```python

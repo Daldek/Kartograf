@@ -349,6 +349,11 @@ class Staging:
     write from any slot built on it, so a plain run reads nothing from and writes
     nothing to the store.
 
+    Each file in place brings its provider lines into ``ATTRIBUTION.txt`` of the
+    directory (``kartograf.attribution.add_lines``, under ``attribution_lock``);
+    ``attribution`` is that file as the write left it, ``None`` while it changed
+    nothing of it (DEV-20.5).
+
     Parameters
     ----------
     directory : pathlib.Path
@@ -356,12 +361,18 @@ class Staging:
     force : bool, optional
         Replace a target that exists when the file is committed. Without it a target
         that appeared after the plan is a ``conflict`` and nothing is replaced.
+    attributed : bool, optional
+        Whether its files bring their lines into ``ATTRIBUTION.txt``: not those of a
+        write whose files are not kept (`scratch`).
     """
 
-    def __init__(self, directory: Path, *, force: bool = False) -> None:
+    def __init__(
+        self, directory: Path, *, force: bool = False, attributed: bool = True
+    ) -> None:
         """Name the staging directory of ``directory`` without creating it."""
         self.directory = directory
         self.force = force
+        self.attributed = attributed
         self.root = directory / STAGING
         self.path = (
             self.root / f"{socket.gethostname()}_{os.getpid()}_{secrets.token_hex(4)}"
@@ -371,6 +382,8 @@ class Staging:
         self._counter = 0
         self._lock = threading.Lock()
         self._signals = contextlib.ExitStack()
+        self.attribution: FileResult | None = None
+        self.attribution_lock = threading.Lock()
 
     def __enter__(self) -> "Staging":
         """Arm the SIGTERM handler and register the handle root."""
@@ -518,14 +531,15 @@ class Staging:
         its ``handle`` as the store root of a track), but its directory is a private
         directory of this staging directory, so its files are removed with it and
         nothing of them reaches the output directory. A target that exists is
-        replaced: the directory is new.
+        replaced: the directory is new. Its files write no ``ATTRIBUTION.txt``: the
+        lines are those of the product this write keeps.
 
         Returns
         -------
         Staging
             The write, not yet entered.
         """
-        return Staging(self.stage_directory(), force=True)
+        return Staging(self.stage_directory(), force=True, attributed=False)
 
 
 _OPEN: dict[Path, Staging] = {}
@@ -567,6 +581,10 @@ def preflight(root: str | os.PathLike[str], names: Iterable[str]) -> None:
     """
     Refuse a plain write whose target list conflicts, before its first byte.
 
+    ``ATTRIBUTION.txt`` of the directory is judged with the targets: the lines of the
+    files are merged into it, so a path there that is no readable UTF-8 file is a
+    conflict without ``force`` (``kartograf.attribution.attribution_refusal``).
+
     Parameters
     ----------
     root : str or os.PathLike
@@ -580,9 +598,12 @@ def preflight(root: str | os.PathLike[str], names: Iterable[str]) -> None:
         ``root`` is a plain write and the plan lists a conflict (`refuse`). Nothing
         happens for a store.
     """
+    from kartograf.attribution import attribution_refusal  # it imports this module
+
     write = plain_of(root)
     if write is not None:
-        refuse(write.plan(list(names)))
+        refusal = attribution_refusal(write)
+        refuse([*write.plan(list(names)), *([] if refusal is None else [refusal])])
 
 
 def store_only(option: str) -> ValidationError:

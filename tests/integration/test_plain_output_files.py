@@ -55,6 +55,10 @@ def listing(directory: Path) -> list[str]:
     return sorted(str(p.relative_to(directory)) for p in directory.rglob("*"))
 
 
+def attribution(directory: Path) -> list[str]:
+    return (directory / "ATTRIBUTION.txt").read_text(encoding="utf-8").splitlines()
+
+
 @pytest.fixture(autouse=True)
 def default_root(monkeypatch, tmp_path):
     """The default store lies in the test directory: it must stay untouched."""
@@ -83,7 +87,9 @@ def _laz_names(session) -> list[str]:
     return sorted(url.rsplit("/", 1)[-1] for url in downloaded_urls(session))
 
 
-def test_plain_laz_tiles_are_flat_files_named_by_their_urls(tmp_path, default_root):
+def test_plain_laz_tiles_are_flat_files_named_by_their_urls(
+    tmp_path, default_root, frozen_clock
+):
     session = wfs_session("sheet4")
     out = tmp_path / "out"
 
@@ -91,7 +97,12 @@ def test_plain_laz_tiles_are_flat_files_named_by_their_urls(tmp_path, default_ro
 
     names = _laz_names(session)
     assert result.ok and len(names) == 4
-    assert listing(out) == names  # no segment, sidecar, versions/ or staging
+    # no segment, sidecar, versions/ or staging; one line G for the four tiles
+    assert listing(out) == sorted(["ATTRIBUTION.txt", *names])
+    assert attribution(out) == [
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, Dane pomiarowe LIDAR "
+        "(wytworzono 2025, pozyskano 2026-10-12); dane przetworzone"
+    ]
     assert sorted(file.path.name for file in result.files) == names
     for file in result.files:
         assert (file.status, file.label, file.version_path) == (
@@ -129,7 +140,7 @@ def test_a_second_laz_run_names_every_existing_tile_before_the_first_byte(tmp_pa
 
     assert [file.status for file in forced.files] == ["replaced"] * 4
     assert (out / names[0]).read_bytes() == LAZ_BYTES
-    assert listing(out) == names
+    assert listing(out) == sorted(["ATTRIBUTION.txt", *names])
 
 
 def test_the_laz_plan_lists_each_tile_with_its_action_and_fetches_none(tmp_path):
@@ -146,8 +157,12 @@ def test_the_laz_plan_lists_each_tile_with_its_action_and_fetches_none(tmp_path)
         None,
         out.resolve().as_posix(),
     )
-    assert [(i.action, i.status) for i in before.items] == [("write", "missing")] * 4
-    assert sorted(i.path.name for i in before.items) == names
+    assert [(i.action, i.status) for i in before.items] == [("write", "missing")] * 5
+    assert sorted(i.path.name for i in before.items[:4]) == names
+    assert (before.items[4].name, before.items[4].fetch_reason) == (
+        "ATTRIBUTION.txt",
+        "built",
+    )
     assert [(i.action, i.reason) for i in after.items] == [
         ("conflict", "output_exists")
     ] * 4
@@ -182,7 +197,7 @@ def _pl_values(xs, ys):
 
 
 def test_a_plain_pl_cutout_has_the_store_name_raster_and_mask_counts(
-    tmp_path, default_root
+    tmp_path, default_root, frozen_clock
 ):
     # land = the western half of the window; on land 5 zero columns (test_wcs_cutout)
     land = LandMask((_square(500000, 200000, 567590.5, 300000),), ())
@@ -205,7 +220,11 @@ def test_a_plain_pl_cutout_has_the_store_name_raster_and_mask_counts(
         np.testing.assert_array_equal(a.read(1), b.read(1))
         assert a.nodata == b.nodata and a.crs == b.crs
     assert plain.file.sha256 == sha256(plain.file.path) == stored.file.sha256
-    assert listing(out) == [plain.file.path.name]
+    assert listing(out) == sorted(["ATTRIBUTION.txt", plain.file.path.name])
+    assert attribution(out) == [  # a WCS answer built at the request: no year
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT "
+        "(wytworzono b.d., pozyskano 2026-10-12); dane przetworzone"
+    ]
     assert not default_root.exists()
 
 
@@ -240,7 +259,7 @@ def test_a_second_plain_pl_cutout_is_refused_before_the_mask_and_force_replaces(
 
     assert forced.file is not None and forced.file.status == "replaced"
     assert target.read_bytes() != b"edited"
-    assert listing(out) == [target.name]
+    assert listing(out) == sorted(["ATTRIBUTION.txt", target.name])
 
 
 def test_the_plain_pl_cutout_plan_asks_neither_the_mask_nor_the_service(tmp_path):
@@ -258,11 +277,16 @@ def test_the_plain_pl_cutout_plan_asks_neither_the_mask_nor_the_service(tmp_path
         None,
         out.resolve().as_posix(),
     )
-    (planned,) = before.items
+    planned, lines = before.items
     assert (planned.action, planned.status, planned.path) == (
         "write",
         "missing",
         done.file.path,
+    )
+    assert (lines.name, lines.action, lines.status) == (
+        "ATTRIBUTION.txt",
+        "write",
+        "missing",
     )
     (refused,) = after.items
     assert (refused.action, refused.reason) == ("conflict", "output_exists")
@@ -308,7 +332,7 @@ SHEETS = {"product": "nmt", "vertical_crs": "Bpv", "cache": False}
 
 
 def test_a_plain_cz_sheet_is_one_file_named_by_the_sheet_and_asks_no_signal(
-    tmp_path, default_root
+    tmp_path, default_root, frozen_clock
 ):
     provider = SheetProvider()
     out = tmp_path / "out"
@@ -323,7 +347,12 @@ def test_a_plain_cz_sheet_is_one_file_named_by_the_sheet_and_asks_no_signal(
     assert file.size_bytes == file.path.stat().st_size
     assert file.sha256 == sha256(file.path)
     assert (provider.fetches, provider.heads) == (1, 0)  # no HEAD in plain mode
-    assert listing(out) == [f"{CZ_SHEET}.tif"]
+    assert listing(out) == ["ATTRIBUTION.txt", f"{CZ_SHEET}.tif"]
+    assert attribution(out) == [
+        "Źródło: Český úřad zeměměřický a katastrální (ČÚZK), DMR 4G "
+        "(pozyskano 2026-10-12), licencja CC BY 4.0 "
+        "(https://creativecommons.org/licenses/by/4.0/); dane przetworzone"
+    ]
     assert not default_root.exists()
 
 
@@ -338,7 +367,7 @@ def test_a_plain_cz_tile_of_the_image_server_is_named_by_its_tile(tmp_path):
 
     assert result.file is not None and result.file.path == out / f"{_TM33}.tif"
     assert result.file.status == "written"
-    assert listing(out) == [f"{_TM33}.tif"]
+    assert listing(out) == sorted(["ATTRIBUTION.txt", f"{_TM33}.tif"])
 
 
 def test_a_second_plain_cz_sheet_is_refused_before_the_transfer_and_force_replaces(
@@ -367,7 +396,7 @@ def test_a_second_plain_cz_sheet_is_refused_before_the_transfer_and_force_replac
     assert forced.file is not None and forced.file.status == "replaced"
     assert (provider.fetches, provider.heads) == (2, 0)
     assert target.read_bytes() != b"edited"
-    assert listing(out) == [target.name]
+    assert listing(out) == ["ATTRIBUTION.txt", target.name]
 
 
 def test_the_plain_cz_sheet_plan_probes_nothing(tmp_path):
@@ -378,11 +407,16 @@ def test_the_plain_cz_sheet_plan_probes_nothing(tmp_path):
         download_cz_sheet(sheet=CZ_SHEET, output_dir=out, **SHEETS)
         after = check_cz_sheet(sheet=CZ_SHEET, output_dir=out, **SHEETS)
 
-    (planned,) = before.items
+    planned, lines = before.items
     assert (planned.action, planned.status, planned.path, planned.track) == (
         "write",
         "missing",
         out / f"{CZ_SHEET}.tif",
+        "cz_sheet",
+    )
+    assert (lines.name, lines.action, lines.track) == (
+        "ATTRIBUTION.txt",
+        "write",
         "cz_sheet",
     )
     (refused,) = after.items
@@ -425,7 +459,7 @@ def test_a_plain_cz_cutout_has_the_store_name_and_still_flags_an_empty_raster(
     assert plain.all_nodata is stored.all_nodata is True  # no sidecar to read it from
     assert [n.code for n in notices] == ["all_nodata"]
     assert str(plain.file.path) in notices[0].message
-    assert listing(out) == [plain.file.path.name]
+    assert listing(out) == sorted(["ATTRIBUTION.txt", plain.file.path.name])
     assert not default_root.exists()
 
 
@@ -455,7 +489,7 @@ def test_a_second_plain_cz_cutout_is_refused_before_the_service_and_force_replac
     assert forced.file is not None and forced.file.status == "replaced"
     assert provider.download_bbox.call_count == 2
     assert target.read_bytes() != b"edited"
-    assert listing(out) == [target.name]
+    assert listing(out) == sorted(["ATTRIBUTION.txt", target.name])
 
 
 def test_the_plain_cz_cutout_plan_says_write_then_conflict(tmp_path, monkeypatch):
@@ -468,11 +502,16 @@ def test_the_plain_cz_cutout_plan_says_write_then_conflict(tmp_path, monkeypatch
     after = check_cz_cutout(bbox=CZ_BBOX, output_dir=out, cache=False, **CZ_CUTOUT)
 
     assert done.file is not None
-    (planned,) = before.items
+    planned, lines = before.items
     assert (planned.action, planned.status, planned.path, planned.track) == (
         "write",
         "missing",
         done.file.path,
+        "cz_cutout",
+    )
+    assert (lines.name, lines.action, lines.track) == (
+        "ATTRIBUTION.txt",
+        "write",
         "cz_cutout",
     )
     (refused,) = after.items
@@ -487,7 +526,7 @@ def test_the_plain_cz_cutout_plan_says_write_then_conflict(tmp_path, monkeypatch
 
 
 def test_a_plain_image_cutout_is_the_server_geotiff_under_the_store_name(
-    tmp_path, default_root
+    tmp_path, default_root, frozen_clock
 ):
     out = tmp_path / "out"
     with patch(SESSION_FACTORY, return_value=orto_session()):
@@ -505,7 +544,11 @@ def test_a_plain_image_cutout_is_the_server_geotiff_under_the_store_name(
     recorded = (ORTO_FIXTURES / "standard_0.25m_4x4.tif").read_bytes()
     assert plain.file.path.read_bytes() == recorded
     assert plain.file.sha256 == hashlib.sha256(recorded).hexdigest()
-    assert listing(out) == [plain.file.path.name]
+    assert listing(out) == sorted(["ATTRIBUTION.txt", plain.file.path.name])
+    assert attribution(out) == [
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, Ortofotomapa "
+        "(wytworzono b.d., pozyskano 2026-10-12); dane przetworzone"
+    ]
     assert not default_root.exists()
 
 
@@ -538,7 +581,7 @@ def test_a_second_plain_image_cutout_is_refused_before_the_service_and_force_rep
     assert (
         target.read_bytes() == (ORTO_FIXTURES / "standard_0.25m_4x4.tif").read_bytes()
     )
-    assert listing(out) == [target.name]
+    assert listing(out) == sorted(["ATTRIBUTION.txt", target.name])
 
 
 def test_the_plain_image_cutout_plan_contacts_no_service(tmp_path):
@@ -551,11 +594,16 @@ def test_the_plain_image_cutout_plan_contacts_no_service(tmp_path):
         after = check_image_cutout(bbox=KRAKOW, output_dir=out, cache=False, **ORTO)
 
     assert done.file is not None
-    (planned,) = before.items
+    planned, lines = before.items
     assert (planned.action, planned.status, planned.path, planned.track) == (
         "write",
         "missing",
         done.file.path,
+        "pl_cutout",
+    )
+    assert (lines.name, lines.action, lines.track) == (
+        "ATTRIBUTION.txt",
+        "write",
         "pl_cutout",
     )
     (refused,) = after.items
@@ -575,19 +623,30 @@ def test_a_plain_contour_sheet_is_the_published_zip_named_by_the_sheet(
     tmp_path,
     openzu,  # noqa: F811
     default_root,
+    frozen_clock,
 ):
     out = tmp_path / "out"
 
     report = download_data(sheet="CTES96", output_dir=out, **CONTOURS)
 
     assert report.ok
-    (unit,) = report.files
+    unit, lines = report.files
     zipped = openzu.files[contours_url("SHP", "CTES96")][0]
     assert unit.file.path == out / "CTES96.zip"
     assert unit.file.path.read_bytes() == zipped  # not unpacked
     assert (unit.file.status, unit.file.label) == ("written", "")
     assert unit.file.sha256 == hashlib.sha256(zipped).hexdigest()
-    assert listing(out) == ["CTES96.zip"]
+    assert (lines.unit, lines.file.path, lines.file.status) == (
+        "ATTRIBUTION.txt",
+        out / "ATTRIBUTION.txt",
+        "written",
+    )
+    assert listing(out) == ["ATTRIBUTION.txt", "CTES96.zip"]
+    assert attribution(out) == [
+        "Źródło: Český úřad zeměměřický a katastrální (ČÚZK), ZABAGED "
+        "(pozyskano 2026-10-12), licencja CC BY 4.0 "
+        "(https://creativecommons.org/licenses/by/4.0/); dane przetworzone"
+    ]
     assert ("HEAD", contours_url("SHP", "CTES96")) not in openzu.calls
     assert not default_root.exists()
 
@@ -595,12 +654,14 @@ def test_a_plain_contour_sheet_is_the_published_zip_named_by_the_sheet(
 def test_a_second_plain_contour_run_names_every_zip_before_the_first_byte(
     tmp_path,
     openzu,  # noqa: F811
+    frozen_clock,
 ):
     out = tmp_path / "out"
     request = {"country": "cz", "bbox": CONTOURS_AREA, "output_dir": out, **CONTOURS}
     first = download_data(**request)
-    assert sorted(unit.unit for unit in first.files) == ["CTES86", "CTES96"]
-    assert listing(out) == ["CTES86.zip", "CTES96.zip"]
+    assert [unit.unit for unit in first.files][-1] == "ATTRIBUTION.txt"
+    assert sorted(unit.unit for unit in first.files[:-1]) == ["CTES86", "CTES96"]
+    assert listing(out) == ["ATTRIBUTION.txt", "CTES86.zip", "CTES96.zip"]
     fetched = len(openzu.zip_gets())
 
     with pytest.raises(ConflictError) as error:
@@ -615,6 +676,7 @@ def test_a_second_plain_contour_run_names_every_zip_before_the_first_byte(
 
     forced = download_data(update="force", **request)
 
+    # the same line on the same day: ATTRIBUTION.txt is left and not reported
     assert [unit.file.status for unit in forced.files] == ["replaced", "replaced"]
     assert len(openzu.zip_gets()) == fetched + 2
-    assert listing(out) == ["CTES86.zip", "CTES96.zip"]
+    assert listing(out) == ["ATTRIBUTION.txt", "CTES86.zip", "CTES96.zip"]

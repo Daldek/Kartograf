@@ -12,7 +12,7 @@ from kartograf.cli import main
 from kartograf.download.plan import UpdatePlan
 from kartograf.envelope import wrap
 from kartograf.error_report import error_report
-from tests.unit.test_script import CORINE, LINE, _item, _nmt_source, _plan
+from tests.unit.test_script import CORINE, LINE, _item, _plan
 
 
 @pytest.fixture(autouse=True)
@@ -54,7 +54,6 @@ def test_the_direct_script_of_a_plan_file_is_the_text_of_the_library(
     plan = _plan(
         _item("a.asc", url="https://example.test/a.asc", size=24),
         _item("c.tif", fetch=False, fetch_reason="built"),
-        sources=(_nmt_source("Dane GUGiK"),),
     )
     path = tmp_path / "plan.json"
     path.write_text(plan.to_json(), encoding="utf-8")

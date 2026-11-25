@@ -95,6 +95,8 @@ def test_plan_to_dict_schema_first():
         "notices",
         "ok",
         "sources",
+        "attribution",
+        "terms_notice",
     ]
     assert data["schema"] == "kartograf-plan/1" == plan.schema
     assert data["notices"] == [
@@ -467,6 +469,121 @@ def test_detached_plan_is_the_write_into_dot_with_relative_posix_paths():
         "N-34-130-D-d-2-4.asc",
         "teryt/1465.zip",
         None,
+        "ATTRIBUTION.txt",
     ]
-    assert [i["action"] for i in data["items"]] == ["write", "write", None]
+    assert [i["action"] for i in data["items"]] == ["write", "write", None, "write"]
     assert UpdatePlan.from_dict(data).to_dict() == data
+
+
+# --- the provider lines of the files of a plan (DEV §20, ADR-064) ---------------
+
+CUZK = "cz.cuzk.dmr5g"
+G_PLANNED = (
+    "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT, Dane pomiarowe LIDAR "
+    "(wytworzono 2022–2025, pozyskano b.d.); dane przetworzone"
+)
+Z_PLANNED = (
+    "Źródło: Český úřad zeměměřický a katastrální (ČÚZK), DMR 5G (pozyskano b.d.), "
+    "licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); "
+    "dane przetworzone"
+)
+
+
+def test_a_plan_carries_the_lines_of_its_files_beside_the_texts_of_its_sources(
+    tmp_path,
+):
+    """G names the products of its positions once and the years they name (a
+    flight label, an index record date), Z its product; the day of the download is
+    ``b.d.`` until the files are downloaded; a provider the table holds no row for
+    keeps its text, after them. ``sources`` keep the texts of the registry."""
+    items = [
+        _item(name="a.laz", source=LAZ),  # label 2025-10-21_84183
+        _item(
+            name="b.asc",
+            source=NMT,
+            available_label=None,
+            available_signal={"date": "2022-05-10"},
+        ),
+        _item(name="c.laz", source=LAZ, available_label="2023-07-01_1"),
+        _item(name="d.tif", source=CORINE),
+        _item(name="e.tif", source=CUZK, available_label=None),
+    ]
+
+    plan = new_plan(tmp_path, items)
+    data = plan.to_dict()
+
+    assert data["attribution"] == [
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, Dane pomiarowe LIDAR, "
+        "NMT (wytworzono 2022–2025, pozyskano b.d.); dane przetworzone",
+        Z_PLANNED,
+        *get_source(CORINE).license.attribution.splitlines(),
+    ]
+    assert data["terms_notice"] == []
+    assert [s["license"]["attribution"] for s in data["sources"]] == [
+        get_source(key).license.attribution for key in (LAZ, NMT, CORINE, CUZK)
+    ]
+
+
+def test_a_plain_plan_lists_attribution_after_the_files_it_would_place(tmp_path):
+    directory = tmp_path / "out"
+    with Staging(directory) as write:
+        planned = new_plan(
+            write.handle,
+            [
+                _item(name="b.asc", source=NMT, available_label="2022-05-10_83233"),
+                _item(name="a.laz", source=LAZ),
+            ],
+        )
+        failed = new_plan(
+            write.handle,
+            [_item(name="c.asc", source=NMT, status="check_failed", error="HTTP 503")],
+        )
+
+    position = planned.items[-1]
+
+    assert [item.name for item in planned.items] == [
+        "b.asc",
+        "a.laz",
+        "ATTRIBUTION.txt",
+    ]
+    assert (position.unit, position.status, position.action) == (
+        "ATTRIBUTION.txt",
+        "missing",
+        "write",
+    )
+    assert (position.source, position.fetch, position.fetch_reason) == (
+        NMT,
+        None,
+        "built",
+    )
+    assert planned.attribution == (G_PLANNED,)
+    assert [item.name for item in failed.items] == ["c.asc"]  # places nothing
+
+
+def test_a_plain_plan_replaces_an_attribution_that_holds_its_lines_already(
+    tmp_path,
+):
+    """The day of a G or Z line is known after the download: a later write merges
+    it into the file that holds the line of an earlier day."""
+    directory = tmp_path / "out"
+    directory.mkdir()
+    (directory / "ATTRIBUTION.txt").write_text(
+        G_PLANNED.replace("b.d.)", "2026-10-12)") + "\n", encoding="utf-8"
+    )
+    with Staging(directory) as write:
+        plan = new_plan(
+            write.handle,
+            [
+                _item(name="b.asc", source=NMT, available_label="2022-05-10_83233"),
+                _item(name="a.laz", source=LAZ),
+            ],
+        )
+
+    position = plan.items[-1]
+
+    assert (position.name, position.status, position.action, position.reason) == (
+        "ATTRIBUTION.txt",
+        "unverifiable",
+        "replace",
+        None,
+    )

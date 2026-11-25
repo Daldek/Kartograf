@@ -18,11 +18,14 @@ machine reads (a leading ``~`` is the home directory there).
 - The *direct script* (``kind`` ``direct``) downloads every file of a plan that is the
   bytes of a URL (``fetch``) with ``curl`` or ``Invoke-WebRequest`` into the target
   under its plain name, checks the size the plan knows and the SHA-256 the registry
-  pins, and merges the registry's attribution of the sources of the files into
-  ``ATTRIBUTION.txt`` (DEV-20.5). The plan is the detached plan of the line
-  (``check_command(..., detached=True)``: the only use of the network) or a saved
-  plan, whose names, URLs and SHA-256 are checked first. A file no URL serves
-  (``fetch_reason``, ``no_url``), one whose source could not be checked
+  pins, and appends to ``ATTRIBUTION.txt`` each provider line of DEV §20 of its files
+  the file lacks (DEV-20.5, ADR-064): G, SG and Z with the products and the years the
+  plan names and the day the script runs as the day of the download, the registry
+  text of a source the table holds no row for (a rerun on another day adds its own G
+  or Z line instead of joining it with the earlier one). The plan is the detached
+  plan of the line (``check_command(..., detached=True)``: the only use of the
+  network) or a saved plan, whose names, URLs and SHA-256 are checked first. A file
+  no URL serves (``fetch_reason``, ``no_url``), one whose source could not be checked
   (``check_failed``) and one whose target is a conflict (its ``reason``; two files of
   one name in a store plan are ``duplicate_output_name``) are left out with their
   reason, in the header of the script and in ``left_out``; a plan whose every file is
@@ -43,18 +46,17 @@ from typing import Final, Literal, Protocol, get_args
 from urllib.parse import urlsplit
 
 from kartograf._version import build_version
-from kartograf.attribution import ATTRIBUTION_FILE
+from kartograf.attribution import ATTRIBUTION_FILE, date_parts
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.commands import declared_commands
 from kartograf.commands import CommandCall, check_command, format_command, parse_command
 from kartograf.download.arguments import require_bool, require_str
-from kartograf.download.plan import PlanItem, UpdatePlan
+from kartograf.download.plan import PlanItem, UpdatePlan, plan_lines
 from kartograf.exceptions import UnsupportedError, ValidationError
 from kartograf.messages import message
 from kartograf.notices import Notice
 from kartograf.serialization import Document
 from kartograf.source_info import SOURCE_GROUPS, list_sources
-from kartograf.sources.registry import get_source
 
 __all__ = [
     "SHELLS",
@@ -521,21 +523,21 @@ def _left_out(item: PlanItem) -> str | None:
     return None
 
 
-def _direct_files(
+def _direct_items(
     plan: UpdatePlan,
-) -> tuple[tuple[ScriptFile, ...], tuple[LeftOutFile, ...]]:
-    """Return the files a direct script downloads and those it leaves out, in order.
+) -> tuple[tuple[PlanItem, ...], tuple[LeftOutFile, ...]]:
+    """Return the positions a direct script downloads and the files it leaves out.
 
-    The plan's own ``ATTRIBUTION.txt`` is neither: the script writes its own. Two files
-    to download of one name are ``duplicate_output_name`` (a store plan has them in
-    other directories; a plain plan judged them already).
+    In the order of the plan. The plan's own ``ATTRIBUTION.txt`` is neither: the script
+    writes its own. Two files to download of one name are ``duplicate_output_name`` (a
+    store plan has them in other directories; a plain plan judged them already).
     """
     items = [item for item in plan.items if item.name != ATTRIBUTION_FILE]
     reasons = [_left_out(item) for item in items]
     names = Counter(
         item.name for item, why in zip(items, reasons, strict=True) if why is None
     )
-    files: list[ScriptFile] = []
+    downloaded: list[PlanItem] = []
     left_out: list[LeftOutFile] = []
     for item, why in zip(items, reasons, strict=True):
         if why is None and names[item.name] > 1:
@@ -543,43 +545,38 @@ def _direct_files(
         if why is not None:
             left_out.append(LeftOutFile(item.name, item.unit, why))
             continue
-        assert item.fetch is not None and item.fetch.url is not None
-        sha256 = item.fetch.sha256
-        files.append(
-            ScriptFile(
-                name=item.name,
-                unit=item.unit,
-                url=item.fetch.url,
-                size_bytes=item.fetch.size_bytes,
-                sha256=None if sha256 is None else sha256.lower(),
-                source=item.source,
-            )
-        )
-    return tuple(files), tuple(left_out)
+        downloaded.append(item)
+    return tuple(downloaded), tuple(left_out)
 
 
-def _attribution(plan: UpdatePlan, files: Iterable[ScriptFile]) -> tuple[str, ...]:
-    """Return the lines of ``ATTRIBUTION.txt`` of the sources of ``files``, each once.
+def _script_file(item: PlanItem) -> ScriptFile:
+    """Return the file a direct script downloads for a position with a URL."""
+    assert item.fetch is not None and item.fetch.url is not None
+    sha256 = item.fetch.sha256
+    return ScriptFile(
+        name=item.name,
+        unit=item.unit,
+        url=item.fetch.url,
+        size_bytes=item.fetch.size_bytes,
+        sha256=None if sha256 is None else sha256.lower(),
+        source=item.source,
+    )
 
-    The ``license.attribution`` of each source, as the plan's ``sources`` name it, else
-    as the registry has it (DEV-20.5); the files of CAMELS-PL, whose provider lines
-    Kartograf has, are never downloaded directly (``built``, ADR-063 erratum 1).
+
+def _attribution(items: Iterable[PlanItem]) -> tuple[str, ...]:
+    """Return the lines of ``ATTRIBUTION.txt`` of the files of ``items``, each once.
+
+    The provider lines of DEV §20 of the positions (``kartograf.download.plan``,
+    ``plan_lines``): G, SG and Z with the products and the years the plan names, the
+    registry text of a source the table holds no row for, the attribution lines before
+    the terms lines. The day of the download of G and Z is ``b.d.`` here: the writer
+    of a shell puts the day the script runs in its place (``date_parts``), and the
+    script appends each line the file lacks, so a rerun on another day adds its own
+    G or Z line instead of joining it with the earlier one (ADR-064). The files of
+    CAMELS-PL, whose provider lines Kartograf has, are never downloaded directly
+    (``built``, ADR-063 erratum 1).
     """
-    named = {source.key: source.license.attribution for source in plan.sources}
-    lines: dict[str, None] = {}
-    for key in dict.fromkeys(file.source for file in files):
-        if key is None:
-            continue
-        text = named.get(key)
-        if text is None:
-            try:
-                text = get_source(key).license.attribution
-            except KeyError:
-                continue  # a source of a plan this Kartograf does not know
-        for row in text.splitlines():
-            if row.strip():
-                lines.setdefault(row)
-    return tuple(lines)
+    return plan_lines(items)
 
 
 def _why(file: LeftOutFile) -> str:
@@ -600,7 +597,8 @@ def _direct_script(
     UnsupportedError
         No file of the plan is the bytes of a URL (``no_direct_files``).
     """
-    files, left_out = _direct_files(plan)
+    downloaded, left_out = _direct_items(plan)
+    files = tuple(_script_file(item) for item in downloaded)
     if not files:
         reasons = ", ".join(dict.fromkeys(file.reason for file in left_out))
         raise UnsupportedError(
@@ -639,7 +637,7 @@ def _direct_script(
         header,
         target=target,
         files=files,
-        lines=_attribution(plan, files),
+        lines=_attribution(downloaded),
     )
     return ScriptResult(writer.shell, "direct", text, files, left_out, plan.notices)
 
@@ -730,6 +728,20 @@ def _bash_path(text: str) -> str:
         rest = text[2:]
         return "~/" + _bash_quoted(rest) if rest else "~/"
     return _bash_quoted(text)
+
+
+def _bash_line(line: str) -> str:
+    """Return a provider line for bash: ``$day`` is the day of its download.
+
+    A line whose row names the day of the download (``date_parts``: G, Z) is its text
+    before that value, the ``$day`` the script sets when it runs and its text after
+    it, in one word; another line is its text.
+    """
+    parts = date_parts(line)
+    if parts is None:
+        return _bash_quoted(line)
+    before, after = parts
+    return f'{_bash_quoted(before)}"$day"{_bash_quoted(after)}'
 
 
 class _Bash:
@@ -881,7 +893,11 @@ class _Bash:
                 "",
                 f'attribution="$target/{ATTRIBUTION_FILE}"',
                 'touch -- "$attribution"',
-                "for line in " + " ".join(_bash_quoted(row) for row in lines) + "; do",
+            ]
+            if any(date_parts(row) is not None for row in lines):
+                script.append("day=$(date -u +%F)")
+            script += [
+                "for line in " + " ".join(_bash_line(row) for row in lines) + "; do",
                 (
                     '  grep -qxF -- "$line" "$attribution" '
                     '|| printf \'%s\\n\' "$line" >> "$attribution"'
@@ -933,6 +949,20 @@ def _ps_path(text: str) -> str:
     if text.startswith("~/"):
         return f"(Join-Path $HOME {_ps_quoted(text[2:])})"
     return _ps_quoted(text)
+
+
+def _ps_line(line: str) -> str:
+    """Return a provider line for PowerShell: ``$day`` is the day of its download.
+
+    A line whose row names the day of the download (``date_parts``: G, Z) is the sum
+    of its text before that value, the ``$day`` the script sets when it runs and its
+    text after it; another line is its text.
+    """
+    parts = date_parts(line)
+    if parts is None:
+        return _ps_quoted(line)
+    before, after = parts
+    return f"({_ps_quoted(before)} + $day + {_ps_quoted(after)})"
 
 
 def _ps_comment(text: str) -> str:
@@ -1107,8 +1137,15 @@ class _PowerShell:
                 "if (Test-Path -LiteralPath $attribution) {",
                 "    $present = [IO.File]::ReadAllLines($attribution, $utf8)",
                 "}",
+            ]
+            if any(date_parts(row) is not None for row in lines):
+                script.append(
+                    "$day = [DateTime]::UtcNow.ToString('yyyy-MM-dd', "
+                    "[Globalization.CultureInfo]::InvariantCulture)"
+                )
+            script += [
                 "foreach ($line in @("
-                + ", ".join(_ps_quoted(row) for row in lines)
+                + ", ".join(_ps_line(row) for row in lines)
                 + ")) {",
                 "    if ($present -cnotcontains $line) {",
                 '        [IO.File]::AppendAllText($attribution, $line + "`n", $utf8)',

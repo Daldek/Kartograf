@@ -12,6 +12,7 @@ request, run the installed ``kartograf`` script itself.
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -65,7 +66,7 @@ def same_path(reported: Any, expected: Path) -> bool:
     )
 
 
-def test_a_plain_write_in_its_own_process_lists_the_file_it_wrote(tmp_path):
+def test_a_plain_write_in_its_own_process_lists_the_files_it_wrote(tmp_path):
     out = tmp_path / "out"
 
     done = run(
@@ -87,7 +88,7 @@ def test_a_plain_write_in_its_own_process_lists_the_file_it_wrote(tmp_path):
     report = document["result"]
     assert (report["mode"], report["root"]) == ("plain", None)
     assert same_path(report["output_dir"], out)
-    (entry,) = report["files"]
+    entry, attribution = report["files"]
     body = (out / f"{G}.asc").read_bytes()
     assert same_path(entry.pop("path"), out / f"{G}.asc")
     assert entry == {
@@ -97,7 +98,24 @@ def test_a_plain_write_in_its_own_process_lists_the_file_it_wrote(tmp_path):
         "sha256": hashlib.sha256(body).hexdigest(),
         "status": "written",
     }
-    assert listing(out) == [f"{G}.asc"]  # no staging directory, no sidecar
+    # the line of the full flight of 2025, fetched on the day of this run
+    (line,) = report["attribution"]
+    assert re.fullmatch(
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT "
+        r"\(wytworzono 2025, pozyskano \d{4}-\d{2}-\d{2}\); dane przetworzone",
+        line,
+    )
+    lines = (out / "ATTRIBUTION.txt").read_bytes()
+    assert lines.decode("utf-8") == f"{line}\n"
+    assert same_path(attribution.pop("path"), out / "ATTRIBUTION.txt")
+    assert attribution == {
+        "unit": "ATTRIBUTION.txt",
+        "country": "PL",
+        "size_bytes": len(lines),
+        "sha256": hashlib.sha256(lines).hexdigest(),
+        "status": "written",
+    }
+    assert listing(out) == ["ATTRIBUTION.txt", f"{G}.asc"]  # no staging, no sidecar
     assert not (tmp_path / "default-store").exists()
 
 

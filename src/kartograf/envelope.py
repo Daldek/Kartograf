@@ -29,10 +29,11 @@ from dataclasses import dataclass, field
 from typing import Any, Final, Literal
 
 from kartograf._errors import OUTCOMES
+from kartograf.attribution import ATTRIBUTION_FILE
 from kartograf.download.availability import AvailabilityReport
 from kartograf.download.collections import CollectionReport
 from kartograf.download.data import DataReport, UnitFailure
-from kartograf.download.plan import PlanItem, UpdatePlan
+from kartograf.download.plan import PlanItem, UpdatePlan, is_attribution
 from kartograf.hydrology.hsg import HsgReport
 from kartograf.landcover.manager import LandCoverReport, SoilReport
 from kartograf.notices import Notice
@@ -194,10 +195,13 @@ def _download(report: _DownloadReport) -> _Reading:
     """Read a ``kartograf-download/1`` report: a unit per file, failure and stale pin.
 
     A failed part of a successful report (``--country auto`` with one country down,
-    ADR-049 A3-2) is a notice of the report, not a failed unit.
+    ADR-049 A3-2) is a notice of the report, not a failed unit. ``ATTRIBUTION.txt``
+    of a plain write is a file of the report, not a unit (DEV-20.5).
     """
     items = [
-        ResultItem(unit, "ok") for unit in dict.fromkeys(f.unit for f in report.files)
+        ResultItem(unit, "ok")
+        for unit in dict.fromkeys(f.unit for f in report.files)
+        if unit != ATTRIBUTION_FILE
     ]
     if not report.ok:
         failed = [
@@ -222,8 +226,12 @@ def _position_item(position: PlanItem) -> ResultItem:
 
 
 def _plan(plan: UpdatePlan) -> _Reading:
-    """Read a plan: a position per unit; only one the source could not tell fails."""
-    return plan.ok, tuple(_position_item(item) for item in plan.items), plan.notices
+    """Read a plan: a position per unit; only one the source could not tell fails.
+
+    The position of ``ATTRIBUTION.txt`` of a plain write is no unit (DEV-20.5).
+    """
+    items = (item for item in plan.items if not is_attribution(item))
+    return plan.ok, tuple(_position_item(item) for item in items), plan.notices
 
 
 def _availability(report: AvailabilityReport) -> _Reading:

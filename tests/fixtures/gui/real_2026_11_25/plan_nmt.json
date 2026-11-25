@@ -68,6 +68,26 @@
     },
     "fetch_reason": null,
     "archive": null
+   },
+   {
+    "track": "pl_sheet",
+    "segment": "",
+    "hierarchy": "",
+    "name": "ATTRIBUTION.txt",
+    "unit": "ATTRIBUTION.txt",
+    "local_label": null,
+    "local_sha256": null,
+    "available_label": null,
+    "available_signal": null,
+    "status": "missing",
+    "error": null,
+    "action": "write",
+    "path": "ATTRIBUTION.txt",
+    "reason": null,
+    "source": "pl.gugik.nmt_1m",
+    "fetch": null,
+    "fetch_reason": "built",
+    "archive": null
    }
   ],
   "notices": [
@@ -89,7 +109,11 @@
     },
     "auth": "none"
    }
-  ]
+  ],
+  "attribution": [
+   "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT (wytworzono 2025, pozyskano b.d.); dane przetworzone"
+  ],
+  "terms_notice": []
  },
  "items": [
   {

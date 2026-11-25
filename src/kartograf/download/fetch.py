@@ -17,10 +17,11 @@ import functools
 import logging
 import shutil
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
+from kartograf.attribution import add_lines, file_lines, merge_lines
 from kartograf.download.links import ensure_link
 from kartograf.download.plan import Fetch, ItemStatus, PlanItem, Track, fetch_fields
 from kartograf.download.versions import (
@@ -45,6 +46,7 @@ from kartograf.notices import CHECK_FAILED, UNVERIFIED_LOCAL, NoticeSink
 from kartograf.output import FileResult, plain_of
 from kartograf.sources.descriptor import SignalKind
 from kartograf.sources.edition import Edition
+from kartograf.sources.sidecar import built_sidecars
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +166,10 @@ class VersionedFile:
     cheap or comparable signal) or ``"check_failed: <error>"``. ``same_as``: for
     ``relabeled``, the label of the newest existing version with identical
     content; otherwise ``None``. ``size_bytes``: the size of the file in bytes
-    (``files[].size_bytes`` of the report, DEV-19.19).
+    (``files[].size_bytes`` of the report, DEV-19.19). ``lines``: the provider
+    lines of the file (``kartograf.attribution.file_lines`` of its sidecar, or of the
+    sidecar a plain file would have had; DEV §20), which the reports carry merged in
+    their ``attribution`` and ``terms_notice``; not a key of ``files[]``.
     """
 
     path: Path
@@ -176,6 +181,7 @@ class VersionedFile:
     newer: str | None = None
     unverified: str | None = None
     same_as: str | None = None
+    lines: tuple[str, ...] = field(default=(), metadata={"json": False})
 
 
 def local_file(
@@ -201,7 +207,14 @@ def local_file(
         version.path if version_path is None else version_path,
         newer=newer,
         unverified=unverified,
+        lines=file_lines(version.meta),
     )
+
+
+def _version_lines(path: Path) -> tuple[str, ...]:
+    """Return the lines of the version file ``path`` from its sidecar; none unread."""
+    version = read_version(path.parent, path.name)
+    return () if version is None else file_lines(version.meta)
 
 
 def committed_file(path: Path, commit: VersionCommit) -> VersionedFile:
@@ -214,14 +227,15 @@ def committed_file(path: Path, commit: VersionCommit) -> VersionedFile:
         commit.size_bytes,
         commit.path,
         same_as=commit.same_as,
+        lines=_version_lines(commit.path),
     )
 
 
-def plain_file(result: FileResult) -> VersionedFile:
+def plain_file(result: FileResult, lines: tuple[str, ...] = ()) -> VersionedFile:
     """Return the outcome of a file a plain write put in place (DEV-19.19).
 
     A plain file has no version: its ``label`` is empty and its ``version_path``
-    is its ``path``.
+    is its ``path``; ``lines`` are those of the sidecar it would have had.
     """
     return VersionedFile(
         result.path,
@@ -230,6 +244,7 @@ def plain_file(result: FileResult) -> VersionedFile:
         result.sha256,
         result.size_bytes,
         result.path,
+        lines=lines,
     )
 
 
@@ -481,23 +496,51 @@ def emit_file_notices(
         )
 
 
-def store_plain_file(slot: FileSlot, staged: Path) -> VersionedFile:
+def built_lines(build: Callable[[], object]) -> tuple[str, ...]:
+    """Return the provider lines of the sidecars ``build`` writes, writing none.
+
+    A plain file has no sidecar, yet it carries the lines its sidecar would carry
+    (DEV-20.5, ADR-064): ``build`` runs the track's sidecar writer on the staged file
+    and `kartograf.sources.sidecar.built_sidecars` keeps what it would write.
+    """
+    with built_sidecars() as built:
+        build()
+    return merge_lines(*(file_lines(meta) for meta in built))
+
+
+def store_plain_file(
+    slot: FileSlot,
+    staged: Path,
+    *,
+    lines: tuple[str, ...] = (),
+    digest: ContentDigest | None = None,
+) -> VersionedFile:
     """Move the staged file of a plain write to its name in the output directory.
 
-    ``os.replace``, size and SHA-256 from one chunked read; the staging directory
-    of the file is removed in every case.
+    ``os.replace``, size and SHA-256 from one chunked read (``digest`` when the
+    caller read the file already); the staging directory of the file is removed in
+    every case. Once the file is in place its provider ``lines`` are merged into
+    ``ATTRIBUTION.txt`` of the directory (`kartograf.attribution.add_lines`).
 
     Raises
     ------
     ConflictError
-        The target appeared after the preflight and the write is not forced.
+        The target, or a path at ``ATTRIBUTION.txt`` that is no readable UTF-8 file,
+        appeared after the preflight and the write is not forced.
     """
     plain = plain_of(slot.root)
     assert plain is not None  # the slot is built on the handle root of a plain write
     try:
-        return plain_file(plain.commit(staged, plain.target(slot.name)))
+        result = plain.commit(
+            staged,
+            plain.target(slot.name),
+            size_bytes=None if digest is None else digest.size_bytes,
+            sha256=None if digest is None else digest.sha256,
+        )
     finally:
         plain.discard(staged)
+    add_lines(plain, lines)
+    return plain_file(result, lines)
 
 
 def store_file(
@@ -521,8 +564,9 @@ def store_file(
 
     A plain write (``output_dir``) moves the staged file to its name in the output
     directory (``os.replace``; size and SHA-256 from one chunked read) and writes no
-    sidecar, link or version: ``version``, ``write_sidecar`` and ``http`` are not
-    used.
+    sidecar, link or version; ``write_sidecar`` builds the sidecar the file would
+    have without writing it, for the provider lines of ``ATTRIBUTION.txt``
+    (`built_lines`, with ``version``, else the download day as the label).
 
     Raises
     ------
@@ -532,7 +576,14 @@ def store_file(
         A plain target appeared after the preflight and the write is not forced.
     """
     if plain_of(slot.root) is not None:
-        return store_plain_file(slot, staged)
+        ref = version if version is not None else VersionRef.downloaded()
+        try:
+            digest = read_content(staged, ext=slot.ext, coverage=False)
+            lines = built_lines(lambda: write_sidecar(staged, ref, digest, http))
+        except BaseException:
+            discard_staging(staged, slot)
+            raise
+        return store_plain_file(slot, staged, lines=lines, digest=digest)
     assert version is not None  # a store file is labelled
     try:
         prepare_store(slot.root)

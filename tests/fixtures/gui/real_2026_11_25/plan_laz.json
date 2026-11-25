@@ -300,6 +300,26 @@
     },
     "fetch_reason": null,
     "archive": null
+   },
+   {
+    "track": "laz_tile",
+    "segment": "",
+    "hierarchy": "",
+    "name": "ATTRIBUTION.txt",
+    "unit": "ATTRIBUTION.txt",
+    "local_label": null,
+    "local_sha256": null,
+    "available_label": null,
+    "available_signal": null,
+    "status": "missing",
+    "error": null,
+    "action": "write",
+    "path": "ATTRIBUTION.txt",
+    "reason": null,
+    "source": "pl.gugik.laz",
+    "fetch": null,
+    "fetch_reason": "built",
+    "archive": null
    }
   ],
   "notices": [
@@ -321,7 +341,11 @@
     },
     "auth": "none"
    }
-  ]
+  ],
+  "attribution": [
+   "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, Dane pomiarowe LIDAR (wytworzono b.d., pozyskano b.d.); dane przetworzone"
+  ],
+  "terms_notice": []
  },
  "items": [
   {

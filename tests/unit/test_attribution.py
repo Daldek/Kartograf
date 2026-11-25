@@ -1,24 +1,35 @@
 """The provider lines of the Nogat standard (``kartograf.attribution``, DEV §20).
 
 The lines are those of the table of the standard that ``_data/provider_lines.json``
-copies; ``L`` filled for CAMELS-PL 2.1.0 and 2.0.0 (ADR-062). ``ATTRIBUTION.txt`` is
-written into the output directory of a plain ``Staging``.
+copies; ``L`` filled for CAMELS-PL 2.1.0 and 2.0.0 (ADR-062); G, SG and Z of the
+sources of GUGiK, ISRIC SoilGrids and ČÚZK, filled from the metadata of a file
+(ADR-064). ``ATTRIBUTION.txt`` is written into the output directory of a plain
+``Staging``.
 """
 
 import hashlib
+import json
+from importlib import resources
 
 import pytest
 
 from kartograf.attribution import (
     ATTRIBUTION_FILE,
+    UNKNOWN,
+    add_lines,
+    date_parts,
+    file_lines,
     merge_lines,
     plan_attribution,
     provider_lines,
+    source_line,
     split_terms,
     write_attribution,
 )
 from kartograf.exceptions import ConflictError
 from kartograf.output import PlanEntry, Staging
+from kartograf.sources.registry import all_sources, get_source
+from kartograf.sources.sidecar import build_metadata
 
 S = (
     "Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej – "
@@ -112,6 +123,188 @@ def test_merge_lines_puts_lines_the_table_lacks_after_its_lines_and_terms_last()
 
 def test_merge_lines_takes_each_line_once():
     assert merge_lines([S, S, P], [P, S], []) == (S, P)
+
+
+# --- the lines of GUGiK, ISRIC SoilGrids and ČÚZK (ADR-064) -----------------------
+
+G_TEXT = (
+    "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, {products} "
+    "(wytworzono {period}, pozyskano {date}); dane przetworzone"
+)
+Z_TEXT = (
+    "Źródło: Český úřad zeměměřický a katastrální (ČÚZK), {products} "
+    "(pozyskano {date}), licencja CC BY 4.0 "
+    "(https://creativecommons.org/licenses/by/4.0/); dane przetworzone"
+)
+SG = (
+    "Źródło: ISRIC – World Soil Information, SoilGrids, licencja CC BY 4.0 "
+    "(https://creativecommons.org/licenses/by/4.0/); dane przetworzone"
+)
+NMT = "pl.gugik.nmt_1m"
+PRG = "pl.gugik.prg"
+RUIAN = "cz.cuzk.ruian"
+SOILGRIDS = "global.isric.soilgrids"
+CORINE = "eu.clms.corine"
+CAMELS = "pl.camels.camels"
+
+
+def _g(products: str, period: str, date: str) -> str:
+    return G_TEXT.format(products=products, period=period, date=date)
+
+
+def _z(products: str, date: str) -> str:
+    return Z_TEXT.format(products=products, date=date)
+
+
+@pytest.mark.parametrize(
+    ("key", "line"),
+    [
+        (NMT, _g("NMT", "2022", "2026-10-12")),
+        (RUIAN, _z("RÚIAN", "2026-10-12")),
+        (SOILGRIDS, SG),
+    ],
+    ids=["G", "Z", "SG"],
+)
+def test_source_line_names_the_product_the_year_and_the_day_its_line_asks_for(
+    key, line
+):
+    assert source_line(get_source(key), years=[2022], days=["2026-10-12"]) == line
+
+
+def test_source_line_without_a_year_or_a_day_says_b_d():
+    assert source_line(get_source(PRG)) == _g("PRG", UNKNOWN, UNKNOWN)
+
+
+def test_source_line_of_a_provider_the_table_lacks_is_none():
+    assert source_line(get_source(CORINE)) is None
+
+
+def test_merge_lines_joins_the_g_of_several_files_into_one_line():
+    """The products each once in the order they came, the years and the days from
+    the first to the last (DEV §20)."""
+    merged = merge_lines(
+        [_g("NMT", "2022", "2026-10-12")],
+        [_g("BDOT10k", "2025", "2026-03-24"), _g("NMT", "2020", "2026-10-29")],
+    )
+
+    assert merged == (
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT, BDOT10k "
+        "(wytworzono 2020–2025, pozyskano 2026-03-24 – 2026-10-29); "
+        "dane przetworzone",
+    )
+
+
+def test_merge_lines_keeps_b_d_only_while_no_line_names_a_value():
+    merged = merge_lines([_g("PRG", UNKNOWN, UNKNOWN)], [_g("NMT", "2021", UNKNOWN)])
+
+    assert merged == (_g("PRG, NMT", "2021", UNKNOWN),)
+
+
+def test_merge_lines_joins_the_z_lines_and_puts_g_sg_z_in_the_order_of_the_table():
+    merged = merge_lines(
+        [_z("RÚIAN", "2026-10-13"), SG],
+        [L_21, RD],
+        [_g("NMT", "2022", "2026-10-12"), _z("DMR 5G", "2026-10-12")],
+    )
+
+    assert merged == (
+        L_21,
+        _g("NMT", "2022", "2026-10-12"),
+        SG,
+        _z("RÚIAN, DMR 5G", "2026-10-12 – 2026-10-13"),
+        RD,
+    )
+
+
+def test_date_parts_split_a_line_around_its_day():
+    before, after = _g("NMT", "2022", "<>").split("<>")
+
+    assert date_parts(_g("NMT", "2022", "2026-10-12")) == (before, after)
+    assert date_parts(SG) is None
+    assert date_parts("Data: a provider of its own") is None
+
+
+def test_file_lines_fill_the_line_of_a_sidecar_from_its_metadata():
+    """The year of the flight and the UTC day of the download, whatever
+    ``license.attribution`` a sidecar written before the lines holds."""
+    meta = {
+        "dataset": NMT,
+        "downloaded_at": "2026-10-12T23:59:59.000001+00:00",
+        "extra": {"campaign": {"date": "2022-05-10"}},
+        "license": {"id": "PL-PGiK-40a", "attribution": "Dane: Glowny Urzad"},
+    }
+
+    assert file_lines(meta) == (_g("NMT", "2022", "2026-10-12"),)
+
+
+@pytest.mark.parametrize(
+    ("extra", "period"),
+    [
+        ({"http": {"last_modified": "Tue, 03 Mar 2026 10:00:00 GMT"}}, "2026"),
+        ({"http": {"last_modified": "no date"}}, UNKNOWN),
+        ({}, UNKNOWN),
+    ],
+    ids=["last-modified", "unreadable", "none"],
+)
+def test_file_lines_without_a_data_year_take_the_year_the_file_was_served(
+    extra, period
+):
+    meta = {
+        "dataset": PRG,
+        "downloaded_at": "2026-10-12T08:00:00+00:00",
+        "extra": extra,
+    }
+
+    assert file_lines(meta) == (_g("PRG", period, "2026-10-12"),)
+
+
+def test_file_lines_of_a_source_without_a_line_are_its_license_attribution():
+    """A CAMELS-PL file carries the lines of its release (ADR-062); a dataset this
+    Kartograf does not know, the text its sidecar holds."""
+    camels = {
+        "dataset": CAMELS,
+        "license": {"attribution": "\n".join([S, P, L_21, RD]) + "\n"},
+    }
+    unknown = {"dataset": "xx.other", "license": {"attribution": "Data: other"}}
+
+    assert file_lines(camels) == (S, P, L_21, RD)
+    assert file_lines(unknown) == ("Data: other",)
+    assert file_lines({"dataset": "xx.other"}) == ()
+
+
+def test_build_metadata_writes_the_filled_line_into_license_attribution(
+    frozen_clock,
+):
+    nmt = get_source(NMT)
+
+    meta = build_metadata(
+        nmt,
+        request={"sheet": "N-34-130-D-d-2-4"},
+        extra={"campaign": {"date": "2022-05-10"}},
+    )
+
+    assert meta.license == {
+        "id": nmt.license.id,
+        "attribution": _g("NMT", "2022", "2026-10-12"),
+        "url": nmt.license.url,
+    }
+
+
+def test_line_products_name_the_product_of_every_source_of_g_and_z_and_no_other():
+    """Every source whose licence names G or Z has its ``<products>`` (a new GUGiK
+    or ČÚZK source needs its name); a name holds no ``, `` (the join of the
+    products) and no parenthesis (the fixed text after the products)."""
+    products = json.loads(
+        resources.files("kartograf")
+        .joinpath("_data", "line_products.json")
+        .read_text(encoding="utf-8")
+    )["products"]
+    lined = {s.key for s in all_sources() if s.license.line in ("G", "Z")}
+
+    assert set(products) == lined
+    for name in products.values():
+        assert name.strip() == name and name and ", " not in name, name
+        assert not set(name) & set("()"), name
 
 
 # --- ATTRIBUTION.txt of a plain write ---------------------------------------------
@@ -218,3 +411,23 @@ def test_attribution_that_is_no_utf8_text_is_replaced_by_the_lines_when_forced(
     assert planned == PlanEntry(target, "replace")
     assert written is not None and written.status == "replaced"
     assert target.read_text("utf-8") == f"{S}\n{P}\n"
+
+
+def test_add_lines_merges_the_lines_of_each_file_placed_into_one_file(tmp_path):
+    """The second file's G joins the first's; the file stays ``written`` for the
+    write that made it, and a write whose files are not kept adds nothing."""
+    out = tmp_path / "out"
+
+    with Staging(out) as write:
+        add_lines(write, [_g("NMT", "2022", "2026-10-12")])
+        add_lines(write, [_g("PRG", UNKNOWN, "2026-10-12"), SG])
+        with write.scratch() as inputs:
+            add_lines(inputs, [_z("RÚIAN", "2026-10-12")])
+            scratch = inputs.attribution
+        written = write.attribution
+
+    assert (out / ATTRIBUTION_FILE).read_text("utf-8") == (
+        f"{_g('NMT, PRG', '2022', '2026-10-12')}\n{SG}\n"
+    )
+    assert written is not None and written.status == "written"
+    assert scratch is None

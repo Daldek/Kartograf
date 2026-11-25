@@ -47,10 +47,20 @@ from tests.support.interrupt_fakes import EndlessResponse
 
 SHEET = {"model": "dmr4g", "vertical_crs": "Bpv", "sheet": "CTES96"}
 AREA = BBox(-448000, -1114000, -446000, -1113000, "EPSG:5514")
+# The line Z of the CZ LAZ DMR 4G downloaded on the day of ``frozen_clock``.
+Z_DMR4G = (
+    "Źródło: Český úřad zeměměřický a katastrální (ČÚZK), DMR 4G "
+    "(pozyskano 2026-10-12), licencja CC BY 4.0 "
+    "(https://creativecommons.org/licenses/by/4.0/); dane przetworzone"
+)
 
 
 def listing(directory: Path) -> list[str]:
     return sorted(str(p.relative_to(directory)) for p in directory.rglob("*"))
+
+
+def attribution(directory: Path) -> list[str]:
+    return (directory / "ATTRIBUTION.txt").read_text(encoding="utf-8").splitlines()
 
 
 @pytest.fixture(autouse=True)
@@ -60,8 +70,8 @@ def default_root(monkeypatch, tmp_path):
     return tmp_path / "default-store"
 
 
-def test_a_plain_run_writes_the_file_under_its_store_name_and_nothing_else(
-    tmp_path, default_root
+def test_a_plain_run_writes_the_file_under_its_store_name_and_its_attribution(
+    tmp_path, default_root, frozen_clock
 ):
     out = tmp_path / "out" / "laz"
 
@@ -74,7 +84,9 @@ def test_a_plain_run_writes_the_file_under_its_store_name_and_nothing_else(
     assert (file.status, file.label, file.version_path) == ("written", "", file.path)
     assert file.size_bytes == len(body)
     assert file.sha256 == hashlib.sha256(body).hexdigest()
-    assert listing(out) == ["CTES96.laz"]  # no sidecar, no versions/, no staging
+    # no sidecar, no versions/, no staging; the provider line in ATTRIBUTION.txt
+    assert listing(out) == ["ATTRIBUTION.txt", "CTES96.laz"]
+    assert attribution(out) == [Z_DMR4G]
     assert not default_root.exists()
     assert session.of("GET") == [CTES96_URL]
 
@@ -92,14 +104,14 @@ def test_a_second_run_is_refused_before_the_first_byte_and_force_replaces(tmp_pa
     assert error.value.details()["paths"] == [str(out / "CTES96.laz")]
     assert session.of("GET") == []  # nothing was transferred
     assert (out / "CTES96.laz").read_bytes() == b"edited"
-    assert listing(out) == ["CTES96.laz"]
+    assert listing(out) == ["ATTRIBUTION.txt", "CTES96.laz"]
 
     with recorded(CuzkSession()):
         forced = download_cz_laz(output_dir=out, update="force", cache=False, **SHEET)
 
     assert [file.status for file in forced.files] == ["replaced"]
     assert (out / "CTES96.laz").read_bytes() == zip_member(CTES96_URL)
-    assert listing(out) == ["CTES96.laz"]
+    assert listing(out) == ["ATTRIBUTION.txt", "CTES96.laz"]
 
 
 def test_the_plan_lists_each_target_with_its_action_and_probes_nothing(tmp_path):
@@ -115,14 +127,26 @@ def test_the_plan_lists_each_target_with_its_action_and_probes_nothing(tmp_path)
         None,
         out.resolve().as_posix(),
     )
-    (planned,) = before.items
+    planned, lines = before.items
     assert (planned.action, planned.status, planned.path, planned.reason) == (
         "write",
         "missing",
         out / "CTES96.laz",
         None,
     )
-    (conflict,) = after.items
+    assert (lines.name, lines.unit, lines.action, lines.status, lines.path) == (
+        "ATTRIBUTION.txt",
+        "ATTRIBUTION.txt",
+        "write",
+        "missing",
+        out / "ATTRIBUTION.txt",
+    )
+    assert (lines.fetch_reason, lines.fetch, lines.track) == (
+        "built",
+        None,
+        planned.track,
+    )
+    (conflict,) = after.items  # a conflicting file brings no lines
     assert (conflict.action, conflict.reason) == ("conflict", "output_exists")
     assert after.ok  # a plan with a conflict is a result
     assert session.of("HEAD") == []  # no freshness signal is asked in plain mode
@@ -145,7 +169,7 @@ def test_a_failed_sheet_fails_alone_and_leaves_nothing_of_it(tmp_path):
     assert result.sheets == ("CTES86", "CTES96") and not result.ok
     assert [failure.sheet for failure in result.failed] == ["CTES86"]
     assert [file.status for file in result.files] == ["written"]
-    assert listing(out) == ["CTES96.laz"]
+    assert listing(out) == ["ATTRIBUTION.txt", "CTES96.laz"]
 
 
 class _EndlessCtes86(CuzkSession):
@@ -215,7 +239,7 @@ def test_both_targets_are_refused_and_a_store_is_not_an_output(tmp_path):
 
 
 def test_the_data_command_reports_a_plain_write_and_checks_the_whole_request_first(
-    tmp_path, default_root
+    tmp_path, default_root, frozen_clock
 ):
     out = tmp_path / "out"
     request = {
@@ -229,16 +253,27 @@ def test_the_data_command_reports_a_plain_write_and_checks_the_whole_request_fir
     with recorded(CuzkSession()):
         plan = check_data(output_dir=out, **request)
         report = download_data(output_dir=out, **request)
-    assert plan.mode == "plain" and [i.action for i in plan.items] == ["write"]
+    assert plan.mode == "plain"
+    assert [(i.name, i.action) for i in plan.items] == [
+        ("CTES96.laz", "write"),
+        ("ATTRIBUTION.txt", "write"),
+    ]
     assert not report.failed and report.ok
     assert (report.mode, report.root, report.output_dir) == ("plain", None, out)
     document = report.to_dict()
     assert document["mode"] == "plain" and document["root"] is None
-    (entry,) = document["files"]
+    entry, lines = document["files"]
     path = (out / "CTES96.laz").as_posix()
     assert entry["status"] == "written" and entry["path"] == path
     assert "label" not in entry and "version_path" not in entry
-    assert listing(out) == ["CTES96.laz"]
+    assert (lines["unit"], lines["country"], lines["status"], lines["path"]) == (
+        "ATTRIBUTION.txt",
+        entry["country"],
+        "written",
+        (out / "ATTRIBUTION.txt").as_posix(),
+    )
+    assert (document["attribution"], document["terms_notice"]) == ([Z_DMR4G], [])
+    assert listing(out) == ["ATTRIBUTION.txt", "CTES96.laz"]
 
     with recorded(CuzkSession()) as session, pytest.raises(ConflictError):
         download_data(output_dir=out, **request)
@@ -246,7 +281,9 @@ def test_the_data_command_reports_a_plain_write_and_checks_the_whole_request_fir
 
     with recorded(CuzkSession()):
         forced = download_data(output_dir=out, update="force", **request)
+    # the same line on the same day: ATTRIBUTION.txt is left and not reported
     assert [f.file.status for f in forced.files] == ["replaced"]
+    assert attribution(out) == [Z_DMR4G]
     assert not default_root.exists()
 
 
@@ -272,7 +309,11 @@ def test_a_request_the_plain_mode_cannot_serve_fails_before_anything_is_created(
     assert not out.exists()
 
 
-def test_the_cz_orthophoto_is_four_plain_files_of_one_archive(tmp_path, cuzk):  # noqa: F811
+def test_the_cz_orthophoto_is_four_plain_files_of_one_archive(
+    tmp_path,
+    cuzk,  # noqa: F811
+    frozen_clock,
+):
     out = tmp_path / "out"
     request = {"product": "orto", "country": "cz", "sheet": "CTES96", "cache": False}
 
@@ -281,9 +322,17 @@ def test_the_cz_orthophoto_is_four_plain_files_of_one_archive(tmp_path, cuzk):  
     assert report.ok and not report.failed
     members = _members("CTES96")
     assert [(f.unit, f.file.status) for f in report.files] == [
-        ("CTES96", "written")
-    ] * 4
-    assert listing(out) == sorted(f"CTES96{suffix}" for suffix in SUFFIXES)
+        *[("CTES96", "written")] * 4,
+        ("ATTRIBUTION.txt", "written"),
+    ]
+    assert listing(out) == sorted(
+        ["ATTRIBUTION.txt", *(f"CTES96{suffix}" for suffix in SUFFIXES)]
+    )
+    assert attribution(out) == [  # one line for the four files of one product
+        "Źródło: Český úřad zeměměřický a katastrální (ČÚZK), Ortofoto ČR "
+        "(pozyskano 2026-10-12), licencja CC BY 4.0 "
+        "(https://creativecommons.org/licenses/by/4.0/); dane przetworzone"
+    ]
     for suffix in SUFFIXES:
         assert (out / f"CTES96{suffix}").read_bytes() == members[suffix]
     (archive,) = cuzk.zip_requests()
@@ -322,7 +371,9 @@ def _partial(records):
     return [replace(record, full_sheet=False) for record in records]
 
 
-def test_a_pl_sheet_is_the_newest_full_flight_not_the_newest_flight(tmp_path):
+def test_a_pl_sheet_is_the_newest_full_flight_not_the_newest_flight(
+    tmp_path, frozen_clock
+):
     fake = FakeCampaignProvider(C14)
     out = tmp_path / "out"
 
@@ -334,7 +385,12 @@ def test_a_pl_sheet_is_the_newest_full_flight_not_the_newest_flight(tmp_path):
     assert file.path.read_bytes() == asc_for(G, f"v1 {tag(full)}")
     assert fake.downloads == [full.url]
     assert result.written == [G] and result.incomplete == {}
-    assert listing(out) == [f"{G}.asc"]  # no sidecar, no versions/, no full_sheet/
+    # no sidecar, no versions/, no full_sheet/; the line G names the year of the flight
+    assert listing(out) == ["ATTRIBUTION.txt", f"{G}.asc"]
+    assert attribution(out) == [
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT "
+        "(wytworzono 2025, pozyskano 2026-10-12); dane przetworzone"
+    ]
 
 
 def test_year_bounds_filter_the_flights_before_the_full_one_is_taken(tmp_path):
@@ -368,7 +424,7 @@ def test_a_list_skips_the_incomplete_sheet_and_writes_the_others(tmp_path):
 
     assert list(result.incomplete) == [G] and result.failed == []
     assert result.written == ["N-34-139-C-a-3-2"]
-    assert listing(tmp_path) == ["N-34-139-C-a-3-2.asc"]
+    assert listing(tmp_path) == ["ATTRIBUTION.txt", "N-34-139-C-a-3-2.asc"]
 
 
 def test_the_data_command_reports_the_skipped_sheet_and_fails_when_all_are_skipped(
@@ -393,7 +449,7 @@ def test_the_data_command_reports_the_skipped_sheet_and_fails_when_all_are_skipp
 
 
 def test_the_data_command_writes_the_full_flight_and_checks_before_the_first_byte(
-    tmp_path,
+    tmp_path, frozen_clock
 ):
     fake = FakeCampaignProvider(C14)
     out = tmp_path / "out"
@@ -402,13 +458,18 @@ def test_the_data_command_writes_the_full_flight_and_checks_before_the_first_byt
         report = download_data(sheet=G, output_dir=out, full_sheet=True, **PL)
 
     assert [(i.name, i.action, i.segment) for i in plan.items] == [
-        (f"{G}.asc", "write", "")
+        (f"{G}.asc", "write", ""),
+        ("ATTRIBUTION.txt", "write", ""),
     ]
     assert plan.items[0].available_label == "2025-04-27_83233"
-    assert report.ok and [f.file.status for f in report.files] == ["written"]
+    assert report.ok
+    assert [(f.unit, f.file.status) for f in report.files] == [
+        (G, "written"),
+        ("ATTRIBUTION.txt", "written"),
+    ]
     assert [n.code for n in report.notices] == [FULL_SHEET_REDUNDANT]
     assert fake.downloads == [REC["83233"].url]  # the extra full flight is not fetched
-    assert listing(out) == [f"{G}.asc"]
+    assert listing(out) == ["ATTRIBUTION.txt", f"{G}.asc"]
 
     with _pl_sheets(fake), pytest.raises(ConflictError) as error:
         download_data(sheet=G, output_dir=out, **PL)

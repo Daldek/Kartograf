@@ -237,13 +237,14 @@ def test_a_plain_plan_names_the_file_of_the_feed_the_cache_holds(tmp_path, gugik
     area = {**CHOICE, "bbox": KRAKOW, "country": "pl", "cache": cache}
     feeds = {SERVICE, DATASET.format(woj="12")}
 
-    (before,) = check_data(output_dir=tmp_path / "out", **area).items
+    before, attribution = check_data(output_dir=tmp_path / "out", **area).items
     assert (before.fetch, before.fetch_reason) == (Fetch(None), "feed_not_cached")
     assert not feeds & set(gugik.calls)
+    assert (attribution.name, attribution.action) == ("ATTRIBUTION.txt", "write")
 
     check_data(root=tmp_path / "store", **area)
     asked = len(gugik.calls)
-    (after,) = check_data(output_dir=tmp_path / "out", **area).items
+    after, _ = check_data(output_dir=tmp_path / "out", **area).items
     cache.close()
 
     assert (after.fetch, after.fetch_reason) == (

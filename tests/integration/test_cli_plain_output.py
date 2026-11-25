@@ -46,6 +46,16 @@ NMT = [
 AREA_ARG = ",".join(str(int(value)) for value in AREA[:4])
 SOIL = ["soil", "download", "--property", "clay", "--depth", "0-5cm", "--stat", "mean"]
 SOIL_AREA = ["--bbox", "770000,509000,772000,511000"]
+ATTRIBUTION = "ATTRIBUTION.txt"
+# The line of the full flight 83233 of 2025-04-27, fetched on the frozen day.
+NMT_LINE = (
+    "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT "
+    "(wytworzono 2025, pozyskano 2026-10-12); dane przetworzone"
+)
+SOILGRIDS_LINE = (
+    "Źródło: ISRIC – World Soil Information, SoilGrids, licencja CC BY 4.0 "
+    "(https://creativecommons.org/licenses/by/4.0/); dane przetworzone"
+)
 
 
 def listing(directory: Path) -> list[str]:
@@ -70,8 +80,8 @@ def default_root(monkeypatch, tmp_path) -> Path:
     return tmp_path / "default-store"
 
 
-def test_a_plain_run_writes_the_full_flight_under_its_store_name_and_nothing_else(
-    capsys, tmp_path, default_root
+def test_a_plain_run_writes_the_full_flight_under_its_store_name_and_its_attribution(
+    capsys, tmp_path, default_root, frozen_clock
 ):
     fake = FakeCampaignProvider(C14)
     out = tmp_path / "out"
@@ -84,7 +94,9 @@ def test_a_plain_run_writes_the_full_flight_under_its_store_name_and_nothing_els
         "83233"
     ]  # the newest flight, 84183, is partial: a plain file says nothing
     assert fake.downloads == [full.url]
-    assert listing(out) == [f"{G}.asc"]  # no sidecar, no versions/, no staging
+    assert listing(out) == [ATTRIBUTION, f"{G}.asc"]  # no sidecar/versions/staging
+    assert (out / ATTRIBUTION).read_text(encoding="utf-8") == f"{NMT_LINE}\n"
+    assert f"{ATTRIBUTION}: zapisano" in stdout
     assert (out / f"{G}.asc").read_bytes() == asc_for(G, f"v1 {tag(full)}")
     assert not default_root.exists()
 
@@ -114,7 +126,7 @@ def test_a_second_run_is_one_conflict_before_any_transfer_and_force_replaces(
     assert (code, stderr) == (0, "")
     assert f"{G}.asc: zastapiono" in stdout
     assert target.read_bytes() == asc_for(G, f"v1 {tag(REC['83233'])}")
-    assert listing(out) == [f"{G}.asc"]  # --force deleted nothing and left no staging
+    assert listing(out) == [ATTRIBUTION, f"{G}.asc"]  # --force deleted nothing
 
 
 def test_the_plan_says_write_replace_or_conflict_and_is_a_result(capsys, tmp_path):
@@ -127,11 +139,13 @@ def test_the_plan_says_write_replace_or_conflict_and_is_a_result(capsys, tmp_pat
     forced = run_nmt(capsys, fake, "-o", out, "--check", "--force")
 
     assert first[0] == existing[0] == forced[0] == 0  # a conflict in a plan is no error
-    assert first[1] == f"{G}.asc: do zapisania\n"
+    assert first[1] == f"{G}.asc: do zapisania\n{ATTRIBUTION}: do zapisania\n"
     assert existing[1] == f"{G}.asc: konflikt: plik istnieje (zastepuje go --force)\n"
-    assert forced[1] == f"{G}.asc: do zastapienia (--force)\n"
+    assert forced[1] == (
+        f"{G}.asc: do zastapienia (--force)\n{ATTRIBUTION}: do zastapienia (--force)\n"
+    )
     assert fake.downloads == [REC["83233"].url]  # the plans fetched no data
-    assert listing(out) == [f"{G}.asc"]
+    assert listing(out) == [ATTRIBUTION, f"{G}.asc"]
 
 
 def test_a_sheet_the_index_cannot_tell_fails_the_plan_as_in_the_store(capsys, tmp_path):
@@ -160,7 +174,9 @@ def test_a_sheet_the_index_cannot_tell_fails_the_plan_as_in_the_store(capsys, tm
     assert fake.downloads == [] and not out.exists()
 
 
-def test_the_json_of_a_plain_run_lists_files_and_says_where_it_wrote(capsys, tmp_path):
+def test_the_json_of_a_plain_run_lists_files_and_says_where_it_wrote(
+    capsys, tmp_path, frozen_clock
+):
     out = tmp_path / "out"
 
     code, stdout, _ = run_nmt(capsys, FakeCampaignProvider(C14), "-o", out, "--json")
@@ -173,7 +189,7 @@ def test_the_json_of_a_plain_run_lists_files_and_says_where_it_wrote(capsys, tmp
         None,
         out.as_posix(),
     )
-    (entry,) = report["files"]
+    entry, attribution = report["files"]
     body = (out / f"{G}.asc").read_bytes()
     assert entry == {
         "unit": G,
@@ -183,6 +199,16 @@ def test_the_json_of_a_plain_run_lists_files_and_says_where_it_wrote(capsys, tmp
         "sha256": hashlib.sha256(body).hexdigest(),
         "status": "written",
     }
+    lines = (out / ATTRIBUTION).read_bytes()
+    assert attribution == {
+        "unit": ATTRIBUTION,
+        "country": "PL",
+        "path": (out / ATTRIBUTION).as_posix(),
+        "size_bytes": len(lines),
+        "sha256": hashlib.sha256(lines).hexdigest(),
+        "status": "written",
+    }
+    assert (report["attribution"], report["terms_notice"]) == ([NMT_LINE], [])
     assert [(i["id"], i["status"]) for i in document["items"]] == [(G, "ok")]
 
 
@@ -294,7 +320,8 @@ def test_a_plain_soil_layer_and_hsg_raster_are_single_files_named_as_in_the_stor
 
     assert code == 0
     coords = "770000_509000_772000_511000"
-    assert listing(out) == [f"{coords}.tif"]
+    assert listing(out) == [f"{coords}.tif", ATTRIBUTION]
+    assert (out / ATTRIBUTION).read_text(encoding="utf-8") == f"{SOILGRIDS_LINE}\n"
     assert f"{coords}.tif: zapisano" in stdout
     assert fake.capabilities == 0  # a plain file has no edition label to ask for
 
@@ -320,9 +347,14 @@ def test_a_plain_collection_is_one_file_per_unit_and_a_rerun_names_them_all(
     code, stdout, _ = run(capsys, *request, "-o", out)
 
     assert code == 0
-    assert listing(out) == ["0208.zip", "0224.zip"]
+    assert listing(out) == ["0208.zip", "0224.zip", ATTRIBUTION]
+    assert (out / ATTRIBUTION).read_text(encoding="utf-8") == (
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, Modele 3D budynków "
+        "(wytworzono 2024, pozyskano 2026-10-12); dane przetworzone\n"
+    )
     assert "0208.zip: zapisano" in stdout and "0224.zip: zapisano" in stdout
-    assert f"Zapisane: 2, zastapione: 0, bledy: 0 ({out})" in stdout
+    assert f"{ATTRIBUTION}: zapisano" in stdout
+    assert f"Zapisane: 3, zastapione: 0, bledy: 0 ({out})" in stdout
 
     code, _, stderr = run(capsys, *request, "-o", out)
 
@@ -333,11 +365,12 @@ def test_a_plain_collection_is_one_file_per_unit_and_a_rerun_names_them_all(
     ]
     code, stdout, _ = run(capsys, *request, "-o", out, "--force")
     assert code == 0
+    # the same line of the same day is in ATTRIBUTION.txt already: it is left
     assert f"Zapisane: 0, zastapione: 2, bledy: 0 ({out})" in stdout
 
 
 def test_a_plain_land_cover_package_is_one_file_and_the_plan_says_write(
-    capsys, tmp_path
+    capsys, tmp_path, frozen_clock
 ):
     def package(code, output_path, **kwargs):
         output_path.write_bytes(b"gpkg")
@@ -351,10 +384,14 @@ def test_a_plain_land_cover_package_is_one_file_and_the_plan_says_write(
         written = run(capsys, *request, "-o", out)
         refused = run(capsys, *request, "-o", out)
 
-    assert planned[:2] == (0, "1465.gpkg: do zapisania\n")
-    assert written[:2] == (0, "1465.gpkg: zapisano\n")
+    assert planned[:2] == (0, f"1465.gpkg: do zapisania\n{ATTRIBUTION}: do zapisania\n")
+    assert written[:2] == (0, f"1465.gpkg: zapisano\n{ATTRIBUTION}: zapisano\n")
     assert refused[0] == 4 and get.call_count == 1
-    assert listing(out) == ["1465.gpkg"]
+    assert listing(out) == ["1465.gpkg", ATTRIBUTION]
+    assert (out / ATTRIBUTION).read_text(encoding="utf-8") == (
+        "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, BDOT10k "
+        "(wytworzono b.d., pozyskano 2026-10-12); dane przetworzone\n"
+    )
     assert not out.joinpath(STAGING).exists()
 
 
@@ -375,4 +412,4 @@ def test_a_plain_write_needs_no_link_of_any_kind(capsys, tmp_path, monkeypatch):
     assert (first[0], first[2]) == (0, "") and f"{G}.asc: zapisano" in first[1]
     assert (forced[0], forced[2]) == (0, "") and f"{G}.asc: zastapiono" in forced[1]
     assert os.stat(out / f"{G}.asc").st_nlink == 1
-    assert listing(out) == [f"{G}.asc"]
+    assert listing(out) == [ATTRIBUTION, f"{G}.asc"]

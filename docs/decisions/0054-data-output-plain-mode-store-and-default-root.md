@@ -3,7 +3,8 @@
 **Date:** 2026-10-25
 **Status:** Accepted (the author approved the Nogat convention on 2026-10-24; this ADR applies it to
 Kartograf); amended by ADR-062 (decisions 3 and 6: `ATTRIBUTION.txt` in a plain write of CAMELS-PL and its plan
-position); supersedes ADR-048 of the branch `claude/vigilant-faraday-finqvd` (documents only, never merged;
+position) and ADR-064 (decisions 3, 6 and 10: `ATTRIBUTION.txt` in every plain write, its plan position and its
+entry in `files[]`); supersedes ADR-048 of the branch `claude/vigilant-faraday-finqvd` (documents only, never merged;
 its decisions D12 and D13 are adopted, see decision 15); amends ADR-028, ADR-032, ADR-033, ADR-036, ADR-040,
 ADR-045, ADR-050, ADR-051 and ADR-052; erratum 1: the command layer takes every command; erratum 2:
 `store_state(root)`, and a marker that cannot be read is an `io_error`

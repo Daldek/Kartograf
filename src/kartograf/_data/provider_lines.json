@@ -1,5 +1,5 @@
 {
-  "source": "Nogat DEVELOPMENT_STANDARDS 1.2, section 20 (DEV-20.4, DEV-20.7; ECO-086, ECO-087)",
+  "source": "Nogat DEVELOPMENT_STANDARDS 1.3, section 20 (DEV-20.4, DEV-20.7; ECO-086, ECO-087, ECO-092)",
   "lines": [
     {
       "code": "S",
@@ -45,19 +45,26 @@
       "order": 7
     },
     {
+      "code": "W",
+      "text": "Źródło danych: Państwowy Instytut Geologiczny – Państwowy Instytut Badawczy (PIG-PIB), Monitoring Wód Podziemnych państwowej służby geologicznej (wytworzono {period}, pozyskano {date}), licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)",
+      "order": 8,
+      "processed_code": "WP",
+      "processed": "Dane PIG-PIB zostały przetworzone"
+    },
+    {
       "code": "G",
       "text": "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, {products} (wytworzono {period}, pozyskano {date}); dane przetworzone",
-      "order": 8
+      "order": 9
     },
     {
       "code": "SG",
       "text": "Źródło: ISRIC – World Soil Information, SoilGrids, licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); dane przetworzone",
-      "order": 9
+      "order": 10
     },
     {
       "code": "Z",
       "text": "Źródło: Český úřad zeměměřický a katastrální (ČÚZK), {products} (pozyskano {date}), licencja CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); dane przetworzone",
-      "order": 10
+      "order": 11
     }
   ],
   "terms": [
@@ -76,6 +83,10 @@
     {
       "code": "RE",
       "text": "Regulamin danych E-OBS: https://www.ecad.eu/documents/ECAD_datapolicy.pdf"
+    },
+    {
+      "code": "RW",
+      "text": "Regulamin danych PIG-PIB: https://www.pgi.gov.pl/rejestry-i-bazy-danych-geologicznych/zasady-korzystania-z-isp.html"
     }
   ]
 }

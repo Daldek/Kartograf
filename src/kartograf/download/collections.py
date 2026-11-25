@@ -102,6 +102,7 @@ from kartograf.download.data import (
     UnitFailure,
     UnitFile,
     WriteTarget,
+    attribution_files,
 )
 from kartograf.download.fetch import (
     FileSlot,
@@ -3914,18 +3915,17 @@ def run_layers_job(
     def write(
         data: Path, ref: VersionRef, digest: ContentDigest, http: dict[str, Any] | None
     ) -> None:
-        extra: dict[str, Any] = {
-            "source": source,
-            "source_files": [
+        extra: dict[str, Any] = {"source": source}
+        if stored:  # a plain file has no sidecar to name the archive of the store in
+            extra["source_files"] = [
                 {
                     "name": "archive",
                     "file": archive.version_path.relative_to(job.slot.root).as_posix(),
                     "sha256": archive.sha256,
                     "label": archive.label,
                 }
-            ],
-            **job.extra,
-        }
+            ]
+        extra.update(job.extra)
         if job.parent:
             extra["parent_request"] = job.parent
         emit_sidecar(
@@ -4054,8 +4054,9 @@ def download_collection(
     registry supports without it). An area of ``pgw`` is read from the national
     archive in the store (downloaded once when missing, reported in ``inputs``;
     ADR-059). The files of a CAMELS-PL release are read out of its ZIP by range
-    requests, a store version only when their bytes change, and a plain write adds
-    ``ATTRIBUTION.txt`` with their provider lines (ADR-062). Files:
+    requests, a store version only when their bytes change (ADR-062). A plain write
+    merges the provider lines of its files into ``ATTRIBUTION.txt`` of the directory,
+    listed last in ``files`` when the write changed it (DEV-20.5, ADR-064). Files:
     ``<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>[-<temat>]|ku/<kod>|<arkusz>|<strefa>/<kafel>}``
     with versions in ``versions/`` (ADR-042 D8, ADR-043). ``update``/``plan``
     as in every store command (``plan`` from ``check_collection`` with
@@ -4116,6 +4117,7 @@ def download_collection(
             sink=sink,
             on_progress=on_progress,
         )
+        files = (*files, *attribution_files(request.root, files))
         stored, plain = report_target(request.root)
     ok = not stale and (not failed or _auto_partial_success(request, failed, sink))
     return CollectionReport(

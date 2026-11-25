@@ -261,9 +261,9 @@ Sources, as in the [Nogat registry](https://github.com/Daldek/Nogat/blob/main/ec
 | Copernicus CLMS | CORINE Land Cover | Copernicus data policy, attribution required |
 | ISRIC SoilGrids | soil properties, input of HSG | CC BY 4.0 |
 
-Every file of the store has a sidecar `<file>.meta.json` (`kartograf-meta/1`) with the CRS, the source, the request, the SHA-256 and the licence with a ready-made attribution text; pass it on when you publish results. A plain file (`-o`) has no sidecar: its licence is the one of its source in the table above, and a plain write of CAMELS-PL adds `ATTRIBUTION.txt` with its provider lines.
+Every file of the store has a sidecar `<file>.meta.json` (`kartograf-meta/1`) with the CRS, the source, the request, the SHA-256 and the licence; its `license.attribution` carries the provider lines of Nogat DEV §20 (G of GUGiK, SG of ISRIC SoilGrids, Z of ČÚZK, the lines of a CAMELS-PL release; Kartograf's text of the source for CORINE and PGW). Pass them on when you publish results. A plain file (`-o`) has no sidecar: every plain write keeps the lines of its files in `ATTRIBUTION.txt` of the directory, and the JSON results and plans carry them in `attribution` and `terms_notice`.
 
-Files go to the directory of `--root` (`root`), one directory per product: `<root>/<product>/<country>_<system>[_<variant>]/...`. A version is a file in `versions/<label>_<sha8>/`; the standard path and `full_sheet/` are hard links to the newest local version ([ARCHITECTURE.md](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md), section 3). With `-o DIR` the same file names lie flat in `DIR` (`N-34-139-C-a-3-1.asc`), with nothing else but the `ATTRIBUTION.txt` of CAMELS-PL.
+Files go to the directory of `--root` (`root`), one directory per product: `<root>/<product>/<country>_<system>[_<variant>]/...`. A version is a file in `versions/<label>_<sha8>/`; the standard path and `full_sheet/` are hard links to the newest local version ([ARCHITECTURE.md](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md), section 3). With `-o DIR` the same file names lie flat in `DIR` (`N-34-139-C-a-3-1.asc`), with nothing else but `ATTRIBUTION.txt`.
 
 ### Settings, directories and backup
 

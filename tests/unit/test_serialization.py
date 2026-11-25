@@ -437,6 +437,10 @@ def test_download_family_is_registered_under_one_schema():
 
 
 _SPEC_SHA256 = "10be475e6b5c43d54b8dc832ab9816367e3dad4c1bd59bbba25c2b296a2824c6"
+_SPEC_LINE = (
+    "Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT "
+    "(wytworzono 2022, pozyskano 2026-10-12); dane przetworzone"
+)
 
 
 def _spec_file() -> VersionedFile:
@@ -450,11 +454,13 @@ def _spec_file() -> VersionedFile:
         sha256=_SPEC_SHA256,
         size_bytes=48,
         version_path=store / "versions/N-34/130/D/d/2/4" / version / name,
+        lines=(_SPEC_LINE,),
     )
 
 
 def test_download_report_equals_the_spec_example():
-    """The example of spec 5.4.1: absolute paths, a ``Notice`` as an object."""
+    """The example of spec 5.4.1: absolute paths, a ``Notice`` as an object; the
+    provider lines of its file in ``attribution`` (DEV-20.6), not in ``files``."""
     sheet_list = Notice(
         "info",
         "sheet_list",
@@ -505,6 +511,8 @@ def test_download_report_equals_the_spec_example():
             {"level": "info", "code": "sheet_list", "message": sheet_list.message}
         ],
         "ok": True,
+        "attribution": [_SPEC_LINE],
+        "terms_notice": [],
     }
 
 

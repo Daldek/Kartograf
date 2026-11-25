@@ -26,7 +26,7 @@ new product of such a channel is a descriptor entry, not a provider.
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
@@ -464,11 +464,21 @@ ChannelParams = (
 
 @dataclass(frozen=True)
 class LicenseInfo:
-    """License and ready-made attribution text for a source."""
+    """License and ready-made attribution text for a source.
+
+    ``attribution`` is the text of the source (``list-sources``, the ``sources`` of a
+    plan). ``line`` is the code of the line of Nogat DEV §20 that the data of the
+    source carry, ``G`` (GUGiK), ``SG`` (ISRIC SoilGrids) or ``Z`` (ČÚZK), and the
+    sidecar of a file carries that line filled (``kartograf.attribution``, ADR-064);
+    ``None`` for a source the table of provider lines holds no row for. Neither
+    written into a document (``license`` keeps ``{id, attribution, url}``) nor
+    compared, so a licence read back from a plan equals the registry's.
+    """
 
     id: str  # e.g. "CC-BY-4.0", "PL-PGiK-40a", "dl-de/by-2-0"
     attribution: str  # ready-made attribution text
     url: str = ""
+    line: str | None = field(default=None, compare=False, metadata={"json": False})
 
 
 @dataclass(frozen=True)

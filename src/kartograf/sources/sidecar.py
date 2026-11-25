@@ -8,17 +8,21 @@ fields are added additively. Since 0.7.1 the top-level ``sha256`` and
 ``size_bytes`` describe the data file.
 """
 
+import contextlib
 import hashlib
 import json
 import logging
 import os
 import threading
+from collections.abc import Iterator
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from kartograf import _clock
 from kartograf._version import PRODUCER, build_version
+from kartograf.attribution import file_lines
 from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.exceptions import DownloadError
 from kartograf.messages import message, reason
@@ -230,9 +234,11 @@ def build_metadata(
     read (D20); the file is then not hashed again. ``version`` becomes
     ``extra.version`` (a version sidecar is written once, D12). ``product``
     names a product derived from the descriptor's data (``hsg`` from
-    SoilGrids); default: the descriptor's ``product``. ``attribution`` is the
-    ``license.attribution`` of a file whose lines depend on it (the provider lines
-    of a CAMELS-PL release, ADR-062); default: the descriptor's text.
+    SoilGrids); default: the descriptor's ``product``. ``license.attribution`` is the
+    line of Nogat DEV §20 of a source that has one (G, SG, Z: `source_line`, filled
+    from this metadata, ADR-064); ``attribution`` is that of a file whose lines
+    depend on it (the provider lines of a CAMELS-PL release, ADR-062); default: the
+    descriptor's text.
     """
     if capability is not None:
         channel = _select_channel_by_capability(descriptor, capability)
@@ -255,7 +261,7 @@ def build_metadata(
     if version is not None:
         extra = {**(extra or {}), "version": dict(version)}
 
-    return ResultMetadata(
+    meta = ResultMetadata(
         dataset=descriptor.key,
         country=descriptor.country,
         product=product or descriptor.product,
@@ -282,6 +288,32 @@ def build_metadata(
         kartograf_version=build_version(),
         producer_version=build_version(),
     )
+    if attribution is None and descriptor.license.line is not None:
+        meta.license["attribution"] = "\n".join(file_lines(asdict(meta)))
+    return meta
+
+
+# The sidecars built in a `built_sidecars` block of this thread, kept, not written.
+_BUILT: ContextVar[list[dict[str, Any]] | None] = ContextVar(
+    "kartograf_built_sidecars", default=None
+)
+
+
+@contextlib.contextmanager
+def built_sidecars() -> Iterator[list[dict[str, Any]]]:
+    """Keep the sidecars `write_sidecar` would write in the block, writing none.
+
+    A plain write has no sidecar, but a file of it carries the provider lines its
+    sidecar would carry (DEV-20.5, ADR-064): the track's sidecar writer runs in the
+    block, and the list it yields holds each sidecar it built, as JSON. Per thread:
+    the writers of other threads write as before.
+    """
+    built: list[dict[str, Any]] = []
+    token = _BUILT.set(built)
+    try:
+        yield built
+    finally:
+        _BUILT.reset(token)
 
 
 def write_sidecar(
@@ -307,10 +339,15 @@ def write_sidecar(
     means another writer published it first.
 
     ``meta`` may be a plain ``dict`` (bare version sidecar of a provider
-    without a descriptor, ``emit_sidecar``).
+    without a descriptor, ``emit_sidecar``). In a `built_sidecars` block nothing is
+    written: the sidecar is kept there.
     """
     sidecar_path = data_path.parent / f"{data_path.name}.meta.json"
     fields = meta if isinstance(meta, dict) else asdict(meta)
+    built = _BUILT.get()
+    if built is not None:
+        built.append(fields)
+        return sidecar_path
     if atomic or exclusive:
         payload = json.dumps(fields, ensure_ascii=False, indent=2)
         tmp = sidecar_path.with_name(

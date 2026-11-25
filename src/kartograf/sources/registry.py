@@ -64,10 +64,14 @@ _VERTICAL_FAMILY: dict[str, tuple[str, ...]] = {"EPSG:5621": ("EPSG:9651",)}
 # below, not from the channel (N8).
 PL_1992_CRS = "EPSG:2180"
 
+# The licences of GUGiK, ISRIC and CUZK name the line of Nogat DEV §20 their data
+# carry (G, SG, Z; ADR-064): the sidecar of a file carries it filled, and its
+# products are those of `_data/line_products.json`.
 _GUGIK_LICENSE = LicenseInfo(
     id="PL-PGiK-40a",
     attribution=message("legal.gugik_attribution"),
     url="https://www.geoportal.gov.pl",
+    line="G",
 )
 
 _CLMS_LICENSE = LicenseInfo(
@@ -83,12 +87,14 @@ _SOILGRIDS_LICENSE = LicenseInfo(
     id="CC-BY-4.0",
     attribution="SoilGrids - ISRIC World Soil Information, CC BY 4.0",
     url="https://www.isric.org/explore/soilgrids",
+    line="SG",
 )
 
 _CUZK_LICENSE = LicenseInfo(
     id="CC-BY-4.0",
     attribution="Podklad: Cesky urad zememericky a katastralni (CUZK), CC BY 4.0",
     url="https://geoportal.cuzk.gov.cz",
+    line="Z",
 )
 
 # The IIaPGW publication names no licence (its page, 2026-11-06): the id names the

@@ -140,8 +140,8 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   SoilGrids raster and HSG (`landcover`, `hsg`), a GeoPackage written from features
   (`feature_bbox`, the layers of an archive), a member unpacked from a package or the ZIP of the
   chosen classes (`unit_package` with `unpack` or `layers`), the members of a CAMELS-PL release
-  read by range requests and its `ATTRIBUTION.txt` (`release_files`, `zip_range`), and the four
-  files of a CZ orthophoto sheet (`cz_orto`: members of its ZIP).
+  read by range requests (`release_files`, `zip_range`), the `ATTRIBUTION.txt` of a plain write
+  (ADR-064), and the four files of a CZ orthophoto sheet (`cz_orto`: members of its ZIP).
 - `check_command(..., detached=True)`: the plan of a request for another machine, as a plain write
   into a directory that does not exist (a fresh name in the temporary directory, never created),
   answered as the write into `.`: `output_dir` `"."`, the `path` of each item relative to it (a
@@ -167,10 +167,10 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `--direct` is the direct script (`kind` `direct`): `curl` or `Invoke-WebRequest` of each file
   of the plan that is the bytes of a URL, into the target (`--target`, by default the line's
   `-o` or `--root` as typed, else `.`) through a `.part` file, with the size the plan knows and
-  the SHA-256 the registry pins checked, and the attribution of the sources of the files merged
-  into `ATTRIBUTION.txt` (the plan's `sources`, else the registry; no line twice). The plan is the
-  detached plan of `--command` or a saved plan of `--plan FILE`, whose names, URLs and SHA-256
-  are checked first (a plan of 0.9.0 without the fetch fields is refused). The header and
+  the SHA-256 the registry pins checked, and the plan's provider lines of the files merged into
+  `ATTRIBUTION.txt` (no line twice; ADR-064, below). The plan is the detached plan of
+  `--command` or a saved plan of `--plan FILE`, whose names, URLs and SHA-256 are checked first
+  (a plan of 0.9.0 without the fetch fields is refused). The header and
   `left_out` name each file left out with its reason: `credentials`, `built`,
   `feed_not_cached`, `no_url` (a `fetch` without a URL), `check_failed`, or the conflict of its
   target (`duplicate_output_name` for two files of one name in a store plan, `output_exists`,
@@ -254,8 +254,63 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The extras `server` and `gui` (the same two packages; `gui` for the page of a later step);
   `httpx2` in `dev` for Starlette's `TestClient`.
 
+#### The provider lines G, SG and Z of GUGiK, ISRIC SoilGrids and ČÚZK (ADR-064)
+
+- The files of GUGiK, ISRIC SoilGrids and ČÚZK carry the lines of Nogat DEV §20 (DEV-20.9 to
+  DEV-20.11): G `Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, <products> (wytworzono
+  <period>, pozyskano <date>); dane przetworzone`, SG of ISRIC and Z of ČÚZK. `<products>` is the
+  product as its provider names it, from `_data/line_products.json` (one name per registry key
+  of the 74 GUGiK and ČÚZK descriptors: NMT, NMPT, BDOT10k, PRG, …, DMR 5G, ZABAGED, RÚIAN, …);
+  `<period>` the year the data were created (the store's `data_year`: the flight, the index
+  record, the edition, the year of the request; else the year of `extra.http.last_modified`;
+  else `b.d.`, as for a WCS, WFS, OGC API or ImageServer answer built at the request);
+  `<date>` the UTC day of `downloaded_at`. Lines of one row merge into one: the products each
+  once, the years first–last (`2020–2025`), the days first – last (`2026-03-24 – 2026-10-29`).
+  Example: `Źródło: Główny Urząd Geodezji i Kartografii – GUGiK, NMT (wytworzono 2022,
+  pozyskano 2026-11-25); dane przetworzone`.
+- The `kartograf-download/1` reports (`DataReport`, `CollectionReport`, `LandCoverReport`,
+  `SoilReport`, `HsgReport`) and `kartograf-plan/1` gain `attribution` and `terms_notice`
+  (arrays of strings) as their last keys (DEV-20.6, DEV-20.7): a report's lines are those of
+  its `files`, `raw` and `inputs`, merged in the order of DEV-20.4, an old version's line
+  recomputed from its sidecar; a plan's are those of its positions as it knows them (G and Z
+  name their products, `<period>` the year a position names, `<date>` `b.d.`; the lines of a
+  CAMELS-PL release; else the registry's text of the source). A plan file without them loads.
+- Every plain write (`-o DIR`) writes `DIR/ATTRIBUTION.txt` (DEV-20.5): the lines of each file
+  are merged in as the file is placed (UTF-8, one per line, the attribution lines and then the
+  terms lines, nothing removed), and the report lists it last in `files[]` (`written` or
+  `replaced`) when the write changed it; the HSG's input rasters add nothing. A path
+  `ATTRIBUTION.txt` that is no readable UTF-8 file is a `conflict` (`output_exists`, exit 4)
+  before any request without `--force`. The plan of a plain write, detached too, lists it as
+  one position after the files (`write`, `replace` or `conflict`; `fetch_reason` `built`) when
+  the lines of its files to write or replace would change it; a merged plan keeps one.
+- Library: `kartograf.attribution` `source_line`, `created_years`, `file_lines`, `period_text`,
+  `date_text`, `date_parts`, `add_lines`, `attribution_refusal` and `UNKNOWN` (`b.d.`);
+  `LicenseInfo.line` (`G`, `SG`, `Z`; not written into a document); `VersionedFile.lines`;
+  `kartograf.sources.sidecar.built_sidecars`.
+
 ### Changed
 
+- The sidecar `license.attribution` of a GUGiK, SoilGrids (the HSG raster too) or ČÚZK file is
+  its filled line G, SG or Z, no longer Kartograf's ASCII text of the source; `license.id` and
+  `url` stay. Version sidecars written before are never rewritten and keep the old text (so
+  does Archiwista's index of them). CAMELS-PL is unchanged; CORINE (CLMS) and PGW keep the
+  registry's text. `list-sources` and a plan's `sources[].license.attribution` keep the
+  registry's texts.
+- `_data/provider_lines.json` follows Nogat standard 1.3: the rows W and WP of PIG-PIB and the
+  terms line RW are added, and G, SG and Z take the orders 9, 10 and 11.
+- The `ATTRIBUTION.txt` of CAMELS-PL is that of the generic plain write: `download/releases.py`
+  no longer writes or plans it itself. `ATTRIBUTION.txt` is no unit: the `items` of
+  `kartograf-result/1` leave out its file in a report and its position in a plan (a plain
+  write of CAMELS-PL listed it as an item before).
+- The direct script (`script generate --direct`) writes into `ATTRIBUTION.txt` the plan's lines
+  of the files it downloads, `<date>` the UTC day it runs (bash `date -u +%F`, PowerShell the
+  invariant-culture UTC date), each line the file lacks appended; a rerun on another day adds
+  its own G or Z line. The GUI's strip `<nogat-sources>` reads the plan's `attribution` and
+  `terms_notice` (the kit shows GK, SK and ZK) and declares as `screenLines` only the registry
+  texts of CLMS and PGW; the position of `ATTRIBUTION.txt` has no footprint.
+- Documentation: ADR-064 (amends ADR-054 decisions 3, 6 and 10, ADR-062 decisions 8 and 9 and
+  erratum 1, ADR-063 decision 5 (c), erratum 1 and decision 9); the deviation DEV-20 leaves
+  `CLAUDE.md`; the release finding E2-04 and the open question of PROGRESS are closed.
 - `src/kartograf/_output_schema.py` is regenerated from the new commands-1, whose `command_name`
   reserves the groups `server` and `jobs` (AGI-6.1).
 - The command layer converts each value a call gives beside its options by the kind of its

@@ -179,7 +179,7 @@ commands ──> catalog, data_commands, download, cache, notices, envelope,
 catalog ──> sources, download, landcover, hydrology, providers, core,
         _version, _output_schema, error_report (l), guide (l), kartograf (l)
 error_report ──> transform, interrupt, _errors, catalog (l)
-envelope ──> download, landcover, hydrology, notices, _errors, kartograf (l)
+envelope ──> download, landcover, hydrology, notices, _errors, attribution, kartograf (l)
 guide ──> catalog, commands, error_report, kartograf (l)
 sheet_info ──> catalog, core
 source_info ──> download, landcover, providers, sources
@@ -191,17 +191,20 @@ config ──> marker, kartograf (l, __version__)
 marker ──> kartograf (_clock), _version, download (TYPE_CHECKING; at runtime
         lazy), config (l), sources (l)
 output ──> config, marker, interrupt
-attribution ──> output
+attribution ──> output, sources (`sources.descriptor`; `sources.registry` lazily),
+        store (TYPE_CHECKING; at runtime lazy)
 download ──> providers, sources, transform, core, cache, notices,
         _version, kartograf (_clock), transport, interrupt, config, marker,
         output, attribution
 landcover ──> providers, download, core, cache, sources, notices, transport,
         interrupt, config, output
 hydrology ──> download, notices, config, output, core, landcover, cache,
-        providers (the last four under TYPE_CHECKING), sources (l), transform (l)
+        providers (the last four under TYPE_CHECKING), sources (l), transform (l),
+        attribution
 providers ──> sources, transform, transport, core, cache,
         auth (TYPE_CHECKING; at runtime lazy), download (l), interrupt
-sources ──> core, kartograf (_clock), _version, transform (TYPE_CHECKING)
+sources ──> core, kartograf (_clock), _version, transform (TYPE_CHECKING),
+        attribution (`sources.sidecar`: the provider line of a sidecar)
 transport ──> transform, core, sources, cache, notices, providers,
         interrupt, kartograf (l, __version__)
 transform ──> core, sources (TYPE_CHECKING), transport (TYPE_CHECKING)
@@ -288,8 +291,9 @@ Notes that are easy to overlook:
 - `download/releases.py` (the files of the releases of a published data set, ADR-062, section
   4.10.1) imports at module level `transport.zip_range` (the members of a ZIP by range requests),
   `transport.http` (`download_to`, `get_with_retry`, `RANGE_UNSUPPORTED`), `attribution` (the
-  provider lines and `ATTRIBUTION.txt`), `output`, `marker` and `sources.sidecar`;
-  `download/collections.py` imports it at module level and calls it instead of the unit jobs.
+  provider lines of a release: `provider_lines`, `split_terms`), `output`, `marker` and
+  `sources.sidecar`; `download/collections.py` imports it at module level and calls it instead of
+  the unit jobs.
 - `cli` only translates flags into command-level function arguments
   and prints the result (Z1, Z8; ADR-037, ADR-046): it builds the parser from the catalog
   declaration (`catalog.cliparser`; `cli/_parser.py::create_parser` is a facade),
@@ -513,9 +517,13 @@ kartograf/
 ├── output.py            # Plain output (ADR-054, 3.6): Target/resolve_target, plan_plain, refuse, Staging
 │                        # (.kartograf-incoming/<host>_<pid>_<token>/), FileResult, digest_of; guard_store,
 │                        # directory_refusal (the target is refused before any request), writing, writes
-├── attribution.py       # The provider lines of Nogat DEV §20 (ADR-062): provider_lines, merge_lines
-│                        # (the order of DEV-20.4), plan_attribution/write_attribution (ATTRIBUTION.txt
-│                        # of a plain write), ATTRIBUTION_FILE; the lines in _data/provider_lines.json
+├── attribution.py       # The provider lines of Nogat DEV §20 (ADR-062, ADR-064): provider_lines, merge_lines
+│                        # (the order of DEV-20.4; G, Z and W of several files as one line), split_terms,
+│                        # source_line/created_years/file_lines (G, SG, Z filled from the metadata; UNKNOWN
+│                        # = b.d.), period_text/date_text/date_parts; ATTRIBUTION.txt of a plain write:
+│                        # add_lines, plan_attribution, attribution_refusal, write_attribution,
+│                        # ATTRIBUTION_FILE; the lines in _data/provider_lines.json, the products of G
+│                        # and Z in _data/line_products.json
 ├── core/                # Base logic, no network IO
 │   ├── bbox.py             # BBox, validate_bbox, validate_extent (positive area: CUZK sheet
 │   │                       # index, RUIAN), transform_bbox (dense envelope: _DENSIFY
@@ -746,7 +754,8 @@ kartograf/
 │   │                    # version of a position left out of a plan, never a request);
 │   │                    # FileSlot.related_roots (D23 between releases, ADR-042 D7)
 │   ├── plan.py          # Update plan: UpdatePlan = kartograf-plan/1 document (PlanItem.track/unit,
-│   │                    # notices, ok, from_dict)
+│   │                    # notices, ok, from_dict); item_lines/plan_lines (attribution, terms_notice),
+│   │                    # the position of ATTRIBUTION.txt of a plain write (new_plan, is_attribution)
 │   ├── cutout.py        # PL WCS cutout (ADR-035): download_pl_cutout/check_pl_cutout,
 │   │                    # land mask, sidecar (internal steps private)
 │   ├── orto_cutout.py   # PL WCS image cutout (ADR-042 D14, plan E1, ADR-044): download_image_cutout/
@@ -1149,7 +1158,7 @@ provider does not write a sidecar (section 1).
 | `resolution` | resolution from the descriptor: registry K2 label (`0.15m`, `0.5m`, `1m`, `10m`, archives up to `50m`, NMT 100 m `100m`; CZ `0.5m`/`2m`/`5m`) or `null` (PL and CZ orthophoto - the pixel of an orthophoto cutout carries `request.resolution`; PL and CZ LAZ, TIN/TTN archives, collections) |
 | `nodata` | empty pixel value: for `.asc` read automatically from the header (`read_asc_nodata`), in the CZ path from the GeoTIFF tag (`download/cz_cutout.py::read_tif_nodata`; in bbox mode with the `CUZK_NODATA` fallback), for the PL cutout the constant `-9999.0`, for the HSG result `0`, for CORINE/SoilGrids GeoTIFFs from `LandCoverManager` from the file tag (section 4.8); `null` when none of these paths applies (e.g. orthophoto) |
 | `request` | the task that produced THIS file: `sheet` (sheet code), `bbox` + `bbox_crs` in the result CRS or `teryt`; for PL campaigns `campaigns` (resolved `newest`/`all`, always), `min_year`/`max_year` (when given) and `year` (when the bounds are equal); LAZ: `year`/`min_year`/`max_year`/`min_density` when given, `campaigns` only for `all`; land cover: content parameters with default values — SoilGrids `property`/`depth`/`stat`, CORINE `year`, BDOT10k `format` (4.8); orthophoto cutout: `bbox`/`bbox_crs` of the result grid, `coverage` and `resolution`; CZ orthophoto: `sheet`; collections: `teryt`, `bbox`/`bbox_crs` in the service CRS or `whole_country: true` and the given variants (`level`, `lod`, `year`, `horizontal_crs`). `request` describes the original DOWNLOAD of the file, not the latest use; `extra.parent_request(s)` does not carry year flags (3.4) |
-| `license` | `{id, attribution, url}` from the descriptor; a CAMELS-PL file: `attribution` = the provider lines S, P and L of its release and the terms line RD, one per line (ADR-062) |
+| `license` | `{id, attribution, url}` from the descriptor; `attribution` of a GUGiK, SoilGrids (the HSG raster too) or ČÚZK file = its provider line G, SG or Z of Nogat DEV §20, filled from this metadata (`kartograf.attribution.source_line`: `<products>` of `_data/line_products.json`, `<period>` the year the data were created, `created_years`: `data_year`, else the year of `extra.http.last_modified`, else `b.d.`; `<date>` the UTC day of `downloaded_at`; ADR-064); a CAMELS-PL file: the provider lines S, P and L of its release and the terms line RD, one per line (ADR-062); CORINE (CLMS) and PGW: the registry's text. A sidecar written before ADR-064 keeps the registry's text; `file_lines` computes the line of any sidecar from its metadata |
 | `downloaded_at`, `kartograf_version` | UTC timestamp (ISO 8601, since 0.8.0 with microseconds — ordering of two downloads within one second) and the package version from `src/kartograf/_version.py::build_version()`: release = `__version__` alone; development version (`dev`) = `<__version__>+<short SHA>` of the commit from which the package was imported, with the `.dirty` suffix when tracked files of the `kartograf/` directory have uncommitted changes (docs/tests do not count); when git is unavailable or the package does not come from the repository it lies in (`os.path.samefile`), `__version__` alone. The same value in `kartograf --version`; the HTTP `User-Agent` carries `__version__` alone |
 | `producer`, `producer_version` | DEV-19.16 (ADR-054): the package that wrote the file (`kartograf`, `src/kartograf/_version.py::PRODUCER`) and its version, the same value as `kartograf_version`, which stays; optional within `/1`: a sidecar written before they existed has neither, and the typed `Sidecar` then reports `kartograf` and the value of `kartograf_version` |
 | `transform` | dictionary of axes (`horizontal`/`vertical`) with a description of the operation used in the format `pinned: <description> (<accuracy> m)`; an axis without conversion has no key, and without any conversion the whole field is `null` |
@@ -1334,7 +1343,8 @@ section 3.6), marked by `kartograf-store.json` (3.3.1). A plain write (`output_d
 `--output-dir`) keeps only the file names of this tree: `N-34-130-D-d-2-4.asc`,
 `<coords>.tif`, `1261.gpkg` or `CTES96.laz` lie flat in the output directory, with no product
 directory, segment, hierarchy, `bbox/`, `teryt/`, `versions/` or `full_sheet/` and no
-`.meta.json`, so the rules below are rules of the store. The output directory may hold a store
+`.meta.json`, so the rules below are rules of the store; beside them lies `ATTRIBUTION.txt` with
+the provider lines of the files (DEV-20.5, ADR-064; 3.6). The output directory may hold a store
 below it (`<data_dir>` is a valid output although the default store lies in it), but it may
 not be, or lie in, a store (`conflict`, `output_in_store`).
 
@@ -2048,8 +2058,8 @@ schema, and that every `result_schema` of the catalog is in the registry.
 
 | Schema | Library type | Module | Keys after `schema` |
 |---|---|---|---|
-| `kartograf-download/1` | `DataReport`, `CollectionReport`, `LandCoverReport`, `SoilReport`, `HsgReport` | `download.data`, `download.collections`, `landcover.manager`, `hydrology.hsg` | `mode, root, output_dir, files, raw, inputs, failed, skipped, stale, superseded, summary, notices, ok` |
-| `kartograf-plan/1` | `UpdatePlan` | `download.plan` | `mode, root, output_dir, checked_at, kartograf_version, items, notices, ok, sources` |
+| `kartograf-download/1` | `DataReport`, `CollectionReport`, `LandCoverReport`, `SoilReport`, `HsgReport` | `download.data`, `download.collections`, `landcover.manager`, `hydrology.hsg` | `mode, root, output_dir, files, raw, inputs, failed, skipped, stale, superseded, summary, notices, ok, attribution, terms_notice` |
+| `kartograf-plan/1` | `UpdatePlan` | `download.plan` | `mode, root, output_dir, checked_at, kartograf_version, items, notices, ok, sources, attribution, terms_notice` |
 | `kartograf-result/1` | `CommandResult` | `envelope` | `tool, version, command, check, status, result, items, notices` |
 | `kartograf-availability/1` | `AvailabilityReport` | `download.availability` | `request, checked_at, areas, combinations, failed, notices, ok` |
 | `kartograf-sheet/1` | `SheetInfo` | `sheet_info` | `sheet, system, country, sheet_system, scale, components, zone, crs, bounds, commands, hierarchy, children, descendants` |
@@ -2168,6 +2178,24 @@ position whose source could not be checked: it stays `check_failed` without them
 and the plan is not `ok`; the one position of a store root that is a conflict has the track
 `store` and the same three fields.
 
+**Provider lines (Nogat DEV §20, ADR-064).** A report of `kartograf-download/1` ends with
+`attribution` and `terms_notice` (`WriteTarget`): the lines of its `files`, `raw` and `inputs`
+(`VersionedFile.lines`: `file_lines` of the version sidecar, or of the sidecar a plain file would
+have had, which `download.fetch.built_lines` builds by running the track's sidecar writer inside
+`sources.sidecar.built_sidecars`, writing nothing), merged by `merge_lines` and parted by
+`split_terms`. A plan ends with the same two keys, computed from its items (`item_lines`: G and Z
+with the products of their sources, `<period>` the year a position names, `<date>` `b.d.`; the
+lines of a CAMELS-PL release; else the registry's text) and never read from a plan file. A plain
+write merges the lines of each file into `ATTRIBUTION.txt` of its directory as soon as the file
+is in place (`store_plain_file` -> `add_lines`, under `Staging.attribution_lock`;
+`Staging.attribution` is the file as the write left it, `None` while unchanged), and
+`download.data.attribution_files` lists it last in `files[]`; a `scratch` write
+(`attributed=False`, the HSG's inputs) adds nothing. `preflight` adds `attribution_refusal` (a
+path that is no readable UTF-8 file is `conflict` `output_exists` without `force`), and `new_plan`
+adds one position `ATTRIBUTION.txt` after the items of a plain plan (`plan_attribution` on the
+lines of the items to `write` or `replace`; `fetch_reason` `built`; the track of the first item;
+`is_attribution`), which `plain_items` leaves as judged and `merge` keeps once.
+
 **Where the files of a plan come from (ADR-063 decisions 3 and 4, errata 1 and 2).** Every item
 of a plan, store or plain, says it from what the check reads, with no request more
 (`download/plan.py`): `source` is the registry key of its source (`null` for the track `store`),
@@ -2190,10 +2218,10 @@ read in refresh mode too), else a `fetch` without `url` and `fetch_reason` `feed
 CRS written, or an ImageServer export), `cz_laz` (unpacked), `pl_cutout`, `cz_cutout`, `cz_orto`
 (members of the sheet ZIP), the merged BDOT10k GeoPackage, SoilGrids, `hsg`, `feature_bbox` and
 the GeoPackage of an archive area, a member unpacked from a package or the ZIP of chosen classes,
-and the CAMELS-PL members and `ATTRIBUTION.txt` of `release_files` (`zip_range`). A detached plan
-(`check_command(detached=True)`, `detached_directory`, `detached_plan`) is the plain write into a
-directory that does not exist, answered as the write into `.`: `output_dir` `"."`, each `path`
-relative to it, every file `write`.
+and the CAMELS-PL members of `release_files` (`zip_range`), and the position `ATTRIBUTION.txt` of
+a plain plan (ADR-064). A detached plan (`check_command(detached=True)`, `detached_directory`,
+`detached_plan`) is the plain write into a directory that does not exist, answered as the write
+into `.`: `output_dir` `"."`, each `path` relative to it, every file `write`.
 
 **The target in the interfaces (ADR-054 decisions 1, 11, 13, 14).** The catalog declares the two
 targets once: `catalog/shared.py` `target(files, sheets=)` gives the two `Param`s (`output_dir`
@@ -4281,8 +4309,8 @@ is `collections.version_not_applicable`. `run_request` and `plan_request` hand s
 
 1. `release_jobs`: one job per `ReleaseFile`, unit `<country>_<theme>` in the slot `country/` of `hydro/pl_camels`,
    the label `published` of the first supported release whose member has the pinned SHA-256 (`holders`).
-2. A plain write first checks its targets (`preflight`) and `ATTRIBUTION.txt` (`plan_attribution`: a file that is
-   no readable UTF-8 text is `conflict` `output_exists` without `--force`), before any request.
+2. A plain write first checks its targets and `ATTRIBUTION.txt` (`preflight` with `attribution_refusal`: a file
+   that is no readable UTF-8 text is `conflict` `output_exists` without `--force`), before any request.
 3. In the store, a slot that holds a version with the pinned SHA-256 is that version (`local`, no request) unless
    `update="force"`; a plan (`--upgrade --plan`) takes only its positions.
 4. When a file has to be read (or with `update="upgrade"`), `newer_release` asks the record of the concept DOI: a
@@ -4300,8 +4328,8 @@ is `collections.version_not_applicable`. `run_request` and `plan_request` hand s
    (`Accept-Encoding: identity`, its `Content-Length` and then its length against `size`), `local_directory` and
    `extract_member` under the same checks, the ZIP removed; `extra.source.read` = `archive`.
 7. `store_file` publishes each file under its label (`VersionRef(label, "edition")`, the sidecar of 3.2); the same
-   bytes again are `unchanged`. A plain write moves the files to `DIR/<unit>.gpkg` and merges the lines into
-   `DIR/ATTRIBUTION.txt` (`write_attribution`, listed in `files[]`).
+   bytes again are `unchanged`. A plain write moves the files to `DIR/<unit>.gpkg`, and the generic plain write
+   merges the lines of each into `DIR/ATTRIBUTION.txt` (`add_lines`, listed in `files[]`; 3.6).
 
 Read timeouts: 60 s for the directory, 30 s for the concept record, 120 s for a member (its local header
 included) or the whole ZIP; the retries are those of `transport/http.py` (`fetch_range` does not retry
@@ -4310,8 +4338,8 @@ included) or the whole ZIP; the retries are those of `transport/http.py` (`fetch
 **Plan (`plan_release`).** No transfer: per file `current` (a version with the pinned SHA-256), `newer` (the slot
 holds other bytes only) or `missing`, `available_label` = the label of the release's bytes and `available_signal`
 = `{version, record, sha256}`; the concept record is asked (`NEWER_RELEASE`, or `CHECK_FAILED` when it fails). A
-plain plan has the targets of the two files and the position of `ATTRIBUTION.txt` (`write`, `replace`, `conflict`;
-none when it holds every line).
+plain plan has the targets of the two files, and `new_plan` adds the position of `ATTRIBUTION.txt` (`write`,
+`replace`, `conflict`; none when it holds every line; 3.6).
 
 **Store and read API.** The segment `hydro/pl_camels` (rule 9) with `country/pl_catchments.gpkg` and
 `country/pl_gauging-stations.gpkg`; `store.py` knows `ReleaseFilesParams` (`describe_segment`, `iter_store`), and

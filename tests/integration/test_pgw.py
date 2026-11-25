@@ -368,10 +368,13 @@ def test_area_check_judges_the_geopackage_by_the_local_archive(
     assert session.calls == []
 
 
-def test_plain_area_writes_only_the_geopackage(tmp_path, monkeypatch, archive):
+def test_plain_area_writes_the_geopackage_and_its_attribution(
+    tmp_path, monkeypatch, archive
+):
     """``-o DIR``: the archive is fetched into the staging directory and removed
-    with it; the directory gets ``<coords>.gpkg`` alone, the same bytes as the
-    store file, and the plan has only that target."""
+    with it; the directory gets ``<coords>.gpkg``, the same bytes as the store
+    file, and ``ATTRIBUTION.txt`` with the registry text of PGW; the plan has
+    those two targets."""
     session = _published(archive)
     monkeypatch.setattr(col, "_session", lambda: session)
     out = tmp_path / "out"
@@ -383,12 +386,20 @@ def test_plain_area_writes_only_the_geopackage(tmp_path, monkeypatch, archive):
     stored = download_collection(**choice, root=store.root)
 
     assert [(item.name, item.action) for item in plan.items] == [
-        (f"{COORDS}.gpkg", "write")
+        (f"{COORDS}.gpkg", "write"),
+        ("ATTRIBUTION.txt", "write"),
     ]
     assert report.ok and report.inputs == ()
-    (area,) = report.files
-    assert area.file.status == "written"
-    assert sorted(path.name for path in out.iterdir()) == [f"{COORDS}.gpkg"]
+    area, attribution = report.files
+    assert area.file.status == attribution.file.status == "written"
+    assert sorted(path.name for path in out.iterdir()) == [
+        f"{COORDS}.gpkg",
+        "ATTRIBUTION.txt",
+    ]
+    assert (out / "ATTRIBUTION.txt").read_text(encoding="utf-8") == (
+        "Dane: PGW Wody Polskie, KZGW, IIaPGW (apgw.gov.pl); materialy pomocnicze, "
+        "prawnie obowiazuja plany gospodarowania wodami ogloszone w Dzienniku Ustaw\n"
+    )
     assert area.file.path.read_bytes() == stored.files[0].file.path.read_bytes()
     assert session.gets(URL) == 1
 

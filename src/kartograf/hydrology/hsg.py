@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from kartograf.attribution import source_line
 from kartograf.config import resolve_root
 from kartograf.download.data import (
     DOWNLOAD_FILL,
@@ -36,6 +37,7 @@ from kartograf.download.data import (
     UnitFailure,
     UnitFile,
     WriteTarget,
+    attribution_files,
 )
 from kartograf.download.plan import plans
 from kartograf.exceptions import ValidationError
@@ -1055,7 +1057,8 @@ class HSGCalculator:
 
         The SoilGrids inputs are fetched into private directories of the staging
         directory and removed with it: only the HSG raster reaches the output
-        directory, under its slot name. An input that failed leaves the HSG out.
+        directory, under its slot name, and its line SG reaches ``ATTRIBUTION.txt``
+        there (listed after it, DEV-20.5). An input that failed leaves the HSG out.
         """
         from kartograf.exceptions import DownloadError
         from kartograf.sources.registry import get_source
@@ -1087,8 +1090,9 @@ class HSGCalculator:
                 except DownloadError as e:
                     logger.debug("HSG %s: %s", unit, e)
                     failed.append(UnitFailure(unit, country, reason(e), "download"))
+        found = (UnitFile(unit, country, hsg),) if hsg is not None else ()
         return HsgReport(
-            files=(UnitFile(unit, country, hsg),) if hsg is not None else (),
+            files=(*found, *attribution_files(self._root, found)),
             inputs=(),
             failed=tuple(failed),
             stale=(),
@@ -1104,12 +1108,17 @@ class HSGCalculator:
         files: "list[VersionedFile]",
         sink: "NoticeSink",
     ) -> "VersionedFile":
-        """Compute the HSG of the staged inputs and move it into the output folder."""
+        """Compute the HSG of the staged inputs and move it into the output folder.
+
+        The raster carries the line of SoilGrids, whose data it is derived from (SG,
+        DEV-20.10), as its sidecar in the store would.
+        """
         from kartograf.download.fetch import (
             discard_staging,
             new_staging,
             store_plain_file,
         )
+        from kartograf.sources.registry import get_source
 
         staged = new_staging(slot)
         try:
@@ -1117,7 +1126,8 @@ class HSGCalculator:
         except BaseException:
             discard_staging(staged, slot)
             raise
-        stored = store_plain_file(slot, staged)
+        line = source_line(get_source(_SOILGRIDS))
+        stored = store_plain_file(slot, staged, lines=() if line is None else (line,))
         if empty:
             _warn_empty(sink, unit_of(stored.path, self._root))
         return stored

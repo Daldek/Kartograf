@@ -25,25 +25,44 @@ the check knows (`Fetch`), or ``fetch_reason`` when no URL serves the file
 `PlanSource`).
 A detached plan (`detached_plan`) is the plan of a plain write into a directory
 that does not exist, answered as the write into ``.``.
+
+A plan carries the provider lines of its files (``attribution`` and
+``terms_notice``, DEV-20.6, DEV-20.7, ADR-064) as far as a plan knows them
+(`item_lines`): G and Z name the products of their sources, G the years the
+positions name (an index record, an edition, a ``Last-Modified``), and the day of
+the download is ``b.d.`` until the files are downloaded. The plan of a plain write
+lists ``ATTRIBUTION.txt`` of the directory as one position (`is_attribution`),
+after the files, when the lines of the files would change it.
 """
 
 import json
+import re
 import secrets
 import tempfile
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
+from datetime import UTC
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Literal, cast, get_args
 
 from kartograf import _clock
 from kartograf._version import build_version
+from kartograf.attribution import (
+    ATTRIBUTION_FILE,
+    merge_lines,
+    plan_attribution,
+    provider_lines,
+    source_line,
+    split_terms,
+)
 from kartograf.exceptions import ConflictError, KartografError, ValidationError
 from kartograf.marker import store_refusal
 from kartograf.messages import message, reason
 from kartograf.notices import Notice
 from kartograf.output import Action, Mode, Staging, plain_of, wrapping
 from kartograf.serialization import Document, EncodeContext
-from kartograf.sources.descriptor import LicenseInfo
+from kartograf.sources.descriptor import LicenseInfo, ReleaseFilesParams
 from kartograf.sources.registry import get_source
 
 PLAN_SCHEMA = "kartograf-plan/1"
@@ -203,7 +222,10 @@ class UpdatePlan(Document):
     ``notices``: the messages emitted while the plan was built (what the
     checking command passed to ``on_notice``); ``ok``: no position failed to
     be checked (a computed property, never read from a plan file); ``sources``: the
-    sources of the positions, each once, in the order of their first position.
+    sources of the positions, each once, in the order of their first position;
+    ``attribution`` and ``terms_notice``: the provider lines of the files of the
+    positions as the plan knows them (`plan_lines`; computed, never read from a plan
+    file).
     """
 
     SCHEMA = PLAN_SCHEMA
@@ -217,6 +239,8 @@ class UpdatePlan(Document):
         "notices",
         "ok",
         "sources",
+        "attribution",
+        "terms_notice",
     )
 
     root: str | None
@@ -244,6 +268,16 @@ class UpdatePlan(Document):
         """No position has the status ``check_failed``."""
         return all(item.status != "check_failed" for item in self.items)
 
+    @property
+    def attribution(self) -> tuple[str, ...]:
+        """Return the attribution lines of the files of the plan (DEV-20.6)."""
+        return split_terms(plan_lines(self.items))[0]
+
+    @property
+    def terms_notice(self) -> tuple[str, ...]:
+        """Return the terms lines of the files of the plan (DEV-20.7)."""
+        return split_terms(plan_lines(self.items))[1]
+
     def prepare_context(self, ctx: EncodeContext) -> None:
         """Keep the paths of a detached plan relative to its ``output_dir`` ``"."``."""
         if self.output_dir == DETACHED:
@@ -264,10 +298,11 @@ class UpdatePlan(Document):
     def from_dict(cls, payload: object) -> "UpdatePlan":
         """Read a plan document (``to_dict`` or a plan file of 0.8.0-dev).
 
-        A plan without ``notices`` and ``ok`` loads; ``ok`` is ignored (it is
-        computed). A plan without ``sources`` and without the ``source``, ``fetch``,
-        ``fetch_reason`` and ``archive`` of its positions (0.9.0) loads with none of
-        them. An unknown schema or a malformed plan = ``ValidationError``.
+        A plan without ``notices`` and ``ok`` loads; ``ok``, ``attribution`` and
+        ``terms_notice`` are ignored (they are computed). A plan without ``sources``
+        and without the ``source``, ``fetch``, ``fetch_reason`` and ``archive`` of its
+        positions (0.9.0) loads with none of them. An unknown schema or a malformed
+        plan = ``ValidationError``.
         """
         if not isinstance(payload, Mapping) or payload.get("schema") != PLAN_SCHEMA:
             schema = payload.get("schema") if isinstance(payload, Mapping) else None
@@ -305,7 +340,8 @@ class UpdatePlan(Document):
         """One plan of both (``--country auto``); the earlier ``checked_at`` wins.
 
         The notices of both plans are joined, in order, without repeats, and so are
-        their sources (one per key, the first one).
+        their sources (one per key, the first one). ``ATTRIBUTION.txt`` of a plain
+        write is one position after the files: the first one of the two plans.
 
         Raises
         ------
@@ -323,10 +359,15 @@ class UpdatePlan(Document):
         sources: dict[str, PlanSource] = {}
         for source in self.sources + other.sources:
             sources.setdefault(source.key, source)
+        both = self.items + other.items
+        attribution = [item for item in both if is_attribution(item)]
         return replace(
             self,
             checked_at=min(self.checked_at, other.checked_at),
-            items=self.items + other.items,
+            items=(
+                *(item for item in both if not is_attribution(item)),
+                *attribution[:1],
+            ),
             notices=tuple(dict.fromkeys(self.notices + other.notices)),
             sources=tuple(sources.values()),
         )
@@ -474,6 +515,130 @@ def store_id(root: str | Path) -> str:
     return Path(root).resolve().as_posix()
 
 
+def is_attribution(item: PlanItem) -> bool:
+    """Say whether a position is ``ATTRIBUTION.txt`` of a plain write (DEV-20.5)."""
+    return item.name == ATTRIBUTION_FILE
+
+
+# A position's label or signal that names the year of its data: a date or a year,
+# alone or before ``_`` (the flight ``2022-05-10_83233``, the edition ``2025``).
+_DATED = re.compile(r"(\d{4})(?:-\d{2}-\d{2})?(?:_|$)")
+
+
+def _item_years(item: PlanItem) -> tuple[int, ...]:
+    """Return the year a position names for its data, as the sidecar would know it.
+
+    The date of its index record (``available_signal.date``) or its label (a flight,
+    an edition), else the ``Last-Modified`` of its signal; none in a plain plan of a
+    position whose check reads none.
+    """
+    signal = item.available_signal or {}
+    for value in (signal.get("date"), item.available_label):
+        if isinstance(value, str) and (found := _DATED.match(value)):
+            return (int(found[1]),)
+    modified = signal.get("last_modified")
+    if isinstance(modified, str):
+        try:
+            moment = parsedate_to_datetime(modified)
+        except (TypeError, ValueError, IndexError):
+            return ()
+        return ((moment.astimezone(UTC) if moment.tzinfo else moment).year,)
+    return ()
+
+
+def _source_lines(
+    key: str, years: tuple[int, ...], release: str | None
+) -> tuple[str, ...]:
+    """Return the lines of a file of the source ``key`` (`item_lines`)."""
+    try:
+        source = get_source(key)
+    except KeyError:
+        return ()  # a source of a plan this Kartograf does not know
+    line = source_line(source, years=years)
+    if line is not None:
+        return (line,)
+    for channel in source.channels:
+        params = channel.params
+        if isinstance(params, ReleaseFilesParams):
+            for found in params.releases:
+                if release in (found.version, found.url):
+                    return provider_lines(
+                        params.lines,
+                        version=found.version,
+                        year=found.published[:4],
+                        doi=found.doi,
+                    )
+            return ()
+    return tuple(row for row in source.license.attribution.splitlines() if row.strip())
+
+
+def item_lines(item: PlanItem) -> tuple[str, ...]:
+    """Return the provider lines the file of a position would carry (DEV §20).
+
+    The line of its source (``kartograf.attribution.source_line``) with the year the
+    position names and the day of the download unknown (``b.d.``: nothing is
+    downloaded yet); the lines of the release of CAMELS-PL the position names
+    (``available_signal.version`` or the ZIP of ``archive``, ADR-062); else the text
+    of its source. None for a position without a source and for ``ATTRIBUTION.txt``.
+    """
+    if item.source is None or is_attribution(item):
+        return ()
+    signal = item.available_signal or {}
+    version = signal.get("version")
+    release = (
+        version
+        if isinstance(version, str)
+        else item.archive.url
+        if item.archive is not None
+        else None
+    )
+    return _source_lines(item.source, _item_years(item), release)
+
+
+def plan_lines(items: Iterable[PlanItem]) -> tuple[str, ...]:
+    """Return the provider lines of the files of ``items``, merged (`item_lines`)."""
+    return merge_lines(*(item_lines(item) for item in items))
+
+
+def _attribution_position(
+    write: Staging, items: tuple[PlanItem, ...]
+) -> PlanItem | None:
+    """Return the position of ``ATTRIBUTION.txt`` of a plain write, or ``None``.
+
+    Judged by ``kartograf.attribution.plan_attribution`` for the lines of the files
+    the write would place (the positions whose action is ``write`` or ``replace``;
+    one that failed its check or is a conflict places nothing): ``write``,
+    ``replace`` or ``conflict``; none without lines or when the file holds them all.
+    Written by Kartograf (``built``), of the source of the first file with lines and
+    the track of the first position.
+    """
+    placed = [item for item in items if item.action in ("write", "replace")]
+    lines = plan_lines(placed)
+    entry = plan_attribution(write, lines) if write.attributed else None
+    if entry is None:
+        return None
+    source = next(item.source for item in placed if item_lines(item))
+    fetch, why = fetch_fields(source, None)
+    return PlanItem(
+        track=items[0].track,
+        segment="",
+        hierarchy="",
+        name=ATTRIBUTION_FILE,
+        unit=ATTRIBUTION_FILE,
+        local_label=None,
+        local_sha256=None,
+        available_label=None,
+        available_signal=None,
+        status="missing" if entry.action == "write" else "unverifiable",
+        action=entry.action,
+        path=entry.path,
+        reason=entry.reason,
+        source=source,
+        fetch=fetch,
+        fetch_reason=why,
+    )
+
+
 def plain_items(write: Staging, items: Iterable[PlanItem]) -> tuple[PlanItem, ...]:
     """Judge the positions of a plain write as a whole (DEV-19.10).
 
@@ -485,22 +650,31 @@ def plain_items(write: Staging, items: Iterable[PlanItem]) -> tuple[PlanItem, ..
     action, path or reason, so the plan is not ``ok`` (the run fails that unit); its
     name still counts for the others, as in the preflight of the run. Called again on
     positions already judged, it judges them again (a plan merged from several tracks
-    sees their duplicates).
+    sees their duplicates). ``ATTRIBUTION.txt`` keeps its own judgment
+    (`is_attribution`): the lines of the files are merged into it.
     """
     listed = tuple(items)
-    entries = write.plan([item.name for item in listed])
-    return tuple(
-        item
-        if item.status == "check_failed"
-        else replace(
-            item,
-            status="missing" if entry.action == "write" else "unverifiable",
-            action=entry.action,
-            path=entry.path,
-            reason=entry.reason,
-        )
-        for item, entry in zip(listed, entries, strict=True)
+    entries = iter(
+        write.plan([item.name for item in listed if not is_attribution(item)])
     )
+    judged: list[PlanItem] = []
+    for item in listed:
+        if is_attribution(item):
+            judged.append(item)
+            continue
+        entry = next(entries)
+        judged.append(
+            item
+            if item.status == "check_failed"
+            else replace(
+                item,
+                status="missing" if entry.action == "write" else "unverifiable",
+                action=entry.action,
+                path=entry.path,
+                reason=entry.reason,
+            )
+        )
+    return tuple(judged)
 
 
 def new_plan(
@@ -512,13 +686,17 @@ def new_plan(
     """Return the plan checked now: of the store ``root``, or of ``output_dir``.
 
     A ``root`` that is the handle root of a plain write (``kartograf.output.plain_of``)
-    gives the plan of that write: its positions are judged by `plain_items` and its
-    directory is the ``output_dir`` of the plan. ``sources`` are those of the
-    positions (`plan_sources`).
+    gives the plan of that write: its positions are judged by `plain_items`, the
+    position of ``ATTRIBUTION.txt`` follows them when the lines of their files would
+    change it (DEV-20.5), and its directory is the ``output_dir`` of the plan.
+    ``sources`` are those of the positions (`plan_sources`).
     """
     write = plain_of(root)
     if write is not None:
         items, root, output_dir = plain_items(write, items), None, write.directory
+        position = _attribution_position(write, items)
+        if position is not None:
+            items = (*items, position)
     listed = tuple(items)
     return UpdatePlan(
         root=None if root is None else store_id(root),

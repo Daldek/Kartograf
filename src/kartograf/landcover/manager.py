@@ -73,6 +73,7 @@ from kartograf.download.data import (
     UnitFailure,
     UnitFile,
     WriteTarget,
+    attribution_files,
 )
 from kartograf.download.fetch import (
     EditionLookup,
@@ -448,10 +449,14 @@ def _landcover_report(
     sink: NoticeSink,
     root: Path,
 ) -> LandCoverReport:
-    """Build the report of one request: ``ok`` = no failure and no stale position."""
+    """Build the report of one request: ``ok`` = no failure and no stale position.
+
+    A plain write lists ``ATTRIBUTION.txt`` of its directory after the files when it
+    merged their provider lines into it (DEV-20.5, ADR-064).
+    """
     stored, plain = report_target(root)
     return LandCoverReport(
-        files=tuple(files),
+        files=(*files, *attribution_files(root, files)),
         raw=tuple(raw),
         failed=tuple(failed),
         stale=tuple(stale),

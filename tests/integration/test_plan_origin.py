@@ -78,7 +78,9 @@ def test_a_laz_tile_is_its_opendata_url_in_store_and_plain_plans(tmp_path, plain
 
     plan = check_laz_area(bbox=W2_AREA, provider=provider, **target, **LAZ)
 
-    (item,) = plan.items
+    item, *more = plan.items
+    # a plain plan writes the provider lines last; a store has no ATTRIBUTION.txt
+    assert [i.name for i in more] == (["ATTRIBUTION.txt"] if plain else [])
     assert item.source == "pl.gugik.laz" and item.fetch_reason is None
     assert item.fetch is not None and item.fetch.size_bytes is None
     assert item.fetch.url is not None and item.fetch.url.endswith(".laz")
@@ -133,7 +135,7 @@ def test_a_detached_plan_is_the_plain_write_into_dot(tmp_path, monkeypatch):
     assert plan is not None
     data = result.to_dict()["result"]
     assert isinstance(data, dict)
-    (item,) = data["items"]
+    item, attribution = data["items"]
     assert (data["mode"], data["root"], data["output_dir"]) == ("plain", None, DETACHED)
     assert (item["action"], item["status"]) == ("write", "missing")
     assert item["path"] == item["name"] and not Path(item["path"]).is_absolute()
@@ -142,6 +144,12 @@ def test_a_detached_plan_is_the_plain_write_into_dot(tmp_path, monkeypatch):
         None,
         "built",
     )
+    assert (attribution["path"], attribution["action"], attribution["status"]) == (
+        "ATTRIBUTION.txt",
+        "write",
+        "missing",
+    )
+    assert (attribution["fetch"], attribution["fetch_reason"]) == (None, "built")
     assert list(tmp_path.iterdir()) == []  # the directory of the plan never existed
 
 
