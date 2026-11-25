@@ -622,8 +622,8 @@ def test_removed_commands_name_their_replacement():
     removed = removed_command_error(["soilgrids"])
     assert removed is not None
     assert removed.localized("pl") == (
-        "komenda 'soilgrids' usunieta w 0.8.0 - uzyj kartograf soil hsg (grupy HSG) "
-        "albo kartograf soil download (wlasciwosci SoilGrids)"
+        "komenda 'soilgrids' usunięta w 0.8.0 - użyj kartograf soil hsg (grupy HSG) "
+        "albo kartograf soil download (właściwości SoilGrids)"
     )
 
 
@@ -660,7 +660,7 @@ def test_unknown_flag_owners_are_listed():
         "Options: kartograf store entries --help"
     )
     assert text.localized("pl") == (
-        "nieznana opcja --hierarchy (maja ja: sheet parse). "
+        "nieznana opcja --hierarchy (mają ją: sheet parse). "
         "Opcje: kartograf store entries --help"
     )
 

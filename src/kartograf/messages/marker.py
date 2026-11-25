@@ -7,32 +7,32 @@ MESSAGES = {
     "inside_a_store": Text(
         "{path} lies inside the store {ancestor} ({marker}): a store does not nest "
         "in another store",
-        "{path} lezy w magazynie {ancestor} ({marker}): magazyn nie zagniezdza sie "
+        "{path} leży w magazynie {ancestor} ({marker}): magazyn nie zagnieżdża się "
         "w innym magazynie",
     ),
     "holds_another_store": Text(
         "{path} holds {marker}, the marker of another store: a store does not nest "
         "in another store",
-        "{path} zawiera {marker}, znacznik innego magazynu: magazyn nie zagniezdza "
-        "sie w innym magazynie",
+        "{path} zawiera {marker}, znacznik innego magazynu: magazyn nie zagnieżdża "
+        "się w innym magazynie",
     ),
     "store_below": Text(
         "the store {folder} ({marker}) lies below {path}: a store does not nest in "
         "another store",
-        "magazyn {folder} ({marker}) lezy pod {path}: magazyn nie zagniezdza sie w "
+        "magazyn {folder} ({marker}) leży pod {path}: magazyn nie zagnieżdża się w "
         "innym magazynie",
     ),
     "inside_a_store_hint": Text(
         "Give a store root outside the store {ancestor}",
-        "Podaj korzen magazynu poza magazynem {ancestor}",
+        "Podaj korzeń magazynu poza magazynem {ancestor}",
     ),
     "holds_another_store_hint": Text(
         "Give another directory as the store root: {path} is the store of another tool",
-        "Podaj inny katalog jako korzen magazynu: {path} to magazyn innego narzedzia",
+        "Podaj inny katalog jako korzeń magazynu: {path} to magazyn innego narzędzia",
     ),
     "store_below_hint": Text(
         "Give a store root with no store below it, or move {folder} out of {path}",
-        "Podaj korzen magazynu bez magazynu pod nim albo przenies {folder} poza {path}",
+        "Podaj korzeń magazynu bez magazynu pod nim albo przenieś {folder} poza {path}",
     ),
     # ``marker``: the document and the layout of a root.
     "not_a_marker": Text(
@@ -41,21 +41,21 @@ MESSAGES = {
     ),
     "layout_without_marker": Text(
         "{path} has the layout of a store but no {marker}",
-        "{path} ma uklad magazynu, ale nie ma {marker}",
+        "{path} ma układ magazynu, ale nie ma {marker}",
     ),
     "init_hint": Text(
         "kartograf store init --root {path} verifies the layout and writes the marker",
-        "kartograf store init --root {path} sprawdza uklad i zapisuje znacznik",
+        "kartograf store init --root {path} sprawdza układ i zapisuje znacznik",
     ),
     "not_empty": Text(
         "{path} is not empty and has no {marker}: a store root is a new or empty "
         "directory",
-        "{path} nie jest pusty i nie ma {marker}: korzen magazynu to nowy albo pusty "
+        "{path} nie jest pusty i nie ma {marker}: korzeń magazynu to nowy albo pusty "
         "katalog",
     ),
     "not_empty_hint": Text(
         "Give a new or empty directory as the store root",
-        "Podaj nowy albo pusty katalog jako korzen magazynu",
+        "Podaj nowy albo pusty katalog jako korzeń magazynu",
     ),
     "naive_time": Text(
         "created_at needs a time zone",
@@ -63,7 +63,7 @@ MESSAGES = {
     ),
     "unexpected_entry": Text(
         "unexpected entry '{name}' at the top level",
-        "nieoczekiwany wpis '{name}' na najwyzszym poziomie",
+        "nieoczekiwany wpis '{name}' na najwyższym poziomie",
     ),
     "tree_not_directory": Text(
         "'{name}' is not a directory",
@@ -71,12 +71,12 @@ MESSAGES = {
     ),
     "not_a_store": Text(
         "{path} is not the layout of a Kartograf store ({count} found)",
-        "{path} nie ma ukladu magazynu Kartografa (znaleziono: {count})",
+        "{path} nie ma układu magazynu Kartografa (znaleziono: {count})",
     ),
     "layout_hint": Text(
         "Move what does not belong out of the root or give another root; "
         "details.problems lists it",
-        "Przenies to, co nie nalezy do magazynu, poza korzen albo podaj inny korzen; "
+        "Przenieś to, co nie należy do magazynu, poza korzeń albo podaj inny korzeń; "
         "details.problems to wymienia",
     ),
     "foreign_sidecar": Text(

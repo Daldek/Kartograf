@@ -14,17 +14,17 @@ MESSAGES = {
         "{what}: the EEA WMS service has no raster layer 'Corine Land Cover {year} "
         "raster' (layers: {named}); the preview for this year is not available - "
         "change --year or set CLMS_CREDENTIALS",
-        "{what}: usluga WMS EEA nie ma warstwy rastrowej 'Corine Land Cover {year} "
-        "raster' (warstwy: {named}); podglad tego roku jest niedostepny - zmien "
+        "{what}: usługa WMS EEA nie ma warstwy rastrowej 'Corine Land Cover {year} "
+        "raster' (warstwy: {named}); podgląd tego roku jest niedostępny - zmień "
         "--year albo ustaw CLMS_CREDENTIALS",
     ),
     "jwt_no_private_key": Text(
         "Failed to create the JWT assertion: private_key is missing",
-        "Nie udalo sie utworzyc asercji JWT: brak private_key",
+        "Nie udało się utworzyć asercji JWT: brak private_key",
     ),
     "jwt_assertion_failed": Text(
         "Failed to create the JWT assertion: {error}",
-        "Nie udalo sie utworzyc asercji JWT: {error}",
+        "Nie udało się utworzyć asercji JWT: {error}",
     ),
     "no_access_token": Text(
         "No access_token in the response: {result}",
@@ -32,11 +32,11 @@ MESSAGES = {
     ),
     "token_exchange_failed": Text(
         "Token exchange failed: {error}",
-        "Wymiana tokenu nie powiodla sie: {error}",
+        "Wymiana tokenu nie powiodła się: {error}",
     ),
     "year_not_available": Text(
         "--year {year}: not available for --product corine; available: {ys}",
-        "--year {year}: niedostepne dla --product corine; dostepne: {ys}",
+        "--year {year}: niedostępne dla --product corine; dostępne: {ys}",
     ),
     "no_clms_dataset": Text(
         "CORINE {year}: no CLMS dataset (years: {clms_years})",
@@ -48,7 +48,7 @@ MESSAGES = {
     ),
     "response_not_json": Text(
         "{what}: response is not JSON: {error}",
-        "{what}: odpowiedz nie jest JSON: {error}",
+        "{what}: odpowiedź nie jest JSON: {error}",
     ),
     "unexpected_record_count": Text(
         "{what}: expected 1 record of dataset {uid}, got {count}",
@@ -61,7 +61,7 @@ MESSAGES = {
     "bbox_wrong_crs": Text(
         "bbox must be in EPSG:2180, got {crs}. Convert with: "
         "SheetParser.get_bbox(crs='EPSG:2180').",
-        "bbox musi byc w EPSG:2180, podano {crs}. Przelicz: "
+        "bbox musi być w EPSG:2180, podano {crs}. Przelicz: "
         "SheetParser.get_bbox(crs='EPSG:2180').",
     ),
     "wms_image_transparent": Text(
@@ -69,81 +69,81 @@ MESSAGES = {
         "the service has no CLC {year} data for this area (outside CORINE coverage or "
         "a country without this vintage); the version was not created, change --bbox "
         "or --year",
-        "podglad CORINE {year}: obraz WMS {service} jest w calosci przezroczysty - "
-        "usluga nie ma danych CLC {year} dla tego obszaru (poza zasiegiem CORINE albo "
-        "kraj bez tego rocznika); wersja nie powstala, zmien --bbox albo --year",
+        "podgląd CORINE {year}: obraz WMS {service} jest w całości przezroczysty - "
+        "usługa nie ma danych CLC {year} dla tego obszaru (poza zasięgiem CORINE albo "
+        "kraj bez tego rocznika); wersja nie powstała, zmień --bbox albo --year",
     ),
     "proxy_task_failed": Text(
         "Task via proxy failed{reason}",
-        "Zadanie przez proxy nie powiodlo sie{reason}",
+        "Zadanie przez proxy nie powiodło się{reason}",
     ),
     "clms_no_task_id": Text(
         "CLMS API did not return a TaskID: {result}",
-        "API CLMS nie zwrocilo TaskID: {result}",
+        "API CLMS nie zwróciło TaskID: {result}",
     ),
     "proxy_download_failed": Text(
         "Failed to download the file via proxy",
-        "Nie udalo sie pobrac pliku przez proxy",
+        "Nie udało się pobrać pliku przez proxy",
     ),
     "clms_task_no_url": Text(
         "CLMS task finished without DownloadURL",
-        "Zadanie CLMS zakonczone bez DownloadURL",
+        "Zadanie CLMS zakończone bez DownloadURL",
     ),
     "clms_task_failed": Text(
         "CLMS task {status}: {detail}", "Zadanie CLMS {status}: {detail}"
     ),
-    "clms_unknown_error": Text("unknown error", "nieznany blad"),
+    "clms_unknown_error": Text("unknown error", "nieznany błąd"),
     "clms_direct_needs_creds": Text(
         "CLMS direct mode requires clms_credentials",
-        "Tryb bezposredni CLMS wymaga clms_credentials",
+        "Tryb bezpośredni CLMS wymaga clms_credentials",
     ),
     "clms_api_request_failed": Text(
         "CLMS API request failed: {error}",
-        "Zapytanie API CLMS nie powiodlo sie: {error}",
+        "Zapytanie API CLMS nie powiodło się: {error}",
     ),
     # ``providers.soilgrids``.
-    "property_bdod": Text("bulk density", "gestosc objetosciowa"),
-    "property_cec": Text("cation exchange capacity", "pojemnosc sorpcyjna"),
-    "property_clay": Text("clay", "il"),
+    "property_bdod": Text("bulk density", "gęstość objętościowa"),
+    "property_cec": Text("cation exchange capacity", "pojemność sorpcyjna"),
+    "property_clay": Text("clay", "ił"),
     "property_cfvo": Text("coarse fragments fraction", "frakcja szkieletowa"),
-    "property_nitrogen": Text("total nitrogen", "azot calkowity"),
-    "property_ocd": Text("organic carbon density", "gestosc wegla organicznego"),
+    "property_nitrogen": Text("total nitrogen", "azot całkowity"),
+    "property_ocd": Text("organic carbon density", "gęstość węgla organicznego"),
     "property_ocs": Text(
         "organic carbon stock, depth 0-30cm only",
-        "zasob wegla organicznego, tylko glebokosc 0-30cm",
+        "zasób węgla organicznego, tylko głębokość 0-30cm",
     ),
     "property_phh2o": Text("pH in water (H2O)", "pH w wodzie (H2O)"),
     "property_sand": Text("sand", "piasek"),
-    "property_silt": Text("silt", "pyl"),
-    "property_soc": Text("organic carbon", "wegiel organiczny"),
+    "property_silt": Text("silt", "pył"),
+    "property_soc": Text("organic carbon", "węgiel organiczny"),
     "property_description": Text("{name} ({units})", "{name} ({units})"),
     "unit_text": Text(
         "in the file {mapped}; {conventional} = value / {divisor}",
-        "w pliku {mapped}; {conventional} = wartosc / {divisor}",
+        "w pliku {mapped}; {conventional} = wartość / {divisor}",
     ),
-    "stat_mean": Text("mean", "srednia"),
+    "stat_mean": Text("mean", "średnia"),
     "stat_q0_05": Text("5th percentile", "5. percentyl"),
     "stat_q0_5": Text("median", "mediana"),
     "stat_q0_95": Text("95th percentile", "95. percentyl"),
     "stat_uncertainty": Text(
         "prediction uncertainty ({unit_text}; unitless)",
-        "niepewnosc predykcji ({unit_text}; bez jednostki)",
+        "niepewność predykcji ({unit_text}; bez jednostki)",
     ),
     "depth_description": Text(
         "depth interval below the surface",
-        "przedzial glebokosci ponizej powierzchni",
+        "przedział głębokości poniżej powierzchni",
     ),
-    "label_property": Text("property", "wlasciwosc"),
-    "label_depth": Text("depth", "glebokosc"),
+    "label_property": Text("property", "właściwość"),
+    "label_depth": Text("depth", "głębokość"),
     "for_property": Text(" for {property}", " dla {property}"),
     "label_stat": Text("statistic", "statystyka"),
     "invalid_layer_option": Text(
         "Invalid {label}: {value}. Available{where}: {allowed}",
-        "Nieprawidlowa {label}: {value}. Dostepne{where}: {allowed}",
+        "Nieprawidłowa {label}: {value}. Dostępne{where}: {allowed}",
     ),
     "invalid_property": Text(
         "Invalid property: {property}. Available: {properties}",
-        "Nieprawidlowa wlasciwosc: {property}. Dostepne: {properties}",
+        "Nieprawidłowa właściwość: {property}. Dostępne: {properties}",
     ),
     "edition_missing_in_title": Text(
         "SoilGrids GetCapabilities {property}: no edition in title {title!r} "
@@ -159,27 +159,27 @@ MESSAGES = {
     ),
     "arcgis_error": Text(
         "ArcGIS error for {url}: {data_error}",
-        "Blad ArcGIS dla {url}: {data_error}",
+        "Błąd ArcGIS dla {url}: {data_error}",
     ),
     "export_tiling_crs_mismatch": Text(
         "exportImage tiling requires bbox.crs == image_sr (bbox: {crs}, image_sr: "
         "{image_sr}) - normalise the bbox to the output CRS before export",
         "Kafelkowanie exportImage wymaga bbox.crs == image_sr (bbox: {crs}, image_sr: "
-        "{image_sr}) - znormalizuj bbox do ukladu wyjsciowego przed eksportem",
+        "{image_sr}) - znormalizuj bbox do układu wyjściowego przed eksportem",
     ),
     "export_not_tiff": Text(
         "exportImage did not return a TIFF (start of response: {snippet!r}) [{url}]",
-        "exportImage nie zwrocil TIFF (poczatek odpowiedzi: {snippet!r}) [{url}]",
+        "exportImage nie zwrócił TIFF (początek odpowiedzi: {snippet!r}) [{url}]",
     ),
     "crs_overwrite_failed": Text(
         "exportImage: failed to overwrite CRS with {image_sr} in {output_path}: "
         "{error}",
-        "exportImage: nie udalo sie nadpisac CRS na {image_sr} w {output_path}: "
+        "exportImage: nie udało się nadpisać CRS na {image_sr} w {output_path}: "
         "{error}",
     ),
     "zip_unexpected_file_count": Text(
         "ZIP {url}: expected exactly 1 file '{unzip_single}', found {names_count}",
-        "ZIP {url}: oczekiwano dokladnie 1 pliku '{unzip_single}', znaleziono "
+        "ZIP {url}: oczekiwano dokładnie 1 pliku '{unzip_single}', znaleziono "
         "{names_count}",
     ),
     "zip_corrupt": Text(
@@ -193,51 +193,51 @@ MESSAGES = {
     # ``providers.cuzk.laz``.
     "no_file_endpoint": Text(
         "Descriptor '{descriptor_key}' has no file endpoint {horizontal_crs}",
-        "Deskryptor '{descriptor_key}' nie ma endpointu plikow {horizontal_crs}",
+        "Deskryptor '{descriptor_key}' nie ma endpointu plików {horizontal_crs}",
     ),
     "sheet_outside_system": Text(
         "Sheet code '{sheet}' is outside the {system} system",
-        "Godlo '{sheet}' spoza systemu {system}",
+        "Godło '{sheet}' spoza systemu {system}",
     ),
     "openzu_file_unavailable": Text(
         "{error} - verify the sheet code in the KladyMapovychListu index (the sheet "
         "may be known to the index, but the openzu file is not available)",
-        "{error} - zweryfikuj godlo w indeksie KladyMapovychListu (arkusz moze byc "
-        "znany indeksowi, ale plik openzu niedostepny)",
+        "{error} - zweryfikuj godło w indeksie KladyMapovychListu (arkusz może być "
+        "znany indeksowi, ale plik openzu niedostępny)",
     ),
     # ``providers.cuzk.raster``.
     "no_kron86_transform": Text(
         "No transformation Bpv (EPSG:8357) -> KRON86 (EPSG:9650) - GUGiK grids are "
         "not public",
         "Brak transformacji Bpv (EPSG:8357) -> KRON86 (EPSG:9650) - siatki GUGiK nie "
-        "sa publiczne",
+        "są publiczne",
     ),
     "bbox_gtiff_only": Text(
         "CuzkRasterProvider.download_bbox supports only GTiff (requested: {format})",
-        "CuzkRasterProvider.download_bbox obsluguje tylko GTiff (zadano: {format})",
+        "CuzkRasterProvider.download_bbox obsługuje tylko GTiff (żądano: {format})",
     ),
     "no_cuzk_file": Text(
         "{sheet} ({model}, {vertical_crs}) has no CUZK file - ImageServer tile "
         "without a cheap source signal",
         "{sheet} ({model}, {vertical_crs}) nie ma pliku CUZK - kafel z ImageServer "
-        "bez taniego sygnalu zrodla",
+        "bez taniego sygnału źródła",
     ),
     "raster_no_crs": Text(
         "Raster {label} has no CRS - cannot determine (lon, lat) required by the "
         "vertical operation",
-        "Raster {label} nie ma CRS - nie da sie wyznaczyc (lon, lat) wymaganych przez "
-        "operacje pionowa",
+        "Raster {label} nie ma CRS - nie da się wyznaczyć (lon, lat) wymaganych przez "
+        "operację pionową",
     ),
     "raster_no_geotransform": Text(
         "Raster {label} has no usable geotransform (identity/non-rectangular) - "
         "cannot determine (lon, lat) for the vertical operation",
-        "Raster {label} nie ma uzytecznej geotransformacji "
-        "(jednostkowa/nieprostokatna) - nie da sie wyznaczyc (lon, lat) dla operacji "
+        "Raster {label} nie ma użytecznej geotransformacji "
+        "(jednostkowa/nieprostokątna) - nie da się wyznaczyć (lon, lat) dla operacji "
         "pionowej",
     ),
     "crs_write_failed": Text(
         "failed to write CRS {crs} to {path}: {error}",
-        "nie udalo sie wpisac CRS {crs} w {path}: {error}",
+        "nie udało się wpisać CRS {crs} w {path}: {error}",
     ),
     # ``providers.cuzk.ruian``.
     "ruian_feature_bad_kod": Text(
@@ -260,7 +260,7 @@ MESSAGES = {
     ),
     "invalid_sm5_code": Text(
         "Invalid SM5 sheet code: '{mapnom}' ({sm5_hint})",
-        "Niepoprawne godlo SM5: '{mapnom}' ({sm5_hint})",
+        "Niepoprawne godło SM5: '{mapnom}' ({sm5_hint})",
     ),
     "sm5_sheet_not_found": Text(
         "SM5 sheet '{mapnom}' does not exist in the KladyMapovychListu index (layer "
@@ -281,8 +281,8 @@ MESSAGES = {
     "bbox_crs_mismatch": Text(
         "{method} requires a bbox in {expected_crs} (the service returns geometries "
         "in this CRS, and the intersection filter requires a common CRS), got: {crs}",
-        "{method} wymaga bbox w {expected_crs} (usluga zwraca geometrie w tym "
-        "ukladzie, a filtr przeciec wymaga wspolnego CRS), otrzymano: {crs}",
+        "{method} wymaga bbox w {expected_crs} (usługa zwraca geometrie w tym "
+        "układzie, a filtr przecięć wymaga wspólnego CRS), otrzymano: {crs}",
     ),
     "feature_no_rings": Text(
         "Feature without 'rings' geometry in the KladyMapovychListu response: "
@@ -301,16 +301,16 @@ MESSAGES = {
     # ``providers.pl.bdot10k``.
     "class_adja": Text(
         "Administrative division units",
-        "Jednostki podzialu administracyjnego",
+        "Jednostki podziału administracyjnego",
     ),
-    "class_adms": Text("Localities", "Miejscowosci"),
+    "class_adms": Text("Localities", "Miejscowości"),
     "class_bubd": Text("Buildings", "Budynki"),
     "class_buhd": Text("Hydrotechnical structures", "Budowle hydrotechniczne"),
     "class_buib": Text("Other structures", "Inne budowle"),
-    "class_buin": Text("Engineering structures", "Budowle inzynierskie"),
-    "class_buit": Text("Other technical installations", "Inne urzadzenia techniczne"),
+    "class_buin": Text("Engineering structures", "Budowle inżynierskie"),
+    "class_buit": Text("Other technical installations", "Inne urządzenia techniczne"),
     "class_busp": Text("Sports structures", "Budowle sportowe"),
-    "class_butr": Text("Transport installations", "Urzadzenia transportowe"),
+    "class_butr": Text("Transport installations", "Urządzenia transportowe"),
     "class_buuo": Text(
         "Road, railway and water reinforcements",
         "Umocnienia drogowe, kolejowe i wodne",
@@ -318,18 +318,18 @@ MESSAGES = {
     "class_buwt": Text("Tall technical structures", "Wysokie budowle techniczne"),
     "class_buzm": Text("Earthworks", "Budowle ziemne"),
     "class_buzt": Text("Technical reservoirs", "Zbiorniki techniczne"),
-    "class_kuho": Text("Hotel service complexes", "Kompleksy uslug hotelarskich"),
+    "class_kuho": Text("Hotel service complexes", "Kompleksy usług hotelarskich"),
     "class_kuhu": Text("Bazaars and marketplaces", "Bazary i targowiska"),
     "class_kuko": Text("Transport complexes", "Kompleksy komunikacyjne"),
     "class_kumn": Text("Residential estates", "Osiedla mieszkaniowe"),
-    "class_kuos": Text("Educational complexes", "Kompleksy oswiatowe"),
+    "class_kuos": Text("Educational complexes", "Kompleksy oświatowe"),
     "class_kuoz": Text(
         "Healthcare and social care complexes",
-        "Kompleksy ochrony zdrowia i opieki spolecznej",
+        "Kompleksy ochrony zdrowia i opieki społecznej",
     ),
     "class_kupg": Text(
         "Industrial and commercial complexes",
-        "Kompleksy przemyslowo-gospodarcze",
+        "Kompleksy przemysłowo-gospodarcze",
     ),
     "class_kupw": Text("Military training grounds", "Poligony wojskowe"),
     "class_kusc": Text(
@@ -344,36 +344,36 @@ MESSAGES = {
         "Historic and heritage complexes",
         "Kompleksy zabytkowo-historyczne",
     ),
-    "class_oikm": Text("Transport-related objects", "Obiekty zwiazane z komunikacja"),
-    "class_oimk": Text("Wetlands", "Mokradla"),
+    "class_oikm": Text("Transport-related objects", "Obiekty związane z komunikacją"),
+    "class_oimk": Text("Wetlands", "Mokradła"),
     "class_oior": Text("Landmark objects", "Obiekty o znaczeniu orientacyjnym"),
     "class_oipr": Text("Natural objects", "Obiekty przyrodnicze"),
     "class_oisz": Text("Reed beds", "Szuwary"),
-    "class_ptgn": Text("Wasteland", "Grunty nieuzytkowe"),
+    "class_ptgn": Text("Wasteland", "Grunty nieużytkowe"),
     "class_ptkm": Text("Transport areas", "Tereny komunikacyjne"),
-    "class_ptlz": Text("Forest areas", "Tereny lesne"),
+    "class_ptlz": Text("Forest areas", "Tereny leśne"),
     "class_ptnz": Text("Undeveloped areas", "Tereny niezabudowane"),
-    "class_ptrk": Text("Shrub vegetation", "Roslinnosc krzewiasta"),
-    "class_ptso": Text("Storage sites", "Skladowiska"),
+    "class_ptrk": Text("Shrub vegetation", "Roślinność krzewiasta"),
+    "class_ptso": Text("Storage sites", "Składowiska"),
     "class_pttr": Text("Agricultural land", "Tereny rolne"),
-    "class_ptut": Text("Permanent crops", "Uprawy trwale"),
+    "class_ptut": Text("Permanent crops", "Uprawy trwałe"),
     "class_ptwp": Text("Surface waters", "Wody powierzchniowe"),
-    "class_ptwz": Text("Excavations and spoil heaps", "Wyrobiska i zwalowiska"),
+    "class_ptwz": Text("Excavations and spoil heaps", "Wyrobiska i zwałowiska"),
     "class_ptzb": Text("Built-up areas", "Tereny zabudowane"),
-    "class_rtlw": Text("Elevation lines", "Linie wysokosciowe"),
-    "class_rtpw": Text("Elevation points", "Punkty wysokosciowe"),
+    "class_rtlw": Text("Elevation lines", "Linie wysokościowe"),
+    "class_rtpw": Text("Elevation points", "Punkty wysokościowe"),
     "class_skdr": Text("Roads", "Drogi"),
     "class_skjz": Text("Carriageways", "Jezdnie"),
     "class_skpp": Text("Crossings", "Przeprawy"),
     "class_skrp": Text(
         "Pedestrian and cycle routes",
-        "Ciagi ruchu pieszego i rowerowego",
+        "Ciągi ruchu pieszego i rowerowego",
     ),
-    "class_skrw": Text("Roundabouts and road junctions", "Ronda i wezly drogowe"),
-    "class_sktr": Text("Tracks and track systems", "Tory i zespoly torow"),
+    "class_skrw": Text("Roundabouts and road junctions", "Ronda i węzły drogowe"),
+    "class_sktr": Text("Tracks and track systems", "Tory i zespoły torów"),
     "class_suln": Text("Power lines", "Linie elektroenergetyczne"),
     "class_supr": Text("Pipelines", "Przewody rurowe"),
-    "class_swkn": Text("Canals", "Kanaly"),
+    "class_swkn": Text("Canals", "Kanały"),
     "class_swrm": Text("Drainage ditches", "Rowy melioracyjne"),
     "class_swrs": Text("Rivers and streams", "Rzeki i strumienie"),
     "class_tcon": Text("Natura 2000 areas", "Obszary Natura 2000"),
@@ -394,27 +394,27 @@ MESSAGES = {
     ),
     "layers_invalid_codes": Text(
         "Invalid BDOT10k layer codes: {bad} (4 letters, e.g. PTWP, SWRS)",
-        "Nieprawidlowe kody warstw BDOT10k: {bad} (4 litery, np. PTWP, SWRS)",
+        "Nieprawidłowe kody warstw BDOT10k: {bad} (4 litery, np. PTWP, SWRS)",
     ),
     "layers_unknown_classes": Text(
         "--layers {unknown}: no such classes in BDOT10k; available: {bdot10k_classes}",
-        "--layers {unknown}: brak takich klas w BDOT10k; dostepne: {bdot10k_classes}",
+        "--layers {unknown}: brak takich klas w BDOT10k; dostępne: {bdot10k_classes}",
     ),
     "invalid_teryt_code": Text(
         "Invalid TERYT code: {code}",
-        "Nieprawidlowy kod TERYT: {code}",
+        "Nieprawidłowy kod TERYT: {code}",
     ),
     "unsupported_format": Text(
         "Unsupported format: {format}. Use 'GPKG' or 'SHP'",
-        "Nieobslugiwany format: {format}. Uzyj 'GPKG' albo 'SHP'",
+        "Nieobsługiwany format: {format}. Użyj 'GPKG' albo 'SHP'",
     ),
     "layer_filter_gpkg_only": Text(
         "The BDOT10k layer filter works only with GPKG",
-        "Filtr warstw BDOT10k dziala tylko z GPKG",
+        "Filtr warstw BDOT10k działa tylko z GPKG",
     ),
     "keep_raw_gpkg_only": Text(
         "keep_raw applies only to GPKG (SHP is already the original ZIP)",
-        "keep_raw dotyczy tylko GPKG (SHP to juz oryginalny ZIP)",
+        "keep_raw dotyczy tylko GPKG (SHP to już oryginalny ZIP)",
     ),
     "raw_path_needs_keep_raw": Text(
         "raw_path requires keep_raw=True",
@@ -422,56 +422,56 @@ MESSAGES = {
     ),
     "unknown_voivodeship_code": Text(
         "Unknown voivodeship code: {woj_code}. Available codes: {keys}",
-        "Nieznany kod wojewodztwa: {woj_code}. Dostepne kody: {keys}",
+        "Nieznany kod województwa: {woj_code}. Dostępne kody: {keys}",
     ),
     "area_no_county": Text(
         "{what}: the area does not intersect any county (PRG)",
-        "{what}: obszar nie przecina zadnego powiatu (PRG)",
+        "{what}: obszar nie przecina żadnego powiatu (PRG)",
     ),
     "area_multiple_counties": Text(
         "{what}: the area intersects {teryts_count} counties ({teryts}); use "
         "download_landcover(product='bdot10k', bbox=..., root=...) or download "
         "each county via --teryt",
-        "{what}: obszar przecina {teryts_count} powiaty ({teryts}); uzyj "
+        "{what}: obszar przecina {teryts_count} powiaty ({teryts}); użyj "
         "download_landcover(product='bdot10k', bbox=..., root=...) albo pobierz "
-        "kazdy powiat przez --teryt",
+        "każdy powiat przez --teryt",
     ),
     "no_gpkg_in_zip": Text(
         "No GPKG files in ZIP. Contents: {namelist}",
-        "Brak plikow GPKG w ZIP. Zawartosc: {namelist}",
+        "Brak plików GPKG w ZIP. Zawartość: {namelist}",
     ),
     "package_missing_class_files": Text(
         "the BDOT10k package has no files for classes {absent} (no objects of these "
         "classes in the county)",
-        "paczka BDOT10k nie ma plikow klas {absent} (brak obiektow tych klas w "
+        "paczka BDOT10k nie ma plików klas {absent} (brak obiektów tych klas w "
         "powiecie)",
     ),
     "raw_zip_save_failed": Text(
         "Failed to save the original BDOT10k ZIP {name}: {error}; previous "
         "{output_gpkg_name} (if any) unchanged",
-        "Nie udalo sie zapisac oryginalnego ZIP BDOT10k {name}: {error}; poprzedni "
-        "{output_gpkg_name} (jesli byl) bez zmian",
+        "Nie udało się zapisać oryginalnego ZIP BDOT10k {name}: {error}; poprzedni "
+        "{output_gpkg_name} (jeśli był) bez zmian",
     ),
     "invalid_zip_file": Text(
         "Invalid ZIP file: {error}",
-        "Nieprawidlowy plik ZIP: {error}",
+        "Nieprawidłowy plik ZIP: {error}",
     ),
     "package_extract_failed": Text(
         "Failed to extract or save the BDOT10k package ({name}): {error}",
-        "Nie udalo sie rozpakowac ani zapisac paczki BDOT10k ({name}): {error}",
+        "Nie udało się rozpakować ani zapisać paczki BDOT10k ({name}): {error}",
     ),
-    "no_files_to_merge": Text("No files to merge", "Brak plikow do scalenia"),
+    "no_files_to_merge": Text("No files to merge", "Brak plików do scalenia"),
     "table_in_multiple_files": Text(
         "BDOT10k package: table {table_name} occurs in more than one file ({name}) - "
         "merging would lose data",
-        "Paczka BDOT10k: tabela {table_name} wystepuje w wiecej niz jednym pliku "
-        "({name}) - scalenie zgubiloby dane",
+        "Paczka BDOT10k: tabela {table_name} występuje w więcej niż jednym pliku "
+        "({name}) - scalenie zgubiłoby dane",
     ),
     # ``providers.pl.gugik``.
     "index_other_variant_hint": Text(
         "The GUGiK sheet index has this sheet in {describe} {vertical_crs} - use "
         "{flags}",
-        "Skorowidz GUGiK ma ten arkusz w {describe} {vertical_crs} - uzyj {flags}",
+        "Skorowidz GUGiK ma ten arkusz w {describe} {vertical_crs} - użyj {flags}",
     ),
     "unsupported_record_format": Text(
         "{file_format} ({extension} file)",
@@ -482,35 +482,35 @@ MESSAGES = {
         "The GUGiK sheet index has only records for this sheet that Kartograf does "
         "not download: {unsupported} (record format inconsistent with the file or a "
         "variant outside the registry)",
-        "Skorowidz GUGiK ma dla tego arkusza tylko rekordy, ktorych Kartograf nie "
+        "Skorowidz GUGiK ma dla tego arkusza tylko rekordy, których Kartograf nie "
         "pobiera: {unsupported} (format rekordu niezgodny z plikiem albo wariant "
         "spoza rejestru)",
     ),
     "no_data_for_sheet": Text(
         "No {describe} data for {sheet} (PL-{sheet_system} system, {vertical_crs})",
-        "Brak danych {describe} dla {sheet} (uklad PL-{sheet_system}, {vertical_crs})",
+        "Brak danych {describe} dla {sheet} (układ PL-{sheet_system}, {vertical_crs})",
     ),
     "vertical_crs_check_skipped": Text(
         "{sheet}: vertical CRS {vertical_crs} was not checked (hint skipped, service "
         "skipped until the end of the task): {error}",
-        "{sheet}: nie sprawdzono ukladu {vertical_crs} (podpowiedz pominieta, usluga "
-        "pomijana do konca zadania): {error}",
+        "{sheet}: nie sprawdzono układu {vertical_crs} (podpowiedź pominięta, usługa "
+        "pomijana do końca zadania): {error}",
     ),
     "wcs_only_1m_grid": Text(
         "WCS download (download_bbox) is available only for the {product} 1m grid - "
         "download {describe} via download() (sheets)",
-        "Pobieranie WCS (download_bbox) jest dostepne tylko dla siatki {product} 1m - "
+        "Pobieranie WCS (download_bbox) jest dostępne tylko dla siatki {product} 1m - "
         "{describe} pobierz przez download() (arkusze)",
     ),
     "wcs_format_unsupported": Text(
         "Unsupported WCS format: '{format}'. Supported formats: {keys}",
-        "Nieobslugiwany format WCS: '{format}'. Obslugiwane formaty: {keys}",
+        "Nieobsługiwany format WCS: '{format}'. Obsługiwane formaty: {keys}",
     ),
     "wcs_withdrawn": Text(
         "WCS {product} 1m for {vertical_crs} is not available (service withdrawn by "
         "GUGiK). Download sheets by sheet code.",
-        "WCS {product} 1m dla {vertical_crs} nie jest dostepny (usluga wycofana przez "
-        "GUGiK). Pobierz arkusze przez godlo.",
+        "WCS {product} 1m dla {vertical_crs} nie jest dostępny (usługa wycofana przez "
+        "GUGiK). Pobierz arkusze przez godło.",
     ),
     # ``providers.pl.gugik_laz``.
     "tile_unknown_xy_crs": Text(
@@ -521,56 +521,56 @@ MESSAGES = {
     ),
     "area_crs_not_2180": Text(
         "area must be in EPSG:2180, got {crs}",
-        "obszar musi byc w EPSG:2180, podano {crs}",
+        "obszar musi być w EPSG:2180, podano {crs}",
     ),
     "tile_unknown_xy_crs_skipped": Text(
         "Tile {sheet}: unrecognised uklad_xy {crs!r} - skipped",
-        "Kafel {sheet}: nierozpoznany uklad_xy {crs!r} - pominiety",
+        "Kafel {sheet}: nierozpoznany uklad_xy {crs!r} - pominięty",
     ),
     "unsupported_vertical_crs_init": Text(
         "Unsupported vertical CRS: '{vertical_crs}'. Supported: {indexes}",
-        "Nieobslugiwany uklad wysokosci: '{vertical_crs}'. Obslugiwane: {indexes}",
+        "Nieobsługiwany układ wysokości: '{vertical_crs}'. Obsługiwane: {indexes}",
     ),
-    "provider_name": Text("GUGiK LAZ (point cloud)", "GUGiK LAZ (chmura punktow)"),
+    "provider_name": Text("GUGiK LAZ (point cloud)", "GUGiK LAZ (chmura punktów)"),
     "year_excludes_range": Text(
         "year is mutually exclusive with min_year/max_year",
-        "year wyklucza sie z min_year/max_year",
+        "year wyklucza się z min_year/max_year",
     ),
     "bbox_crs_not_2180": Text(
         "bbox must be in EPSG:2180, got {crs}. Convert it first (e.g. "
         "SheetParser.get_bbox(crs='EPSG:2180')).",
-        "bbox musi byc w EPSG:2180, podano {crs}. Najpierw przelicz (np. "
+        "bbox musi być w EPSG:2180, podano {crs}. Najpierw przelicz (np. "
         "SheetParser.get_bbox(crs='EPSG:2180')).",
     ),
     "unsupported_vertical_crs": Text(
         "Unsupported vertical CRS: '{vcrs}'. Supported: {indexes}",
-        "Nieobslugiwany uklad wysokosci: '{vcrs}'. Obslugiwane: {indexes}",
+        "Nieobsługiwany układ wysokości: '{vcrs}'. Obsługiwane: {indexes}",
     ),
     "vintage_not_in_service": Text(
         "vintage {lo} does not exist in service {vcrs} (available: {years})",
-        "rocznik {lo} nie istnieje w usludze {vcrs} (dostepne: {years})",
+        "rocznik {lo} nie istnieje w usłudze {vcrs} (dostępne: {years})",
     ),
     "range_no_vintage": Text(
         "range {label} has no vintage in service {vcrs} (available: {years})",
-        "przedzial {label} nie ma rocznika w usludze {vcrs} (dostepne: {years})",
+        "przedział {label} nie ma rocznika w usłudze {vcrs} (dostępne: {years})",
     ),
     "unit_area_tiles": Text("area tiles", "kafli obszaru"),
     "subject_laz_tiles": Text("LAZ tiles", "kafli LAZ"),
     "wfs_axis_order_mismatch": Text(
         "WFS {layer}: server returned {returned} {returned:plural(tile|tiles)}, none "
         "intersects the requested bbox - axis order mismatch (report a bug)",
-        "WFS {layer}: serwer zwrocil {returned} {returned:plural(kafel|kafle|kafli)}, "
-        "zaden nie przecina zadanego bboxa - niezgodnosc kolejnosci osi (zglos blad)",
+        "WFS {layer}: serwer zwrócił {returned} {returned:plural(kafel|kafle|kafli)}, "
+        "żaden nie przecina żądanego bboxa - niezgodność kolejności osi (zgłoś błąd)",
     ),
     # ``providers.pl.gugik_orto``.
     "no_wms_sheet_index": Text(
         "Source {key_value} has no WMS sheet index",
-        "Zrodlo {key_value} nie ma skorowidza arkuszy WMS",
+        "Źródło {key_value} nie ma skorowidza arkuszy WMS",
     ),
     "coverage_single_wcs_service": Text(
         "--coverage {coverage!r}: --product {product} has a single cutout WCS service "
         "({notes}) - omit --coverage",
-        "--coverage {coverage!r}: --product {product} ma jedna usluge WCS wycinka "
+        "--coverage {coverage!r}: --product {product} ma jedną usługę WCS wycinka "
         "({notes}) - bez --coverage",
     ),
     "coverage_required_cutout": Text(
@@ -579,7 +579,7 @@ MESSAGES = {
     ),
     "coverage_unknown_value": Text(
         "--coverage {coverage!r}: unknown value - available: {coverage_choices}",
-        "--coverage {coverage!r}: nieznana wartosc - dostepne: {coverage_choices}",
+        "--coverage {coverage!r}: nieznana wartość - dostępne: {coverage_choices}",
     ),
     "resolution_required_cutout": Text(
         "--resolution required with --cutout --product {product} (cutout pixel): "
@@ -590,12 +590,12 @@ MESSAGES = {
     "resolution_unavailable_cutout": Text(
         "--resolution {resolution!r}: not available for the {variant} orthophoto "
         "cutout - available: {labels}",
-        "--resolution {resolution!r}: niedostepne dla wycinka ortofotomapy {variant} "
-        "- dostepne: {labels}",
+        "--resolution {resolution!r}: niedostępne dla wycinka ortofotomapy {variant} "
+        "- dostępne: {labels}",
     ),
     "product_no_wcs_cutout": Text(
         "--product {product} has no WCS cutout - omit --coverage and --resolution",
-        "--product {product} nie ma wycinka WCS - pomin --coverage i --resolution",
+        "--product {product} nie ma wycinka WCS - pomiń --coverage i --resolution",
     ),
     "resolution_needs_coverage": Text(
         "--resolution --product {product} applies only to the WCS cutout - give "
@@ -606,11 +606,11 @@ MESSAGES = {
     "direction_not_oblique": Text(
         "--direction applies only to oblique orthophoto - --product {product} has no "
         "directions",
-        "--direction dotyczy tylko orto ukosnej - --product {product} nie ma kierunkow",
+        "--direction dotyczy tylko orto ukośnej - --product {product} nie ma kierunków",
     ),
     "direction_unknown": Text(
         "--product {product}: direction {direction!r} - available: {codes}",
-        "--product {product}: kierunek {direction!r} - dostepne: {codes}",
+        "--product {product}: kierunek {direction!r} - dostępne: {codes}",
     ),
     "product_with_direction": Text(
         "--product {product} (direction {direction})",
@@ -618,7 +618,7 @@ MESSAGES = {
     ),
     "orto_no_data_for_sheet": Text(
         "No data {what} for {sheet} (PL-{sheet_system} system)",
-        "Brak danych {what} dla {sheet} (uklad PL-{sheet_system})",
+        "Brak danych {what} dla {sheet} (układ PL-{sheet_system})",
     ),
     "wcs_area_cutout_only": Text(
         "--product {product}: WCS area only as a cutout (give the cutout resolution)",
@@ -633,60 +633,60 @@ MESSAGES = {
     "wcs_cutout_color_only": Text(
         "WCS orthophoto cutout has only the {default_color} composition - got "
         "color={color!r}",
-        "wycinek WCS ortofotomapy ma tylko kompozycje {default_color} - podano "
+        "wycinek WCS ortofotomapy ma tylko kompozycję {default_color} - podano "
         "color={color!r}",
     ),
     "no_orthophoto_for_sheet": Text(
         "No {color} orthophoto for {sheet} (PL-{sheet_system} system){variants_note}",
-        "Brak ortofotomapy {color} dla {sheet} (uklad PL-{sheet_system})"
+        "Brak ortofotomapy {color} dla {sheet} (układ PL-{sheet_system})"
         "{variants_note}",
     ),
     "sheet_variants_available": Text(
         ". Available variants of this sheet: {variants}",
-        ". Dostepne warianty tego arkusza: {variants}",
+        ". Dostępne warianty tego arkusza: {variants}",
     ),
     "unsupported_image_product": Text(
         "Unsupported PL image product: {product}",
-        "Nieobslugiwany produkt obrazow PL: {product}",
+        "Nieobsługiwany produkt obrazów PL: {product}",
     ),
     "direction_oblique_only": Text(
         "--direction applies only to oblique orthophoto - --product orto has no "
         "directions",
-        "--direction dotyczy tylko orto ukosnej - --product orto nie ma kierunkow",
+        "--direction dotyczy tylko orto ukośnej - --product orto nie ma kierunków",
     ),
     # ``providers.pl.prg``.
     "prg_query_counties": Text("PRG query (counties)", "zapytanie PRG (powiaty)"),
     "invalid_county_teryt": Text(
         "PRG WFS: invalid county TERYT code {code!r}",
-        "PRG WFS: nieprawidlowy kod TERYT powiatu {code!r}",
+        "PRG WFS: nieprawidłowy kod TERYT powiatu {code!r}",
     ),
     "response_not_xml": Text(
         "PRG WFS: response is not XML: {error}",
-        "PRG WFS: odpowiedz nie jest XML: {error}",
+        "PRG WFS: odpowiedź nie jest XML: {error}",
     ),
     "service_error": Text(
         "PRG WFS: service error ({tag}): {text}",
-        "PRG WFS: blad uslugi ({tag}): {text}",
+        "PRG WFS: błąd usługi ({tag}): {text}",
     ),
     "no_2d_point_list": Text(
         "PRG WFS: no two-dimensional GML point list",
-        "PRG WFS: brak dwuwymiarowej listy punktow GML",
+        "PRG WFS: brak dwuwymiarowej listy punktów GML",
     ),
     "invalid_point_list": Text(
         "PRG WFS: invalid GML point list",
-        "PRG WFS: nieprawidlowa lista punktow GML",
+        "PRG WFS: nieprawidłowa lista punktów GML",
     ),
     "polygon_no_exterior": Text(
         "PRG WFS: polygon without an exterior ring",
-        "PRG WFS: wielokat bez zewnetrznego pierscienia",
+        "PRG WFS: wielokąt bez zewnętrznego pierścienia",
     ),
     "incomplete_returned": Text(
         "PRG WFS: incomplete response for {layer} (numberReturned={returned})",
-        "PRG WFS: niepelna odpowiedz {layer} (numberReturned={returned})",
+        "PRG WFS: niepełna odpowiedź {layer} (numberReturned={returned})",
     ),
     "incomplete_matched": Text(
         "PRG WFS: incomplete response for {layer} (numberMatched={matched})",
-        "PRG WFS: niepelna odpowiedz {layer} (numberMatched={matched})",
+        "PRG WFS: niepełna odpowiedź {layer} (numberMatched={matched})",
     ),
     "no_layer_geometry": Text(
         "PRG WFS: no geometry for {layer}",
@@ -703,43 +703,43 @@ MESSAGES = {
     "prg_query_layer": Text("PRG query ({layer})", "zapytanie PRG ({layer})"),
     "no_national_boundary": Text(
         "PRG WFS: no national boundary",
-        "PRG WFS: brak granicy panstwa",
+        "PRG WFS: brak granicy państwa",
     ),
     "inconsistent_response": Text(
         "PRG WFS: inconsistent response: numberReturned={returned_attr}, codes {found}",
-        "PRG WFS: niespojna odpowiedz: numberReturned={returned_attr}, kodow {found}",
+        "PRG WFS: niespójna odpowiedź: numberReturned={returned_attr}, kodów {found}",
     ),
     "incomplete_county_list": Text(
         "PRG WFS: incomplete county list ({returned} of {matched}) - reduce the area",
-        "PRG WFS: niepelna lista powiatow ({returned} z {matched}) - zmniejsz obszar",
+        "PRG WFS: niepełna lista powiatów ({returned} z {matched}) - zmniejsz obszar",
     ),
     "unknown_county_count": Text("an unknown number", "nieznanej liczby"),
     # ``providers.pl.skorowidz``.
     "no_coverage_hints": Text("{text}. {hints:join(; )}", "{text}. {hints:join(; )}"),
     "record_no_https_url": Text(
         "Layer {layer}: skipped record without HTTPS URL",
-        "Warstwa {layer}: pominieto rekord bez URL HTTPS",
+        "Warstwa {layer}: pominięto rekord bez URL HTTPS",
     ),
     "invalid_sheet_code": Text(
         "Layer {layer}: invalid sheet code {code!r}",
-        "Warstwa {layer}: nieprawidlowe godlo {code!r}",
+        "Warstwa {layer}: nieprawidłowe godło {code!r}",
     ),
     "record_year_outside_partition": Text(
         "Layer {layer}: record {sheet} has year {record_year} outside the layer "
         "partition",
-        "Warstwa {layer}: rekord {sheet} ma rok {record_year} poza partycja warstwy",
+        "Warstwa {layer}: rekord {sheet} ma rok {record_year} poza partycją warstwy",
     ),
     "record_no_crs_resolution": Text(
         "Layer {layer}: record {sheet} without CRS or resolution - skipped",
-        "Warstwa {layer}: rekord {sheet} bez ukladu lub rozdzielczosci - pominieto",
+        "Warstwa {layer}: rekord {sheet} bez układu lub rozdzielczości - pominięto",
     ),
     "ogc_exception_report": Text(
         "{description}: OGC exception report: {excerpt}",
-        "{description}: raport wyjatku OGC: {excerpt}",
+        "{description}: raport wyjątku OGC: {excerpt}",
     ),
     "not_sheet_index_template": Text(
         "{description}: response is not a GUGiK sheet index template",
-        "{description}: odpowiedz nie jest szablonem skorowidza GUGiK",
+        "{description}: odpowiedź nie jest szablonem skorowidza GUGiK",
     ),
     "cached_no_coverage": Text(
         "No data for {sheet} (from metadata cache)",
@@ -752,7 +752,7 @@ MESSAGES = {
     "no_campaign": Text("No campaign for {sheet}", "Brak kampanii {sheet}"),
     "wms_caps_invalid_xml": Text(
         "GUGiK WMS GetCapabilities {wms_endpoint}: invalid XML: {error}",
-        "GUGiK WMS GetCapabilities {wms_endpoint}: nieprawidlowy XML: {error}",
+        "GUGiK WMS GetCapabilities {wms_endpoint}: nieprawidłowy XML: {error}",
     ),
     "wms_layer_pattern_mismatch": Text(
         "GetCapabilities layer {layer_name} of the product family does not match "
@@ -768,20 +768,20 @@ MESSAGES = {
     ),
     "descendant_sheet_available": Text(
         "Available descendant {sheet} - use --scale {scale}",
-        "Dostepny potomek {sheet} - uzyj --scale {scale}",
+        "Dostępny potomek {sheet} - użyj --scale {scale}",
     ),
     "index_other_system_hint": Text(
         "The sheet index has this area in PL-{system}: {sheet} ({scale}) - use this "
         "sheet code or {flags}",
-        "Skorowidz ma ten obszar w PL-{system}: {sheet} ({scale}) - uzyj tego godla "
+        "Skorowidz ma ten obszar w PL-{system}: {sheet} ({scale}) - użyj tego godła "
         "lub {flags}",
     ),
     # ``providers.pl.skorowidz_wfs``.
-    "incomplete_result": Text("the result would be incomplete", "wynik bylby niepelny"),
+    "incomplete_result": Text("the result would be incomplete", "wynik byłby niepełny"),
     "error_incomplete": Text("{error} - {incomplete}", "{error} - {incomplete}"),
     "wfs_exception_report": Text(
         "{description}: OGC exception report: {details} - {incomplete}",
-        "{description}: raport wyjatku OGC: {details} - {incomplete}",
+        "{description}: raport wyjątku OGC: {details} - {incomplete}",
     ),
     "sheet_error": Text("{sheet}: {error}", "{sheet}: {error}"),
     "type_pattern_mismatch": Text(
@@ -792,19 +792,19 @@ MESSAGES = {
     ),
     "wfs_response_unreadable": Text(
         "{description}: WFS response unreadable: {error} - {incomplete}",
-        "{description}: odpowiedz WFS nieczytelna: {error} - {incomplete}",
+        "{description}: odpowiedź WFS nieczytelna: {error} - {incomplete}",
     ),
     "no_feature_types": Text(
         "{description}: no feature types {prefix}<year> - {incomplete}",
-        "{description}: brak typow obiektow {prefix}<rok> - {incomplete}",
+        "{description}: brak typów obiektów {prefix}<rok> - {incomplete}",
     ),
     "types_shown_label": Text(
         "{types_count} types {prefix}",
-        "{types_count} typow {prefix}",
+        "{types_count} typów {prefix}",
     ),
     "wfs_paging_loop": Text(
         "WFS {endpoint}: paging loop - {incomplete}",
-        "WFS {endpoint}: petla stronicowania - {incomplete}",
+        "WFS {endpoint}: pętla stronicowania - {incomplete}",
     ),
     "wfs_getfeature_page": Text(
         "WFS GetFeature {shown} (page {page})",
@@ -813,27 +813,27 @@ MESSAGES = {
     "not_feature_collection": Text(
         "{description}: response is not a feature collection ({localname}) - "
         "{incomplete}",
-        "{description}: odpowiedz nie jest kolekcja obiektow ({localname}) - "
+        "{description}: odpowiedź nie jest kolekcją obiektów ({localname}) - "
         "{incomplete}",
     ),
     "number_returned_mismatch": Text(
         "{description}: numberReturned={returned!r}, features {found_count} - "
         "{incomplete}",
-        "{description}: numberReturned={returned!r}, obiektow {found_count} - "
+        "{description}: numberReturned={returned!r}, obiektów {found_count} - "
         "{incomplete}",
     ),
     "feature_repeated_page": Text(
         "{description}: feature {key_value} repeated from the previous page - server "
         "paging inconsistent - {incomplete}",
-        "{description}: obiekt {key_value} powtorzony z poprzedniej strony - "
-        "stronicowanie serwera niespojne - {incomplete}",
+        "{description}: obiekt {key_value} powtórzony z poprzedniej strony - "
+        "stronicowanie serwera niespójne - {incomplete}",
     ),
     "next_page_outside_service": Text(
         "{description}: next page outside the service ({following}) - {incomplete}",
-        "{description}: strona next spoza uslugi ({following}) - {incomplete}",
+        "{description}: strona next spoza usługi ({following}) - {incomplete}",
     ),
     "year_outside_partition": Text(
         "Layer {layer}: record {sheet} has year {year} outside the layer partition",
-        "Warstwa {layer}: rekord {sheet} ma rok {year} poza partycja warstwy",
+        "Warstwa {layer}: rekord {sheet} ma rok {year} poza partycją warstwy",
     ),
 }

@@ -11,6 +11,6 @@ MESSAGES = {
     "clms_credentials_bad_shape": Text(
         "CLMS_CREDENTIALS must be a JSON object with the fields client_id and "
         "private_key",
-        "CLMS_CREDENTIALS musi byc obiektem JSON z polami client_id i private_key",
+        "CLMS_CREDENTIALS musi być obiektem JSON z polami client_id i private_key",
     ),
 }

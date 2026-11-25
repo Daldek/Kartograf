@@ -15,6 +15,7 @@ from tests.integration.test_collections_cz import _page_size
 from tests.integration.test_cz_data50_250 import AREA, DATA50, DATA250, NATIONAL
 from tests.integration.test_cz_data50_250 import serve as serve_cuzk
 from tests.integration.test_nmt_100m import BORDER
+from tests.support.errors import error_line
 from tests.support.fake_packages import zip_bytes
 from tests.support.parity import assert_notices_printed, assert_same_store, run_both
 
@@ -147,6 +148,6 @@ def test_invalid_options_match_cli_and_api(
     fake = serve(monkeypatch)
     run = _landcover(tmp_path, source, flags, **options)
     assert run.cli_code == 2 and isinstance(run.api_error, ValidationError)
-    assert run.cli_text == f"Error: {run.api_error.localized('pl')}\n"
+    assert run.cli_text == f"{error_line(run.api_error)}\n"
     assert not run.cli_store.exists() and not run.api_store.exists()
     assert fake.calls == []

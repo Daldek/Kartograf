@@ -743,7 +743,7 @@ def test_every_allowed_value_has_a_polish_meaning(command):
 def test_a_value_without_a_meaning_is_refused_and_a_pattern_gives_one():
     assert meaning("resolution", "0.25m") == "Cell or pixel size 0.25m (metres)."
     assert localize(meaning("resolution", "0.25m"), "pl") == (
-        "Rozmiar komorki albo piksela 0.25m (metry)."
+        "Rozmiar komórki albo piksela 0.25m (metry)."
     )
     assert meaning("depth", "5-15cm").endswith("below the surface.")
     assert meaning("horizontal_crs", "EPSG:5514") == meaning("bbox_crs", "EPSG:5514")

@@ -8,22 +8,22 @@ MESSAGES = {
     "browser_failed": Text(
         "the page {url} could not be opened in a web browser ({error}); open it "
         "yourself",
-        "nie udalo sie otworzyc strony {url} w przegladarce ({error}); otworz ja "
+        "nie udało się otworzyć strony {url} w przeglądarce ({error}); otwórz ją "
         "samodzielnie",
     ),
     # ``kartograf.gui.basemaps``: the base maps of the page (Nogat DEV-15.15, DEV-18.1).
     "catalogue_unreadable": Text(
         "the catalogue of base maps {path} cannot be read: {error}",
-        "nie mozna odczytac katalogu podkladow {path}: {error}",
+        "nie można odczytać katalogu podkładów {path}: {error}",
     ),
     "basemaps_invalid": Text(
         "{name} is not a list of the ids of base maps: {value}",
-        "{name} to nie lista identyfikatorow podkladow: {value}",
+        "{name} to nie lista identyfikatorów podkładów: {value}",
     ),
     "basemap_unknown": Text(
         "{name} names the base map {value}, which the catalogue does not have "
         "(known: {known})",
-        "{name} podaje podklad {value}, ktorego nie ma w katalogu (znane: {known})",
+        "{name} podaje podkład {value}, którego nie ma w katalogu (znane: {known})",
     ),
     "basemap_mirrors_invalid": Text(
         "{name} is not a table of an id of the catalogue and the http or https "
@@ -33,23 +33,23 @@ MESSAGES = {
     ),
     "basemap_extra_invalid": Text(
         "{name}: the field {field} of an own base map is not valid: {value}",
-        "{name}: pole {field} wlasnego podkladu jest nieprawidlowe: {value}",
+        "{name}: pole {field} własnego podkładu jest nieprawidłowe: {value}",
     ),
     "basemap_extra_missing": Text(
         "{name}: the own base map {value} has no field {field}",
-        "{name}: wlasny podklad {value} nie ma pola {field}",
+        "{name}: własny podkład {value} nie ma pola {field}",
     ),
     "basemap_hint": Text(
         "Allowed ids: {known}. Own base maps: a list of tables with id, name, kind "
         "(xyz, wms or vector), url, attribution and grayscale.",
-        "Dozwolone identyfikatory: {known}. Wlasne podklady: lista tabel z polami id, "
+        "Dozwolone identyfikatory: {known}. Własne podkłady: lista tabel z polami id, "
         "name, kind (xyz, wms albo vector), url, attribution i grayscale.",
     ),
     # ``kartograf.gui.site``: the other GUIs (Nogat DEV-15.4) and the regulamin.
     "gui_table_invalid": Text(
         "[nogat] gui of nogat.toml is not a table of names and addresses: the app "
         "menu lists no other GUI",
-        "[nogat] gui w nogat.toml to nie tabela nazw i adresow: menu aplikacji nie "
+        "[nogat] gui w nogat.toml to nie tabela nazw i adresów: menu aplikacji nie "
         "pokazuje innych GUI",
     ),
     "terms_none": Text(
@@ -60,7 +60,7 @@ MESSAGES = {
     ),
     "terms_failed": Text(
         "the regulamin cannot be filled, the GUI serves none: {error}",
-        "nie mozna wypelnic regulaminu, GUI go nie podaje: {error}",
+        "nie można wypełnić regulaminu, GUI go nie podaje: {error}",
     ),
     "terms_no_address": Text(
         "[nogat.gui] of nogat.toml has no address of kartograf",
@@ -76,7 +76,7 @@ MESSAGES = {
     ),
     "terms_value_missing": Text(
         "no value of {names}",
-        "brak wartosci {names}",
+        "brak wartości {names}",
     ),
     "terms_not_text": Text(
         "{key} of [nogat.operator] is not text",
@@ -88,12 +88,12 @@ MESSAGES = {
     ),
     "terms_left": Text(
         "a placeholder {{{{...}}}} is left in the page",
-        "w stronie zostal symbol zastepczy {{{{...}}}}",
+        "w stronie został symbol zastępczy {{{{...}}}}",
     ),
     # ``kartograf.gui.app``: the request limit of a page (Nogat DEV-15.9).
-    "rate_limited_title": Text("Too many requests", "Zbyt wiele zadan"),
+    "rate_limited_title": Text("Too many requests", "Zbyt wiele żądań"),
     "rate_limited_page": Text(
         "Too many requests. Try again in {seconds} s.",
-        "Zbyt wiele zadan. Sprobuj ponownie za {seconds} s.",
+        "Zbyt wiele żądań. Spróbuj ponownie za {seconds} s.",
     ),
 }

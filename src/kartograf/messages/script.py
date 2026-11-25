@@ -12,39 +12,39 @@ MESSAGES = {
     # --- the arguments ------------------------------------------------------------
     "give_shell": Text(
         "Give the shell of the script (--shell): bash or powershell",
-        "Podaj powloke skryptu (--shell): bash albo powershell",
+        "Podaj powłokę skryptu (--shell): bash albo powershell",
     ),
     "unknown_shell": Text(
         "Unknown shell {shell!r} (--shell): bash or powershell",
-        "Nieznana powloka {shell!r} (--shell): bash albo powershell",
+        "Nieznana powłoka {shell!r} (--shell): bash albo powershell",
     ),
     "give_command_or_plan": Text(
         "Give the line of a data command (--command) or, for a direct script, its "
         "plan (--plan)",
-        "Podaj linie komendy danych (--command) albo, dla skryptu bezposredniego, jej "
+        "Podaj linię komendy danych (--command) albo, dla skryptu bezpośredniego, jej "
         "plan (--plan)",
     ),
     "command_and_plan": Text(
         "--command and --plan exclude each other: give the line or its plan",
-        "--command i --plan wykluczaja sie: podaj linie albo jej plan",
+        "--command i --plan wykluczają się: podaj linię albo jej plan",
     ),
     "plan_needs_direct": Text(
         "--plan makes a direct script only: add --direct, or give the line "
         "(--command) for the Kartograf script",
-        "--plan daje tylko skrypt bezposredni: dodaj --direct albo podaj linie "
+        "--plan daje tylko skrypt bezpośredni: dodaj --direct albo podaj linię "
         "(--command) dla skryptu Kartografa",
     ),
     "target_needs_direct": Text(
         "--target is the directory of a direct script: add --direct (the Kartograf "
         "script writes where its line says)",
-        "--target to katalog skryptu bezposredniego: dodaj --direct (skrypt "
-        "Kartografa zapisuje tam, gdzie mowi jego linia)",
+        "--target to katalog skryptu bezpośredniego: dodaj --direct (skrypt "
+        "Kartografa zapisuje tam, gdzie mówi jego linia)",
     ),
     "bad_target": Text(
         "--target {target!r} is no directory a script can name: it is empty or "
         "holds a control character",
-        "--target {target!r} nie jest katalogiem, ktory skrypt moze nazwac: jest "
-        "pusty albo zawiera znak sterujacy",
+        "--target {target!r} nie jest katalogiem, który skrypt może nazwać: jest "
+        "pusty albo zawiera znak sterujący",
     ),
     "not_a_plan": Text(
         "--plan is a plan kartograf-plan/1, got {got}",
@@ -53,36 +53,36 @@ MESSAGES = {
     "not_a_data_command": Text(
         "--command: {command} is no data command; a script runs or downloads the "
         "data of one of: {data_commands}",
-        "--command: {command} nie jest komenda danych; skrypt uruchamia albo pobiera "
+        "--command: {command} nie jest komendą danych; skrypt uruchamia albo pobiera "
         "dane jednej z: {data_commands}",
     ),
     "development_version": Text(
         "Kartograf {version} is no release: a script that installs Kartograf pins "
         "a released tag",
-        "Kartograf {version} nie jest wydaniem: skrypt instalujacy Kartografa "
+        "Kartograf {version} nie jest wydaniem: skrypt instalujący Kartografa "
         "przypina wydany tag",
     ),
     "development_version_hint": Text(
         "Generate the script with a released Kartograf, or give the command line or "
         "a direct script (--direct)",
-        "Wygeneruj skrypt wydanym Kartografem albo uzyj linii komendy lub skryptu "
-        "bezposredniego (--direct)",
+        "Wygeneruj skrypt wydanym Kartografem albo użyj linii komendy lub skryptu "
+        "bezpośredniego (--direct)",
     ),
     "no_direct_files": Text(
         "No file of the plan can be downloaded directly ({count} left out: "
         "{reasons}): use the Kartograf script (without --direct)",
-        "Zadnego pliku planu nie da sie pobrac bezposrednio (pominiete: {count}, "
-        "{reasons}): uzyj skryptu Kartografa (bez --direct)",
+        "Żadnego pliku planu nie da się pobrać bezpośrednio (pominięte: {count}, "
+        "{reasons}): użyj skryptu Kartografa (bez --direct)",
     ),
     "plan_without_fetch": Text(
         "--plan: the plan does not say where {name} comes from (written by Kartograf "
         "{version}): make the plan again",
-        "--plan: plan nie mowi, skad pochodzi {name} (zapisal go Kartograf "
-        "{version}): utworz plan ponownie",
+        "--plan: plan nie mówi, skąd pochodzi {name} (zapisał go Kartograf "
+        "{version}): utwórz plan ponownie",
     ),
     "plan_file_name": Text(
         "--plan: {name!r} is no plain file name",
-        "--plan: {name!r} nie jest prosta nazwa pliku",
+        "--plan: {name!r} nie jest prostą nazwą pliku",
     ),
     "plan_url": Text(
         "--plan: the URL {url!r} of {name} is no http or https URL",
@@ -99,25 +99,25 @@ MESSAGES = {
     ),
     "kartograf_runs": Text(
         "It runs this command with Kartograf {version}:",
-        "Uruchamia te komende Kartografem {version}:",
+        "Uruchamia tę komendę Kartografem {version}:",
     ),
     "kartograf_steps": Text(
         "It stops when uv is missing, installs Kartograf {version} with uv tool "
         "install when kartograf is missing, and runs the command with uvx when "
         "another version of Kartograf is installed, which it leaves as it is. "
         "Kartograf's retries, checks, sidecars, store and ATTRIBUTION.txt apply.",
-        "Zatrzymuje sie, gdy brak uv, instaluje Kartografa {version} przez uv tool "
-        "install, gdy brak kartograf, i uruchamia komende przez uvx, gdy jest "
-        "zainstalowana inna wersja Kartografa, ktorej nie zmienia. Dzialaja "
+        "Zatrzymuje się, gdy brak uv, instaluje Kartografa {version} przez uv tool "
+        "install, gdy brak kartograf, i uruchamia komendę przez uvx, gdy jest "
+        "zainstalowana inna wersja Kartografa, której nie zmienia. Działają "
         "ponawiania, kontrole, pliki boczne, magazyn i ATTRIBUTION.txt Kartografa.",
     ),
     "kartograf_keys": Text(
         "It stops when {variables:join} is not set and, on macOS, the Keychain has no "
         "key either: the data need your key of the source. The script reads no key "
         "and writes none.",
-        "Zatrzymuje sie, gdy nie ustawiono {variables:join}, a na macOS nie ma klucza "
-        "takze w Keychain: dane wymagaja twojego klucza zrodla. Skrypt nie czyta ani "
-        "nie zapisuje zadnego klucza.",
+        "Zatrzymuje się, gdy nie ustawiono {variables:join}, a na macOS nie ma klucza "
+        "także w Keychain: dane wymagają twojego klucza źródła. Skrypt nie czyta ani "
+        "nie zapisuje żadnego klucza.",
     ),
     "direct_command": Text(
         "It downloads the files of the plan of this command, checked {checked_at}:",
@@ -133,21 +133,21 @@ MESSAGES = {
         "under its plain name; its size is checked where the plan knows it and its "
         "SHA-256 where the registry pins it, and ATTRIBUTION.txt gets the lines of "
         "the sources of the files.",
-        "Kazdy plik przychodzi ze swojego zrodla przez {tool} do katalogu docelowego "
-        "pod prosta nazwa; jego rozmiar jest sprawdzany, gdzie zna go plan, a SHA-256, "
-        "gdzie przypina je rejestr, a ATTRIBUTION.txt dostaje linie zrodel plikow.",
+        "Każdy plik przychodzi ze swojego źródła przez {tool} do katalogu docelowego "
+        "pod prostą nazwą; jego rozmiar jest sprawdzany, gdzie zna go plan, a SHA-256, "
+        "gdzie przypina je rejestr, a ATTRIBUTION.txt dostaje linie źródeł plików.",
     ),
     "direct_does_not": Text(
         "Unlike Kartograf it has no retries or backoff, no format checks, no "
         "sidecars kartograf-meta/1, no store or versions, and no cutout, merge or "
         "reprojection.",
-        "W odroznieniu od Kartografa nie ma ponawian ani odstepow, kontroli formatu, "
-        "plikow bocznych kartograf-meta/1, magazynu ani wersji, wycinania, scalania "
-        "ani przeliczania ukladow.",
+        "W odróżnieniu od Kartografa nie ma ponawiań ani odstępów, kontroli formatu, "
+        "plików bocznych kartograf-meta/1, magazynu ani wersji, wycinania, scalania "
+        "ani przeliczania układów.",
     ),
     "direct_left_out": Text(
         "Left out, {count} {count:plural(file|files)}:",
-        "Pominiete, {count} {count:plural(plik|pliki|plikow)}:",
+        "Pominięte, {count} {count:plural(plik|pliki|plików)}:",
     ),
     "left_out_file": Text(
         "{name} ({unit}): {why}",
@@ -157,30 +157,30 @@ MESSAGES = {
     "why_credentials": Text(
         "its source needs a key exchange only Kartograf makes; use the Kartograf "
         "script",
-        "jego zrodlo wymaga wymiany klucza, ktora robi tylko Kartograf; uzyj skryptu "
+        "jego źródło wymaga wymiany klucza, którą robi tylko Kartograf; użyj skryptu "
         "Kartografa",
     ),
     "why_built": Text(
         "Kartograf builds it (a cutout, an unpacked, merged or reprojected file, a "
         "member of an archive), no URL serves it; use the Kartograf script",
         "Kartograf go buduje (wycinek, plik rozpakowany, scalony albo przeliczony, "
-        "skladnik archiwum), zaden URL go nie podaje; uzyj skryptu Kartografa",
+        "składnik archiwum), żaden URL go nie podaje; użyj skryptu Kartografa",
     ),
     "why_feed_not_cached": Text(
         "its URL is in an ATOM feed the plan did not read; plan again where the "
         "metadata cache holds the feed, or use the Kartograf script",
-        "jego URL jest w kanale ATOM, ktorego plan nie czytal; zaplanuj ponownie tam, "
-        "gdzie cache metadanych ma ten kanal, albo uzyj skryptu Kartografa",
+        "jego URL jest w kanale ATOM, którego plan nie czytał; zaplanuj ponownie tam, "
+        "gdzie cache metadanych ma ten kanał, albo użyj skryptu Kartografa",
     ),
     "why_check_failed": Text(
         "its source could not be checked when the plan was made; plan again",
-        "nie udalo sie sprawdzic jego zrodla przy tworzeniu planu; zaplanuj ponownie",
+        "nie udało się sprawdzić jego źródła przy tworzeniu planu; zaplanuj ponownie",
     ),
     "why_no_url": Text(
         "the plan names no URL of it (its source listed none when the plan was made); "
         "plan again or use the Kartograf script",
-        "plan nie podaje jego URL (zrodlo nie wymienialo zadnego przy tworzeniu "
-        "planu); zaplanuj ponownie albo uzyj skryptu Kartografa",
+        "plan nie podaje jego URL (źródło nie wymieniało żadnego przy tworzeniu "
+        "planu); zaplanuj ponownie albo użyj skryptu Kartografa",
     ),
     "why_conflict": Text(
         "a conflict of its target ({reason})",
@@ -193,7 +193,7 @@ MESSAGES = {
     ),
     "key_missing": Text(
         "{variable} is not set: the data of this command need your key of the source.",
-        "Nie ustawiono {variable}: dane tej komendy wymagaja twojego klucza zrodla.",
+        "Nie ustawiono {variable}: dane tej komendy wymagają twojego klucza źródła.",
     ),
     "curl_missing": Text(
         "curl is missing: install it and run this script again.",
@@ -205,14 +205,14 @@ MESSAGES = {
     ),
     "size_differs": Text(
         "{name}: {actual} bytes downloaded, the plan says {size}",
-        "{name}: pobrano {actual} bajtow, plan mowi {size}",
+        "{name}: pobrano {actual} bajtów, plan mówi {size}",
     ),
     "sha256_differs": Text(
         "{name}: its SHA-256 is not the one the registry pins, {sha256}",
-        "{name}: jego SHA-256 nie jest tym, ktore przypina rejestr, {sha256}",
+        "{name}: jego SHA-256 nie jest tym, które przypina rejestr, {sha256}",
     ),
     "downloaded": Text(
         "{count} {count:plural(file|files)} downloaded into {target}",
-        "Pobrano {count} {count:plural(plik|pliki|plikow)} do {target}",
+        "Pobrano {count} {count:plural(plik|pliki|plików)} do {target}",
     ),
 }

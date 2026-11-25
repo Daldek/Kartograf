@@ -3,6 +3,8 @@
 import json
 from typing import Any
 
+from kartograf.messages import localize, reason
+
 SCHEMA = "kartograf-error/1"
 
 
@@ -40,3 +42,12 @@ def without_error_document(stderr: str) -> str:
     if lines and _document(lines[-1]) is not None:
         return "".join(lines[:-1])
     return stderr
+
+
+def error_line(error: BaseException) -> str:
+    """Return the ``Error:`` line the CLI prints for ``error`` on a Polish command line.
+
+    The catalog text of the error in Polish, its Polish letters folded for the terminal
+    and its values as they are (``cli._language.localized``).
+    """
+    return f"Error: {localize(reason(error), 'pl', folded=True)}"

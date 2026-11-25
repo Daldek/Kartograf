@@ -381,7 +381,7 @@ def test_a_year_out_of_range_is_refused_in_the_language_of_the_reader():
     assert str(caught.value) == "--year must be an integer 1900..2100, got 1800"
     assert (
         caught.value.localized("pl")
-        == "--year musi byc liczba calkowita 1900..2100, otrzymano 1800"
+        == "--year musi być liczbą całkowitą 1900..2100, otrzymano 1800"
     )
 
 
@@ -408,7 +408,7 @@ def test_localized_renders_the_same_key_and_values_in_the_other_language():
 
     polish = text.localized("pl")
 
-    assert polish == "Dozwolone wartosci --product: nmt, laz."
+    assert polish == "Dozwolone wartości --product: nmt, laz."
     assert polish.lang == "pl"
     assert polish.localized("en") == text
     assert text.localized("en") is text
@@ -444,7 +444,7 @@ def test_operations_on_a_message_give_plain_text_but_copies_keep_it_translatable
     ):
         assert isinstance(clone, Message)
         assert clone.key == text.key
-        assert clone.localized("pl") == "Wyczysc cache: kartograf cache clear"
+        assert clone.localized("pl") == "Wyczyść cache: kartograf cache clear"
 
 
 def test_reason_keeps_the_message_of_an_exception_translatable_and_stringifies_others():
@@ -598,7 +598,7 @@ def test_the_error_document_is_english_unless_a_person_asks_for_polish():
     assert polish.title != error_report(KeyboardInterrupt()).title
     assert (
         error_report(exc, lang="pl").hint
-        == "Dozwolone wartosci vertical_crs: EVRF2007, KRON86."
+        == "Dozwolone wartości vertical_crs: EVRF2007, KRON86."
     )
 
 

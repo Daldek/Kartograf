@@ -788,7 +788,7 @@ def test_the_page_of_a_form_gives_each_option_its_section_and_polish_texts():
             "Product (required).",  # a text that is no catalog message stays as it is
             "Produkt i obszar",
             {
-                "nmt": "Numeryczny model terenu (sam grunt, bez obiektow); PL i CZ.",
+                "nmt": "Numeryczny model terenu (sam grunt, bez obiektów); PL i CZ.",
                 "nmpt": (
                     "Numeryczny model pokrycia terenu (z obiektami na powierzchni); "
                     "PL i CZ."
@@ -799,13 +799,13 @@ def test_the_page_of_a_form_gives_each_option_its_section_and_polish_texts():
     # the rule of the group is said in Polish after the Polish description
     assert form["sheet"].i18n.pl.description == (  # type: ignore[union-attr]
         message("catalog.sheet_description", "pl")
-        + ". Podaj dokladnie jedno z: `sheet`, `bbox`."
+        + ". Podaj dokładnie jedno z: `sheet`, `bbox`."
     )
     assert form["sheet"].description == plain["sheet"].description
     # an integer value is keyed by its text; an option without a section has none
     assert form["lod"].i18n.pl.enum == {  # type: ignore[union-attr]
-        "1": "Poziom szczegolowosci 1 (LoD1).",
-        "2": "Poziom szczegolowosci 2 (LoD2).",
+        "1": "Poziom szczegółowości 1 (LoD1).",
+        "2": "Poziom szczegółowości 2 (LoD2).",
     }
     assert form["bbox"].section is None
     assert "section" not in encode(form["bbox"].i18n)["pl"]  # type: ignore[index]

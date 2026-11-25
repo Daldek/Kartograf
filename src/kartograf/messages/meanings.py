@@ -14,7 +14,7 @@ MESSAGES = {
     # ``product``
     "product_nmt": Text(
         "Digital terrain model (bare earth); PL and CZ.",
-        "Numeryczny model terenu (sam grunt, bez obiektow); PL i CZ.",
+        "Numeryczny model terenu (sam grunt, bez obiektów); PL i CZ.",
     ),
     "product_nmpt": Text(
         "Digital surface model (with the objects on the ground); PL and CZ.",
@@ -22,7 +22,7 @@ MESSAGES = {
     ),
     "product_laz": Text(
         "LIDAR point cloud; PL and CZ.",
-        "Chmura punktow LIDAR; PL i CZ.",
+        "Chmura punktów LIDAR; PL i CZ.",
     ),
     "product_contours": Text(
         "ZABAGED contours, 2D vector, SM5 sheets, SHP or DGN; CZ.",
@@ -31,7 +31,7 @@ MESSAGES = {
     "product_orto": Text("RGB orthophoto; PL and CZ.", "Ortofotomapa RGB; PL i CZ."),
     "product_intensity": Text(
         "LIDAR intensity images, one band, 0.25 m; PL.",
-        "Obrazy intensywnosci LIDAR, jedno pasmo, 0,25 m; PL.",
+        "Obrazy intensywności LIDAR, jedno pasmo, 0,25 m; PL.",
     ),
     "product_true_orto": Text(
         "True orthophoto of selected cities, 0.05 m; PL.",
@@ -40,15 +40,15 @@ MESSAGES = {
     "product_oblique_orto": Text(
         "Oblique orthophoto of selected cities; a sheet is four files (n, e, s, w); "
         "PL.",
-        "Ortofotomapa ukosna wybranych miast; arkusz to cztery pliki (n, e, s, w); PL.",
+        "Ortofotomapa ukośna wybranych miast; arkusz to cztery pliki (n, e, s, w); PL.",
     ),
     "product_bdot10k": Text(
         "BDOT10k topographic object database; PL.",
-        "Baza danych obiektow topograficznych BDOT10k; PL.",
+        "Baza danych obiektów topograficznych BDOT10k; PL.",
     ),
     "product_bdoo": Text(
         "BDOO general geographic object database (1:250000); PL.",
-        "Baza danych obiektow ogolnogeograficznych BDOO (1:250000); PL.",
+        "Baza danych obiektów ogólnogeograficznych BDOO (1:250000); PL.",
     ),
     "product_corine": Text(
         "CORINE Land Cover; EU.",
@@ -69,7 +69,7 @@ MESSAGES = {
     ),
     "product_soil": Text(
         "SoilGrids soil property layers (ISRIC); global.",
-        "Warstwy wlasciwosci gleb SoilGrids (ISRIC); caly swiat.",
+        "Warstwy właściwości gleb SoilGrids (ISRIC); cały świat.",
     ),
     "product_admin": Text(
         "Administrative and cadastral unit boundaries: PRG (PL), RUIAN (CZ).",
@@ -85,7 +85,7 @@ MESSAGES = {
     ),
     "product_geomorphology": Text(
         "Geomorphological units of Czechia, subprovince to part; CZ.",
-        "Jednostki geomorfologiczne Czech, od podprowincji do czesci; CZ.",
+        "Jednostki geomorfologiczne Czech, od podprowincji do części; CZ.",
     ),
     "product_map": Text(
         "Cadastral map: EGiB (PL) and the cadastral map of Czechia (CZ).",
@@ -93,11 +93,11 @@ MESSAGES = {
     ),
     "product_prices": Text(
         "RCN register of real-estate transaction prices; PL.",
-        "Rejestr cen nieruchomosci RCN (ceny transakcyjne); PL.",
+        "Rejestr cen nieruchomości RCN (ceny transakcyjne); PL.",
     ),
     "product_buildings": Text(
         "3D building models (CityGML, LoD1 and LoD2); PL.",
-        "Modele 3D budynkow (CityGML, LoD1 i LoD2); PL.",
+        "Modele 3D budynków (CityGML, LoD1 i LoD2); PL.",
     ),
     "product_mesh": Text(
         "3D city mesh models (OBJ with textures); PL.",
@@ -109,11 +109,11 @@ MESSAGES = {
     ),
     "product_network": Text(
         "HY-NET hydrographic network (INSPIRE Hydrography - Network); CZ.",
-        "Siec hydrograficzna HY-NET (INSPIRE Hydrografia - siec); CZ.",
+        "Sieć hydrograficzna HY-NET (INSPIRE Hydrografia - sieć); CZ.",
     ),
     "product_pgw": Text(
         "IIaPGW geodatabase of the water management plans (PGW); PL.",
-        "Geobaza IIaPGW planow gospodarowania wodami (PGW); PL.",
+        "Geobaza IIaPGW planów gospodarowania wodami (PGW); PL.",
     ),
     "product_camels": Text(
         "CAMELS-PL catchment boundaries and gauging stations of the gauges of "
@@ -127,7 +127,7 @@ MESSAGES = {
     ),
     "product_world": Text(
         "Polish geographic names of the world (PRNG); PL.",
-        "Polskie nazwy geograficzne swiata (PRNG); PL.",
+        "Polskie nazwy geograficzne świata (PRNG); PL.",
     ),
     "product_topographic": Text(
         "Topographic maps: BDOT10k visualisations (PL), ZTM (CZ).",
@@ -142,13 +142,13 @@ MESSAGES = {
         "Model quasi-geoidy: PL-geoid2021 (PL), QGZU-2013 (CZ).",
     ),
     # ``country``
-    "country_pl": Text("Poland (GUGiK sources).", "Polska (zrodla GUGiK)."),
-    "country_cz": Text("Czechia (CUZK sources).", "Czechy (zrodla CUZK)."),
+    "country_pl": Text("Poland (GUGiK sources).", "Polska (źródła GUGiK)."),
+    "country_cz": Text("Czechia (CUZK sources).", "Czechy (źródła CUZK)."),
     "country_auto": Text(
         "Both: the area is split by the bounding boxes of PL and CZ, one file per "
         "country.",
-        "Oba kraje: obszar jest dzielony prostokatnymi obwiedniami PL i CZ, osobny "
-        "plik dla kazdego kraju.",
+        "Oba kraje: obszar jest dzielony prostokątnymi obwiedniami PL i CZ, osobny "
+        "plik dla każdego kraju.",
     ),
     # ``format``
     "format_asc": Text("ESRI ASCII grid.", "Siatka ESRI ASCII."),
@@ -161,8 +161,8 @@ MESSAGES = {
         "ASCII TBD structure points and lines, ZIP.",
         "Punkty i linie struktury TBD w ASCII, ZIP.",
     ),
-    "format_tin": Text("ESRI TIN, ZIP.", "Siatka trojkatow ESRI TIN, ZIP."),
-    "format_ttn": Text("Intergraph TTN.", "Siatka trojkatow Intergraph TTN."),
+    "format_tin": Text("ESRI TIN, ZIP.", "Siatka trójkątów ESRI TIN, ZIP."),
+    "format_ttn": Text("Intergraph TTN.", "Siatka trójkątów Intergraph TTN."),
     "format_grd": Text("Intergraph GRD.", "Siatka Intergraph GRD."),
     "format_dxf": Text(
         "DXF (contours; CZ cadastral map).",
@@ -185,20 +185,20 @@ MESSAGES = {
     ),
     "format_agents": Text(
         "AGENTS.md: the full guide for agents.",
-        "AGENTS.md: pelny przewodnik dla agentow.",
+        "AGENTS.md: pełny przewodnik dla agentów.",
     ),
     "format_llms": Text(
         "llms.txt: the short guide in the llmstxt.org layout.",
-        "llms.txt: krotki przewodnik w ukladzie llmstxt.org.",
+        "llms.txt: krótki przewodnik w układzie llmstxt.org.",
     ),
     "format_agents_md_block": Text(
         "The compact block for the AGENTS.md of a repository that uses Kartograf.",
-        "Zwiezly blok do AGENTS.md repozytorium, ktore korzysta z Kartografa.",
+        "Zwięzły blok do AGENTS.md repozytorium, które korzysta z Kartografa.",
     ),
     # ``sheet_system``
     "sheet_system_1992": Text(
         "PL-1992 sheets (1:10000 and coarser).",
-        "Arkusze PL-1992 (1:10000 i mniej szczegolowe).",
+        "Arkusze PL-1992 (1:10000 i mniej szczegółowe).",
     ),
     "sheet_system_2000": Text(
         "PL-2000 sheets (zones EPSG:2176-2179).",
@@ -206,16 +206,16 @@ MESSAGES = {
     ),
     "sheet_system_sjtsk": Text(
         "ZTM sheets in S-JTSK.",
-        "Arkusze ZTM w ukladzie S-JTSK.",
+        "Arkusze ZTM w układzie S-JTSK.",
     ),
     "sheet_system_etrs89": Text(
         "ZTM sheets in ETRS89.",
-        "Arkusze ZTM w ukladzie ETRS89.",
+        "Arkusze ZTM w układzie ETRS89.",
     ),
     # ``lang``
     "lang_pl": Text(
         "Polish text for people (the default).",
-        "Teksty dla ludzi po polsku (domyslnie).",
+        "Teksty dla ludzi po polsku (domyślnie).",
     ),
     "lang_en": Text("English text for people.", "Teksty dla ludzi po angielsku."),
     # ``bbox_crs``
@@ -225,31 +225,31 @@ MESSAGES = {
     "bbox_crs_epsg_2179": Text("PL-2000 zone 8.", "PL-2000, strefa 8."),
     "bbox_crs_epsg_2180": Text(
         "PL-1992 (ETRS89 / Poland CS92).",
-        "Uklad PL-1992 (ETRS89 / Poland CS92).",
+        "Układ PL-1992 (ETRS89 / Poland CS92).",
     ),
     "bbox_crs_epsg_3045": Text("ETRS89 / UTM zone 33N.", "ETRS89 / UTM, strefa 33N."),
     "bbox_crs_epsg_4326": Text(
         "WGS 84 geographic coordinates, in degrees.",
-        "Wspolrzedne geograficzne WGS 84, w stopniach.",
+        "Współrzędne geograficzne WGS 84, w stopniach.",
     ),
     "bbox_crs_epsg_5514": Text(
         "S-JTSK / Krovak East North (CZ).",
-        "Uklad S-JTSK / Krovak East North (CZ).",
+        "Układ S-JTSK / Krovak East North (CZ).",
     ),
     # ``vertical_crs``
     "vertical_crs_evrf2007": Text(
         "European Vertical Reference Frame 2007: the current PL height system "
         "(PL-EVRF2007-NH) and the native one of CZ TM33 files.",
-        "Europejski uklad wysokosci EVRF2007: obowiazujacy uklad wysokosci PL "
-        "(PL-EVRF2007-NH) i natywny uklad plikow CZ TM33.",
+        "Europejski układ wysokości EVRF2007: obowiązujący układ wysokości PL "
+        "(PL-EVRF2007-NH) i natywny układ plików CZ TM33.",
     ),
     "vertical_crs_kron86": Text(
         "Kronstadt 86: the historical PL height system (PL-KRON86-NH).",
-        "Kronsztadt 86: historyczny uklad wysokosci PL (PL-KRON86-NH).",
+        "Kronsztadt 86: historyczny układ wysokości PL (PL-KRON86-NH).",
     ),
     "vertical_crs_bpv": Text(
         "Baltic after adjustment: native for CZ S-JTSK, SM5 and ImageServer data.",
-        "Baltycki po wyrownaniu: natywny dla danych CZ w S-JTSK, SM5 i ImageServer.",
+        "Bałtycki po wyrównaniu: natywny dla danych CZ w S-JTSK, SM5 i ImageServer.",
     ),
     # ``model``
     "model_dmr5g": Text("Terrain model DMR 5G.", "Model terenu DMR 5G."),
@@ -260,32 +260,32 @@ MESSAGES = {
     "model_dmp1g": Text("Surface model DMP 1G.", "Model powierzchni DMP 1G."),
     "model_dmpok": Text(
         "Surface model from image correlation (DMP OK).",
-        "Model powierzchni z korelacji obrazow (DMP OK).",
+        "Model powierzchni z korelacji obrazów (DMP OK).",
     ),
     # ``coverage``
     "coverage_standard": Text(
         "The newest available orthophotos.",
-        "Najnowsze dostepne ortofotomapy.",
+        "Najnowsze dostępne ortofotomapy.",
     ),
     "coverage_high": Text(
         "Orthophotos with a pixel of 10 cm or finer.",
         "Ortofotomapy z pikselem 10 cm albo mniejszym.",
     ),
     # ``direction``
-    "direction_n": Text("North.", "Polnoc."),
-    "direction_e": Text("East.", "Wschod."),
-    "direction_s": Text("South.", "Poludnie."),
-    "direction_w": Text("West.", "Zachod."),
+    "direction_n": Text("North.", "Północ."),
+    "direction_e": Text("East.", "Wschód."),
+    "direction_s": Text("South.", "Południe."),
+    "direction_w": Text("West.", "Zachód."),
     # ``level``
-    "level_wojewodztwo": Text("Voivodeship (PL).", "Wojewodztwo (PL)."),
+    "level_wojewodztwo": Text("Voivodeship (PL).", "Województwo (PL)."),
     "level_powiat": Text("County (PL).", "Powiat (PL)."),
     "level_gmina": Text("Municipality (PL).", "Gmina (PL)."),
     "level_jednostka_ewidencyjna": Text(
         "Cadastral unit (PL).",
         "Jednostka ewidencyjna (PL).",
     ),
-    "level_obreb": Text("Cadastral precinct (PL).", "Obreb ewidencyjny (PL)."),
-    "level_kraj": Text("Region, kraj (CZ).", "Kraj, odpowiednik wojewodztwa (CZ)."),
+    "level_obreb": Text("Cadastral precinct (PL).", "Obręb ewidencyjny (PL)."),
+    "level_kraj": Text("Region, kraj (CZ).", "Kraj, odpowiednik województwa (CZ)."),
     "level_okres": Text("District, okres (CZ).", "Okres, odpowiednik powiatu (CZ)."),
     "level_obec": Text("Municipality, obec (CZ).", "Obec, odpowiednik gminy (CZ)."),
     "level_katastralni_uzemi": Text(
@@ -310,105 +310,105 @@ MESSAGES = {
     ),
     "level_okrsek": Text(
         "Geomorphological district, okrsek (CZ).",
-        "Okreg geomorfologiczny, okrsek (CZ).",
+        "Okręg geomorfologiczny, okrsek (CZ).",
     ),
     "level_podokrsek": Text(
         "Geomorphological subdistrict, podokrsek (CZ).",
-        "Podokreg geomorfologiczny, podokrsek (CZ).",
+        "Podokręg geomorfologiczny, podokrsek (CZ).",
     ),
     "level_cast": Text(
         "Geomorphological part, cast (CZ).",
-        "Czesc geomorfologiczna, cast (CZ).",
+        "Część geomorfologiczna, cast (CZ).",
     ),
     # ``lod``
-    "lod_1": Text("Level of detail 1 (LoD1).", "Poziom szczegolowosci 1 (LoD1)."),
-    "lod_2": Text("Level of detail 2 (LoD2).", "Poziom szczegolowosci 2 (LoD2)."),
+    "lod_1": Text("Level of detail 1 (LoD1).", "Poziom szczegółowości 1 (LoD1)."),
+    "lod_2": Text("Level of detail 2 (LoD2).", "Poziom szczegółowości 2 (LoD2)."),
     # ``network``
     "network_horizontal": Text("Horizontal control network.", "Osnowa pozioma."),
     "network_vertical": Text(
         "Vertical (height) control network.",
-        "Osnowa wysokosciowa.",
+        "Osnowa wysokościowa.",
     ),
     "network_gravity": Text("Gravimetric control network.", "Osnowa grawimetryczna."),
     "network_magnetic": Text("Magnetic control network.", "Osnowa magnetyczna."),
     "network_archive_1942": Text(
         "Archive catalogues of the control points, 1942 (sheets 1:100000).",
-        "Archiwalne katalogi punktow osnowy, 1942 (arkusze 1:100000).",
+        "Archiwalne katalogi punktów osnowy, 1942 (arkusze 1:100000).",
     ),
     "network_archive_kronsztadt60": Text(
         "Archive catalogues of the control points, Kronstadt 60 (sheets 1:100000).",
-        "Archiwalne katalogi punktow osnowy, Kronsztadt 60 (arkusze 1:100000).",
+        "Archiwalne katalogi punktów osnowy, Kronsztadt 60 (arkusze 1:100000).",
     ),
     "network_gnss": Text("GNSS control points (CZ).", "Punkty osnowy GNSS (CZ)."),
     "network_densification": Text(
         "Densification control network (CZ).",
-        "Osnowa zageszczajaca (CZ).",
+        "Osnowa zagęszczająca (CZ).",
     ),
     "network_horizontal_detailed": Text(
         "Detailed horizontal control network (CZ).",
-        "Szczegolowa osnowa pozioma (CZ).",
+        "Szczegółowa osnowa pozioma (CZ).",
     ),
     "network_vertical_detailed": Text(
         "Detailed vertical control network (CZ).",
-        "Szczegolowa osnowa wysokosciowa (CZ).",
+        "Szczegółowa osnowa wysokościowa (CZ).",
     ),
     # ``property``
     "property_bdod": Text(
         "Bulk density of the fine earth; file unit cg/cm3 (kg/dm3 = value / 100).",
-        "Gestosc objetosciowa czesci ziemistych; jednostka pliku cg/cm3 (kg/dm3 = "
-        "wartosc / 100).",
+        "Gęstość objętościowa części ziemistych; jednostka pliku cg/cm3 (kg/dm3 = "
+        "wartość / 100).",
     ),
     "property_cec": Text(
         "Cation exchange capacity; file unit mmol(c)/kg (cmol(c)/kg = value / 10).",
-        "Pojemnosc sorpcyjna (wymiany kationow); jednostka pliku mmol(c)/kg "
-        "(cmol(c)/kg = wartosc / 10).",
+        "Pojemność sorpcyjna (wymiany kationów); jednostka pliku mmol(c)/kg "
+        "(cmol(c)/kg = wartość / 10).",
     ),
     "property_cfvo": Text(
         "Coarse fragments by volume; file unit cm3/dm3 (cm3/100cm3 = value / 10).",
-        "Objetosciowy udzial frakcji szkieletowej; jednostka pliku cm3/dm3 "
-        "(cm3/100cm3 = wartosc / 10).",
+        "Objętościowy udział frakcji szkieletowej; jednostka pliku cm3/dm3 "
+        "(cm3/100cm3 = wartość / 10).",
     ),
     "property_clay": Text(
         "Clay content; file unit g/kg (percent = value / 10).",
-        "Zawartosc ilu; jednostka pliku g/kg (procent = wartosc / 10).",
+        "Zawartość iłu; jednostka pliku g/kg (procent = wartość / 10).",
     ),
     "property_nitrogen": Text(
         "Total nitrogen; file unit cg/kg (g/kg = value / 100).",
-        "Azot calkowity; jednostka pliku cg/kg (g/kg = wartosc / 100).",
+        "Azot całkowity; jednostka pliku cg/kg (g/kg = wartość / 100).",
     ),
     "property_ocd": Text(
         "Organic carbon density; file unit hg/m3 (kg/m3 = value / 10).",
-        "Gestosc wegla organicznego; jednostka pliku hg/m3 (kg/m3 = wartosc / 10).",
+        "Gęstość węgla organicznego; jednostka pliku hg/m3 (kg/m3 = wartość / 10).",
     ),
     "property_ocs": Text(
         "Organic carbon stock, depth 0-30cm only; file unit t/ha (kg/m2 = value / 10).",
-        "Zasob wegla organicznego, tylko glebokosc 0-30cm; jednostka pliku t/ha "
-        "(kg/m2 = wartosc / 10).",
+        "Zasób węgla organicznego, tylko głębokość 0-30cm; jednostka pliku t/ha "
+        "(kg/m2 = wartość / 10).",
     ),
     "property_phh2o": Text(
         "Soil pH in water; the file holds pH x 10 (pH = value / 10).",
-        "Odczyn gleby (pH w wodzie); plik zawiera pH x 10 (pH = wartosc / 10).",
+        "Odczyn gleby (pH w wodzie); plik zawiera pH x 10 (pH = wartość / 10).",
     ),
     "property_sand": Text(
         "Sand content; file unit g/kg (percent = value / 10).",
-        "Zawartosc piasku; jednostka pliku g/kg (procent = wartosc / 10).",
+        "Zawartość piasku; jednostka pliku g/kg (procent = wartość / 10).",
     ),
     "property_silt": Text(
         "Silt content; file unit g/kg (percent = value / 10).",
-        "Zawartosc pylu; jednostka pliku g/kg (procent = wartosc / 10).",
+        "Zawartość pyłu; jednostka pliku g/kg (procent = wartość / 10).",
     ),
     "property_soc": Text(
         "Soil organic carbon; file unit dg/kg (g/kg = value / 10).",
-        "Wegiel organiczny gleby; jednostka pliku dg/kg (g/kg = wartosc / 10).",
+        "Węgiel organiczny gleby; jednostka pliku dg/kg (g/kg = wartość / 10).",
     ),
     # ``stat``
-    "stat_mean": Text("Mean.", "Srednia."),
+    "stat_mean": Text("Mean.", "Średnia."),
     "stat_q0_05": Text("5th percentile.", "5. percentyl."),
     "stat_q0_5": Text("Median.", "Mediana."),
     "stat_q0_95": Text("95th percentile.", "95. percentyl."),
     "stat_uncertainty": Text(
         "Prediction uncertainty: the file holds 10 * (Q0.95 - Q0.05) / Q0.5, unitless.",
-        "Niepewnosc predykcji: plik zawiera 10 * (Q0.95 - Q0.05) / Q0.5, bez "
+        "Niepewność predykcji: plik zawiera 10 * (Q0.95 - Q0.05) / Q0.5, bez "
         "jednostki.",
     ),
     # ``depth_rule``
@@ -416,18 +416,18 @@ MESSAGES = {
         "Classify the SoilGrids layers 0-5cm to 60-100cm and take, per cell, the "
         "group of the layer with the lowest saturated hydraulic conductivity of its "
         "USDA texture class (Rawls, Brakensiek & Saxton 1982).",
-        "Klasyfikuje warstwy SoilGrids od 0-5cm do 60-100cm i bierze w kazdej "
-        "komorce grupe warstwy o najmniejszej przewodnosci hydraulicznej w stanie "
+        "Klasyfikuje warstwy SoilGrids od 0-5cm do 60-100cm i bierze w każdej "
+        "komórce grupę warstwy o najmniejszej przewodności hydraulicznej w stanie "
         "nasycenia jej klasy uziarnienia USDA (Rawls, Brakensiek i Saxton 1982).",
     ),
     # ``update``
     "update_upgrade": Text(
         "Fetch newer content when the source signals it.",
-        "Pobiera nowsza tresc, gdy zrodlo ja sygnalizuje.",
+        "Pobiera nowszą treść, gdy źródło ją sygnalizuje.",
     ),
     "update_force": Text(
         "Fetch every file again; nothing is overwritten.",
-        "Pobiera kazdy plik ponownie; nic nie jest nadpisywane.",
+        "Pobiera każdy plik ponownie; nic nie jest nadpisywane.",
     ),
     # ``shell``
     "shell_bash": Text(
@@ -441,11 +441,11 @@ MESSAGES = {
     # values of a regular form
     "resolution": Text(
         "Cell or pixel size {value} (metres).",
-        "Rozmiar komorki albo piksela {value} (metry).",
+        "Rozmiar komórki albo piksela {value} (metry).",
     ),
     "depth": Text(
         "Depth interval {value} below the surface.",
-        "Przedzial glebokosci {value} ponizej powierzchni.",
+        "Przedział głębokości {value} poniżej powierzchni.",
     ),
     "scale": Text(
         "Sheets or maps at the scale {value}.",

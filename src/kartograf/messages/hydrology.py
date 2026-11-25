@@ -6,23 +6,23 @@ MESSAGES = {
     # ``hydrology.hsg``.
     "class_a": Text(
         "High infiltration - sandy soils, low runoff potential",
-        "Duza infiltracja - gleby piaszczyste, maly potencjal splywu",
+        "Duża infiltracja - gleby piaszczyste, mały potencjał spływu",
     ),
     "class_b": Text(
         "Moderate infiltration - loamy soils, moderate runoff",
-        "Umiarkowana infiltracja - gleby gliniaste, umiarkowany splyw",
+        "Umiarkowana infiltracja - gleby gliniaste, umiarkowany spływ",
     ),
     "class_c": Text(
         "Low infiltration - clay loams, high runoff",
-        "Mala infiltracja - gliny ilaste, duzy splyw",
+        "Mała infiltracja - gliny ilaste, duży spływ",
     ),
     "class_d": Text(
         "Very low infiltration - clay soils, very high runoff",
-        "Bardzo mala infiltracja - gleby ilaste, bardzo duzy splyw",
+        "Bardzo mała infiltracja - gleby ilaste, bardzo duży spływ",
     ),
     "hsg_output_files": Text(
         "inputs in <DIR>/soil/..., HSG in <DIR>/hsg/...",
-        "wejscia w <KATALOG>/soil/..., HSG w <KATALOG>/hsg/...",
+        "wejścia w <KATALOG>/soil/..., HSG w <KATALOG>/hsg/...",
     ),
     "root_is_store_dir": Text(
         "--root is a store directory (since 0.8.0); for a file outside the store "
@@ -31,12 +31,12 @@ MESSAGES = {
     ),
     "exactly_one_selection": Text(
         "Give exactly one selection: --sheet, --bbox or --geometry",
-        "Podaj dokladnie jeden wybor: --sheet, --bbox albo --geometry",
+        "Podaj dokładnie jeden wybór: --sheet, --bbox albo --geometry",
     ),
     "depth_with_depth_rule": Text(
         "Give exactly one of --depth and --depth-rule: the rule reads the layers "
         "of 0-100cm itself",
-        "Podaj dokladnie jedno z --depth i --depth-rule: regula sama czyta warstwy "
+        "Podaj dokładnie jedno z --depth i --depth-rule: reguła sama czyta warstwy "
         "0-100cm",
     ),
     "depth_rule_not_allowed": Text(
@@ -51,15 +51,15 @@ MESSAGES = {
     "hsg_all_nodata": Text(
         "{relative_to}: HSG has no data at all - clay, sand and silt are zeros "
         "(SoilGrids has no data: sea, water, built-up areas, rock, ice); check --bbox",
-        "{relative_to}: HSG w calosci bez danych - clay, sand i silt sa zerami "
-        "(SoilGrids nie ma danych: morze, woda, zabudowa, skaly, lod); sprawdz --bbox",
+        "{relative_to}: HSG w całości bez danych - clay, sand i silt są zerami "
+        "(SoilGrids nie ma danych: morze, woda, zabudowa, skały, lód); sprawdź --bbox",
     ),
     "stat_nodata_description": Text(
         "No data: cells without input values (class 0)",
-        "Brak danych: komorki bez wartosci wejsc (klasa 0)",
+        "Brak danych: komórki bez wartości wejść (klasa 0)",
     ),
     "pixel_m_not_positive": Text(
         "pixel_m must be positive (got {pixel_m})",
-        "pixel_m musi byc dodatni (podano {pixel_m})",
+        "pixel_m musi być dodatni (podano {pixel_m})",
     ),
 }

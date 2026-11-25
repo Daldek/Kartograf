@@ -26,6 +26,7 @@ from tests.integration.test_collections_cz import AREA as ZABAGED_AREA
 from tests.integration.test_collections_cz import serve_zabaged
 from tests.integration.test_hsg import RasterSoilGrids
 from tests.integration.test_landcover_output_params import FakePackages
+from tests.support.errors import error_line
 from tests.support.fake_packages import FakePackageSession, package_route
 from tests.support.parity import assert_notices_printed, assert_same_store, run_both
 
@@ -243,7 +244,7 @@ def test_invalid_landcover_options_match_cli_and_api(tmp_path, source, flags, op
         tmp_path, source, ["--bbox", BBOX_ARG, *flags], bbox=BBOX, **options
     )
     assert run.cli_code == 2 and isinstance(run.api_error, ValidationError)
-    assert run.cli_text == f"Error: {run.api_error.localized('pl')}\n"
+    assert run.cli_text == f"{error_line(run.api_error)}\n"
     assert not run.cli_store.exists() and not run.api_store.exists()
 
 

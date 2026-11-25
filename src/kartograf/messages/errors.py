@@ -9,26 +9,26 @@ MESSAGES = {
     "internal_error_hint": Text(
         "Report the error with the command and the version; KARTOGRAF_DEBUG=1 shows "
         "the traceback",
-        "Zglos blad z komenda i wersja; KARTOGRAF_DEBUG=1 pokazuje traceback",
+        "Zgłoś błąd z komendą i wersją; KARTOGRAF_DEBUG=1 pokazuje traceback",
     ),
     "io_error_hint": Text(
         "Check the path and the permissions: {path}",
-        "Sprawdz sciezke i uprawnienia: {path}",
+        "Sprawdź ścieżkę i uprawnienia: {path}",
     ),
     "io_error_hint_no_path": Text(
         "Check the paths and the permissions of the directories in the arguments",
-        "Sprawdz sciezki i uprawnienia katalogow z argumentow",
+        "Sprawdź ścieżki i uprawnienia katalogów z argumentów",
     ),
     # The parts of the hint of an invalid argument or a wrong command line.
     "allowed_values": Text(
         "Allowed values of {flag}: {values}.",
-        "Dozwolone wartosci {flag}: {values}.",
+        "Dozwolone wartości {flag}: {values}.",
     ),
     "allowed_values_cut": Text(
         "Allowed values of {flag}: {values}, ...",
-        "Dozwolone wartosci {flag}: {values}, ...",
+        "Dozwolone wartości {flag}: {values}, ...",
     ),
-    "example": Text("Example: {line}", "Przyklad: {line}"),
+    "example": Text("Example: {line}", "Przykład: {line}"),
     "options": Text("Options: {flags}.", "Opcje: {flags}."),
     "usage_hint": Text(
         'The options of the command: kartograf commands schema --command "{command}".',
@@ -43,29 +43,29 @@ MESSAGES = {
     "parse_default_hint": Text(
         "Sheet code formats: PL-1992 N-34-130-D-d-2-4, PL-2000 6.179.12.20, SM5 "
         "CTES96, TM33 302_5550; more: kartograf sheet parse --help",
-        "Formaty godel: PL-1992 N-34-130-D-d-2-4, PL-2000 6.179.12.20, SM5 CTES96, "
-        "TM33 302_5550; wiecej: kartograf sheet parse --help",
+        "Formaty godeł: PL-1992 N-34-130-D-d-2-4, PL-2000 6.179.12.20, SM5 CTES96, "
+        "TM33 302_5550; więcej: kartograf sheet parse --help",
     ),
     "config_default_hint": Text(
         "Fix or remove the settings file, or point NOGAT_CONFIG at another one; "
         "kartograf config show reports the problem",
-        "Popraw albo usun plik ustawien, albo wskaz inny w NOGAT_CONFIG; kartograf "
+        "Popraw albo usuń plik ustawień, albo wskaż inny w NOGAT_CONFIG; kartograf "
         "config show pokazuje problem",
     ),
     "cache_default_hint": Text(
         "Clear the cache: kartograf cache clear",
-        "Wyczysc cache: kartograf cache clear",
+        "Wyczyść cache: kartograf cache clear",
     ),
     "sidecar_default_hint": Text(
         "Give the path of a data file of the store or of its sidecar "
         "<file>.meta.json (kartograf-meta/1)",
-        "Podaj sciezke pliku danych magazynu albo jego sidecara "
+        "Podaj ścieżkę pliku danych magazynu albo jego sidecara "
         "<plik>.meta.json (kartograf-meta/1)",
     ),
     "command_not_rebuildable_hint": Text(
         "Pin the file as it is: without its command it cannot be checked for updates "
         "or restored (ADR-057, KB-6)",
-        "Przypnij plik taki, jaki jest: bez jego komendy nie da sie sprawdzic "
-        "aktualizacji ani go odtworzyc (ADR-057, KB-6)",
+        "Przypnij plik taki, jaki jest: bez jego komendy nie da się sprawdzić "
+        "aktualizacji ani go odtworzyć (ADR-057, KB-6)",
     ),
 }

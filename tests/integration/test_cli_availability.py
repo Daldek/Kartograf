@@ -186,7 +186,7 @@ def test_exit_codes(capsys):
 
     code, _, err = _run(capsys, KRAKOW, RecordedIndex())
     assert code == 2
-    choices = localize(COUNTRY_CHOICES, "pl")
+    choices = localize(COUNTRY_CHOICES, "pl", folded=True)
     assert (
         without_error_document(err)
         == f"Error: --country wymagane z --bbox/--geometry: {choices}\n"

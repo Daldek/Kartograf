@@ -296,6 +296,15 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Polish letters. The guard test checks the English texts for ASCII and the Polish ones for the
   placeholders and the Polish letters, and `tests/contract/test_cli_language.py` runs lines of
   the CLI with the Polish catalog accented and folded and asserts the same ASCII output.
+- The Polish texts of the message catalog are written with their letters (ą ć ę ł ń ó ś ź ż):
+  `Message.localized("pl")`, `KartografError.localized("pl")`, the notices' `i18n.pl` and the
+  Polish texts of `commands schema` (`i18n.pl`) read „Górna granica”, not „Gorna granica”. The
+  terminal folds them, so the CLI prints what it printed before. `messages/legal.py` stays
+  ASCII: its attributions go into sidecars and are the same in both languages. A Polish
+  `hint` of `error_report(lang="pl")` (the problem documents of `kartograf server` for
+  `Accept-Language: pl`) keeps its Polish letters; an English hint stays ASCII, another
+  character escaped as before. The Polish notice of sources off the pixel grid agrees in
+  number with its count („leżą” for 2 to 4).
 
 ## [0.9.0] - 2026-11-25
 

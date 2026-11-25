@@ -148,7 +148,7 @@ def test_gui_app_counts_its_pages_not_its_files_and_refuses_a_page_over_the_limi
     assert refused.status_code == 429
     assert int(refused.headers["retry-after"]) > 0
     assert refused.headers["content-type"].startswith("text/html")
-    assert "Zbyt wiele zadan" in refused.text
+    assert "Zbyt wiele żądań" in refused.text
     assert "content-security-policy" in refused.headers
     assert views == 2
 

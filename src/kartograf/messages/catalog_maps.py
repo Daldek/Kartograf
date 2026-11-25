@@ -17,8 +17,8 @@ MESSAGES = {
         "ZTM (CZ) only: sheet system, `sjtsk` or `etrs89`; required with `bbox` or "
         "`geometry`, implied by a sheet code. BDOT10k maps (PL) use PL-1992 sheets: "
         "omit it.{choice_text:skip}",
-        "Tylko ZTM (CZ): uklad arkuszy - wymagany z --bbox/--geometry, z --sheet "
-        "wynika z godla; mapy BDOT10k (PL) maja arkusze PL-1992 (pomin "
+        "Tylko ZTM (CZ): układ arkuszy - wymagany z --bbox/--geometry, z --sheet "
+        "wynika z godła; mapy BDOT10k (PL) mają arkusze PL-1992 (pomiń "
         "--sheet-system): {choice_text}",
     ),
     "download_summary": Text(
@@ -31,25 +31,25 @@ MESSAGES = {
         "`etrs89`). `scale` and `format` are required. ZTM TIFF, DGN and SHP are "
         "ZIPs, PDF is a .pdf; BDOT10k TIFF and PDF are the index files.",
         "--product topographic: wizualizacje BDOT10k (--country pl; arkusze PL-1992, "
-        "bez --sheet-system) albo ZTM (--country cz). --scale i --format sa wymagane. "
-        "ZTM (CZ): uklad arkuszy --sheet-system sjtsk|etrs89 wynika z godla, dla "
-        "--bbox/--geometry jest wymagany. ZTM TIFF, DGN i SHP sa ZIP-ami, PDF jest "
-        "plikiem .pdf; BDOT10k TIFF i PDF sa oryginalnymi plikami z indeksu map.",
+        "bez --sheet-system) albo ZTM (--country cz). --scale i --format są wymagane. "
+        "ZTM (CZ): układ arkuszy --sheet-system sjtsk|etrs89 wynika z godła, dla "
+        "--bbox/--geometry jest wymagany. ZTM TIFF, DGN i SHP są ZIP-ami, PDF jest "
+        "plikiem .pdf; BDOT10k TIFF i PDF są oryginalnymi plikami z indeksu map.",
     ),
     "area_result_description": Text(
         "Downloads the map sheets that cover the area (original files).",
-        "arkusze map przecinajace obszar (pliki oryginalne)",
+        "arkusze map przecinające obszar (pliki oryginalne)",
     ),
     "sheet_help_description": Text(
         "Map sheet code: PL-1992 (`country=pl`) or ZTM in S-JTSK or ETRS89 "
         "(`country=cz`; the sheet system follows from the code).",
-        "Godlo mapy: PL-1992 (--country pl) albo ZTM w S-JTSK/ETRS89 (--country cz; "
-        "uklad arkuszy wynika z godla)",
+        "Godło mapy: PL-1992 (--country pl) albo ZTM w S-JTSK/ETRS89 (--country cz; "
+        "układ arkuszy wynika z godła)",
     ),
     "check_description": Text(
         "Signal: the release label of the BDOT10k map index (PL) or the "
         "ETag/Last-Modified of the ZTM sheet (CZ).",
-        "Porownaj etykiete wydania z indeksem map BDOT10k (PL) albo "
+        "Porównaj etykietę wydania z indeksem map BDOT10k (PL) albo "
         "ETag/Last-Modified arkusza ZTM (CZ) bez pobierania danych",
     ),
     "example_pl_bdot10k_map_sheet": Text(
@@ -59,7 +59,7 @@ MESSAGES = {
     "example_cz_ztm_map_sheet": Text("CZ ZTM map: a sheet", "Mapa ZTM CZ: arkusz"),
     "example_cz_ztm_map_sheets_rectangle": Text(
         "CZ ZTM map: sheets for a rectangle",
-        "Mapa ZTM CZ: arkusze dla prostokata",
+        "Mapa ZTM CZ: arkusze dla prostokąta",
     ),
     "group_summary": Text(
         "Topographic maps: BDOT10k (PL), ZTM (CZ)",
@@ -68,7 +68,7 @@ MESSAGES = {
     "group_description": Text(
         "Topographic map sheets of BDOT10k and ZTM as the original source files "
         "(GeoTIFF, PDF, DGN or SHP).",
-        "Arkusze map topograficznych BDOT10k i ZTM jako oryginalne pliki ze zrodla "
+        "Arkusze map topograficznych BDOT10k i ZTM jako oryginalne pliki ze źródła "
         "(GeoTIFF, PDF, DGN lub SHP).",
     ),
 }

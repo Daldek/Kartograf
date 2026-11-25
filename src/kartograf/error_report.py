@@ -31,7 +31,7 @@ from kartograf.exceptions import (
     registry_exit_code,
 )
 from kartograf.interrupt import Terminated
-from kartograf.messages import DEFAULT_LANG, Lang, Message, localize, message
+from kartograf.messages import DEFAULT_LANG, Lang, Message, fold, localize, message
 from kartograf.serialization import Document
 from kartograf.transform.crs import TransformUnavailableError
 
@@ -337,8 +337,9 @@ class ErrorReport(Document):
     """The failure of a command as a document (``kartograf-error/1``, AGI-4.3).
 
     ``code`` is a registry code and ``title`` its English title; ``message`` is
-    what the CLI prints after ``Error: ``; ``hint`` is one ASCII line of at most
-    400 characters or ``None`` (then the key is left out of the document);
+    what the CLI prints after ``Error: ``; ``hint`` is one line of at most 400
+    characters, ASCII but for the Polish letters of a Polish hint, or ``None`` (then
+    the key is left out of the document);
     ``exit_code`` is the exit code of the registry (``null`` for a code of the REST
     interface alone, ``rate_limited``); ``command`` is the catalog id
     of the failed command (known to the CLI and the MCP server, ``None`` for a
@@ -408,9 +409,18 @@ def allowed_values_hint(
     return message("errors.allowed_values", lang, flag=flag, values=shown)
 
 
-def _one_line(text: str) -> str:
-    """ASCII, one line, at most ``HINT_MAX_CHARS`` characters (cut with ``...``)."""
-    text = text.encode("ascii", "backslashreplace").decode("ascii")
+def _one_line(text: str, lang: Lang) -> str:
+    """One line of at most ``HINT_MAX_CHARS`` characters (cut with ``...``).
+
+    ASCII, a character outside it escaped as ``backslashreplace`` does, but a Polish
+    hint keeps its Polish letters (ADR-053 amendment 1, decision 3).
+    """
+    text = "".join(
+        char
+        if char.isascii() or (lang == "pl" and fold(char) != char)
+        else _ascii(char)
+        for char in text
+    )
     text = " ".join(text.split())
     if len(text) > HINT_MAX_CHARS:
         text = text[: HINT_MAX_CHARS - 3] + "..."
@@ -598,7 +608,7 @@ def error_report(
         return _report(
             exc.code,
             exc.localized(lang) or type(exc).__name__,
-            hint=_hint_or_none(_library_hint(exc, command, given, lang)),
+            hint=_hint_or_none(_library_hint(exc, command, given, lang), lang),
             command=command if command is not None else named,
             details=exc.details(),
             lang=lang,
@@ -628,7 +638,7 @@ def error_report(
         return _report(
             "io_error",
             text,
-            hint=_one_line(hint),
+            hint=_one_line(hint, lang),
             command=command,
             details=_io_details(exc),
             lang=lang,
@@ -642,5 +652,5 @@ def error_report(
     )
 
 
-def _hint_or_none(text: str | None) -> str | None:
-    return None if text is None else _one_line(text)
+def _hint_or_none(text: str | None, lang: Lang) -> str | None:
+    return None if text is None else _one_line(text, lang)

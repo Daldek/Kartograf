@@ -46,6 +46,7 @@ from tests.conftest import (
     wfs_requests,
     wfs_response,
 )
+from tests.support.errors import error_line
 from tests.support.parity import assert_same_store, run_both
 
 SESSION_FACTORY = "kartograf.transport.http.make_gugik_session"
@@ -724,7 +725,7 @@ def test_rejected_before_network_cli_equals_api(tmp_path, argv, selection, messa
 
     assert run.cli_code == 2
     assert isinstance(run.api_error, ValidationError)
-    assert f"Error: {run.api_error.localized('pl')}" in run.cli_stderr.splitlines()
+    assert error_line(run.api_error) in run.cli_stderr.splitlines()
     assert str(run.api_error) == message
     session.get.assert_not_called()
     assert not run.cli_store.exists() and not run.api_store.exists()

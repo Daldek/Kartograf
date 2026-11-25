@@ -701,4 +701,4 @@ def test_pwsh_parses_every_powershell_script(tmp_path):
 def test_a_text_a_script_prints_holds_nothing_a_shell_expands(key):
     for text in MESSAGES[key]:
         assert not set(text) & set('"$`\\'), (key, text)
-        assert text.isascii()
+    assert MESSAGES[key].en.isascii()  # a script prints the English text

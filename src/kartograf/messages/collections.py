@@ -4,8 +4,8 @@ from kartograf.messages import Text
 
 MESSAGES = {
     # ``download.collections``.
-    "unit_powiat": Text("county packages", "paczek powiatow"),
-    "unit_woj": Text("voivodeship packages", "paczek wojewodztw"),
+    "unit_powiat": Text("county packages", "paczek powiatów"),
+    "unit_woj": Text("voivodeship packages", "paczek województw"),
     "unit_country": Text("country file", "pliku krajowego"),
     "unit_ku": Text("cadastral area packages", "paczek katastralnich uzemi"),
     "product_required": Text(
@@ -15,12 +15,12 @@ MESSAGES = {
     "product_unknown_value": Text(
         "--product {product!r}: unknown value - available: "
         "{collection_product_choices}",
-        "--product {product!r}: nieznana wartosc - dostepne: "
+        "--product {product!r}: nieznana wartość - dostępne: "
         "{collection_product_choices}",
     ),
     "unknown_product": Text(
         "Unknown product '{product}'. Available: {collection_product_choices}",
-        "Nieznany produkt '{product}'. Dostepne: {collection_product_choices}",
+        "Nieznany produkt '{product}'. Dostępne: {collection_product_choices}",
     ),
     "area_sheet": Text("sheets of the area", "arkusze obszaru"),
     "area_tile": Text("tiles of the area", "kafle obszaru"),
@@ -37,23 +37,23 @@ MESSAGES = {
     ),
     "what_ku_package": Text("cadastral area package", "paczka katastralniho uzemi"),
     "what_powiat_package": Text("county package", "paczka powiatu"),
-    "what_woj_package": Text("voivodeship package", "paczka wojewodztwa"),
+    "what_woj_package": Text("voivodeship package", "paczka województwa"),
     "where_selection": Text(
         "{selection} {product} ({country})", "{selection} {product} ({country})"
     ),
     "country_available": Text("{country}: {available}", "{country}: {available}"),
-    "units_counties": Text("counties", "powiatow"),
-    "units_voivodeships": Text("voivodeships", "wojewodztw"),
+    "units_counties": Text("counties", "powiatów"),
+    "units_voivodeships": Text("voivodeships", "województw"),
     "what_area_packages": Text(
         "packages of the {units} in the area", "paczki {units} obszaru"
     ),
     "choose_one_single": Text(
         "Give exactly one choice for {subject_flag} ({country}): {available}",
-        "Podaj dokladnie jeden wybor dla {subject_flag} ({country}): {available}",
+        "Podaj dokładnie jeden wybór dla {subject_flag} ({country}): {available}",
     ),
     "choose_one_multi": Text(
         "Give exactly one choice for {subject_flag} - {per_country:join(; )}",
-        "Podaj dokladnie jeden wybor dla {subject_flag} - {per_country:join(; )}",
+        "Podaj dokładnie jeden wybór dla {subject_flag} - {per_country:join(; )}",
     ),
     "selection_text_area": Text("area", "obszaru"),
     "teryt_no_unit": Text(
@@ -63,7 +63,7 @@ MESSAGES = {
     "teryt_per_voivodeship": Text(
         "--teryt {teryt}: {product} is published per voivodeship - give --teryt "
         "{voivodeship_code}",
-        "--teryt {teryt}: {product} jest publikowane per wojewodztwo - podaj --teryt "
+        "--teryt {teryt}: {product} jest publikowane per województwo - podaj --teryt "
         "{voivodeship_code}",
     ),
     "no_ku_units": Text(
@@ -85,27 +85,27 @@ MESSAGES = {
     "option_only_elsewhere": Text(
         "{cli_flag} {value}: {product} ({country}) - available only for "
         "{elsewhere}{here}",
-        "{cli_flag} {value}: {product} ({country}) - dostepne tylko dla "
+        "{cli_flag} {value}: {product} ({country}) - dostępne tylko dla "
         "{elsewhere}{here}",
     ),
     "option_country_mismatch": Text(
         "{cli_flag} applies only to {subject_flag} ({country}: {allowed}) - for "
         "{descriptor_country} omit {cli_flag}",
         "{cli_flag} dotyczy tylko {subject_flag} ({country}: {allowed}) - dla "
-        "{descriptor_country} pomin {cli_flag}",
+        "{descriptor_country} pomiń {cli_flag}",
     ),
     "selection_missing_available": Text(
         "{missing}; available: {available}",
-        "{missing}; dostepne: {available}",
+        "{missing}; dostępne: {available}",
     ),
     "option_value_unavailable": Text(
         "{cli_flag} {value}: not available for {where}; available: "
         "{values}{option_hint}",
-        "{cli_flag} {value}: niedostepne dla {where}; dostepne: {values}{option_hint}",
+        "{cli_flag} {value}: niedostępne dla {where}; dostępne: {values}{option_hint}",
     ),
     "options_unavailable_together": Text(
         "{chosen}: not available together for {where}",
-        "{chosen}: niedostepne razem dla {where}",
+        "{chosen}: niedostępne razem dla {where}",
     ),
     "option_required_for": Text(
         "{cli_flag} required for {where}: {values}{option_hint}",
@@ -113,15 +113,15 @@ MESSAGES = {
     ),
     "hint_value_per_country": Text(
         "a value per country, e.g. {cli_flag} {example}",
-        "wartosc per kraj, np. {cli_flag} {example}",
+        "wartość per kraj, np. {cli_flag} {example}",
     ),
     "hint_single_value": Text(
         "one value for both countries",
-        "jedna wartosc dla obu krajow",
+        "jedna wartość dla obu krajów",
     ),
     "hint_pl_cz_task": Text(
         " (PL+CZ task: {how} - {others}; common: {common})",
-        " (zadanie PL+CZ: {how} - {others}; wspolne: {common})",
+        " (zadanie PL+CZ: {how} - {others}; wspólne: {common})",
     ),
     "level_example_item": Text("{code}=<level>", "{code}=<poziom>"),
     "level_hint_multi_country": Text(
@@ -131,7 +131,7 @@ MESSAGES = {
     "level_not_for_packages": Text(
         "--level applies to area features (--bbox/--sheet/--geometry), not to "
         "{product} packages",
-        "--level dotyczy obiektow obszaru (--bbox/--sheet/--geometry), nie paczek "
+        "--level dotyczy obiektów obszaru (--bbox/--sheet/--geometry), nie paczek "
         "{product}",
     ),
     "flag_not_for_release_files": Text(
@@ -143,13 +143,13 @@ MESSAGES = {
     "version_not_applicable": Text(
         "--version does not apply to {product} ({country}): it chooses the release "
         "of the files of a published data set (--product camels)",
-        "--version nie dotyczy {product} ({country}): wybiera wydanie plikow "
+        "--version nie dotyczy {product} ({country}): wybiera wydanie plików "
         "opublikowanego zbioru danych (--product camels)",
     ),
     "flag_not_for_national_file": Text(
         "{cli_flag} does not apply to the national file {product} ({country}: current "
         "release from the ATOM feed)",
-        "{cli_flag} nie dotyczy pliku krajowego {product} ({country}: biezace wydanie "
+        "{cli_flag} nie dotyczy pliku krajowego {product} ({country}: bieżące wydanie "
         "z feedu ATOM)",
     ),
     "national_file_subject": Text(
@@ -159,8 +159,8 @@ MESSAGES = {
     "hcrs_area_service_crs": Text(
         "--horizontal-crs {horizontal_crs}: area features of {product} ({country}) "
         "are always in the service CRS {crs}",
-        "--horizontal-crs {horizontal_crs}: obiekty obszaru {product} ({country}) sa "
-        "zawsze w ukladzie uslugi {crs}",
+        "--horizontal-crs {horizontal_crs}: obiekty obszaru {product} ({country}) są "
+        "zawsze w układzie usługi {crs}",
     ),
     "hcrs_file_only_crs": Text(
         "--horizontal-crs {horizontal_crs}: {product} ({country}) publishes this file "
@@ -170,7 +170,7 @@ MESSAGES = {
     ),
     "layers_not_applicable": Text(
         "--layers does not apply to {product} (content is stored in full)",
-        "--layers nie dotyczy {product} (zawartosc zapisywana w calosci)",
+        "--layers nie dotyczy {product} (zawartość zapisywana w całości)",
     ),
     "layers_not_for_national_file": Text(
         "--layers does not apply to the national file of {product} (--whole-country: "
@@ -183,7 +183,7 @@ MESSAGES = {
     ),
     "layers_need_one_class": Text(
         "--layers: give at least one class of {product} {where}",
-        "--layers: podaj co najmniej jedna klase {product} {where}",
+        "--layers: podaj co najmniej jedną klasę {product} {where}",
     ),
     "layers_unknown_groups": Text(
         "--layers {unknown}: no such layer groups in the area result of {product}",
@@ -191,15 +191,15 @@ MESSAGES = {
     ),
     "layers_need_one_group": Text(
         "--layers: give at least one layer group of {product}",
-        "--layers: podaj co najmniej jedna grupe warstw {product}",
+        "--layers: podaj co najmniej jedną grupę warstw {product}",
     ),
     "layers_problem_available": Text(
         "{problem}; available: {published}",
-        "{problem}; dostepne: {published}",
+        "{problem}; dostępne: {published}",
     ),
     "selection_not_available": Text(
         "{cli_flag} {value}: not available for {where}; available: {available}",
-        "{cli_flag} {value}: niedostepne dla {where}; dostepne: {available}",
+        "{cli_flag} {value}: niedostępne dla {where}; dostępne: {available}",
     ),
     "area_product_subject": Text(
         "area of {product} ({country})",
@@ -208,20 +208,20 @@ MESSAGES = {
     "flag_not_for_area_state": Text(
         "{cli_flag} does not apply to area features of product {product} ({country}: "
         "current service state)",
-        "{cli_flag} nie dotyczy obiektow obszaru produktu {product} ({country}: "
-        "biezacy stan uslugi)",
+        "{cli_flag} nie dotyczy obiektów obszaru produktu {product} ({country}: "
+        "bieżący stan usługi)",
     ),
     "flag_not_for_area_features": Text(
         "{cli_flag} does not apply to area features of product {product} ({country})",
-        "{cli_flag} nie dotyczy obiektow obszaru produktu {product} ({country})",
+        "{cli_flag} nie dotyczy obiektów obszaru produktu {product} ({country})",
     ),
     "teryt_is_pl_code": Text(
         "--teryt is a TERYT code (PL); remove --country {country}",
-        "--teryt to kod TERYT (PL); usun --country {country}",
+        "--teryt to kod TERYT (PL); usuń --country {country}",
     ),
     "ku_is_cz_code": Text(
         "--ku is a cadastral area code (CZ); remove --country {country}",
-        "--ku to kod katastralniho uzemi (CZ); usun --country {country}",
+        "--ku to kod katastralniho uzemi (CZ); usuń --country {country}",
     ),
     "source_label": Text("{name}, {country}", "{name}, {country}"),
     "product_sources": Text("{sources:join(; )}", "{sources:join(; )}"),
@@ -231,7 +231,7 @@ MESSAGES = {
     ),
     "level_not_for_fixed_content": Text(
         "--level does not apply to {subject_flag} (fixed content: {content})",
-        "--level nie dotyczy {subject_flag} (stala zawartosc: {content})",
+        "--level nie dotyczy {subject_flag} (stała zawartość: {content})",
     ),
     "unknown_level": Text(
         "unknown level of {product} ({country})",
@@ -239,11 +239,11 @@ MESSAGES = {
     ),
     "level_not_applicable": Text(
         "--level does not apply to product {product} (choose --{selector} {codes})",
-        "--level nie dotyczy produktu {product} (wybor: --{selector} {codes})",
+        "--level nie dotyczy produktu {product} (wybór: --{selector} {codes})",
     ),
     "unavailable_for_where": Text(
         "not available for {where}",
-        "niedostepne dla {where}",
+        "niedostępne dla {where}",
     ),
     "selector_required": Text(
         "{cli_flag} required for {where}: {codes}{hint}",
@@ -251,7 +251,7 @@ MESSAGES = {
     ),
     "selector_value_unknown": Text(
         "{cli_flag} {value}: {unknown}; available: {codes}{hint}",
-        "{cli_flag} {value}: {unknown}; dostepne: {codes}{hint}",
+        "{cli_flag} {value}: {unknown}; dostępne: {codes}{hint}",
     ),
     "unknown_country": Text(
         "Unknown country --country {country!r}: {country_choices}",
@@ -259,12 +259,12 @@ MESSAGES = {
     ),
     "product_limited_availability": Text(
         "--product {product} is available only for {descriptors}",
-        "--product {product} jest dostepny tylko dla {descriptors}",
+        "--product {product} jest dostępny tylko dla {descriptors}",
     ),
     "invalid_teryt_code": Text(
         "Invalid TERYT code {teryt!r}: voivodeship (2 digits, e.g. 12) or county (4 "
         "digits, e.g. 1261)",
-        "Nieprawidlowy kod TERYT {teryt!r}: wojewodztwo (2 cyfry, np. 12) albo powiat "
+        "Nieprawidłowy kod TERYT {teryt!r}: województwo (2 cyfry, np. 12) albo powiat "
         "(4 cyfry, np. 1261)",
     ),
     "county_code_prefix": Text(
@@ -274,12 +274,12 @@ MESSAGES = {
     "teryt_unknown_voivodeship": Text(
         "--teryt {teryt}: no voivodeship with code {voivodeship_code}{of_powiat}; "
         "available: {known}",
-        "--teryt {teryt}: nie ma wojewodztwa o kodzie {voivodeship_code}{of_powiat}; "
-        "dostepne: {known}",
+        "--teryt {teryt}: nie ma województwa o kodzie {voivodeship_code}{of_powiat}; "
+        "dostępne: {known}",
     ),
     "invalid_ku_code": Text(
         "Invalid cadastral area code {ku!r}: 6 digits, e.g. 623164",
-        "Nieprawidlowy kod katastralniho uzemi {ku!r}: 6 cyfr, np. 623164",
+        "Nieprawidłowy kod katastralniho uzemi {ku!r}: 6 cyfr, np. 623164",
     ),
     "national_file_one_country": Text(
         "a national file of one country",
@@ -297,7 +297,7 @@ MESSAGES = {
     "sheet_system_mismatch": Text(
         "--sheet {sheet} belongs to sheet system {inferred}, but --sheet-system "
         "{selected} was given",
-        "--sheet {sheet} nalezy do ukladu {inferred}, a podano --sheet-system "
+        "--sheet {sheet} należy do układu {inferred}, a podano --sheet-system "
         "{selected}",
     ),
     "cz_no_sheets_variant": Text(
@@ -308,34 +308,34 @@ MESSAGES = {
     ),
     "invalid_cuzk_sheet_code": Text(
         "Invalid CUZK sheet code {sheet!r} (letters, digits and '-' allowed)",
-        "Nieprawidlowe godlo arkusza CUZK {sheet!r} (dozwolone litery, cyfry i '-')",
+        "Nieprawidłowe godło arkusza CUZK {sheet!r} (dozwolone litery, cyfry i '-')",
     ),
     "cz_sheet_no_area": Text(
         "{subject_flag} (CZ): sheet code {sheet} does not define a CZ area - give "
         "--bbox (e.g. in EPSG:5514) or --geometry",
-        "{subject_flag} (CZ): godlo {sheet} nie wyznacza obszaru CZ - podaj --bbox "
+        "{subject_flag} (CZ): godło {sheet} nie wyznacza obszaru CZ - podaj --bbox "
         "(np. w EPSG:5514) albo --geometry",
     ),
     "sheet_country_mismatch": Text(
         "Sheet code '{sheet}' belongs to system {name} (country {country}), but "
         "--country {country_2} was given",
-        "Godlo '{sheet}' nalezy do systemu {name} (kraj {country}), a podano "
+        "Godło '{sheet}' należy do systemu {name} (kraj {country}), a podano "
         "--country {country_2}",
     ),
     "sheet_needs_pl": Text(
         "--sheet {sheet} ({name}): the collection area is determined by a PL sheet "
         "code; for CZ give --bbox (e.g. in EPSG:5514) or --geometry",
-        "--sheet {sheet} ({name}): obszar kolekcji wyznacza godlo PL; dla CZ podaj "
+        "--sheet {sheet} ({name}): obszar kolekcji wyznacza godło PL; dla CZ podaj "
         "--bbox (np. w EPSG:5514) albo --geometry",
     ),
     "area_no_country": Text(
         "the area does not intersect the extent of any known country (PL, CZ)",
-        "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)",
+        "obszar nie przecina zasięgu żadnego znanego kraju (PL, CZ)",
     ),
     "product_country_mismatch": Text(
         "--product {product} is available only for {descriptors}, but the area lies "
         "in {found}",
-        "--product {product} jest dostepny tylko dla {descriptors}, a obszar lezy w "
+        "--product {product} jest dostępny tylko dla {descriptors}, a obszar leży w "
         "{found}",
     ),
     "country_auto_product": Text(
@@ -344,15 +344,15 @@ MESSAGES = {
     ),
     "area_no_voivodeship": Text(
         "{what}: the area does not intersect any voivodeship (PRG)",
-        "{what}: obszar nie przecina zadnego wojewodztwa (PRG)",
+        "{what}: obszar nie przecina żadnego województwa (PRG)",
     ),
     "area_voivodeships_list": Text(
         "{what}: voivodeships of the area according to PRG ({codes_count}): {named}",
-        "{what}: wojewodztwa obszaru wg PRG ({codes_count}): {named}",
+        "{what}: województwa obszaru wg PRG ({codes_count}): {named}",
     ),
     "area_no_sheet": Text(
         "{product}: the area does not intersect any sheet",
-        "{product}: obszar nie przecina zadnego arkusza",
+        "{product}: obszar nie przecina żadnego arkusza",
     ),
     "sheets_list": Text(
         "{product}: sheets ({sheets_count}): {names_text}",
@@ -368,7 +368,7 @@ MESSAGES = {
     "index_no_records": Text(
         "{product}: the index has no records{year} for the sheets of the area "
         "({names_text})",
-        "{product}: indeks nie ma rekordow{year} dla arkuszy obszaru ({names_text})",
+        "{product}: indeks nie ma rekordów{year} dla arkuszy obszaru ({names_text})",
     ),
     "no_tiles_in_area": Text(
         "{product}: no tiles in the area (index {endpoint})",
@@ -384,7 +384,7 @@ MESSAGES = {
     ),
     "no_cadastral_territory": Text(
         "{product}: the area does not intersect any cadastral territory (RUIAN)",
-        "{product}: obszar nie przecina zadnego katastralniho uzemi (RUIAN)",
+        "{product}: obszar nie przecina żadnego katastralniho uzemi (RUIAN)",
     ),
     "ruian_territories_list": Text(
         "{product}: cadastral territories of the area per RUIAN ({codes_count}): "
@@ -393,7 +393,7 @@ MESSAGES = {
     ),
     "no_county_in_area": Text(
         "{product}: the area does not intersect any county (PRG)",
-        "{product}: obszar nie przecina zadnego powiatu (PRG)",
+        "{product}: obszar nie przecina żadnego powiatu (PRG)",
     ),
     "prg_counties_list": Text(
         "{product}: counties of the area per PRG ({units_count}): {names_text}",
@@ -405,13 +405,13 @@ MESSAGES = {
     ),
     "large_file_size": Text(
         "{what} {country} {unit}: large file {url} - {size_text}",
-        "{what} {country} {unit}: duzy plik {url} - {size_text}",
+        "{what} {country} {unit}: duży plik {url} - {size_text}",
     ),
     "package_classes_absent": Text(
         "{product} {country} {unit}: the package has no files for classes {absent} "
         "(no such objects); saved classes {classes}",
-        "{product} {country} {unit}: paczka nie ma plikow klas {absent} (brak takich "
-        "obiektow); zapisano klasy {classes}",
+        "{product} {country} {unit}: paczka nie ma plików klas {absent} (brak takich "
+        "obiektów); zapisano klasy {classes}",
     ),
     "no_coverage_task_area": Text(
         "{error} (task area: {requested})",
@@ -419,7 +419,7 @@ MESSAGES = {
     ),
     "local_version_removed": Text(
         "{unit}: local version removed during download - retry the download",
-        "{unit}: lokalna wersja usunieta w trakcie pobierania - ponow pobranie",
+        "{unit}: lokalna wersja usunięta w trakcie pobierania - ponów pobranie",
     ),
     "unit_choice_powiat": Text("--teryt <4 digits>", "--teryt <4 cyfry>"),
     "unit_choice_voivodeship": Text("--teryt <2 digits>", "--teryt <2 cyfry>"),
@@ -428,15 +428,15 @@ MESSAGES = {
         "an estimated {bytes_text} (average size over {known} of {count} "
         "{count:plural(file|files)} by HEAD; indicative only - file sizes vary "
         "widely, and the refusal is decided by the file count alone)",
-        "szacunkowo {bytes_text} (sredni rozmiar {known} z {count} "
-        "{count:plural(pliku|plikow|plikow)} wg HEAD; tylko orientacyjnie - rozmiary "
-        "plikow sa bardzo rozne, a o odmowie decyduje juz sama liczba plikow)",
+        "szacunkowo {bytes_text} (średni rozmiar {known} z {count} "
+        "{count:plural(pliku|plików|plików)} wg HEAD; tylko orientacyjnie - rozmiary "
+        "plików są bardzo różne, a o odmowie decyduje już sama liczba plików)",
     ),
     "size_at_least": Text(
         "at least {bytes_text} (size known for {known} of {count} "
         "{count:plural(file|files)})",
         "co najmniej {bytes_text} (rozmiar znany dla {known} z {count} "
-        "{count:plural(pliku|plikow|plikow)})",
+        "{count:plural(pliku|plików|plików)})",
     ),
     "size_total_head": Text(
         "{bytes_text} in total by HEAD",
@@ -444,16 +444,16 @@ MESSAGES = {
     ),
     "choose_unit_hint": Text(
         ", choose a unit ({units:join})",
-        ", wybierz jednostke ({units:join})",
+        ", wybierz jednostkę ({units:join})",
     ),
     "volume_limit_exceeded": Text(
         "{product}: the area yields {count} {count:plural(file|files)} to download, "
         "{size} - the limit of one task is {max_files} files and {max_gb} GB. Narrow "
         "the area (--bbox, --sheet, --geometry){unit} or run the plan with part of "
         "the items (--check --plan FILE, then --upgrade --plan FILE)",
-        "{product}: obszar daje {count} {count:plural(plik|pliki|plikow)} do "
-        "pobrania, {size} - limit jednego zadania to {max_files} plikow i {max_gb} "
-        "GB. Zawez obszar (--bbox, --sheet, --geometry){unit} albo wykonaj plan z "
-        "czescia pozycji (--check --plan PLIK, potem --upgrade --plan PLIK)",
+        "{product}: obszar daje {count} {count:plural(plik|pliki|plików)} do "
+        "pobrania, {size} - limit jednego zadania to {max_files} plików i {max_gb} "
+        "GB. Zawęź obszar (--bbox, --sheet, --geometry){unit} albo wykonaj plan z "
+        "częścią pozycji (--check --plan PLIK, potem --upgrade --plan PLIK)",
     ),
 }

@@ -356,3 +356,10 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
   shell; outputs hidden while the plan is stale. Playwright (dev dependency `playwright>=1.64,<2`, marker `e2e`,
   `tests/e2e/`): 7 tests of the main flow against the real `create_gui_app`; only the plans are stubbed, from answers
   recorded on 2026-11-25 (`tests/fixtures/gui/real_2026_11_25/`). Open: K6 docs, K7 live runs.
+- K5, the page's Polish (2026-11-25, ADR-053 amendment 1, ADR-063 amendment 1): the Polish texts of the catalog
+  carry their diacritics (all of `messages/` but `legal.py`, whose attributions are the same in both languages), so
+  the form reads „Górna granica”; the terminal folds them to ASCII (`kartograf.messages.fold`,
+  `cli._language.localized`), so the CLI prints what it printed before. Each notice of a JSON document carries
+  `i18n.pl` beside its English `message`, and the plan shows it on a Polish page (the LAZ notice „pominięto … kafli
+  LAZ”). Checked: each file folds back to its former ASCII text byte for byte, a dictionary check, a CLI contract
+  test with the catalog accented and folded, and the page in Chromium.

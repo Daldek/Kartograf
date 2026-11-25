@@ -115,7 +115,7 @@ def test_soil_list_layers_explains_depths_with_the_library_description(capsys):
     """The depth codes are introduced by the description the library gives them."""
     (description,) = set(soil_choices()["depth"].values())
     assert main(["soil", "list-layers"]) == 0
-    shown = localize(description, "pl")
+    shown = localize(description, "pl", folded=True)
     assert f"  Glebokosci ({shown}):\n    0-5cm\n" in capsys.readouterr().out
 
 

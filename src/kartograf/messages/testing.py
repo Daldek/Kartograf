@@ -10,6 +10,6 @@ MESSAGES = {
     ),
     "empty_directory_needed": Text(
         "The test store needs a directory that does not exist or is empty: {base}",
-        "Magazyn testowy wymaga nieistniejacego albo pustego katalogu: {base}",
+        "Magazyn testowy wymaga nieistniejącego albo pustego katalogu: {base}",
     ),
 }

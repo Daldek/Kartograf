@@ -40,6 +40,7 @@ from tests.integration.test_collections_products import (
     serve_prg_obreby,
 )
 from tests.support.camels import fixture_params, use_params, zenodo
+from tests.support.errors import error_line
 from tests.support.fake_packages import (
     FakePackageSession,
     package_route,
@@ -320,7 +321,7 @@ def test_buildings_area_with_missing_powiat(tmp_path, monkeypatch):
     _same(run, statuses=["new"])
     assert [n.code for n in run.api_result.notices] == [UNIT_LIST]
     assert [f.unit for f in run.api_result.failed] == ["0224"]
-    polish = localize(run.api_result.failed[0].error, "pl")
+    polish = localize(run.api_result.failed[0].error, "pl", folded=True)
     assert f"Error: 0224: {polish}\n" in run.cli_stderr
 
 
@@ -403,6 +404,6 @@ def test_input_errors_same_type_and_text(tmp_path, monkeypatch, argv, kwargs):
     run = run_both(argv, lambda out: download_collection(root=out, **kwargs), tmp_path)
     assert isinstance(run.api_error, ValidationError)
     assert run.cli_code == 2
-    assert run.cli_text == f"Error: {run.api_error.localized('pl')}\n"
+    assert run.cli_text == f"{error_line(run.api_error)}\n"
     assert session.calls == []
     assert not run.cli_store.exists() and not run.api_store.exists()

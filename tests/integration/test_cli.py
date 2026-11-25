@@ -32,7 +32,7 @@ from kartograf.download.manager import DownloadProgress, DownloadResult
 from kartograf.download.options import pl_file_variant
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.marker import prepare_store
-from kartograf.messages import Lang
+from kartograf.messages import Lang, localize
 from kartograf.notices import Notice
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -42,7 +42,7 @@ from kartograf.sources.registry import sources_for
 from kartograf.sources.variants import UNKNOWN_VERTICAL, ProductVariant, variants
 from tests.conftest import WCS_FIXTURES, recorded_response, write_gpkg_layers
 from tests.support.cz_fakes import cz_factory, route_of
-from tests.support.errors import without_error_document
+from tests.support.errors import error_line, without_error_document
 
 
 @pytest.fixture(autouse=True)
@@ -2056,9 +2056,10 @@ def _choose_vertical_crs(wybor: str, vertical_crs: str | None) -> list[str]:
 def _registry_grids(product: str, lang: Lang = "en") -> set[tuple[str, str]]:
     """``{(vertical CRS, label)}`` of the product's PL variants in the product
     format (registry): the ASC grids and the voivodeship files without a
-    height system (NMT 100 m, listed under ``UNKNOWN_VERTICAL``)."""
+    height system (NMT 100 m, listed under ``UNKNOWN_VERTICAL`` as the terminal
+    shows it)."""
     return {
-        (v.vertical_crs or UNKNOWN_VERTICAL.localized(lang), v.label)
+        (v.vertical_crs or localize(UNKNOWN_VERTICAL, lang, folded=True), v.label)
         for v in variants(product=product, country="PL")
         if v.label is not None and not v.source_file
     }
@@ -2263,7 +2264,7 @@ class TestNmt5mKron86Rejected:
         task = ns("KRON86")
         with pytest.raises(ValidationError) as kron:
             resolve_pl_options(task, code_system="1992")
-        assert f"Error: {kron.value.localized('pl')}" == _5M_KRON86_ERROR
+        assert error_line(kron.value) == _5M_KRON86_ERROR
         assert task.vertical_crs == "KRON86"  # no silent swap
 
 
@@ -2381,7 +2382,7 @@ class TestRegistryVariantsCli:
             )
 
         message = str(exc.value)
-        assert without_error_document(err) == f"Error: {exc.value.localized('pl')}\n"
+        assert without_error_document(err) == f"{error_line(exc.value)}\n"
         prefix = "--resolution required for NMPT PL: "
         assert message.startswith(prefix)
         listed = _labels_by_system(message.removeprefix(prefix))
@@ -2487,7 +2488,6 @@ class TestRegistryVariantsCli:
             )
 
     def test_help_cz_uses_variant_models(self, capsys):
-        from kartograf.messages import localize
         from kartograf.sources.variants import cz_model_text, cz_resolution_text
 
         with pytest.raises(SystemExit) as exc:
@@ -2496,7 +2496,7 @@ class TestRegistryVariantsCli:
         text = " ".join(capsys.readouterr().out.split())
         assert f"NMT: {cz_resolution_text('nmt')}" in text
         assert f"NMPT: {cz_resolution_text('nmpt')}" in text
-        assert localize(cz_model_text(), "pl") in text
+        assert localize(cz_model_text(), "pl", folded=True) in text
 
 
 class TestPlCutoutOnly1m:
@@ -6556,11 +6556,8 @@ class TestCountryDispatch:
                 resolution=resolution,
                 vertical_crs=vertical_crs,
             )
-        assert (
-            exc.value.localized("pl")
-            == without_error_document(capsys.readouterr().err)
-            .removeprefix("Error: ")
-            .strip()
+        assert error_line(exc.value) == (
+            without_error_document(capsys.readouterr().err).strip()
         )
         assert expected in str(exc.value)
         assert not (tmp_path / "laz").exists() and not (tmp_path / "nmpt").exists()

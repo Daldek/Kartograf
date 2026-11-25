@@ -7,14 +7,14 @@ MESSAGES = {
     "empty_segment_dimension": Text(
         "Empty storage segment dimension '{name}' (source '{source_key}') - give a "
         "value or None",
-        "Pusty wymiar segmentu storage '{name}' (zrodlo '{source_key}') - podaj "
-        "wartosc albo None",
+        "Pusty wymiar segmentu storage '{name}' (źródło '{source_key}') - podaj "
+        "wartość albo None",
     ),
     # ``sources.edition``.
     "edition_invalid_label": Text(
         "{what}: edition {raw!r} is not usable as a version label (allowed: "
         "[A-Za-z0-9._+-])",
-        "{what}: wydanie {raw!r} nie nadaje sie na etykiete wersji (dozwolone "
+        "{what}: wydanie {raw!r} nie nadaje się na etykietę wersji (dozwolone "
         "[A-Za-z0-9._+-])",
     ),
     # ``sources.registry``.
@@ -32,17 +32,17 @@ MESSAGES = {
     "nmpt_wcs_notes": Text(
         "heights only image/x-aaigrid (saved as GeoTIFF float32); 1 m via "
         "SCALEFACTOR=0.5 on the 1 m sheet grid",
-        "wysokosci tylko image/x-aaigrid (zapisywany jako GeoTIFF float32); 1 m przez "
+        "wysokości tylko image/x-aaigrid (zapisywany jako GeoTIFF float32); 1 m przez "
         "SCALEFACTOR=0.5 na siatce arkuszy 1 m",
     ),
     "sheet_source_name": Text(
         "{product_name} - {format} archive{shown_suffix} ({description}; source file)",
         "{product_name} - archiwum {format}{shown_suffix} ({description}; plik "
-        "zrodlowy)",
+        "źródłowy)",
     ),
     "sheet_index_source_file": Text(
         "GUGiK WFS sheet index; file as in the source (no conversion)",
-        "skorowidz WFS GUGiK; plik jak w zrodle (bez konwersji)",
+        "skorowidz WFS GUGiK; plik jak w źródle (bez konwersji)",
     ),
     "sheet_index_opendata": Text(
         "GUGiK WFS sheet index; OpenData sheets",
@@ -50,35 +50,35 @@ MESSAGES = {
     ),
     "cz_file_note_sm5": Text(
         "SM5 sheets (S-JTSK, Bpv heights); file 1:1 from ZIP, CRS from the channel",
-        "arkusze SM5 (S-JTSK, wysokosci Bpv); plik 1:1 z ZIP, CRS z kanalu",
+        "arkusze SM5 (S-JTSK, wysokości Bpv); plik 1:1 z ZIP, CRS z kanału",
     ),
     "cz_file_note_tm33": Text(
         "TM33 2x2 km tiles (ETRS89, EVRF2007 heights); file 1:1 from ZIP",
-        "kafle TM33 2x2 km (ETRS89, wysokosci EVRF2007); plik 1:1 z ZIP",
+        "kafle TM33 2x2 km (ETRS89, wysokości EVRF2007); plik 1:1 z ZIP",
     ),
     "cz_image_notes": Text(
         "The server supports imageSR, but ADR-024 forbids it - content reprojection "
         "is local only, a pinned operation",
-        "Serwer obsluguje imageSR, ale ADR-024 zabrania - reprojekcja tresci "
-        "wylacznie lokalna, przypieta operacja",
+        "Serwer obsługuje imageSR, ale ADR-024 zabrania - reprojekcja treści "
+        "wyłącznie lokalna, przypięta operacja",
     ),
     "cz_zabaged_notes": Text(
         "22 land cover and hydrography layers (source names); full geometries of "
         "features intersecting the area",
-        "22 warstwy pokrycia terenu i hydrografii (nazwy zrodla); pelne geometrie "
-        "obiektow przecinajacych obszar",
+        "22 warstwy pokrycia terenu i hydrografii (nazwy źródła); pełne geometrie "
+        "obiektów przecinających obszar",
     ),
     "cz_zabaged_area_omitted": Text(
         "the area result has 22 land cover and water layers; the full ZABAGED "
         "database is in the national file: --whole-country --horizontal-crs "
         "EPSG:5514|EPSG:3045",
-        "wynik obszaru ma 22 warstwy pokrycia terenu i wod; pelna baza ZABAGED jest w "
+        "wynik obszaru ma 22 warstwy pokrycia terenu i wód; pełna baza ZABAGED jest w "
         "pliku krajowym: --whole-country --horizontal-crs EPSG:5514|EPSG:3045",
     ),
     "zabaged_national_gpkg_note": Text(
         "national GPKG file (5.8 GB EPSG:5514, 6.7 GB EPSG:3045; layers of the full "
         "database under CUZK names), only with --whole-country",
-        "plik krajowy GPKG (5,8 GB EPSG:5514, 6,7 GB EPSG:3045; warstwy pelnej bazy "
+        "plik krajowy GPKG (5,8 GB EPSG:5514, 6,7 GB EPSG:3045; warstwy pełnej bazy "
         "pod nazwami CUZK), tylko z --whole-country",
     ),
     "ruian_admin_name": Text(
@@ -88,7 +88,7 @@ MESSAGES = {
     ),
     "ruian_area_note": Text(
         "full geometries of units intersecting the area",
-        "pelne geometrie jednostek przecinajacych obszar",
+        "pełne geometrie jednostek przecinających obszar",
     ),
     "ruian_national_shp_note": Text(
         "national SHP file (approx. 253 MB), only with --whole-country",
@@ -96,13 +96,13 @@ MESSAGES = {
     ),
     "hynet_network_name": Text(
         "HY-NET - hydrographic network (INSPIRE Hydrography - Network)",
-        "HY-NET - siec hydrograficzna (INSPIRE Hydrography - Network)",
+        "HY-NET - sieć hydrograficzna (INSPIRE Hydrography - Network)",
     ),
     "hynet_area_note": Text(
         "watercourse segments and network nodes intersecting the area "
         "(grade-separated crossings - relations without geometry - only in the "
         "national file)",
-        "odcinki ciekow i wezly sieci przecinajace obszar (skrzyzowania bezkolizyjne "
+        "odcinki cieków i węzły sieci przecinające obszar (skrzyżowania bezkolizyjne "
         "- relacje bez geometrii - tylko w pliku krajowym)",
     ),
     "hynet_area_omitted": Text(
@@ -110,9 +110,9 @@ MESSAGES = {
         "WatercourseSeparatedCrossing: segment relations without geometry, the "
         "service does not count them in the area) - they are in the national file: "
         "--whole-country --country cz",
-        "wynik obszaru bez skrzyzowan bezkolizyjnych (typ "
-        "WatercourseSeparatedCrossing: relacje odcinkow bez geometrii, usluga nie "
-        "liczy ich w obszarze) - sa w pliku krajowym: --whole-country --country cz",
+        "wynik obszaru bez skrzyżowań bezkolizyjnych (typ "
+        "WatercourseSeparatedCrossing: relacje odcinków bez geometrii, usługa nie "
+        "liczy ich w obszarze) - są w pliku krajowym: --whole-country --country cz",
     ),
     "hynet_national_gpkg_note": Text(
         "national GPKG file (approx. 194 MB) in EPSG:3045 (ATOM feed category), only "
@@ -134,7 +134,7 @@ MESSAGES = {
         "whole features of the spatial layers that intersect the area (--layers "
         "PGW_WP, JCWPd, SIG), read from the national archive in the store, one "
         "GeoPackage in EPSG:2180",
-        "cale obiekty warstw przestrzennych przecinajace obszar (--layers PGW_WP, "
+        "całe obiekty warstw przestrzennych przecinające obszar (--layers PGW_WP, "
         "JCWPd, SIG), czytane z archiwum krajowego w magazynie, jeden GeoPackage w "
         "EPSG:2180",
     ),
@@ -142,8 +142,8 @@ MESSAGES = {
         "area result without the 34 attribute tables of the geodatabase "
         "(characteristics, objectives, pressures, measures) - they are in the "
         "national archive: --whole-country --country pl",
-        "wynik obszaru bez 34 tabel atrybutow geobazy (charakterystyki, cele, presje, "
-        "dzialania) - sa w archiwum krajowym: --whole-country --country pl",
+        "wynik obszaru bez 34 tabel atrybutów geobazy (charakterystyki, cele, presje, "
+        "działania) - są w archiwum krajowym: --whole-country --country pl",
     ),
     "camels_name": Text(
         "CAMELS-PL - catchment boundaries and gauging stations of IMGW-PIB gauges",
@@ -154,8 +154,8 @@ MESSAGES = {
         "of a CAMELS-PL release, read from its ZIP on Zenodo by HTTP range requests "
         "(the whole ZIP when the server does not answer them) and stored as "
         "published, only with --whole-country; --version chooses the release",
-        "GeoPackage zlewni i wodowskazow (EPSG:2180) wydania CAMELS-PL, czytane z "
-        "jego ZIP w Zenodo zapytaniami o zakres HTTP (caly ZIP, gdy serwer na nie "
+        "GeoPackage zlewni i wodowskazów (EPSG:2180) wydania CAMELS-PL, czytane z "
+        "jego ZIP w Zenodo zapytaniami o zakres HTTP (cały ZIP, gdy serwer na nie "
         "nie odpowiada) i zapisywane 1:1, tylko z --whole-country; --version wybiera "
         "wydanie",
     ),
@@ -163,9 +163,9 @@ MESSAGES = {
         "its 354 catchments are another file under the root CAMELS-PL/, other "
         "files are named otherwise, and its record licenses it under CC BY-NC 4.0, "
         "not the CC BY 4.0 that the provider line L names",
-        "jego 354 zlewnie to inny plik pod katalogiem CAMELS-PL/, inne pliki maja "
-        "inne nazwy, a jego rekord podaje licencje CC BY-NC 4.0, nie CC BY 4.0, "
-        "ktora podaje linia dostawcy L",
+        "jego 354 zlewnie to inny plik pod katalogiem CAMELS-PL/, inne pliki mają "
+        "inne nazwy, a jego rekord podaje licencję CC BY-NC 4.0, nie CC BY 4.0, "
+        "którą podaje linia dostawcy L",
     ),
     "cz_dmr5g_name": Text(
         "DMR 5G - Digitalni model reliefu 5. generace (2 m, ImageServer: TM33 tile "
@@ -191,19 +191,19 @@ MESSAGES = {
     ),
     "cz_dmr5g_laz_name": Text(
         "DMR 5G - LAZ point cloud (SM5 sheets and TM33 tiles)",
-        "DMR 5G - chmura punktow LAZ (arkusze SM5 i kafle TM33)",
+        "DMR 5G - chmura punktów LAZ (arkusze SM5 i kafle TM33)",
     ),
     "cz_dmr4g_laz_name": Text(
         "DMR 4G - LAZ point cloud (5 m grid; SM5 sheets and TM33 tiles)",
-        "DMR 4G - chmura punktow LAZ (siatka 5 m; arkusze SM5 i kafle TM33)",
+        "DMR 4G - chmura punktów LAZ (siatka 5 m; arkusze SM5 i kafle TM33)",
     ),
     "cz_dmp1g_laz_name": Text(
         "DMP 1G - LAZ point cloud (SM5 sheets and TM33 tiles)",
-        "DMP 1G - chmura punktow LAZ (arkusze SM5 i kafle TM33)",
+        "DMP 1G - chmura punktów LAZ (arkusze SM5 i kafle TM33)",
     ),
     "cz_dmpok_laz_name": Text(
         "DMP OK - LAZ point cloud (image correlation; SM5 sheets and TM33 tiles)",
-        "DMP OK - chmura punktow LAZ (korelacja obrazowa; arkusze SM5 i kafle TM33)",
+        "DMP OK - chmura punktów LAZ (korelacja obrazowa; arkusze SM5 i kafle TM33)",
     ),
     "cz_orto_name": Text(
         "Ortofoto CR (JPEG, SM5 sheets)",
@@ -212,36 +212,36 @@ MESSAGES = {
     "cz_orto_notes": Text(
         "current vintage of the sheet (archival CUZK orthophotos are paid - out of "
         "scope); JPEG with JGW files in S-JTSK, TM33N and TM34N",
-        "aktualny rocznik arkusza (archiwalne ortofoto CUZK sa platne - poza "
+        "aktualny rocznik arkusza (archiwalne ortofoto CUZK są płatne - poza "
         "zakresem); JPEG z plikami JGW w S-JTSK, TM33N i TM34N",
     ),
     "nmt100_vertical_crs_note": Text(
         "GUGiK does not declare the vertical CRS of NMT 100 m (ATOM feed and CSW "
         "record without a CRS; model from the NMT of the LPIS project) - vertical CRS "
         "unknown",
-        "GUGiK nie deklaruje ukladu wysokosci NMT 100 m (feed ATOM i rekord CSW bez "
-        "ukladu; model z NMT projektu LPIS) - uklad wysokosci nieznany",
+        "GUGiK nie deklaruje układu wysokości NMT 100 m (feed ATOM i rekord CSW bez "
+        "układu; model z NMT projektu LPIS) - układ wysokości nieznany",
     ),
     "nmt100_name": Text(
         "Digital terrain model 100 m (XYZ, voivodeship files; vertical CRS unknown)",
-        "Numeryczny Model Terenu 100 m (XYZ, pliki wojewodztw; uklad wysokosci "
+        "Numeryczny Model Terenu 100 m (XYZ, pliki województw; układ wysokości "
         "nieznany)",
     ),
     "nmt100_notes": Text(
         "GUGiK ATOM feed: one ZIP with an XYZ file per voivodeship (2019 edition); "
         "voivodeships of the area by PRG; ZIP saved 1:1",
-        "feed ATOM GUGiK: jeden ZIP z plikiem XYZ na wojewodztwo (wydanie 2019); "
-        "wojewodztwa obszaru wg PRG; ZIP zapisywany 1:1",
+        "feed ATOM GUGiK: jeden ZIP z plikiem XYZ na województwo (wydanie 2019); "
+        "województwa obszaru wg PRG; ZIP zapisywany 1:1",
     ),
     "intensity_name": Text(
         "LIDAR intensity images (sheets by flight)",
-        "Obrazy intensywnosci LIDAR (arkusze wg lotow)",
+        "Obrazy intensywności LIDAR (arkusze wg lotów)",
     ),
     "intensity_notes": Text(
         "GeoTIFF 1 band (reflection intensity), pixel 0.25 m; PL-1992 sheets (7-part "
         "sheet codes) and PL-2000 by flight",
-        "GeoTIFF 1 pasmo (intensywnosc odbicia), piksel 0,25 m; arkusze PL-1992 "
-        "(godla 7-czlonowe) i PL-2000 wg lotow",
+        "GeoTIFF 1 pasmo (intensywność odbicia), piksel 0,25 m; arkusze PL-1992 "
+        "(godła 7-członowe) i PL-2000 wg lotów",
     ),
     "true_orto_name": Text(
         "True orthophoto (true orto) of selected cities (sheets; WCS cutout)",
@@ -250,12 +250,12 @@ MESSAGES = {
     "true_orto_notes": Text(
         "GeoTIFF RGB, pixel 0.05 m; PL-1992 8-part sheets (GUGiK 1:2500 module) by "
         "flight",
-        "GeoTIFF RGB, piksel 0,05 m; arkusze PL-1992 8-czlonowe (modul GUGiK 1:2500) "
-        "wg lotow",
+        "GeoTIFF RGB, piksel 0,05 m; arkusze PL-1992 8-członowe (moduł GUGiK 1:2500) "
+        "wg lotów",
     ),
     "true_orto_extent": Text(
         "GUGiK true orto covers only selected cities (e.g. Gdansk)",
-        "true orto GUGiK obejmuje tylko wybrane miasta (np. Gdansk)",
+        "true orto GUGiK obejmuje tylko wybrane miasta (np. Gdańsk)",
     ),
     "true_orto_wcs_desc": Text(
         "true orthophoto 0.05 m of selected cities (outside them pixels 0,0,0)",
@@ -263,17 +263,17 @@ MESSAGES = {
     ),
     "oblique_orto_name": Text(
         "Oblique orthophoto of selected cities (PL-2000 sheets, directions N, E, S, W)",
-        "Ortofotomapa ukosna wybranych miast (arkusze PL-2000, kierunki N, E, S, W)",
+        "Ortofotomapa ukośna wybranych miast (arkusze PL-2000, kierunki N, E, S, W)",
     ),
     "oblique_orto_notes": Text(
         "GeoTIFF RGB, pixel 0.05 m; a sheet is 4 direction files (n, e, s, w); "
         "PL-2000 sheets (1:2000, 1:1000) by flight",
-        "GeoTIFF RGB, piksel 0,05 m; arkusz to 4 pliki kierunkow (n, e, s, w); "
-        "arkusze PL-2000 (1:2000, 1:1000) wg lotow",
+        "GeoTIFF RGB, piksel 0,05 m; arkusz to 4 pliki kierunków (n, e, s, w); "
+        "arkusze PL-2000 (1:2000, 1:1000) wg lotów",
     ),
     "oblique_orto_extent": Text(
         "GUGiK oblique orto covers only selected cities (e.g. Krakow, Gdansk)",
-        "orto ukosna GUGiK obejmuje tylko wybrane miasta (np. Krakow, Gdansk)",
+        "orto ukośna GUGiK obejmuje tylko wybrane miasta (np. Kraków, Gdańsk)",
     ),
     "cz_contours_name": Text(
         "ZABAGED - 2D contours (vrstevnice; {fmt}, SM5 sheet ZIP)",
@@ -282,12 +282,12 @@ MESSAGES = {
     "cz_contours_notes": Text(
         "SM5 sheets (S-JTSK, Bpv heights); ZIP stored 1:1, without unpacking or "
         "conversion",
-        "arkusze SM5 (S-JTSK, wysokosci Bpv); ZIP zapisywany 1:1, bez rozpakowania i "
+        "arkusze SM5 (S-JTSK, wysokości Bpv); ZIP zapisywany 1:1, bez rozpakowania i "
         "konwersji",
     ),
     "prng_world_name": Text(
         "PRNG - Polish geographic names of the world",
-        "PRNG - polskie nazwy geograficzne swiata",
+        "PRNG - polskie nazwy geograficzne świata",
     ),
     "prng_poland_name": Text(
         "PRNG - geographic names of Poland",
@@ -296,7 +296,7 @@ MESSAGES = {
     "prng_slow_response_note": Text(
         "OGC API PRNG request - the service takes approx. 80-95 s per page of objects "
         "(measured 2026-10-16), wait",
-        "zapytanie OGC API PRNG - usluga odpowiada ok. 80-95 s na strone obiektow "
+        "zapytanie OGC API PRNG - usługa odpowiada ok. 80-95 s na stronę obiektów "
         "(pomiar 2026-10-16), czekaj",
     ),
     "bdot10k_maps_name": Text(
@@ -312,8 +312,8 @@ MESSAGES = {
         "area result without census enumeration districts (collection "
         "GranicaObwoduSpisowego: the service takes minutes to respond) - they are in "
         "the national file: --whole-country --format SHP|GML",
-        "wynik obszaru bez obwodow spisowych (kolekcja GranicaObwoduSpisowego: usluga "
-        "odpowiada minutami) - sa w pliku krajowym: --whole-country --format SHP|GML",
+        "wynik obszaru bez obwodów spisowych (kolekcja GranicaObwoduSpisowego: usługa "
+        "odpowiada minutami) - są w pliku krajowym: --whole-country --format SHP|GML",
     ),
     "prg_addresses_name": Text(
         "PRG - address points and streets",
@@ -321,29 +321,29 @@ MESSAGES = {
     ),
     "prg_addresses_service_note": Text(
         "address points and streets intersecting the area (service state)",
-        "punkty adresowe i ulice przecinajace obszar (stan uslugi)",
+        "punkty adresowe i ulice przecinające obszar (stan usługi)",
     ),
     "prg_addresses_county_note": Text(
         "county SHP package: address points, streets, squares, localities (GUGiK does "
         "not publish voivodeship packages)",
-        "paczka SHP powiatu: punkty adresowe, ulice, place, miejscowosci (GUGiK nie "
-        "publikuje paczek wojewodztw)",
+        "paczka SHP powiatu: punkty adresowe, ulice, place, miejscowości (GUGiK nie "
+        "publikuje paczek województw)",
     ),
     "prg_addresses_national_note": Text(
         "national SHP file (approx. 564 MB) or GML (16 voivodeship files, approx. 804 "
         "MB), only with --whole-country",
-        "plik krajowy SHP (ok. 564 MB) albo GML (16 plikow wojewodztw, ok. 804 MB), "
+        "plik krajowy SHP (ok. 564 MB) albo GML (16 plików województw, ok. 804 MB), "
         "tylko z --whole-country",
     ),
     "rcn_daily_export_note": Text(
         "daily-refreshed export of {scope}: GeoPackage with layers "
         "transakcje_dzialki, transakcje_budynki, transakcje_lokale",
-        "eksport {scope} odswiezany co dobe: GeoPackage z warstwami "
+        "eksport {scope} odświeżany co dobę: GeoPackage z warstwami "
         "transakcje_dzialki, transakcje_budynki, transakcje_lokale",
     ),
     "rcn_name": Text(
         "RCN - real estate price register (transactions: plots, buildings, premises)",
-        "RCN - rejestr cen nieruchomosci (transakcje: dzialki, budynki, lokale)",
+        "RCN - rejestr cen nieruchomości (transakcje: działki, budynki, lokale)",
     ),
     "cz_geomorphology_name": Text(
         "Geomorphological units of Czechia (from subprovincie to casti)",
@@ -351,7 +351,7 @@ MESSAGES = {
     ),
     "cz_geomorphology_note": Text(
         "full geometries of units of the --level level intersecting the area",
-        "pelne geometrie jednostek poziomu --level przecinajacych obszar",
+        "pełne geometrie jednostek poziomu --level przecinających obszar",
     ),
     "cz_cadastral_map_name": Text(
         "Cadastral map of Czechia (katastralni mapa: SHP, DXF, DGN, VFK)",
@@ -360,24 +360,24 @@ MESSAGES = {
     "cz_cadastral_map_note": Text(
         "cadastral area (KU) package in one of the formats; KU of the area according "
         "to RUIAN; ZIP saved 1:1",
-        "paczka katastralniho uzemi (KU) w jednym z formatow; KU obszaru wg RUIAN; "
+        "paczka katastralniho uzemi (KU) w jednym z formatów; KU obszaru wg RUIAN; "
         "ZIP zapisywany 1:1",
     ),
     "bdoo_name": Text(
         "BDOO - general geographic objects database (1:250 000)",
-        "BDOO - baza danych obiektow ogolnogeograficznych (1:250 000)",
+        "BDOO - baza danych obiektów ogólnogeograficznych (1:250 000)",
     ),
     "bdoo_gml_package_note": Text(
         "GML package of a voivodeship by vintage (2015, 2021-2026) saved 1:1; with "
         "--layers a ZIP of the files of the selected classes",
-        "paczka GML wojewodztwa wg rocznika (2015, 2021-2026) zapisywana 1:1; z "
-        "--layers ZIP plikow wybranych klas",
+        "paczka GML województwa wg rocznika (2015, 2021-2026) zapisywana 1:1; z "
+        "--layers ZIP plików wybranych klas",
     ),
     "cz_feature_layers_note": Text(
         "{layers_count} feature layers (source names); full geometries of features "
         "intersecting the area",
-        "{layers_count} warstw obiektowych (nazwy zrodla); pelne geometrie obiektow "
-        "przecinajacych obszar",
+        "{layers_count} warstw obiektowych (nazwy źródła); pełne geometrie obiektów "
+        "przecinających obszar",
     ),
     "cz_national_shp_note": Text(
         "national SHP file ({sizes}), only with --whole-country",
@@ -391,7 +391,7 @@ MESSAGES = {
         "tile = file of a WFS index record (ZIP with OBJ, MTL and JPG saved 1:1); "
         "tile CRS from the record (PL-1992, PL-2000 S5-S7), heights PL-EVRF2007-NH",
         "kafel = plik rekordu indeksu WFS (ZIP z OBJ, MTL i JPG zapisywany 1:1); "
-        "uklad kafla z rekordu (PL-1992, PL-2000 S5-S7), wysokosci PL-EVRF2007-NH",
+        "układ kafla z rekordu (PL-1992, PL-2000 S5-S7), wysokości PL-EVRF2007-NH",
     ),
     "trees_product_name": Text(
         "3D tree models (CityGML LoD1)",
@@ -400,30 +400,30 @@ MESSAGES = {
     "trees_county_package_note": Text(
         "county package (0.3-25 GB): GML files of 1:500 sheets, EPSG:2180 without "
         "vertical CRS; not every county has a package",
-        "paczka powiatu (0,3-25 GB): pliki GML arkuszy 1:500, EPSG:2180 bez ukladu "
-        "wysokosci; nie kazdy powiat ma paczke",
+        "paczka powiatu (0,3-25 GB): pliki GML arkuszy 1:500, EPSG:2180 bez układu "
+        "wysokości; nie każdy powiat ma paczkę",
     ),
     "control_wfs_note": Text(
         "control points (and isogon zones) intersecting the area, service state",
-        "punkty osnowy (i strefy izogon) przecinajace obszar, stan uslugi",
+        "punkty osnowy (i strefy izogon) przecinające obszar, stan usługi",
     ),
     "control_product_name": Text(
         "Basic control networks: horizontal, vertical, gravimetric, magnetic (with "
         "archives)",
-        "Osnowy podstawowe: pozioma, wysokosciowa, grawimetryczna, magnetyczna (z "
+        "Osnowy podstawowe: pozioma, wysokościowa, grawimetryczna, magnetyczna (z "
         "archiwami)",
     ),
     "control_county_package_note": Text(
         "county package of the horizontal or vertical network: coordinate lists (XLS) "
         "and topographic descriptions (JPG), ZIP 1:1",
-        "paczka powiatu sieci poziomej albo wysokosciowej: wykazy wspolrzednych (XLS) "
+        "paczka powiatu sieci poziomej albo wysokościowej: wykazy współrzędnych (XLS) "
         "i opisy topograficzne (JPG), ZIP 1:1",
     ),
     "control_archive_notes": Text(
         "archival catalogues and point record cards of the 1:100,000 sheet (PDF and "
         "TIFF scans in historical CRSs), ZIP 1:1",
-        "archiwalne katalogi i kartoteki punktow arkusza 1:100 000 (skany PDF i TIFF "
-        "w ukladach historycznych), ZIP 1:1",
+        "archiwalne katalogi i kartoteki punktów arkusza 1:100 000 (skany PDF i TIFF "
+        "w układach historycznych), ZIP 1:1",
     ),
     "geoid2021_name": Text(
         "Quasi-geoid model PL-geoid2021 (PL-EVRF2007-NH)",
@@ -432,12 +432,12 @@ MESSAGES = {
     "geoid2021_notes": Text(
         "one national TXT file (latitude, longitude, zeta; 0.01 deg grid, 42 MB) "
         "saved 1:1, only with --whole-country",
-        "jeden plik krajowy TXT (szerokosc, dlugosc, zeta; siatka 0,01 st., 42 MB) "
+        "jeden plik krajowy TXT (szerokość, długość, zeta; siatka 0,01 st., 42 MB) "
         "zapisywany 1:1, tylko z --whole-country",
     ),
     "cz_control_notes": Text(
         "points of the --network network intersecting the area (sum of its layers)",
-        "punkty sieci --network przecinajace obszar (suma jej warstw)",
+        "punkty sieci --network przecinające obszar (suma jej warstw)",
     ),
     "cz_qgzu2013_notes": Text(
         "one national file: ZIP of 17 TXT grids (58 MB) saved 1:1, only with "
@@ -451,7 +451,7 @@ MESSAGES = {
     ),
     "orto_standard_desc": Text(
         "latest available orthophotos",
-        "najnowsze dostepne ortofotomapy",
+        "najnowsze dostępne ortofotomapy",
     ),
     "orto_high_desc": Text(
         "orthophotos with a pixel of 10 cm or smaller",
@@ -459,7 +459,7 @@ MESSAGES = {
     ),
     "laz_name": Text(
         "LIDAR point clouds (ALS survey data)",
-        "Chmury punktow LIDAR (dane pomiarowe ALS)",
+        "Chmury punktów LIDAR (dane pomiarowe ALS)",
     ),
     "laz_wms_notes": Text(
         "WMS of LAZ sheet indexes returns 401 - WFS is the only way",
@@ -467,12 +467,12 @@ MESSAGES = {
     ),
     "bdot10k_name": Text(
         "BDOT10k - topographic objects database",
-        "BDOT10k - baza danych obiektow topograficznych",
+        "BDOT10k - baza danych obiektów topograficznych",
     ),
     "bdot10k_notes": Text(
         "archive of vintages 2014-2025 (state as of the start of the year), GML or "
         "SHP; county package saved 1:1",
-        "archiwum rocznikow 2014-2025 (stan z poczatku roku), GML albo SHP; paczka "
+        "archiwum roczników 2014-2025 (stan z początku roku), GML albo SHP; paczka "
         "powiatu zapisywana 1:1",
     ),
     "admin_name": Text(
@@ -481,7 +481,7 @@ MESSAGES = {
     ),
     "admin_notes": Text(
         "voivodeship package: GML of levels A01, A02, A03, A05, A06",
-        "paczka wojewodztwa: GML poziomow A01, A02, A03, A05, A06",
+        "paczka województwa: GML poziomów A01, A02, A03, A05, A06",
     ),
     "national_shp_note": Text(
         "national SHP file (approx. 377 MB), only with --whole-country",
@@ -489,28 +489,28 @@ MESSAGES = {
     ),
     "product_name_egib_map": Text(
         "EGiB - cadastral map (parcels and buildings)",
-        "EGiB - mapa ewidencyjna (dzialki i budynki)",
+        "EGiB - mapa ewidencyjna (działki i budynki)",
     ),
     "county_export_note": Text(
         "county export refreshed daily: layers parcels, buildings and transactions "
         "(RCN)",
-        "eksport powiatu odswiezany co dobe: warstwy dzialki, budynki i transakcje "
+        "eksport powiatu odświeżany co dobę: warstwy działki, budynki i transakcje "
         "(RCN)",
     ),
     "county_wfs_note": Text(
         "aggregate service of county WFS: gaps in counties without integration, "
         "restricted attributes = brak_uprawnien",
-        "usluga zbiorcza powiatowych WFS: luki w powiatach bez integracji, atrybuty "
-        "zastrzezone = brak_uprawnien",
+        "usługa zbiorcza powiatowych WFS: luki w powiatach bez integracji, atrybuty "
+        "zastrzeżone = brak_uprawnien",
     ),
     "product_name_buildings": Text(
         "3D building models (CityGML LoD1, LoD2)",
-        "Modele 3D budynkow (CityGML LoD1, LoD2)",
+        "Modele 3D budynków (CityGML LoD1, LoD2)",
     ),
     "lod2_coverage_note": Text(
         "LoD2 does not cover the whole country (no county package = no data); "
         "national files (3.5-4.1 GB) out of scope",
-        "LoD2 nie pokrywa calego kraju (brak paczki powiatu = brak danych); pliki "
+        "LoD2 nie pokrywa całego kraju (brak paczki powiatu = brak danych); pliki "
         "krajowe (3,5-4,1 GB) poza zakresem",
     ),
     "clms_credentials_note": Text(
@@ -520,7 +520,7 @@ MESSAGES = {
     "clms_no_credentials_note": Text(
         "without CLMS credentials: styled PNG from EEA WMS - preview, not data; 1990: "
         "DLR WMS in EPSG:4326",
-        "bez credentials CLMS: stylizowany PNG z WMS EEA - podglad, nie dane; 1990: "
+        "bez credentials CLMS: stylizowany PNG z WMS EEA - podgląd, nie dane; 1990: "
         "WMS DLR w EPSG:4326",
     ),
     "product_name_soilgrids": Text(
@@ -535,24 +535,24 @@ MESSAGES = {
     "country_name_cz": Text("Czechia", "Czechy"),
     "unknown_source": Text(
         "Unknown source: '{key_value}'. Available: {sources}",
-        "Nieznane zrodlo: '{key_value}'. Dostepne: {sources}",
+        "Nieznane źródło: '{key_value}'. Dostępne: {sources}",
     ),
     "source_no_channel": Text(
         "Source '{source_key}' has no {transport!r} channel{where} (channels: "
         "{channels})",
-        "Zrodlo '{source_key}' nie ma kanalu {transport!r}{where} (kanaly: {channels})",
+        "Źródło '{source_key}' nie ma kanału {transport!r}{where} (kanały: {channels})",
     ),
     "multiple_channels_ambiguous": Text(
         "Source '{source_key}' has several {transport!r} channels ({crs_list}) - "
         "selection requires the channel's horizontal CRS",
-        "Zrodlo '{source_key}' ma kilka kanalow {transport!r} ({crs_list}) - wybor "
-        "wymaga ukladu poziomego kanalu",
+        "Źródło '{source_key}' ma kilka kanałów {transport!r} ({crs_list}) - wybór "
+        "wymaga układu poziomego kanału",
     ),
     "channels_differing_signals": Text(
         "{transport!r} channels of source '{source_key}' have different signals "
         "({signals}) - selection requires the channel's horizontal CRS",
-        "Kanaly {transport!r} zrodla '{source_key}' maja rozne sygnaly ({signals}) - "
-        "wybor wymaga ukladu poziomego kanalu",
+        "Kanały {transport!r} źródła '{source_key}' mają różne sygnały ({signals}) - "
+        "wybór wymaga układu poziomego kanału",
     ),
     "sheet_asc_grid_name": Text(
         "{product_name} {shown} (ASC grid)",
@@ -567,7 +567,7 @@ MESSAGES = {
         "ZTM - zakladni topograficke mapy Czech",
     ),
     "rcn_scope_county": Text("a county", "powiatu"),
-    "rcn_scope_voivodeship": Text("a voivodeship", "wojewodztwa"),
+    "rcn_scope_voivodeship": Text("a voivodeship", "województwa"),
     "cz_data_model_name": Text(
         "{dataset} - digital geographic model of Czechia ({scale})",
         "{dataset} - cyfrowy model geograficzny Czech ({scale})",
@@ -584,21 +584,21 @@ MESSAGES = {
     # ``sources.sidecar``.
     "sidecar_write_failed": Text(
         "Failed to write sidecar {sidecar_path}: {error}",
-        "Nie udalo sie zapisac sidecara {sidecar_path}: {error}",
+        "Nie udało się zapisać sidecara {sidecar_path}: {error}",
     ),
     "mandatory_sidecar_no_descriptor": Text(
         "Failed to write mandatory sidecar {sidecar_path}: no source descriptor "
         "({descriptor_key!r})",
-        "Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: brak "
-        "deskryptora zrodla ({descriptor_key!r})",
+        "Nie udało się zapisać obowiązkowego sidecara {sidecar_path}: brak "
+        "deskryptora źródła ({descriptor_key!r})",
     ),
     "mandatory_sidecar_failed": Text(
         "Failed to write mandatory sidecar {sidecar_path}: {error}",
-        "Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: {error}",
+        "Nie udało się zapisać obowiązkowego sidecara {sidecar_path}: {error}",
     ),
     "sidecar_for_file_failed": Text(
         "Failed to write sidecar for {data_path}: {error}",
-        "Nie udalo sie zapisac sidecara dla {data_path}: {error}",
+        "Nie udało się zapisać sidecara dla {data_path}: {error}",
     ),
     # ``sources.variants``.
     "format_ascii_nmt": Text(
@@ -623,17 +623,17 @@ MESSAGES = {
     "cz_vertical_text": Text(
         "Bpv (native to S-JTSK/SM5 and ImageServer services), EVRF2007 (native to "
         "ETRS89/TM33 files; pinned transformation from Bpv)",
-        "Bpv (natywny dla S-JTSK/SM5 i uslug ImageServer), EVRF2007 (natywny dla "
-        "plikow ETRS89/TM33; z Bpv przypieta transformacja)",
+        "Bpv (natywny dla S-JTSK/SM5 i usług ImageServer), EVRF2007 (natywny dla "
+        "plików ETRS89/TM33; z Bpv przypięta transformacja)",
     ),
     "cz_laz_vertical_text": Text(
         "Bpv (SM5 sheets, S-JTSK) or EVRF2007 (TM33 tiles, ETRS89); point clouds "
         "without transformation",
-        "Bpv (arkusze SM5, S-JTSK) albo EVRF2007 (kafle TM33, ETRS89); chmury punktow "
+        "Bpv (arkusze SM5, S-JTSK) albo EVRF2007 (kafle TM33, ETRS89); chmury punktów "
         "bez transformacji",
     ),
-    "unknown_vertical_crs": Text("vertical CRS unknown", "uklad wysokosci nieznany"),
-    "no_resolution_label": Text("no resolution", "bez rozdzielczosci"),
+    "unknown_vertical_crs": Text("vertical CRS unknown", "układ wysokości nieznany"),
+    "no_resolution_label": Text("no resolution", "bez rozdzielczości"),
     "vertical_crs_labels": Text(
         "{vertical_crs}: {labels}",
         "{vertical_crs}: {labels}",
@@ -641,22 +641,22 @@ MESSAGES = {
     "vertical_crs_labels_list": Text("{parts:join(; )}", "{parts:join(; )}"),
     "product_no_variants": Text(
         "--product {product} has no variants in {country}",
-        "--product {product} nie ma wariantow w {country}",
+        "--product {product} nie ma wariantów w {country}",
     ),
     "format_unavailable": Text(
         "--format {format}: not available for {name} {country} - available: {tokens}",
-        "--format {format}: niedostepny dla {name} {country} - dostepne: {tokens}",
+        "--format {format}: niedostępny dla {name} {country} - dostępne: {tokens}",
     ),
     "vertical_undeclared_omit": Text(
         "{shown} ({country}): {unknown_vertical} (the source does not declare it) - "
         "omit --vertical-crs",
-        "{shown} ({country}): {unknown_vertical} (zrodlo go nie deklaruje) - pomin "
+        "{shown} ({country}): {unknown_vertical} (źródło go nie deklaruje) - pomiń "
         "--vertical-crs",
     ),
     "vertical_crs_only_named": Text(
         "{shown} ({country}) is only available in {named} - got --vertical-crs "
         "{vertical_crs}",
-        "{shown} ({country}) jest dostepny tylko w {named} - podano --vertical-crs "
+        "{shown} ({country}) jest dostępny tylko w {named} - podano --vertical-crs "
         "{vertical_crs}",
     ),
     "resolution_required": Text(
@@ -666,25 +666,25 @@ MESSAGES = {
     "resolution_not_applicable": Text(
         "--resolution does not apply to {shown} (the sheet index gives no resolution) "
         "- omit --resolution",
-        "--resolution nie dotyczy {shown} (skorowidz nie podaje rozdzielczosci) - "
-        "pomin --resolution",
+        "--resolution nie dotyczy {shown} (skorowidz nie podaje rozdzielczości) - "
+        "pomiń --resolution",
     ),
     "res_vertical_undeclared": Text(
         "{shown} {resolution} ({country}): {unknown_vertical} (the source does not "
         "declare it) - omit --vertical-crs",
-        "{shown} {resolution} ({country}): {unknown_vertical} (zrodlo go nie "
-        "deklaruje) - pomin --vertical-crs",
+        "{shown} {resolution} ({country}): {unknown_vertical} (źródło go nie "
+        "deklaruje) - pomiń --vertical-crs",
     ),
     "res_vertical_crs_mismatch": Text(
         "{shown} {resolution} ({country}) is only available in {named} - got "
         "--vertical-crs {vertical_crs}; available in {vertical_crs}: {labels}",
-        "{shown} {resolution} ({country}) jest dostepny tylko w {named} - podano "
-        "--vertical-crs {vertical_crs}; dostepne w {vertical_crs}: {labels}",
+        "{shown} {resolution} ({country}) jest dostępny tylko w {named} - podano "
+        "--vertical-crs {vertical_crs}; dostępne w {vertical_crs}: {labels}",
     ),
     "resolution_unavailable": Text(
         "{country} has no resolution {resolution} for {shown} - available: "
         "{labels_by_vertical_crs}",
-        "{country} nie ma rozdzielczosci {resolution} dla {shown} - dostepne: "
+        "{country} nie ma rozdzielczości {resolution} dla {shown} - dostępne: "
         "{labels_by_vertical_crs}",
     ),
     "vertical_crs_required": Text(
@@ -696,12 +696,12 @@ MESSAGES = {
     "sheet_not_cz_system": Text(
         "Sheet code '{sheet}' does not belong to any CZ system (SM5 sheet, e.g. "
         "CTES96, or TM33 tile, e.g. 302_5550)",
-        "Godlo '{sheet}' nie nalezy do zadnego systemu CZ (arkusz SM5, np. CTES96, "
+        "Godło '{sheet}' nie należy do żadnego systemu CZ (arkusz SM5, np. CTES96, "
         "albo kafel TM33, np. 302_5550)",
     ),
     "no_cz_raster_variants": Text(
         "--product {product} has no raster variants in CZ",
-        "--product {product} nie ma wariantow rastrowych w CZ",
+        "--product {product} nie ma wariantów rastrowych w CZ",
     ),
     "cz_resolution_required": Text(
         "--resolution required for {name} CZ: {cz_labels}",
@@ -709,19 +709,19 @@ MESSAGES = {
     ),
     "cz_resolution_unavailable": Text(
         "CZ has no {resolution} resolution for {name} - available: {cz_labels}",
-        "CZ nie ma rozdzielczosci {resolution} dla {name} - dostepne: {cz_labels}",
+        "CZ nie ma rozdzielczości {resolution} dla {name} - dostępne: {cz_labels}",
     ),
     "cz_sm5_resolution_limit": Text(
         "SM5 sheets of {name} CZ exist only in {cz_labels} - omit --resolution or "
         "give {sorted_labels}; {resolution}: a TM33 tile (e.g. 302_5550) or --bbox "
         "with --cutout",
-        "Arkusze SM5 {name} CZ sa tylko w {cz_labels} - pomin --resolution albo podaj "
+        "Arkusze SM5 {name} CZ są tylko w {cz_labels} - pomiń --resolution albo podaj "
         "{sorted_labels}; {resolution}: kafel TM33 (np. 302_5550) albo --bbox z "
         "--cutout",
     ),
     "cz_vertical_crs_unavailable": Text(
         "{vertical_crs} is not available for CZ - available: {cz_vertical_text}",
-        "{vertical_crs} nie jest dostepny dla CZ - dostepne: {cz_vertical_text}",
+        "{vertical_crs} nie jest dostępny dla CZ - dostępne: {cz_vertical_text}",
     ),
     "cz_laz_model_required": Text(
         "--model required for --product laz in CZ: {cz_model_text}",
@@ -729,20 +729,20 @@ MESSAGES = {
     ),
     "cz_laz_model_unknown": Text(
         "--model {model!r}: unknown value - available: {cz_model_text}",
-        "--model {model!r}: nieznana wartosc - dostepne: {cz_model_text}",
+        "--model {model!r}: nieznana wartość - dostępne: {cz_model_text}",
     ),
     "cz_laz_vertical_unavailable": Text(
         "{vertical_crs} is not available for LAZ CZ - available: "
         "{cz_laz_vertical_text}",
-        "{vertical_crs} nie jest dostepny dla LAZ CZ - dostepne: "
+        "{vertical_crs} nie jest dostępny dla LAZ CZ - dostępne: "
         "{cz_laz_vertical_text}",
     ),
     "cz_laz_native_vertical_only": Text(
         "LAZ CZ - {shown} exist only in {native}, but --vertical-crs {vertical_crs} "
         "was given (point clouds without transformation); {vertical_crs}: "
         "{alternative}, e.g. {example}, or an area (--bbox/--geometry)",
-        "LAZ CZ - {shown} sa tylko w {native}, podano --vertical-crs {vertical_crs} "
-        "(chmury punktow bez transformacji); {vertical_crs}: {alternative}, np. "
+        "LAZ CZ - {shown} są tylko w {native}, podano --vertical-crs {vertical_crs} "
+        "(chmury punktów bez transformacji); {vertical_crs}: {alternative}, np. "
         "{example}, albo obszar (--bbox/--geometry)",
     ),
 }

@@ -7,11 +7,11 @@ MESSAGES = {
     "format_zip": Text("ZIP archive", "archiwum ZIP"),
     "year_not_integer": Text(
         "{name} must be an integer 1900..2100, got {year!r}",
-        "{name} musi byc liczba calkowita 1900..2100, otrzymano {year!r}",
+        "{name} musi być liczbą całkowitą 1900..2100, otrzymano {year!r}",
     ),
     "min_year_exceeds_max": Text(
         "{min_name} ({min_year}) must not be greater than {max_name} ({max_year})",
-        "{min_name} ({min_year}) nie moze byc wiekszy niz {max_name} ({max_year})",
+        "{min_name} ({min_year}) nie może być większy niż {max_name} ({max_year})",
     ),
     "year_label_single": Text("from year {min_year}", "z roku {min_year}"),
     "year_label_range": Text(
@@ -52,11 +52,11 @@ MESSAGES = {
     ),
     "year_partial_sheets": Text(
         "{year} (incomplete sheets only)",
-        "{year} (tylko arkusze niepelne)",
+        "{year} (tylko arkusze niepełne)",
     ),
     "sheet_available_vintages": Text(
         "  {sheet}{label_suffix}: available vintages {year_texts:join}",
-        "  {sheet}{label_suffix}: dostepne roczniki {year_texts:join}",
+        "  {sheet}{label_suffix}: dostępne roczniki {year_texts:join}",
     ),
     "sheets_more_count": Text(
         "  ... and {remaining} more",
@@ -64,22 +64,22 @@ MESSAGES = {
     ),
     "year_range_hint": Text(
         "Hint: {hints:join( or )}",
-        "Podpowiedz: {hints:join( albo )}",
+        "Podpowiedź: {hints:join( albo )}",
     ),
     "record_invalid_freshness": Text(
         "Sheet index record has an invalid freshness {date!r} (expected YYYY-MM-DD)",
-        "Rekord skorowidza ma niepoprawna aktualnosc {date!r} (oczekiwano RRRR-MM-DD)",
+        "Rekord skorowidza ma niepoprawną aktualność {date!r} (oczekiwano RRRR-MM-DD)",
     ),
     "record_vertical_crs_mismatch": Text(
         "{sheet}: sheet index record declares vertical CRS {declared}, but "
         "{vertical_crs} was requested (expected {expected}) - file was not "
         "downloaded: {url}",
-        "{sheet}: rekord skorowidza deklaruje uklad wysokosci {declared}, a zadano "
-        "{vertical_crs} (oczekiwano {expected}) - plik nie zostal pobrany: {url}",
+        "{sheet}: rekord skorowidza deklaruje układ wysokości {declared}, a żądano "
+        "{vertical_crs} (oczekiwano {expected}) - plik nie został pobrany: {url}",
     ),
     "campaign_format_unsupported": Text(
         "Campaign {dirname}: format {fmt!r} is unsupported (product: {default_ext})",
-        "Kampania {dirname}: format {fmt!r} nieobslugiwany (produkt: {default_ext})",
+        "Kampania {dirname}: format {fmt!r} nieobsługiwany (produkt: {default_ext})",
     ),
     "no_format_verification": Text(
         "{name}: no format verification for {ext!r}",
@@ -91,15 +91,15 @@ MESSAGES = {
     ),
     "file_format_mismatch": Text(
         "{name}: content is not {format_name} (header: {head_bytes!r})",
-        "{name}: tresc nie jest {format_name} (naglowek: {head_bytes!r})",
+        "{name}: treść nie jest {format_name} (nagłówek: {head_bytes!r})",
     ),
     "coverage_measure_failed": Text(
         "{name}: failed to measure coverage: {error}",
-        "{name}: nie udalo sie zmierzyc pokrycia: {error}",
+        "{name}: nie udało się zmierzyć pokrycia: {error}",
     ),
     "asc_cell_count_mismatch": Text(
         "{name}: ASC has {count} cells, expected {expected}",
-        "{name}: ASC ma {count} komorek, oczekiwano {expected}",
+        "{name}: ASC ma {count} komórek, oczekiwano {expected}",
     ),
     "no_coverage_measurement": Text(
         "{name}: no coverage measurement for {ext!r}",
@@ -108,32 +108,32 @@ MESSAGES = {
     "url_suffix_mismatch": Text(
         "Sheet index record URL does not end with sheet code {sheet} and suffix "
         "{suffix}: {url}",
-        "URL rekordu skorowidza nie konczy sie godlem {sheet} z przyrostkiem "
+        "URL rekordu skorowidza nie kończy się godłem {sheet} z przyrostkiem "
         "{suffix}: {url}",
     ),
     "url_missing_sheet_code": Text(
         "Sheet index record URL does not contain sheet code {sheet}: {url}",
-        "URL rekordu skorowidza nie zawiera godla {sheet}: {url}",
+        "URL rekordu skorowidza nie zawiera godła {sheet}: {url}",
     ),
     "asc_header_incomplete": Text(
         "{name}: incomplete ASC header (missing {error}) - cannot check extent of "
         "sheet {sheet}",
-        "{name}: niepelny naglowek ASC (brak {error}) - nie mozna sprawdzic zasiegu "
+        "{name}: niepełny nagłówek ASC (brak {error}) - nie można sprawdzić zasięgu "
         "arkusza {sheet}",
     ),
     "sheet_extent_mismatch": Text(
         "{name}: file extent ({x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}) does not match "
         "the frame of sheet {sheet} ({min_x:.0f}, {min_y:.0f}, {max_x:.0f}, "
         "{max_y:.0f}, {crs})",
-        "{name}: zasieg pliku ({x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}) nie pokrywa "
-        "sie z rama godla {sheet} ({min_x:.0f}, {min_y:.0f}, {max_x:.0f}, "
+        "{name}: zasięg pliku ({x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}) nie pokrywa "
+        "się z ramą godła {sheet} ({min_x:.0f}, {min_y:.0f}, {max_x:.0f}, "
         "{max_y:.0f}, {crs})",
     ),
     "cell_size_unreadable": Text(
         "{name}: cannot read the cell size of the grid ({error}) - cannot check it "
         "against the {declared_m:g} m of sheet {sheet}",
-        "{name}: nie mozna odczytac rozmiaru oczka siatki ({error}) - nie mozna "
-        "porownac go z {declared_m:g} m arkusza {sheet}",
+        "{name}: nie można odczytać rozmiaru oczka siatki ({error}) - nie można "
+        "porównać go z {declared_m:g} m arkusza {sheet}",
     ),
     "resolution_mismatch": Text(
         "{name}: the grid has cells of {found_m:g} m, the index record of sheet "
@@ -152,13 +152,13 @@ MESSAGES = {
         "Choose another flight of the sheet with --year or --max-year: the index "
         "lists it also in {years:join}",
         "Wybierz inny nalot arkusza przez --year lub --max-year: skorowidz ma go "
-        "takze w latach {years:join}",
+        "także w latach {years:join}",
     ),
     # ``download.manager``.
     "year_excludes_bounds": Text(
         "--year excludes --min-year/--max-year (--year Y is shorthand for --min-year "
         "Y --max-year Y)",
-        "--year wyklucza sie z --min-year/--max-year (--year Y to skrot --min-year Y "
+        "--year wyklucza się z --min-year/--max-year (--year Y to skrót --min-year Y "
         "--max-year Y)",
     ),
     "error_item": Text("{name}: {error}", "{name}: {error}"),
@@ -170,31 +170,31 @@ MESSAGES = {
     "no_coverage_text": Text(
         "GUGiK has no data for any of the {total} {total:plural(sheet|sheets)} of the "
         "area",
-        "GUGiK nie ma danych dla zadnego z {total} "
+        "GUGiK nie ma danych dla żadnego z {total} "
         "{total:plural(arkusza|arkuszy|arkuszy)} obszaru",
     ),
     "provider_no_campaigns": Text(
         "Provider {name} does not support campaigns "
         "(--all-campaigns/--min-year/--max-year/--year/--full-sheet)",
-        "Provider {name} nie obsluguje kampanii "
+        "Provider {name} nie obsługuje kampanii "
         "(--all-campaigns/--min-year/--max-year/--year/--full-sheet)",
     ),
     "range_check_requirements": Text(
         "Range check requires PL campaigns and a year boundary",
-        "Sprawdzenie przedzialu wymaga kampanii PL i granicy roku",
+        "Sprawdzenie przedziału wymaga kampanii PL i granicy roku",
     ),
     "year_check_failed": Text(
         "could not check the data year for {failed_count} of {sheets_count} "
         "{sheets_count:plural(sheet|sheets)} (sheet index error, not missing data): "
         "{names} - retry the download",
-        "nie udalo sie sprawdzic roku danych dla {failed_count} z {sheets_count} "
-        "{sheets_count:plural(arkusza|arkuszy|arkuszy)} (blad skorowidza, nie brak "
-        "danych): {names} - ponow pobranie",
+        "nie udało się sprawdzić roku danych dla {failed_count} z {sheets_count} "
+        "{sheets_count:plural(arkusza|arkuszy|arkuszy)} (błąd skorowidza, nie brak "
+        "danych): {names} - ponów pobranie",
     ),
-    "link_error": Text("link {link}: {error}", "dowiazanie {link}: {error}"),
+    "link_error": Text("link {link}: {error}", "dowiązanie {link}: {error}"),
     "large_file_notice": Text(
         "{what} PL {sheet}: large file {url} - {size_text}",
-        "{what} PL {sheet}: duzy plik {url} - {size_text}",
+        "{what} PL {sheet}: duży plik {url} - {size_text}",
     ),
     "campaigns_not_downloaded": Text(
         "{errors_count} of {chosen_count} campaigns not downloaded ({listing:join})",
@@ -203,27 +203,27 @@ MESSAGES = {
     "index_unavailable_unverified": Text(
         "{sheet}: GUGiK sheet index not available - used local version without "
         "checking for a newer one ({unverified_reason})",
-        "{sheet}: skorowidz GUGiK niedostepny - uzyto lokalnej wersji bez sprawdzenia "
+        "{sheet}: skorowidz GUGiK niedostępny - użyto lokalnej wersji bez sprawdzenia "
         "nowszej ({unverified_reason})",
     ),
     "index_unavailable_many_sheets": Text(
         "GUGiK sheet index not available - used local versions without checking for a "
         "newer one for {sheets_count} {sheets_count:plural(sheet|sheets)} ({shown}) "
         "({unverified_reason})",
-        "skorowidz GUGiK niedostepny - dla {sheets_count} "
-        "{sheets_count:plural(arkusza|arkuszy|arkuszy)} uzyto lokalnych wersji bez "
+        "skorowidz GUGiK niedostępny - dla {sheets_count} "
+        "{sheets_count:plural(arkusza|arkuszy|arkuszy)} użyto lokalnych wersji bez "
         "sprawdzenia nowszej ({shown}) ({unverified_reason})",
     ),
     "newer_campaign_available": Text(
         "newer campaign available for {sheets_count} "
         "{sheets_count:plural(sheet|sheets)} ({shown}) - used local versions; "
         "download with: --upgrade",
-        "dostepna nowsza kampania dla {sheets_count} "
-        "{sheets_count:plural(arkusza|arkuszy|arkuszy)} ({shown}) - uzyto lokalnych "
+        "dostępna nowsza kampania dla {sheets_count} "
+        "{sheets_count:plural(arkusza|arkuszy|arkuszy)} ({shown}) - użyto lokalnych "
         "wersji; pobierz: --upgrade",
     ),
     "campaign_sidecar_failed": Text(
         "Failed to write the mandatory sidecar of campaign {dirname}: {error}",
-        "Nie udalo sie zapisac obowiazkowego sidecara kampanii {dirname}: {error}",
+        "Nie udało się zapisać obowiązkowego sidecara kampanii {dirname}: {error}",
     ),
 }

@@ -59,6 +59,7 @@ from tests.integration.test_orto_cutout import ARGS as ORTO_CUTOUT
 from tests.integration.test_orto_cutout import KRAKOW
 from tests.integration.test_orto_cutout import SESSION_FACTORY as ORTO_WCS_SESSION
 from tests.integration.test_orto_cutout import _session as orto_wcs_session
+from tests.support.errors import error_line
 from tests.support.parity import assert_notices_printed, assert_same_store, run_both
 from tests.unit.test_geometry import _write_prj
 
@@ -686,7 +687,7 @@ def test_input_errors_same_type_and_text(tmp_path, argv, kwargs):
     )
     assert run.cli_code == 2
     assert type(run.api_error).__name__ == "ValidationError"
-    assert run.cli_text.strip() == f"Error: {run.api_error.localized('pl')}"
+    assert run.cli_text.strip() == error_line(run.api_error)
     assert not run.cli_store.exists() and not run.api_store.exists()
 
 
@@ -733,7 +734,7 @@ def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
     run = run_both(argv, lambda out: operation(root=out, **options), tmp_path)
     assert run.cli_code == 2
     assert type(run.api_error) is ValidationError
-    assert run.cli_text == f"Error: {run.api_error.localized('pl')}\n"
+    assert run.cli_text == f"{error_line(run.api_error)}\n"
     assert run.cli_stdout == ""
     assert not run.cli_store.exists() and not run.api_store.exists()
 

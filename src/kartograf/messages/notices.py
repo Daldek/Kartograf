@@ -6,7 +6,7 @@ MESSAGES = {
     # ``notices``.
     "size_unknown": Text(
         "size unknown (the server did not send Content-Length)",
-        "rozmiar nieznany (serwer nie podal Content-Length)",
+        "rozmiar nieznany (serwer nie podał Content-Length)",
     ),
     "size_known": Text(
         "{length} B (approx. {megabytes:.0f} MB)",
