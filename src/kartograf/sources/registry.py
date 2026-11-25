@@ -21,11 +21,15 @@ from kartograf.sources.descriptor import (
     ArchiveLayersParams,
     AtomFilesParams,
     CountryProfile,
+    DatasetRelease,
     FeatureBBoxParams,
     FeatureLayer,
     IndexSource,
     LicenseInfo,
     PackageVariant,
+    ReleaseFile,
+    ReleaseFilesParams,
+    ReleaseMember,
     SheetGrid,
     SheetIndexParams,
     SignalKind,
@@ -93,6 +97,14 @@ _PGW_LICENSE = LicenseInfo(
     id="PL-APGW",
     attribution=message("legal.pgw_attribution"),
     url="https://apgw.gov.pl/pl/III-cykl-materialy-do-pobrania",
+)
+
+# CAMELS-PL: the record licence of releases 2.0.0 and 2.1.0 (ECO-086). The sidecar of
+# a file carries the provider lines of its release instead (DEV-20.12, ADR-062).
+_CAMELS_LICENSE = LicenseInfo(
+    id="CC-BY-4.0",
+    attribution=message("legal.camels_attribution"),
+    url="https://creativecommons.org/licenses/by/4.0/",
 )
 
 _PL_VERTICAL_BOTH = ("EPSG:9650", "EPSG:9651")
@@ -2530,6 +2542,114 @@ _PL_PGW = SourceDescriptor(
     license=_PGW_LICENSE,
 )
 
+# CAMELS-PL (ECO-086, ADR-062): the catchment boundaries and the gauging stations of
+# a release, two GeoPackages (EPSG:2180) of its ZIP on Zenodo. Checked on 2026-11-23
+# from the central directories of the ZIPs (range requests): 2.0.0 and 2.1.0 hold the
+# same bytes of both files; 1.0.0 (354 catchments, another file under the root
+# ``CAMELS-PL/``, CC BY-NC 4.0) is known and refused.
+_ZENODO_RECORDS = "https://zenodo.org/api/records"
+_CAMELS_CATCHMENTS = (
+    "CAMELS_PL_catchment_boundaries/catchments/CAMELS_PL_catchments.gpkg"
+)
+_CAMELS_GAUGES = (
+    "CAMELS_PL_catchment_boundaries/gauging_stations/CAMELS_PL_gauging_stations.gpkg"
+)
+_CAMELS_CATCHMENTS_SHA256 = (
+    "dadc37e02febc0f188683c0df18b2380767a4396e7948213b73617ff4746d6b9"
+)
+_CAMELS_GAUGES_SHA256 = (
+    "a0616fc6eef89b1a3e84de3688e35a87c54ffb2517dc1a54ddcc3af4579d8c14"
+)
+
+
+def _camels_members(root: str) -> tuple[ReleaseMember, ...]:
+    """Return the two files of releases 2.0.0 and 2.1.0 below the root of a ZIP."""
+    return (
+        ReleaseMember(
+            "catchments",
+            f"{root}/{_CAMELS_CATCHMENTS}",
+            95_703_040,
+            "2ff1251b",
+            _CAMELS_CATCHMENTS_SHA256,
+        ),
+        ReleaseMember(
+            "gauging-stations",
+            f"{root}/{_CAMELS_GAUGES}",
+            196_608,
+            "6addfeba",
+            _CAMELS_GAUGES_SHA256,
+        ),
+    )
+
+
+_PL_CAMELS = SourceDescriptor(
+    key="pl.camels.camels",
+    country="PL",
+    product="camels",
+    name=message("sources.camels_name"),
+    provider_name="CAMELS-PL",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="metadata",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_ZENODO_RECORDS}/",
+            notes=message("sources.camels_note"),
+            params=ReleaseFilesParams(
+                dataset="CAMELS-PL",
+                files=(
+                    ReleaseFile(
+                        "catchments",
+                        r"(?:^|/)CAMELS_PL_catchment_boundaries/catchments/"
+                        r"CAMELS_PL_catchments\.gpkg$",
+                    ),
+                    ReleaseFile(
+                        "gauging-stations",
+                        r"(?:^|/)CAMELS_PL_catchment_boundaries/gauging_stations/"
+                        r"CAMELS_PL_gauging_stations\.gpkg$",
+                    ),
+                ),
+                releases=(
+                    DatasetRelease(
+                        version="1.0.0",
+                        record="20133183",
+                        doi="10.5281/zenodo.20133183",
+                        published="2026-05-29",
+                        url=f"{_ZENODO_RECORDS}/20133183/files/CAMELS-PL.zip/content",
+                        size=780_566_205,
+                        refusal=message("sources.camels_1_0_0_refused"),
+                    ),
+                    DatasetRelease(
+                        version="2.0.0",
+                        record="23102156",
+                        doi="10.5281/zenodo.23102156",
+                        published="2026-10-07",
+                        url=f"{_ZENODO_RECORDS}/23102156/files/CAMELS_PL_2.0.zip/content",
+                        size=1_654_474_228,
+                        members=_camels_members("CAMELS_PL_2.0"),
+                    ),
+                    DatasetRelease(
+                        version="2.1.0",
+                        record="23275336",
+                        doi="10.5281/zenodo.23275336",
+                        published="2026-10-11",
+                        url=f"{_ZENODO_RECORDS}/23275336/files/CAMELS_PL_2.1.zip/content",
+                        size=1_670_805_350,
+                        members=_camels_members("CAMELS_PL_2.1"),
+                    ),
+                ),
+                concept=f"{_ZENODO_RECORDS}/20133182",
+                concept_doi="10.5281/zenodo.20133182",
+                lines=("S", "P", "L", "RD"),
+            ),
+        ),
+    ),
+    storage_subdir="hydro/pl_camels",
+    default_extension=".gpkg",
+    license=_CAMELS_LICENSE,
+)
+
 # Survey control of CR (raport E, wiersz 23; service and layers recorded
 # 2026-10-16, tests/fixtures/cz/survey_control): --network -> the point layers
 # of BodovaPole/MapServer, layer names without diacritics. The points
@@ -2924,6 +3044,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         *_E5_PL_SOURCES,
         # ADR-059: the water management plan data of PGW Wody Polskie.
         _PL_PGW,
+        # ADR-062: the catchments and gauges of CAMELS-PL.
+        _PL_CAMELS,
         SourceDescriptor(
             key="eu.clms.corine",
             country="EU",

@@ -39,6 +39,7 @@ from kartograf.sources.descriptor import (
     ArchiveLayersParams,
     AtomFilesParams,
     FeatureBBoxParams,
+    ReleaseFilesParams,
     SheetIndexParams,
     SourceDescriptor,
     UnitPackageParams,
@@ -662,7 +663,7 @@ def _content_variant(descriptor: SourceDescriptor, suffix: str) -> str | None:
                 isinstance(params, FeatureBBoxParams)
                 and params.selection == "all"
                 and not params.choice
-            ) or isinstance(params, ArchiveLayersParams):
+            ) or isinstance(params, ArchiveLayersParams | ReleaseFilesParams):
                 return ""
         return None
     for channel in descriptor.channels:
@@ -723,6 +724,7 @@ _COLLECTION_PARAMS = (
     AtomFilesParams,
     FeatureBBoxParams,
     ArchiveLayersParams,
+    ReleaseFilesParams,
 )
 
 

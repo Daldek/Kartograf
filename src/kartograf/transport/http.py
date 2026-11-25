@@ -7,14 +7,17 @@ attempts with exponential backoff (``backoff_delay``: 2 s, 4 s), only
 network errors, 429 and 5xx are retried (``is_retryable``), ``Retry-After`` extends
 the pause (``retry_wait``), ``DownloadError.status_code`` carries the HTTP code
 of the last attempt (``http_failure``). Files are downloaded by ``download_to``,
-in-memory responses by ``get_with_retry``; per-thread sessions by ``SessionPerThread``.
+in-memory responses by ``get_with_retry``, a range of a file by ``fetch_range``
+(``download_to`` with a ``Range`` header and ``require_partial`` for a large one,
+ADR-062); per-thread sessions by ``SessionPerThread``.
 A thread of a stopping pool (``kartograf.interrupt``) leaves ``download_to``,
-``get_with_retry`` and ``head_signal`` with ``Stopped`` before the next attempt,
-between the chunks of a body and instead of a retry pause.
+``get_with_retry``, ``fetch_range`` and ``head_signal`` with ``Stopped`` before the
+next attempt, between the chunks of a body and instead of a retry pause.
 """
 
 import logging
 import os
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -41,6 +44,11 @@ RETRY_BACKOFF_BASE = 2
 # Upper bound of the wait from the Retry-After header (s): we would not outlast a longer
 # server outage within three attempts anyway, and the CLI must not "hang".
 MAX_RETRY_AFTER = 60
+# ``DownloadError.reason`` of a server that does not answer a range request with that
+# range (``require_partial``): it sent the whole file, another range or no
+# ``Content-Range``. The caller reads the whole file instead (ADR-062).
+RANGE_UNSUPPORTED = "range_unsupported"
+_CONTENT_RANGE = re.compile(r"bytes (\d+)-(\d+)/(\d+|\*)")
 
 
 def backoff_delay(attempt: int) -> float:
@@ -254,6 +262,152 @@ def get_with_retry(
     ) from last_error
 
 
+def _range_header(start: int | None, length: int) -> str:
+    """Return the ``Range`` of ``length`` bytes from ``start``, or the last ones."""
+    if start is None:
+        return f"bytes=-{length}"
+    return f"bytes={start}-{start + length - 1}"
+
+
+def require_partial(
+    response: requests.Response, start: int | None, length: int, context: str
+) -> tuple[int, int | None]:
+    """Check that ``response`` holds the range it was asked for (HTTP 206).
+
+    ``start`` ``None``: the last ``length`` bytes were asked (a suffix range), so the
+    answer ends at the last byte of the file and holds at most ``length`` bytes;
+    otherwise exactly the bytes ``start`` to ``start + length - 1``. Usable as the
+    ``validate`` of ``download_to`` through a closure.
+
+    Returns
+    -------
+    tuple of (int, int or None)
+        The offset of the first byte of the answer in the file and the length of
+        the file its ``Content-Range`` gives (``None``: ``*``, never for a suffix).
+
+    Raises
+    ------
+    DownloadError
+        ``reason`` ``RANGE_UNSUPPORTED``: another status (a server that ignores
+        ``Range`` sends the whole file with 200), no ``Content-Range`` or another
+        range. The response is closed before its body is read.
+    """
+    header = response.headers.get("Content-Range")
+    found = (
+        _CONTENT_RANGE.fullmatch(header.strip()) if isinstance(header, str) else None
+    )
+    if response.status_code == 206 and found is not None:
+        first, last = int(found[1]), int(found[2])
+        total = None if found[3] == "*" else int(found[3])
+        if start is None:
+            if total is not None and last == total - 1 and 0 < total - first <= length:
+                return first, total
+        elif first == start and last == start + length - 1:
+            return first, total
+    response.close()
+    raise DownloadError(
+        message(
+            "transport.range_unsupported",
+            context=context,
+            range=_range_header(start, length),
+            http_status=response.status_code,
+            content_range=header or "-",
+        ),
+        status_code=response.status_code,
+        reason=RANGE_UNSUPPORTED,
+    )
+
+
+def fetch_range(
+    session: requests.Session,
+    url: str,
+    start: int | None,
+    length: int,
+    *,
+    timeout: float,
+    retries: int = MAX_RETRIES,
+    description: str = "",
+) -> tuple[bytes, int, int | None]:
+    """Fetch a range of a file into memory with the retry policy of ``get_with_retry``.
+
+    ``length`` bytes from ``start``, or the last ``length`` bytes of the file when
+    ``start`` is ``None``. The file is asked without a content coding (a range counts
+    the bytes of the coded answer) and the body is read only after the answer was
+    checked (``require_partial``): of a server that sends the whole file instead
+    nothing but its headers is read. Meant for small ranges (a ZIP directory); a
+    large one goes to a file through ``download_to`` with ``headers``.
+
+    Returns
+    -------
+    tuple of (bytes, int, int or None)
+        The bytes, the offset of the first of them in the file and the length of
+        the file (``None``: the server did not give it).
+
+    Raises
+    ------
+    DownloadError
+        ``reason`` ``RANGE_UNSUPPORTED`` at once (no retry), a non-retryable HTTP
+        error at once, otherwise after ``retries`` attempts; a body shorter than
+        its range is retried like a broken connection.
+    """
+    headers = {"Range": _range_header(start, length), "Accept-Encoding": "identity"}
+    context = description or url
+    last_error: requests.RequestException | None = None
+    for attempt in range(retries):
+        check_stop()
+        try:
+            response = session.get(url, timeout=timeout, headers=headers, stream=True)
+            response.raise_for_status()
+            first, total = require_partial(response, start, length, context)
+            body = response.content
+            expected = length if start is not None or total is None else total - first
+            if len(body) != expected:
+                raise requests.ConnectionError(
+                    message(
+                        "transport.range_short",
+                        context=context,
+                        got=len(body),
+                        expected=expected,
+                    )
+                )
+            return body, first, total
+        except requests.RequestException as exc:
+            last_error = exc
+            if not is_retryable(exc):
+                raise http_failure(
+                    message(
+                        "transport.http_error_no_retry",
+                        context=context,
+                        http_status=http_status(exc),
+                        error=reason(exc),
+                    ),
+                    exc,
+                ) from exc
+            if attempt < retries - 1:
+                delay = retry_wait(exc, backoff_delay(attempt))
+                logger.warning(
+                    message(
+                        "transport.attempt_failed_retrying",
+                        context=context,
+                        attempt=attempt + 1,
+                        retries=retries,
+                        failure_reason=failure_reason(exc),
+                        delay=delay,
+                    ),
+                )
+                logger.debug("%s: %r", context, exc)
+                _pause(delay)
+    raise http_failure(
+        message(
+            "transport.download_failed_retries",
+            context=context,
+            retries=retries,
+            failure_reason=failure_reason(last_error),
+        ),
+        last_error,
+    ) from last_error
+
+
 def response_signal(response: requests.Response) -> dict[str, Any]:
     """HTTP freshness signal of a response (versioned store, ``extra.http``).
 
@@ -385,6 +539,7 @@ def download_to(
     save: Callable[[requests.Response, Path], Path] | None = None,
     chunk_size: int = 1_048_576,
     on_response: Callable[[requests.Response], None] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> Path:
     """Download a URL to a file (atomically, with a retry policy); return the path.
 
@@ -404,6 +559,9 @@ def download_to(
         Called with the response after ``validate``, before writing (e.g. to
         capture ``response_signal``); a retried attempt calls it again, so
         the last attempt wins.
+    headers : dict, optional
+        Request headers of every attempt (a ``Range`` with ``require_partial`` as
+        ``validate``).
 
     The target directory is created only after a successful response - an HTTP error
     leaves no empty directories.
@@ -416,7 +574,8 @@ def download_to(
         check_stop()
         try:
             logger.debug(f"Downloading {context} (attempt {attempt + 1}/{retries})")
-            response = session.get(url, stream=True, timeout=timeout)
+            extra: dict[str, Any] = {"headers": headers} if headers is not None else {}
+            response = session.get(url, stream=True, timeout=timeout, **extra)
             response.raise_for_status()
             if validate is not None:
                 validate(response)

@@ -5,6 +5,106 @@ All significant changes to the project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-11-25
+
+Changes since 0.8.2, to be released as 0.9.0, the next minor release. The release commit
+renames this heading to `[0.9.0] - <date>` (REL-2.1).
+
+### Added
+
+#### Catchments and gauging stations of CAMELS-PL (ADR-062)
+
+- `hydro download --product camels --country pl --whole-country [--version 2.0.0|2.1.0]`
+  (`download_collection(product="camels", country="pl", whole_country=True, version=None)`;
+  `check_collection` and `validate_collection_request` take `version` too, and so does the MCP
+  tool `kartograf_hydro_download`): the catchment boundaries and the gauging stations of a
+  release of CAMELS-PL (Zenodo), its GeoPackages `CAMELS_PL_catchments.gpkg` and
+  `CAMELS_PL_gauging_stations.gpkg` read out of the ZIP of the release and stored as published
+  (EPSG:2180) in `hydro/pl_camels/country/pl_catchments.gpkg` and
+  `hydro/pl_camels/country/pl_gauging-stations.gpkg` (descriptor `pl.camels.camels`, provider
+  `CAMELS-PL`; Nogat plan `docs/plans/2026-11-22-camels-pl.md` step 2, ECO-086; plan
+  `docs/plans/2026-11-23-camels-pl-catchments.md`). The registry knows the releases 1.0.0
+  (refused: another layout and the licence CC BY-NC 4.0), 2.0.0 and 2.1.0 (the newest, read
+  when `--version` is not given), and pins the length of each ZIP and the size, CRC and
+  SHA-256 of each file (`ReleaseFilesParams`, `ReleaseFile`, `ReleaseMember` and
+  `DatasetRelease` of `kartograf.sources.descriptor`); a file is found by its path pattern
+  whatever the root of the ZIP. `--version 1.0.0`, a version the registry does not know and
+  `--version` with another product are a `validation_error` before any request. The label of
+  a version is the date of the first release with its bytes (`2026-10-07`, `label_source`
+  `edition`), so 2.0.0 and 2.1.0, which hold the same bytes, make one version: a stored version
+  with the pinned bytes is used without a request, `--force` reads the files again
+  (`unchanged`), and `--check` says `current`, `newer` or `missing` without a transfer. The
+  sidecar names the release read (`request.version`, `extra.release`), every release with these
+  bytes (`extra.releases`) and the published member (`extra.source` `{url, member, crc32,
+  read}`); `command_for_file` rebuilds the command with `--version`, and the read API
+  (`describe_segment`, `iter_store`) knows the segment `hydro/pl_camels`.
+- Members of a ZIP read by HTTP range requests (`transport/zip_range.py`: `read_directory`,
+  `fetch_member`, and `local_directory`, `extract_member` for a local ZIP; `transport/http.py`:
+  `fetch_range`, `require_partial`, `download_to(headers=)`): the central directory from the
+  last 1 MiB of the file (one more request for a directory that begins before it; ZIP64), then
+  the local header and the compressed bytes of each member, unpacked (stored or deflated) and
+  checked against the size and CRC of its directory entry. A CAMELS-PL read transfers about
+  55.5 MB of a 1.67 GB ZIP. A server that does not answer a range request with the range raises
+  a `DownloadError` with the reason `range_unsupported`; the CAMELS-PL engine then downloads the
+  whole ZIP into the staging directory, reads the members from it under the same checks and
+  removes it (`extra.source.read` `archive` instead of `range`).
+- The provider lines of Nogat DEV §20 (`kartograf.attribution`; `_data/provider_lines.json`,
+  the table of provider lines and the terms lines copied byte for byte): the CAMELS-PL files
+  carry S and P of IMGW-PIB and L of their release (DEV-20.12), and after them the terms line
+  RD of IMGW-PIB, `Regulamin danych IMGW-PIB: https://danepubliczne.imgw.pl/regulations`
+  (DEV-20.7; the author's decision of 2026-11-24, ADR-062 erratum 1), in the sidecar
+  (`license.attribution`, one line each; `extra.attribution` S, P and L, `extra.terms_notice`
+  RD, parted by `split_terms`), and a plain write (`-o DIR`) of them writes `DIR/ATTRIBUTION.txt`
+  beside the two files, listed in `files[]`: the lines merged into an existing file in the order
+  of DEV-20.4 and DEV-20.7, none removed. An existing `ATTRIBUTION.txt` that is no readable UTF-8
+  file is a `conflict` (`output_exists`) before any request, and `--force` replaces it with the
+  lines alone; `--check -o DIR` lists the file as `write`, `replace` or `conflict`.
+- `ReleaseLayoutError` (`kartograf.ReleaseLayoutError`, a `DownloadError`; registry code
+  `data_error`, `details.reason` `release_layout`, exit 7; `details.version`, `record`, `url`,
+  `member`; the hint names the DOI of the release): the ZIP of a release differs from what the
+  registry pins (its length, a file found by its pattern not exactly once, a member of another
+  size, CRC, compression method or SHA-256), and nothing is written. A Kartograf release that
+  checked the new layout reads it.
+- The notices `whole_archive` (warning: the server does not answer range requests, so the
+  whole ZIP is downloaded) and `newer_release` (info: the record of the CAMELS-PL concept DOI
+  resolves to a release newer than every one Kartograf knows, which is not read). Before a
+  range read, `whole_country_size` gives the size of the files, the bytes to transfer and the
+  size of the ZIP; a failed request of the concept record is a `check_failed` warning of
+  `--check` and only a log record of a run.
+- `kartograf.testing.build_camels_archive(path, *, version=None)` and
+  `build_camels_store(root, *, version=None)` (`CamelsFixture`, `CAMELS_DATASET`,
+  `CAMELS_SEGMENT`), for Obserwator's step 3 of the Nogat plan: a tiny ZIP in the published
+  layout of 2.0.0 or 2.1.0 whose GeoPackages hold six gauges of 2.1.0 (codes, names and points
+  as published; fictional rectangle catchments nested as the published ones, a MultiPolygon and
+  a ring self-intersection as published), built offline from `_data/camels_fixture.json`, and
+  a store written from it by the engine of the command, its range requests answered from
+  memory: the version `2026-10-07_<sha8>` of each file with the sidecar of the command.
+
+### Changed
+
+- `parse_command` takes `--version` as the program's flag only before the group: `hydro
+  download ... --version 2.0.0` is a call, while `--version` before the group and `-h`/`--help`
+  anywhere stay a `UsageError` (before, any `--version` token was one).
+- `hydro download` declares the registry code `data_error` (a new `errors` parameter of
+  `collection_commands` in `catalog/commands/_collection.py`, `DATA_ERRORS` by default), so its
+  catalog entry and MCP tool list it; its summary, description and the texts of
+  `--whole-country` and `--check` name CAMELS-PL.
+- `emit_sidecar` and `build_metadata` take `attribution=`: the `license.attribution` of a file
+  whose lines depend on it (the lines of a CAMELS-PL release); without it the descriptor's text.
+- Documentation: ADR-062 (amends ADR-042 D1, D2 and D6 and ADR-054 decisions 3 and 6; erratum 1:
+  the terms line RD) and the plan `docs/plans/2026-11-23-camels-pl-catchments.md`; `CLAUDE.md`
+  words the deviation from Nogat DEV-20 anew: the GUGiK, ISRIC and ČÚZK products keep
+  Kartograf's own `license.attribution` and no `ATTRIBUTION.txt`, while the CAMELS-PL files
+  carry S, P, L and RD; USAGE 1.14 describes the product.
+
+### Fixed
+
+- An `ATTRIBUTION.txt` that holds every line is left as it is whatever its line endings:
+  `plan_attribution` and `write_attribution` compared its bytes with the LF text, so a file
+  with CRLF (written on Windows) or without a final newline was replaced by the same lines
+  (`replace`/`replaced` instead of none). They now compare its lines; a file they write stays
+  UTF-8 with LF (DEV-14.1).
+
 ## [0.8.2] - 2026-11-18
 
 An urgent patch of a gross formula defect (Nogat CMP-9.1, CMP-9.2), released outside the
@@ -5070,6 +5170,8 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[0.9.0]: https://github.com/Daldek/Kartograf/compare/v0.8.2...v0.9.0
+[0.8.2]: https://github.com/Daldek/Kartograf/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/Daldek/Kartograf/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Daldek/Kartograf/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/Daldek/Kartograf/compare/v0.7.1...v0.7.2

@@ -1,0 +1,85 @@
+{
+  "source": "kartograf.testing.build_camels_archive: six gauges of CAMELS-PL 2.1.0 (Zenodo record 23275336) with their gauge_id, gauge_name, water_body_name and points as published; the catchments are fictional rectangles in EPSG:2180, nested as the published ones (Wisla in Ustron-Oblaziec in Skoczow, Gorki Wielkie in Skoczow), Wampierzow a MultiPolygon of two parts and Okuninka a MultiPolygon with a ring self-intersection, as published",
+  "crs": "EPSG:2180",
+  "prj": "PROJCS[\"ETRS_1989_Poland_CS92\",GEOGCS[\"GCS_ETRS_1989\",DATUM[\"D_ETRS_1989\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"False_Easting\",500000.0],PARAMETER[\"False_Northing\",-5300000.0],PARAMETER[\"Central_Meridian\",19.0],PARAMETER[\"Scale_Factor\",0.9993],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]",
+  "member_date": [2026, 10, 7, 10, 11, 0],
+  "files": {
+    "catchments": {
+      "layer": "CAMELS_PL_catchments",
+      "geometry": "Unknown",
+      "last_change": "2026-09-11T06:22:32.230Z"
+    },
+    "gauging-stations": {
+      "layer": "CAMELS_PL_gauging_stations",
+      "geometry": "Point",
+      "last_change": "2026-09-11T06:22:30.506Z"
+    }
+  },
+  "gauges": [
+    {
+      "gauge_id": 149180100,
+      "gauge_name": "Skoczów",
+      "water_body_name": "Wisła",
+      "point": [485003.0, 215120.0],
+      "catchment": {
+        "type": "Polygon",
+        "coordinates": [[[480700, 190900], [501200, 190900], [501200, 215200], [480700, 215200], [480700, 190900]]]
+      }
+    },
+    {
+      "gauge_id": 149180110,
+      "gauge_name": "Ustroń-Obłaziec",
+      "water_body_name": "Wisła",
+      "point": [489207.0, 201471.0],
+      "catchment": {
+        "type": "Polygon",
+        "coordinates": [[[485900, 190900], [501200, 190900], [501200, 201700], [485900, 201700], [485900, 190900]]]
+      }
+    },
+    {
+      "gauge_id": 149180120,
+      "gauge_name": "Górki Wielkie",
+      "water_body_name": "Brennica",
+      "point": [489377.0, 211688.0],
+      "catchment": {
+        "type": "Polygon",
+        "coordinates": [[[488700, 201700], [499800, 201700], [499800, 213400], [488700, 213400], [488700, 201700]]]
+      }
+    },
+    {
+      "gauge_id": 149180140,
+      "gauge_name": "Wisła",
+      "water_body_name": "Wisła",
+      "point": [492832.0, 196067.0],
+      "catchment": {
+        "type": "Polygon",
+        "coordinates": [[[492400, 190900], [501200, 190900], [501200, 199500], [492400, 199500], [492400, 190900]]]
+      }
+    },
+    {
+      "gauge_id": 150210070,
+      "gauge_name": "Wampierzów",
+      "water_body_name": "Breń",
+      "point": [658829.0, 272630.0],
+      "catchment": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [[[645000, 255000], [671900, 255000], [671900, 272700], [645000, 272700], [645000, 255000]]],
+          [[[640000, 258000], [642000, 258000], [642000, 260000], [640000, 260000], [640000, 258000]]]
+        ]
+      }
+    },
+    {
+      "gauge_id": 151230030,
+      "gauge_name": "Okuninka",
+      "water_body_name": "Włodawka",
+      "point": [813618.0, 415811.0],
+      "catchment": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [[[790000, 400000], [814000, 400000], [814000, 424000], [802000, 424000], [808000, 412000], [796000, 412000], [802000, 424000], [790000, 424000], [790000, 400000]]]
+        ]
+      }
+    }
+  ]
+}

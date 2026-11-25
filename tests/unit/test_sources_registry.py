@@ -16,6 +16,7 @@ import pytest
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.collections import _capability
 from kartograf.download.options import ELEVATION_PRODUCTS, IMAGERY_PRODUCTS
+from kartograf.download.releases import choose_release
 from kartograf.exceptions import ValidationError
 from kartograf.landcover.store import hsg_segment
 from kartograf.providers.corine import CorineProvider
@@ -32,6 +33,8 @@ from kartograf.sources.descriptor import (
     AtomFilesParams,
     FeatureBBoxParams,
     LicenseInfo,
+    ReleaseFilesParams,
+    ReleaseMember,
     SheetIndexParams,
     SourceDescriptor,
     TransportKind,
@@ -128,6 +131,15 @@ _OPENZU_HEAD = {
 # The only spatial file of the IIaPGW publication (ADR-059, recorded 2026-11-06).
 _PGW_FIXTURE = Path(__file__).parent.parent / "fixtures" / "pl" / "pgw" / "archive.json"
 _PGW_RECORDED = json.loads(_PGW_FIXTURE.read_text(encoding="utf-8"))
+# The record of the newest CAMELS-PL release and the answer to a range of its ZIP
+# (ADR-062, recorded 2026-11-23).
+_CAMELS_FIXTURES = Path(__file__).parent.parent / "fixtures" / "pl" / "camels"
+_CAMELS_ANSWERS = json.loads(
+    (_CAMELS_FIXTURES / "answers.json").read_text(encoding="utf-8")
+)
+_CAMELS_RECORD = json.loads(
+    (_CAMELS_FIXTURES / "record_23275336.json").read_text(encoding="utf-8")
+)
 
 
 # Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md;
@@ -166,6 +178,7 @@ CHANNEL_SIGNALS = [
     ("cz.cuzk.orto", TransportKind.DIRECT_FILES, "metadata"),
     ("pl.gugik.nmt_100m", TransportKind.DIRECT_FILES, "metadata"),
     ("pl.pgw.pgw", TransportKind.DIRECT_FILES, "none"),
+    ("pl.camels.camels", TransportKind.DIRECT_FILES, "metadata"),
 ]
 
 
@@ -731,7 +744,11 @@ class TestCollectionChannels:
         for d, ch in channels:
             if ch.transport == TransportKind.DIRECT_FILES:
                 assert isinstance(
-                    ch.params, UnitPackageParams | AtomFilesParams | ArchiveLayersParams
+                    ch.params,
+                    UnitPackageParams
+                    | AtomFilesParams
+                    | ArchiveLayersParams
+                    | ReleaseFilesParams,
                 ), d.key
                 if isinstance(ch.params, AtomFilesParams):
                     assert ch.params.service_feed == ch.endpoint, d.key
@@ -964,6 +981,122 @@ class TestCollectionChannels:
         assert matched == ["Geobaza_2aPGW_ver_20230915.gdb/gdb"]
         assert d.license.url == _PGW_RECORDED["page"]
 
+    def test_camels_releases_are_the_checked_ones(self):
+        """CAMELS-PL (ADR-062): the releases checked on 2026-11-23 from the central
+        directories of their ZIPs - 1.0.0 refused, 2.0.0 and 2.1.0 with the same two
+        members below their roots, the newest the default - and the recorded record
+        of 2.1.0, which names its ZIP, its size and the concept DOI."""
+        d = get_source("pl.camels.camels")
+        (channel,) = d.channels
+        params = channel.params
+        assert isinstance(params, ReleaseFilesParams)
+        assert (d.provider_name, d.product, d.storage_subdir) == (
+            "CAMELS-PL",
+            "camels",
+            "hydro/pl_camels",
+        )
+        assert (channel.transport, channel.update_signal, channel.horizontal_crs) == (
+            TransportKind.DIRECT_FILES,
+            "metadata",
+            "EPSG:2180",
+        )
+        assert (d.license.id, d.license.url) == (
+            "CC-BY-4.0",
+            "https://creativecommons.org/licenses/by/4.0/",
+        )
+        records = "https://zenodo.org/api/records"
+        assert [
+            (r.version, r.record, r.doi, r.published, r.url, r.size)
+            for r in params.releases
+        ] == [
+            (
+                "1.0.0",
+                "20133183",
+                "10.5281/zenodo.20133183",
+                "2026-05-29",
+                f"{records}/20133183/files/CAMELS-PL.zip/content",
+                780_566_205,
+            ),
+            (
+                "2.0.0",
+                "23102156",
+                "10.5281/zenodo.23102156",
+                "2026-10-07",
+                f"{records}/23102156/files/CAMELS_PL_2.0.zip/content",
+                1_654_474_228,
+            ),
+            (
+                "2.1.0",
+                "23275336",
+                "10.5281/zenodo.23275336",
+                "2026-10-11",
+                f"{records}/23275336/files/CAMELS_PL_2.1.zip/content",
+                1_670_805_350,
+            ),
+        ]
+        refused, *supported = params.releases
+        assert (refused.refusal is not None, refused.members) == (True, ())
+        for release, root in zip(
+            supported, ("CAMELS_PL_2.0", "CAMELS_PL_2.1"), strict=True
+        ):
+            assert release.refusal is None
+            assert release.members == (
+                ReleaseMember(
+                    "catchments",
+                    f"{root}/CAMELS_PL_catchment_boundaries/catchments/"
+                    "CAMELS_PL_catchments.gpkg",
+                    95_703_040,
+                    "2ff1251b",
+                    "dadc37e02febc0f188683c0df18b2380767a4396e7948213b73617ff4746d6b9",
+                ),
+                ReleaseMember(
+                    "gauging-stations",
+                    f"{root}/CAMELS_PL_catchment_boundaries/gauging_stations/"
+                    "CAMELS_PL_gauging_stations.gpkg",
+                    196_608,
+                    "6addfeba",
+                    "a0616fc6eef89b1a3e84de3688e35a87c54ffb2517dc1a54ddcc3af4579d8c14",
+                ),
+            )
+            for file in params.files:
+                matched = [
+                    m.path for m in release.members if re.search(file.pattern, m.path)
+                ]
+                assert matched == [release.member(file.theme).path]
+        assert (params.concept, params.concept_doi, params.lines) == (
+            f"{records}/20133182",
+            "10.5281/zenodo.20133182",
+            ("S", "P", "L", "RD"),
+        )
+        assert choose_release(params, None, product="camels").version == "2.1.0"
+        with pytest.raises(ValidationError) as raised:
+            choose_release(params, "1.0.0", product="camels")
+        assert (raised.value.option, raised.value.allowed) == (
+            "version",
+            ("2.0.0", "2.1.0"),
+        )
+        newest = params.releases[-1]
+        record = _CAMELS_RECORD
+        (archive,) = [f for f in record["files"] if f["key"].endswith(".zip")]
+        assert (str(record["id"]), record["doi"], record["conceptdoi"]) == (
+            newest.record,
+            newest.doi,
+            params.concept_doi,
+        )
+        metadata = record["metadata"]
+        assert (metadata["version"], metadata["publication_date"]) == (
+            newest.version,
+            newest.published,
+        )
+        assert metadata["license"]["id"] == d.license.id.lower()
+        assert (archive["links"]["self"], archive["size"]) == (newest.url, newest.size)
+        concept = _CAMELS_ANSWERS["concept"]
+        assert concept["url"] == params.concept
+        assert concept["headers"]["location"] == f"/api/records/{newest.record}"
+        content_range = _CAMELS_ANSWERS["range"]["headers"]["content-range"]
+        assert _CAMELS_ANSWERS["range"]["url"] == newest.url
+        assert content_range.endswith(f"/{newest.size}")
+
     def test_bdot10k_archive_is_channel_of_bdot10k(self):
         d = get_source("pl.gugik.bdot10k")
         files = [ch for ch in d.channels if ch.transport == TransportKind.DIRECT_FILES]
@@ -1113,8 +1246,9 @@ class TestNamingConvention:
     every descriptor (ARCHITECTURE 3.3, rule 10)."""
 
     def test_keys_name_country_provider_and_storage_path(self):
-        """``<country>.<provider>.<name>``: the country of the descriptor, its
-        provider, and a name made of whole words of its ``data/`` path - the
+        """``<country>.<provider>.<name>``: the country of the descriptor, a word
+        of its provider (words split on whitespace and ``-``: ``camels`` of
+        ``CAMELS-PL``), and a name made of whole words of its ``data/`` path - the
         directory or the dataset token, fixed tokens of the descriptor
         (``nmt_tbd_25m``, ``zabaged_contours_shp``) - never another name of
         the same data (``orto_true`` for ``true-orto/``, ``hy_net`` for
@@ -1123,7 +1257,8 @@ class TestNamingConvention:
             match = _KEY.fullmatch(d.key)
             assert match is not None, d.key
             assert match["country"] == d.country.lower(), d.key
-            assert match["provider"] in d.provider_name.lower().split(), d.key
+            words = re.split(r"[\s-]+", d.provider_name.lower())
+            assert match["provider"] in words, d.key
             assert _composed(match["name"], _key_tokens(d)), (d.key, d.storage_subdir)
 
     def test_directory_is_product_or_group(self):

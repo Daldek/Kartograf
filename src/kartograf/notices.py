@@ -48,6 +48,11 @@ CLASSES_ABSENT = "classes_absent"
 # request (GUGiK PRNG OGC API Features; the WCS series of a PL cutout tells
 # its time in ``CUTOUT_SIZE``).
 SLOW_SOURCE = "slow_source"
+# The files of a release of a published data set (ADR-062): the whole ZIP is
+# downloaded because the server does not answer range requests, and a release
+# newer than every one the registry knows exists (its concept DOI) - it is not read.
+WHOLE_ARCHIVE = "whole_archive"
+NEWER_RELEASE = "newer_release"
 # Availability report: index records Kartograf does not download (outside the
 # variant registry, format inconsistent with the file, sheet code outside
 # SheetParser).

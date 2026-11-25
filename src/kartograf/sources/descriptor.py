@@ -18,10 +18,11 @@ Collection channels (ADR-042, ADR-043) carry typed engine configuration in
 unit, country, map sheet, index tile or CZ cadastral area - from a URL
 template or from the record of an index), ``FeatureBBoxParams`` (features of
 an area from WFS / ArcGIS REST / OGC API Features into one GeoPackage),
-``AtomFilesParams`` (files listed by a CUZK ATOM feed) and
+``AtomFilesParams`` (files listed by a CUZK ATOM feed),
 ``ArchiveLayersParams`` (features of an area read from the stored national
-archive of the same source, ADR-059). A new product of such a channel is a
-descriptor entry, not a provider.
+archive of the same source, ADR-059) and ``ReleaseFilesParams`` (files of the
+releases of a published data set, read from the ZIP of a release, ADR-062). A
+new product of such a channel is a descriptor entry, not a provider.
 """
 
 from collections.abc import Iterable
@@ -365,11 +366,97 @@ def layer_groups_token(codes: Iterable[str]) -> str:
     return "-".join(sorted(code.lower().replace("_", "-") for code in codes))
 
 
+@dataclass(frozen=True)
+class ReleaseFile:
+    """One file a release of a published data set holds in its ZIP (ADR-062).
+
+    ``theme`` names the file in the store, unit ``<country>_<theme>`` of the
+    national files (``pl_catchments``); ``pattern`` is a regular expression
+    searched in the path of every ZIP member - the file is the one member it
+    matches, whatever the root directory of the release (``CAMELS_PL_2.1/``).
+    """
+
+    theme: str
+    pattern: str
+
+
+@dataclass(frozen=True)
+class ReleaseMember:
+    """What a release holds for one ``ReleaseFile``, as checked when it was added.
+
+    ``path`` is the member in the ZIP, ``size`` its unpacked bytes, ``crc32`` the
+    CRC of the central directory (eight lower-case hexadecimal digits) and
+    ``sha256`` the SHA-256 of its unpacked bytes.
+    """
+
+    theme: str
+    path: str
+    size: int
+    crc32: str
+    sha256: str
+
+
+@dataclass(frozen=True)
+class DatasetRelease:
+    """One release of a published data set that the registry knows (ADR-062).
+
+    ``version`` as the publisher writes it (``2.1.0``), ``record`` the id of its
+    record (Zenodo), ``doi`` the DOI of this release (never the concept DOI),
+    ``published`` the date of the record (``YYYY-MM-DD``), ``url`` the ZIP of the
+    release and ``size`` its bytes. ``members``: one ``ReleaseMember`` per
+    ``ReleaseFilesParams.files``. ``refusal``: why a known release is not read
+    (its layout or licence differs; a catalog message naming it), ``None`` for a
+    supported release, which has every member.
+    """
+
+    version: str
+    record: str
+    doi: str
+    published: str
+    url: str
+    size: int
+    members: tuple[ReleaseMember, ...] = ()
+    refusal: str | None = None
+
+    def member(self, theme: str) -> ReleaseMember:
+        """Return the member of the file ``theme`` (``KeyError`` when absent)."""
+        for member in self.members:
+            if member.theme == theme:
+                return member
+        raise KeyError(theme)
+
+
+@dataclass(frozen=True)
+class ReleaseFilesParams:
+    """Engine ``release_files``: files of the releases of a published data set.
+
+    The files (``files``) are read out of the ZIP of a release by HTTP range
+    requests (its central directory, then the member), the whole ZIP being the
+    fallback, and kept as published. ``releases``: every release the registry
+    knows, oldest first - the newest supported one is the default, a refused one
+    is an error naming it, and an unknown version is refused (a new release is a
+    registry change, after its layout is checked). ``dataset`` names the data set
+    in messages, ``concept`` is the record that resolves to the newest release
+    (its API address) and ``concept_doi`` its DOI: they only tell that a newer
+    release exists (a notice), never which one is read. ``lines``: the codes of
+    the provider lines and the terms lines of the files (DEV §20; ``L`` names the
+    release).
+    """
+
+    dataset: str
+    files: tuple[ReleaseFile, ...]
+    releases: tuple[DatasetRelease, ...]
+    concept: str
+    concept_doi: str
+    lines: tuple[str, ...] = ()
+
+
 ChannelParams = (
     UnitPackageParams
     | FeatureBBoxParams
     | AtomFilesParams
     | ArchiveLayersParams
+    | ReleaseFilesParams
     | WcsCutoutParams
     | SheetIndexParams
 )

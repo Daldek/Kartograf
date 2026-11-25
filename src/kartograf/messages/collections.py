@@ -32,6 +32,9 @@ MESSAGES = {
     "flags_ku": Text("--ku <6 digits>", "--ku <6 cyfr>"),
     "what_area_features": Text("area features", "obiekty obszaru"),
     "what_country_file": Text("country file", "plik krajowy"),
+    "what_release_files": Text(
+        "the files of a release, --version", "pliki wydania, --version"
+    ),
     "what_ku_package": Text("cadastral area package", "paczka katastralniho uzemi"),
     "what_powiat_package": Text("county package", "paczka powiatu"),
     "what_woj_package": Text("voivodeship package", "paczka wojewodztwa"),
@@ -130,6 +133,18 @@ MESSAGES = {
         "{product} packages",
         "--level dotyczy obiektow obszaru (--bbox/--sheet/--geometry), nie paczek "
         "{product}",
+    ),
+    "flag_not_for_release_files": Text(
+        "{cli_flag} does not apply to {product} ({country}: the files of a release as "
+        "published, chosen by --version)",
+        "{cli_flag} nie dotyczy {product} ({country}: pliki wydania zapisywane 1:1, "
+        "wybierane przez --version)",
+    ),
+    "version_not_applicable": Text(
+        "--version does not apply to {product} ({country}): it chooses the release "
+        "of the files of a published data set (--product camels)",
+        "--version nie dotyczy {product} ({country}): wybiera wydanie plikow "
+        "opublikowanego zbioru danych (--product camels)",
     ),
     "flag_not_for_national_file": Text(
         "{cli_flag} does not apply to the national file {product} ({country}: current "

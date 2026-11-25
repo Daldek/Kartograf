@@ -50,6 +50,7 @@ SPEC_ERROR_TABLE = [
     ("InvalidSidecarError", "data_error", "invalid_sidecar", 7),
     ("InvalidLayoutError", "data_error", "invalid_layout", 7),
     ("ResolutionMismatchError", "data_error", "resolution_mismatch", 7),
+    ("ReleaseLayoutError", "data_error", "release_layout", 7),
     ("ConflictError", "conflict", None, 4),
     ("MissingDependencyError", "missing_dependency", None, 6),
     ("ForbiddenError", "forbidden", None, 12),

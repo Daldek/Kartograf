@@ -1,8 +1,8 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Tool for Downloading Spatial Data**
 
-**Version:** 4.10
-**Date:** 2026-11-14
+**Version:** 4.11
+**Date:** 2026-11-23
 **Product Owner:** Piotr
 **Status:** v0.8.0 (unreleased; `docs/CHANGELOG.md` [Unreleased])
 
@@ -1217,6 +1217,43 @@ kartograf hydro download --product pgw --country pl --layers PGW_WP --bbox 38000
 
 ---
 
+### 3.21.2 Feature: CAMELS-PL catchments and gauging stations (`hydro --product camels`, ADR-062)
+
+**Priority:** P1 (High)
+**Status:** Implemented on branch `feat/camels-pl-catchments` (not merged into `develop`; 0.9.0)
+
+#### Description
+The catchment boundaries and the gauging stations of CAMELS-PL (Zenodo, concept DOI 10.5281/zenodo.20133182):
+the two GeoPackages of a release, the catchments of the 869 gauges of IMGW-PIB, made to IMGW-PIB's order, and
+their points (Nogat plan `docs/plans/2026-11-22-camels-pl.md` step 2, ECO-086). Obserwator reads them from the
+store to show a gauge's catchment (Nogat plan step 3).
+
+#### Requirements
+- `--whole-country --country pl`: `hydro/pl_camels/country/pl_catchments.gpkg` and `pl_gauging-stations.gpkg`, the
+  members of the ZIP of the release as published (EPSG:2180), read by HTTP range requests (about 55.5 MB of a
+  1.67 GB ZIP; the whole ZIP when the server does not answer range requests, `whole_archive`).
+- Releases: 2.0.0 and 2.1.0 (the default); `--version` chooses one; 1.0.0 and an unknown version are a
+  `validation_error` before any request. A newer release on Zenodo is an `Info:` (`newer_release`), read only by
+  the Kartograf release that adds it after checking its layout.
+- The length of the ZIP and the size, CRC and SHA-256 of each file are checked against the registry, and its
+  compression method against those Kartograf reads, before anything is written; a difference is `data_error`
+  (`release_layout`, `ReleaseLayoutError`).
+- One version per content, labelled by the date of the first release with these bytes (`2026-10-07`); `--check`
+  without a transfer.
+- The sidecar names the release read, every release with these bytes and the published member; the files carry the
+  provider lines S, P and L and the terms line RD of Nogat DEV §20 in the sidecar (RD in `extra.terms_notice`) and
+  in `ATTRIBUTION.txt` of a plain write.
+- Licence: CC BY 4.0 (the record licence of 2.0.0 and 2.1.0).
+
+#### CLI Commands
+```bash
+kartograf hydro download --product camels --country pl --whole-country --root ./data
+kartograf hydro download --product camels --country pl --whole-country --version 2.0.0 --root ./data
+kartograf hydro download --product camels --country pl --whole-country --check --root ./data
+```
+
+---
+
 ### 3.22 Feature: PRG addresses, PRG special boundaries and RCN (`boundaries`, `cadastre`, ADR-043)
 
 **Priority:** P2 (Medium)
@@ -1711,6 +1748,7 @@ from kartograf import (
     NoCoverageError,
     YearRangeError,
     ResolutionMismatchError,
+    ReleaseLayoutError,
     CacheError,
     InvalidSidecarError,
     InvalidLayoutError,
@@ -1898,6 +1936,6 @@ HYDROGRAF (main application)
 
 ---
 
-**Document version:** 4.10
-**Last update date:** 2026-11-14
+**Document version:** 4.11
+**Last update date:** 2026-11-23
 **Status:** v0.8.0 (unreleased; `docs/CHANGELOG.md` [Unreleased])
