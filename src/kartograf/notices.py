@@ -8,7 +8,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from kartograf.messages import DEFAULT_LANG, Lang, Message, message
+from kartograf.messages import DEFAULT_LANG, LANGS, Lang, Message, localize, message
 
 SHEET_LIST = "sheet_list"
 GEOMETRY_LAYER_DEFAULT = "geometry_layer_default"
@@ -122,7 +122,8 @@ class Notice:
     """A message about data, identified independently of its wording.
 
     ``message`` is English and ASCII; a catalog `kartograf.messages.Message` there
-    can be rendered in another language (`localized`), Polish with its diacritics.
+    can be rendered in another language (`localized`), Polish with its diacritics,
+    and its JSON form carries that rendering beside the English text.
     """
 
     level: Literal["info", "warning"]
@@ -141,6 +142,28 @@ class Notice:
         return replace(
             self, message=text.localized(lang) if isinstance(text, Message) else text
         )
+
+    def __json__(self, ctx: object) -> dict[str, object]:
+        """Return the JSON form (``kartograf.serialization`` hook).
+
+        ``level``, ``code`` and the English ``message``, as every document has it
+        (AGI-9.2); a catalog message adds ``i18n``, its text in each other language
+        of the catalog (``{"pl": ...}``, with the Polish letters), for a page that
+        shows the notice in the language of its reader (ADR-063 amendment 1). A
+        notice read back from a document has its English text only.
+        """
+        document: dict[str, object] = {
+            "level": self.level,
+            "code": self.code,
+            "message": localize(self.message, DEFAULT_LANG),
+        }
+        if isinstance(self.message, Message):
+            document["i18n"] = {
+                lang: localize(self.message, lang)
+                for lang in LANGS
+                if lang != DEFAULT_LANG
+            }
+        return document
 
 
 class NoticeSink:

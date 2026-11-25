@@ -121,8 +121,9 @@ granica” beside the page's own words with their diacritics. The ASCII of decis
 came from the terminal (ADR-037, Z5): a code page or a pipe that cannot print a Polish
 letter. Of the three ways the GUI's review found, B is chosen: ASCII becomes a rule of the
 terminal, not of the catalog. A, the server answering in Polish, is kept for the notices of a
-document only, in an additive form beside their English text; C, a dictionary of the page
-that restores the letters, would be ambiguous (`lat`, `ze`) and follow every catalog edit.
+document only, in an additive form beside their English text (ADR-063 amendment 1); C, a
+dictionary of the page that restores the letters, would be ambiguous (`lat`, `ze`) and follow
+every catalog edit.
 
 1. The Polish texts of the catalog are written with their diacritics (ą ć ę ł ń ó ś ź ż and
    the capitals); the English texts stay ASCII. The formulas of `messages/legal.py` keep one

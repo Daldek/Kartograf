@@ -48,6 +48,13 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and a footprint select each other. A server's error stands under the option it names, and an
   edit after the check marks the plan as stale. The view's right panel holds the plan and the
   base maps.
+- Each notice of a JSON document carries, beside its English `message`, the optional `i18n`:
+  `{"pl": "…"}`, its catalog message in Polish with the Polish letters (ADR-063 amendment 1).
+  `message` stays English (AGI-9.2) and the field only adds to the schemas `/1`; it is in the
+  domain documents and the envelope alike (`--json`, MCP results, the server's answers), and a
+  notice read back from a plan file has its English text only. The page's plan shows a
+  notice's `i18n` in the page's language, so the LAZ notice reads „pominięto 21 kafli LAZ …”
+  on a Polish page.
 - The outputs of a checked plan beside it, for bash or PowerShell: (a) the line, to copy or
   save as `kartograf.txt`; (b) the script that runs the line (`POST script/generate`, saved as
   `kartograf.sh` or `kartograf.ps1`); (c) the script that fetches the plan's files directly

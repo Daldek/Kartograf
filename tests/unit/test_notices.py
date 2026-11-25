@@ -2,16 +2,18 @@
 
 import pytest
 
-from kartograf import Notice
+from kartograf import Notice, messages
 from kartograf.exceptions import ValidationError
-from kartograf.messages import localize
+from kartograf.messages import Text, localize, message
 from kartograf.notices import (
     CACHE_DISABLED,
     CUTOUT_SIZE,
+    LAZ_SUPERSEDED,
     LISTED_UNITS,
     NoticeSink,
     names_text,
 )
+from kartograf.serialization import encode
 
 
 def test_sink_forwards_in_order_and_collects() -> None:
@@ -40,6 +42,30 @@ def test_notice_text_ascii(text: str) -> None:
     with pytest.raises(ValueError, match="ASCII") as exc:
         Notice("warning", CACHE_DISABLED, text)
     assert not isinstance(exc.value, ValidationError)
+
+
+def test_a_catalog_notice_carries_its_polish_text_beside_the_english_one(monkeypatch):
+    """ADR-063 amendment 1: a page shows a notice in its reader's language."""
+    monkeypatch.setattr(
+        messages,
+        "_catalog",
+        lambda area: {"skip": Text("skipped {n} LAZ tiles", "pominięto {n} kafli LAZ")},
+    )
+    notice = Notice("info", LAZ_SUPERSEDED, message("x.skip", n=21))
+    english = {
+        "level": "info",
+        "code": LAZ_SUPERSEDED,
+        "message": "skipped 21 LAZ tiles",
+    }
+    polish = {"i18n": {"pl": "pominięto 21 kafli LAZ"}}
+
+    assert encode(notice) == {**english, **polish}
+    assert encode(notice.localized("pl")) == {**english, **polish}
+    assert encode(Notice("warning", CACHE_DISABLED, "HTTP 500")) == {
+        "level": "warning",
+        "code": CACHE_DISABLED,
+        "message": "HTTP 500",
+    }
 
 
 def test_names_text_lists_all_names_up_to_the_limit_then_counts_the_rest() -> None:

@@ -51,14 +51,17 @@ export function sizeText(bytes) {
 }
 
 /**
- * A notice of the plan: its first line, the rest folded under it.
+ * A notice of the plan in the page's language: its text of `i18n` in that language when the
+ * server gives one (ADR-063 amendment 1), else its English `message`; its first line, the
+ * rest folded under it.
  *
- * @param {{level: string, message: string}} notice a notice of the plan
+ * @param {{level: string, message: string, i18n?: Object<string, string>}} notice a notice
  * @returns {HTMLLIElement} the item
  */
 function noticeItem(notice) {
   const item = make("li", notice.level === "info" ? null : notice.level);
-  const [first, ...rest] = String(notice.message ?? "").split("\n");
+  const text = notice.i18n?.[lang()] ?? notice.message;
+  const [first, ...rest] = String(text ?? "").split("\n");
   if (!rest.length) {
     item.textContent = first;
     return item;

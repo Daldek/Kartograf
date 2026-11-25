@@ -3428,7 +3428,7 @@ of the library return it as `CommandResult` (`to_dict()` is the same document).
 | `status` | `ok`, `partial` or `failed` (a cancelled command is the error `cancelled`) |
 | `result` | the domain document of the table below |
 | `items` | one entry per unit of a batch, `{id, status, code?, reason?, message?}`: `status` is `ok` or `failed`, a failed unit has the registry `code` of its failure (`reason` where the code is not precise enough); `[]` for a command with no batch |
-| `notices` | `{level, code, message}` of the run (the notices of `result`) |
+| `notices` | `{level, code, message, i18n?}` of the run (the notices of `result`); `i18n` is `{"pl": …}`, the Polish text of a catalog message (ADR-063 amendment 1) |
 
 `status` follows the verdict `ok` of the domain document: `ok` when it is true (or the
 document has no verdict), `partial` when it is false and a unit succeeded, `failed` when
@@ -3478,8 +3478,8 @@ Common rules of the documents:
   (`2026-10-18T12:00:00+00:00`), data dates `YYYY-MM-DD`; `bbox` is
   `[min_x, min_y, max_x, max_y]` next to a key with the CRS (`bbox_crs`, `crs`);
 - notices (`Info:` and `Warning:` of the text mode) are in the `notices` array as
-  `{level, code, message}` (the text key is `message`, as in an error), in the document of the command
-  and in the envelope;
+  `{level, code, message}` (the text key is `message`, as in an error), with `i18n` `{"pl": …}` beside the
+  English `message` when it is a catalog message, in the document of the command and in the envelope;
 - `ok` is present in the documents `-download/1`, `-plan/1` and `-availability/1`.
   `ok: false` is a **result** (units in
   `failed`, stale positions in `stale`, a `check_failed` position), not an error: the

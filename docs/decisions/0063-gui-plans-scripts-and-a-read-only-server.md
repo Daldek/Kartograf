@@ -224,3 +224,16 @@ the plan judges no version by it). Without such a feed in the cache the item kee
 or a store check or a run of the same request on that machine first, gets it. The server's detached plans read the
 server's cache the same way. `cache stats` counts these entries with the feed indexes (`atom_feeds`, „ATOM feed
 entries”).
+
+**Amendment 1 (2026-11-25, the coordinator's decision on the language of a plan's notices):** The plan the page
+shows (`POST <group>/download?check=true`) is a JSON document, English by AGI-9.2 and ADR-053 decision 4, so its
+notices reached a Polish page in English (the LAZ notice „skipped 21 LAZ tiles - the area is covered by newer
+tiles …”), and the page could not render them again: a notice carries no key and no values. `Accept-Language`
+translates only the problem documents (decision 7). Each notice of a JSON document now also carries the optional
+`i18n`, its message in each other language of the catalog, `{"pl": "…"}`, with the Polish letters (ADR-053
+amendment 1): `Notice` writes it when its message is a catalog message. `message` stays the English text, so the
+document stays English for an agent, and the field only adds to the schemas `/1` (the notice of the vendored
+`result-1.schema.json` allows it); it is in every document and envelope alike, the `--json` of the CLI, the
+results of the MCP tools and the answers of the server. A notice read back from a document (`UpdatePlan.from_dict`)
+keeps its English message only, as `ok` is computed and not read. The page's plan (`plan.js`) shows a notice's
+`i18n` in the page's language when it is there, else its `message`.
