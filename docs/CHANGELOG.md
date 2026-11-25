@@ -9,6 +9,32 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+#### `kartograf gui serve`: the page beside the server (ADR-063 decision 9, step K5)
+
+- The catalog command `kartograf gui serve [--host 127.0.0.1] [--port 8065] [--no-browser]`
+  (group `gui`, extra `gui`, no MCP tool, `rest` `null`; library `serve_gui`, document
+  `kartograf-gui/1` with `url`, `started_at` and `stopped_at`) serves the page of
+  `src/kartograf/gui/web/` and the read-only `/api/v1` of `kartograf server` in one process
+  until Ctrl+C or `SIGTERM`, and opens the page in a browser. `kartograf.server.serving.run_app`
+  is the uvicorn loop of both; `create_app` takes a `Page`: its routes after the API's, its
+  headers on every answer, its HTML pages counted in the request limit, the visitors and
+  the page views (a page over the limit gets a short `429` page with `Retry-After`), and
+  `gui` and `terms` in its entry of `nogat-server/1`.
+- The page (ES modules, no build step): Nogat's shell with Kartograf's mark, Polish and
+  English, the light and the dark theme, the app menu of `[nogat] gui`, the regulamin of a
+  public GUI (`[nogat.operator]`: the kit's `nogat-terms.html` filled at the start with the
+  blocks `gugik`, `cuzk` and those of the base maps offered, at `/regulamin.html`, linked at
+  the foot of the rail and in the app menu) and a map on MapLibre GL JS 6.14.0 over the
+  shared base maps of the kit (`basemaps`, `basemap_mirrors`, `basemap_extra` of
+  `nogat.toml` or `KARTOGRAF_BASEMAPS`/`NOGAT_BASEMAPS`; a wrong value stops the start with
+  `validation_error`, `invalid_config`). The settings of the page are `site.json` beside it;
+  the page finds its API by `GET /api/v1/server`. Every answer carries a
+  Content-Security-Policy that names no remote origin but those of the base maps offered.
+- Nogat's kit 1.3.0 (`design/kit/`), `tokens.css` and the marks copied from Nogat `1a68cc7`
+  (`web/nogat/nogat.json`, `nogat-kit.json`); MapLibre GL JS 6.14.0 and the Noto Sans glyphs
+  vendored with their licences (`web/vendor/vendor.json`), checked against npm and the
+  openmaptiles release.
+
 #### The fields of a command form and the route on the server (ADR-063)
 
 - `kartograf-commands/1` writes the rules among the options as the fields a form reads (Nogat

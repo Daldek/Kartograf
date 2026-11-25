@@ -6,7 +6,7 @@
 
 Kartograf downloads official spatial data of Poland (GUGiK) and Czechia (CUZK), with Copernicus (CORINE land cover) and ISRIC (SoilGrids soils): digital elevation models (DEM, Polish NMT) and surface models (NMPT), LAZ point clouds, orthophotos, land cover (BDOT10k, CORINE), soils and hydrologic soil groups (HSG), administrative boundaries, cadastre, 3D models and more. Every file is saved as an immutable version in a store, next to a `kartograf-meta/1` sidecar with its CRS, source and licence. Interfaces: a Python library, a CLI and an MCP server, all from one command catalog.
 
-Use it to get the data of an area (a sheet code, a bbox, a geometry file, a TERYT code or a whole country) and to read what it has already downloaded. Command groups: `boundaries`, `cadastre`, `elevation`, `geodesy`, `hydro`, `imagery`, `landcover`, `maps`, `models3d`, `names`, `sheet`, `soil`, `store`, `cache`, `commands`, `config`, `script`.
+Use it to get the data of an area (a sheet code, a bbox, a geometry file, a TERYT code or a whole country) and to read what it has already downloaded. Command groups: `boundaries`, `cadastre`, `elevation`, `geodesy`, `hydro`, `imagery`, `landcover`, `maps`, `models3d`, `names`, `sheet`, `soil`, `store`, `cache`, `commands`, `config`, `gui`, `script`.
 
 Not for:
 
@@ -115,6 +115,7 @@ One line per command: name, `operation_id`, summary. Options, allowed values, un
 - `store sidecar` (`kartograf_store_sidecar`): Read the sidecar of one store file (kartograf-meta/1)
 - `store init` (`kartograf_store_init`): Write the marker of a store (kartograf-store.json)
 - `config show` (no MCP tool): Show the settings in force: the value and source of every key
+- `gui serve` (no MCP tool): Serve the page of plans and scripts with the read-only API on this computer
 
 ## Typical flows
 

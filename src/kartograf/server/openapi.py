@@ -159,6 +159,22 @@ _SERVER_SCHEMA: Final = {
                         "additionalProperties": {"type": "string"},
                     },
                     "capabilities": {"type": "array", "items": {"type": "string"}},
+                    "gui": {
+                        "type": "string",
+                        "description": "The address of the GUI served with the API "
+                        "(`kartograf gui serve`), from `[nogat.gui]` of `nogat.toml`, "
+                        "else `/`.",
+                    },
+                    "terms": {
+                        "type": "object",
+                        "description": "The regulamin of a public GUI and its version "
+                        "(DEV-15.7).",
+                        "required": ["url", "version"],
+                        "properties": {
+                            "url": {"type": "string"},
+                            "version": {"type": "string"},
+                        },
+                    },
                 },
             },
         },
@@ -418,25 +434,34 @@ def _own_paths(version: str) -> dict[str, Any]:
     }
 
 
-def server_document(version: str) -> dict[str, Any]:
+def server_document(
+    version: str,
+    *,
+    gui: str | None = None,
+    terms: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
     """Return ``nogat-server/1`` of this server (AGI-6.7, ADR-063 decision 7).
 
     Parameters
     ----------
     version : str
         The version of Kartograf.
+    gui : str, optional
+        The address of the GUI served with the API (``kartograf gui serve``).
+    terms : Mapping, optional
+        ``{url, version}`` of the regulamin of a public GUI (DEV-15.7).
     """
-    return {
-        "schema": "nogat-server/1",
-        "services": [
-            {
-                "tool": "kartograf",
-                "version": version,
-                "api": {"1": API_BASE},
-                "capabilities": list(CAPABILITIES),
-            }
-        ],
+    service: dict[str, Any] = {
+        "tool": "kartograf",
+        "version": version,
+        "api": {"1": API_BASE},
+        "capabilities": list(CAPABILITIES),
     }
+    if gui is not None:
+        service["gui"] = gui
+    if terms is not None:
+        service["terms"] = dict(terms)
+    return {"schema": "nogat-server/1", "services": [service]}
 
 
 @functools.cache

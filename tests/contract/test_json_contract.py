@@ -13,6 +13,7 @@ import pkgutil
 import subprocess
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -48,6 +49,7 @@ from kartograf.download.plan import (
 from kartograf.envelope import ResultItem, wrap
 from kartograf.error_report import error_report
 from kartograf.exceptions import ValidationError
+from kartograf.gui import GuiServed
 from kartograf.hydrology.hsg import HsgReport
 from kartograf.landcover.manager import LandCoverReport, SoilReport
 from kartograf.marker import StoreInit
@@ -551,6 +553,14 @@ def _script() -> Document:
     )
 
 
+def _gui() -> Document:
+    return GuiServed(
+        "http://127.0.0.1:8065/",
+        datetime(2026, 11, 25, 10, 0, tzinfo=UTC),
+        datetime(2026, 11, 25, 12, 0, tzinfo=UTC),
+    )
+
+
 def _command_entry() -> object:
     return command_schema("elevation download").commands[0]
 
@@ -618,6 +628,7 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-guide/1": (_agent_guide,),
     "kartograf-command-line/1": (_command_line,),
     "kartograf-script/1": (_script,),
+    "kartograf-gui/1": (_gui,),
 }
 
 # schema -> the keys of the document in order (``schema`` first)
@@ -763,6 +774,7 @@ CONTRACT: dict[str, list[str]] = {
         "left_out",
         "notices",
     ],
+    "kartograf-gui/1": ["schema", "url", "started_at", "stopped_at"],
 }
 
 # type name -> (a value, the keys of its object in order); spec 5.3 and 5.4

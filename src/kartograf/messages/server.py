@@ -185,7 +185,7 @@ MESSAGES = {
         "nie mozna nasluchiwac na {host}: {error}",
     ),
     "missing_extra": Text(
-        "kartograf server needs the extra server (Starlette and uvicorn): {error}",
-        "kartograf server wymaga dodatku server (Starlette i uvicorn): {error}",
+        "{program} needs the extra {extra} (Starlette and uvicorn): {error}",
+        "{program} wymaga dodatku {extra} (Starlette i uvicorn): {error}",
     ),
 }

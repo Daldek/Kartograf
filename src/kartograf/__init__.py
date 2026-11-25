@@ -41,7 +41,9 @@ return the ``kartograf-result/1`` envelope (``CommandResult``: ``status``, ``ite
 ``generate_script`` writes the bash or PowerShell script of a data command for the
 user's own machine (``script generate``, ADR-063): the one that runs its line with a
 released Kartograf, or the one that downloads the files of its plan directly
-(``ScriptResult``, ``kartograf-script/1``). Other
+(``ScriptResult``, ``kartograf-script/1``). ``serve_gui`` serves the page of plans and
+scripts with the read-only API of ``kartograf server`` on this computer until it is
+stopped (``gui serve``, ADR-063; ``GuiServed``, ``kartograf-gui/1``). Other
 reports of the document family: ``describe_sheet``, ``find_sheets``, ``list_sources``,
 ``list_layers``, ``get_cache_info``, ``get_cache_path``, ``clear_cache``,
 ``get_config``, ``store_root`` (the default store root with its source and marker,
@@ -238,6 +240,7 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.gui import GuiServed, serve_gui
 from kartograf.guide import AgentGuide, agent_guide
 from kartograf.hydrology.hsg import (
     HsgReport,
@@ -520,6 +523,9 @@ __all__ = [
     # Scripts of a request for the user's own machine (`script generate`, ADR-063)
     "generate_script",
     "ScriptResult",
+    # The page of plans and scripts on this computer (`gui serve`, ADR-063)
+    "serve_gui",
+    "GuiServed",
     # Errors as data (`kartograf-error/1`, spec 6)
     "ErrorReport",
     "error_report",

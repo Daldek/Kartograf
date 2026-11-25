@@ -63,6 +63,7 @@ kartograf = [
     "_data/pgw_geodatabase.json",
     "_data/provider_lines.json",
     "_data/camels_fixture.json",
+    "gui/web/**/*",
 ]
 
 [tool.setuptools.dynamic]

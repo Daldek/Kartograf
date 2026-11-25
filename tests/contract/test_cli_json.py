@@ -18,6 +18,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+import uvicorn
 
 from kartograf import (
     calculate_hsg,
@@ -657,15 +658,50 @@ def test_query_and_management_commands_print_one_document(
     assert (code == 0) == envelope["result"].get("ok", True)
 
 
+# The commands that serve until Ctrl+C or SIGTERM: their test stops them at once.
+SERVING = {"gui serve"}
+
+
 def test_every_cli_command_has_a_json_test():
     """A command added to the catalog is a data command (the parity tests above),
-    ``elevation availability`` or one of ``OFFLINE``."""
+    ``elevation availability``, one of ``OFFLINE`` or one of ``SERVING``."""
     leaves = {c.id for c in declared().commands}
     data = {c.id for c in declared().commands if c.kind == "data"}
     data.add("elevation availability")
 
-    assert set(OFFLINE) | data == leaves
+    assert set(OFFLINE) | data | SERVING == leaves
     assert not set(OFFLINE) & data
+    assert not (set(OFFLINE) | data) & SERVING
+
+
+def test_gui_serve_prints_one_envelope_after_the_stop(capsys, monkeypatch):
+    """``--json``: once the server stops (uvicorn's ``Server.run`` returns at once),
+    all of stdout is one envelope of ``kartograf-gui/1`` with the address served;
+    stderr carries the lifecycle records."""
+    served = []
+
+    def run(self, sockets=None):
+        served.append(sockets[0].getsockname()[1])
+
+    monkeypatch.setattr(uvicorn.Server, "run", run)
+
+    code = main(["gui", "serve", "--port", "0", "--no-browser", "--json"])
+    captured = capsys.readouterr()
+
+    envelope = json.loads(captured.out)
+    (port,) = served
+    result = envelope["result"]
+    assert code == 0
+    assert (envelope["command"], envelope["status"]) == ("gui serve", "ok")
+    assert (result["schema"], result["url"]) == (
+        "kartograf-gui/1",
+        f"http://127.0.0.1:{port}/",
+    )
+    assert result["started_at"] <= result["stopped_at"]
+    assert [json.loads(line)["event"] for line in captured.err.splitlines()] == [
+        "start",
+        "stop",
+    ]
 
 
 @pytest.mark.parametrize(

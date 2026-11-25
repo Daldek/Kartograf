@@ -36,6 +36,7 @@ MODULE_ORDER = (
     "script",
     "misc",
     "config",
+    "gui",
 )
 
 

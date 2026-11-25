@@ -49,6 +49,7 @@ _DOCUMENT_FUNCTIONS = {
     "find_sheets": [],
     "list_commands": [],
     "command_schema": ["command"],
+    "serve_gui": [],
 }
 
 

@@ -10,7 +10,9 @@ limits) and the errors reduced to their type (DEV-12.7). uvicorn runs with
 ``log_config=None``, ``access_log=False`` (its access line names the client) and
 without its proxy headers: the client's address is the server's own reading of
 ``X-Forwarded-For`` from a trusted proxy (AGI-6.9). The pattern is Hydrolog's ``gui
-serve`` (``hydrolog.gui._serving``).
+serve`` (``hydrolog.gui._serving``). ``run_app`` is that loop for any application
+of the server: ``kartograf gui serve`` serves its page and the API through it
+(``kartograf.gui``).
 
 Importing this module imports neither Starlette nor uvicorn: ``serve`` does, and
 reports their absence as ``missing_dependency`` (the extra ``server``).
@@ -23,13 +25,26 @@ import signal
 import socket
 import sys
 import threading
-from collections.abc import Iterator
-from typing import Any, Final
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING, Any, Final
 
 from kartograf.exceptions import ConflictError, MissingDependencyError, ValidationError
 from kartograf.messages import message, reason
 
-__all__ = ["DEFAULT_HOST", "DEFAULT_PORT", "serve", "url_of"]
+if TYPE_CHECKING:
+    from starlette.types import ASGIApp
+
+    from kartograf.server.nogat_logging import ServerLog
+    from kartograf.server.settings import ServerSettings
+
+__all__ = [
+    "DEFAULT_HOST",
+    "DEFAULT_PORT",
+    "require_extra",
+    "run_app",
+    "serve",
+    "url_of",
+]
 
 DEFAULT_HOST: Final = "127.0.0.1"
 """This computer only (AGI-6.9): behind a proxy the server keeps listening here."""
@@ -39,6 +54,8 @@ EXTRA: Final = "server"
 _MODULES: Final = ("starlette", "uvicorn")
 _GRACE_S: Final = 5
 """How long open requests may take to end at a stop [s]."""
+_STARTED_POLL_S: Final = 0.05
+"""How often ``run_app`` looks whether uvicorn has started, for ``ready`` [s]."""
 _IN_USE: Final = frozenset(
     code
     for code in (errno.EADDRINUSE, getattr(errno, "WSAEADDRINUSE", None))
@@ -52,14 +69,29 @@ def url_of(host: str, port: int) -> str:
     return f"http://{shown}:{port}/"
 
 
-def _require_extra() -> None:
-    """Raise ``MissingDependencyError`` unless Starlette and uvicorn import."""
+def require_extra(extra: str = EXTRA, program: str = "kartograf server") -> None:
+    """Raise ``MissingDependencyError`` unless Starlette and uvicorn import.
+
+    Parameters
+    ----------
+    extra : str
+        The extra that brings them (``server``, or ``gui`` for ``kartograf gui
+        serve``), named by the error.
+    program : str
+        The program that needs them, named by the message.
+    """
     for module in _MODULES:
         try:
             importlib.import_module(module)
         except ImportError as error:
             raise MissingDependencyError(
-                message("server.missing_extra", error=reason(error)), extra=EXTRA
+                message(
+                    "server.missing_extra",
+                    program=program,
+                    extra=extra,
+                    error=reason(error),
+                ),
+                extra=extra,
             ) from error
 
 
@@ -119,12 +151,53 @@ def serve(*, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
     ValidationError
         The host cannot be resolved.
     """
-    _require_extra()
+    require_extra()
+    from kartograf.server.app import create_app
+
+    run_app(lambda settings, log: create_app(settings, log=log), host=host, port=port)
+
+
+def run_app(
+    build: "Callable[[ServerSettings, ServerLog], ASGIApp]",
+    *,
+    host: str,
+    port: int,
+    ready: Callable[[str], None] | None = None,
+) -> str:
+    """Serve the application ``build`` makes until Ctrl+C or ``SIGTERM``.
+
+    The settings in force (``ServerSettings.from_config``) and Nogat's logs of
+    ``<state_dir>/kartograf/logs`` go to ``build``; the record ``start`` names the
+    address and the limits. The caller checks the extra first (``require_extra``).
+
+    Parameters
+    ----------
+    build : callable
+        ``(settings, log) -> app``: the application to serve.
+    host : str
+        The address to listen on.
+    port : int
+        The TCP port (``0`` takes a free one).
+    ready : callable, optional
+        Called with the address once uvicorn has started, in a thread of its own
+        (``kartograf gui serve`` opens the page in a browser then).
+
+    Returns
+    -------
+    str
+        The address served, ``http://<host>:<port>/``, after the stop.
+
+    Raises
+    ------
+    ConflictError
+        The port is in use (``port_in_use``).
+    ValidationError
+        The host cannot be resolved.
+    """
     import uvicorn
 
     from kartograf import config
     from kartograf._version import build_version
-    from kartograf.server.app import create_app
     from kartograf.server.nogat_logging import ServerLog
     from kartograf.server.settings import ServerSettings
 
@@ -157,7 +230,7 @@ def serve(*, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
     listener = _bind(host, port)
     try:
         url = url_of(host, listener.getsockname()[1])
-        app = create_app(settings, log=log)
+        app = build(settings, log)
         server = _Server(
             uvicorn.Config(
                 app,
@@ -170,9 +243,31 @@ def serve(*, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
             )
         )
         log.start({"url": url, **settings.summary()})
+        ended = threading.Event()
+        if ready is not None:
+            _when_started(server, ended, lambda: ready(url))
         try:
             server.run(sockets=[listener])
         finally:
+            ended.set()
             log.stop()
     finally:
         listener.close()
+    return url
+
+
+def _when_started(
+    server: Any, ended: threading.Event, then: Callable[[], None]
+) -> None:
+    """Call ``then`` in a daemon thread once uvicorn's ``server`` has started.
+
+    It gives up when the server ends before it has started (a failure at the start).
+    """
+
+    def wait() -> None:
+        while not server.started:
+            if ended.wait(_STARTED_POLL_S):
+                return
+        then()
+
+    threading.Thread(target=wait, name="kartograf-started", daemon=True).start()

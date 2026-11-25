@@ -323,3 +323,14 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
   `source` and `fetch` filled); the real process served `curl`, wrote the lifecycle records to stderr, access records
   without an address and `stats.jsonl`, and stopped gracefully on `SIGTERM`. Open: the limits revisited after the
   first days of public traffic (question 7).
+- K5, first slice (2026-11-25, ADR-063 decision 9): `kartograf gui serve` (catalog group `gui`, extra `gui`,
+  `serve_gui` -> `kartograf-gui/1`, no MCP tool, `rest` `null`) serves `src/kartograf/gui/web/` and the API in one
+  process through the server's `run_app` and a `Page` of `create_app` (its routes, headers, counted pages, and `gui`
+  and `terms` in `nogat-server/1`). The page: Nogat's shell, Polish and English, both themes, the app menu, the
+  regulamin of a public GUI filled at the start (blocks `gugik`, `cuzk` and the base maps'), and a MapLibre 6.14.0 map
+  over the kit's shared base maps with the settings `basemaps`, `basemap_mirrors` and `basemap_extra`; its settings
+  are `site.json` beside it, its API found by `GET /api/v1/server`. Kit 1.3.0 copied from Nogat `1a68cc7`. Read
+  differently: without a server the page builds nothing (F3 makes the line the server's `commands format`; D5's
+  page that builds (a) and (b) alone would need F1, which ADR-063 rejects). Open: the form, the plan table and the
+  footprints (second slice), the outputs and the Playwright test of the main flow (third slice); the regulamin's
+  „Zgłoś uwagę” (DEV-15.12) and the admin panel (DEV-15.13), which the kit's text describes, before a public launch.

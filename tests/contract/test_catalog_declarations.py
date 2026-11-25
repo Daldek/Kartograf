@@ -635,6 +635,7 @@ def test_the_core_family_has_at_most_ten_tools_and_only_tools_have_a_family():
         "cache clear",
         "cache path",
         "config show",
+        "gui serve",
         "commands guide",
     }
     assert all(c.family in FAMILIES for c in _DECLARED.commands if c.family)

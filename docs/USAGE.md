@@ -3463,6 +3463,7 @@ the catalog, a script) is `ok` with no items, and the envelope carries the `noti
 | `kartograf-guide/1` | `commands guide` (no MCP tool) | `agent_guide` | - |
 | `kartograf-command-line/1` | `commands parse --line`, `commands format --command` (MCP: `kartograf_commands_parse`, `kartograf_commands_format`) | `read_command_line`, `write_command_line` | - |
 | `kartograf-script/1` | `script generate` (MCP: `kartograf_script_generate`) | `generate_script` | - |
+| `kartograf-gui/1` | `gui serve` (no MCP tool), printed after the stop | `serve_gui` | - |
 | `kartograf-store-overview/1` | `store overview` (MCP: `kartograf_store_overview`) | `describe_store` | - |
 | `kartograf-store-entries/1` | `store entries` (MCP: `kartograf_store_entries`) | `list_store_entries` | - |
 | `kartograf-store-sidecar/1` | `store sidecar` (MCP: `kartograf_store_sidecar`) | `read_store_sidecar` | - |

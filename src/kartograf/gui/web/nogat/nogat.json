@@ -1,0 +1,58 @@
+{
+  "description": "Copies of Nogat's visual identity and GUI kit (DEV-15.3, DEV-15.6; ADR-063 decision 9). tokens.css and the marks are listed here, each byte-identical to its source at the commit except where 'modified' says otherwise; the kit's files (design/kit/: the command form, the base maps and their catalogue, the sources strip, the app menu, the regulamin and the rest of kit 1.3.0) are copied byte for byte beside them with the kit's own manifest, nogat-kit.json, which holds the SHA-256 of each of its files. Change Nogat, then copy again.",
+  "source": "https://github.com/Daldek/Nogat",
+  "commit": "1a68cc727df26302fe5e49afee51d12df1546a47",
+  "kit": {
+    "manifest": "nogat-kit.json",
+    "version": "1.3.0",
+    "sha256": "e35db9b35d87faf8fe32a0d5d1b6e135e8e03b82deacb28f5e82eb9e08076f19"
+  },
+  "files": {
+    "tokens.css": {
+      "from": "design/tokens.css",
+      "from_sha256": "8776321068d198fa85f0c58878d8193f24b34df28aa265059b4066c6b1bcc420",
+      "sha256": "72bd30a68b17a71a904146c0ad746fa83174a3a6eb125e83db7ebb22f5da545d",
+      "modified": "two comment lines at the top name the commit (DEV-15.3); the rest is the source unchanged"
+    },
+    "marks/archiwista.svg": {
+      "from": "design/marks/archiwista.svg",
+      "sha256": "5a163b2bb0470a6940b0039bada21193f6aef8f3b97ba5cd445960850e895293"
+    },
+    "marks/goniec.svg": {
+      "from": "design/marks/goniec.svg",
+      "sha256": "60f7a5f763f817f592476f5828f3f038ecffdb3cac4f18b20830a747139ada83"
+    },
+    "marks/hydraulik.svg": {
+      "from": "design/marks/hydraulik.svg",
+      "sha256": "ffcce1c3c5c2efec6e760406fb453211313d3db976c865fdd80dd2cc538bca91"
+    },
+    "marks/hydrograf.svg": {
+      "from": "design/marks/hydrograf.svg",
+      "sha256": "8c6d3714cec79db59de0a9159919a64eb18875dc9218606a04b2f5cf9bfe47c8"
+    },
+    "marks/hydrolog.svg": {
+      "from": "design/marks/hydrolog.svg",
+      "sha256": "8665d339f75a7cc09b419681438df0471ed34db68e911c7050e382a7671b3c55"
+    },
+    "marks/kartograf.svg": {
+      "from": "design/marks/kartograf.svg",
+      "sha256": "515a46605fda28fac99f933a071466a14f6b3115dd21e914e53cdc6197cfcfd4"
+    },
+    "marks/latarnik.svg": {
+      "from": "design/marks/latarnik.svg",
+      "sha256": "da63a88812e65b63931b67ff5faa88986134d908926ce03d37841a997cda5934"
+    },
+    "marks/nogat.svg": {
+      "from": "design/marks/nogat.svg",
+      "sha256": "2341d50005835065bf4e42e664cbc2a0704532866ba861467d081884c22ef93c"
+    },
+    "marks/obserwator.svg": {
+      "from": "design/marks/obserwator.svg",
+      "sha256": "b1b7616d947d71c9b046a89eacefa53abde9332dae32e114153a1878a729d40c"
+    },
+    "marks/retman.svg": {
+      "from": "design/marks/retman.svg",
+      "sha256": "8a908bd2e8f15b9dea77622652dd9a7a2bca18bc49b489daa588d933c6a43a02"
+    }
+  }
+}

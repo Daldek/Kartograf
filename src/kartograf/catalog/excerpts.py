@@ -217,4 +217,10 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
         "line": "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
         "--root ./data",
     },
+    "kartograf-gui/1": {
+        "schema": "kartograf-gui/1",
+        "url": "http://127.0.0.1:8065/",
+        "started_at": "2026-11-25T10:00:00+00:00",
+        "stopped_at": "2026-11-25T12:00:00+00:00",
+    },
 }

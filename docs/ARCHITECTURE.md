@@ -2061,6 +2061,7 @@ schema, and that every `result_schema` of the catalog is in the registry.
 | `kartograf-guide/1` | `AgentGuide` | `guide` | `format, text` |
 | `kartograf-command-line/1` | `CommandLine` | `commands` | `command, options, run, line` |
 | `kartograf-script/1` | `ScriptResult` | `script` | `shell, kind, text, files, left_out, notices` |
+| `kartograf-gui/1` | `GuiServed` | `gui` | `url, started_at, stopped_at` |
 | `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `root, segments` |
 | `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `root, segment, units, limit, truncated, entries` |
 | `kartograf-store-sidecar/1` | `StoreSidecar` | `store_documents` | `path, sidecar` |

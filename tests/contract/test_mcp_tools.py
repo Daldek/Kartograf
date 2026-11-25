@@ -83,12 +83,13 @@ def test_every_command_with_a_family_is_one_tool_in_the_order_of_the_catalog():
 
     assert len(expected) == 37
     assert list(WRITES) == expected
-    # the commands of the cache and the settings are no tools
+    # the commands of the cache, the settings and the GUI are no tools
     assert {c.id for c in CATALOG.values() if not c.family} == {
         "cache stats",
         "cache clear",
         "cache path",
         "config show",
+        "gui serve",
         "commands guide",
     }
     assert [s.name for s in tool_specs(allow_writes=True)] == expected  # deterministic

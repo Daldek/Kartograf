@@ -24,6 +24,7 @@ from kartograf.cli.catalog_cmd import (
 from kartograf.cli.collection_cmd import cmd_collection_download
 from kartograf.cli.config_cmd import cmd_config_show
 from kartograf.cli.download_cmd import cmd_download
+from kartograf.cli.gui_cmd import cmd_gui_serve
 from kartograf.cli.landcover_cmd import cmd_landcover_download
 from kartograf.cli.layers_cmd import cmd_list_layers
 from kartograf.cli.parse_cmd import cmd_find_sheets, cmd_parse
@@ -85,4 +86,5 @@ HANDLERS: dict[str, Handler] = {
     "cache clear": partial(cmd_cache, action="clear"),
     "cache path": partial(cmd_cache, action="path"),
     "config show": cmd_config_show,
+    "gui serve": cmd_gui_serve,
 }

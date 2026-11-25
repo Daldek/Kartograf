@@ -23,13 +23,20 @@ run in worker threads, at most ``NETWORK_CALLS`` of them with the network at onc
 With a ``ServerLog`` the outermost middleware is Nogat's ``AccessLog`` (DEV-12.8).
 The daily totals are written every ``FLUSH_S`` and at shutdown, when the metadata
 cache is closed too.
+
+With a ``Page`` (``kartograf gui serve``, ADR-063 decision 9) the application also
+serves a GUI: its routes after the API's, its headers on every answer, its HTML pages
+counted like the requests of the API and, when served, as page views (DEV-15.9,
+DEV-15.11; a page over the limit gets the page's own ``429``), and its address and
+regulamin in ``nogat-server/1``.
 """
 
 import contextlib
 import functools
 import json
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Final
 
 import anyio
@@ -39,8 +46,8 @@ from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from starlette.routing import Route
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.routing import BaseRoute, Route
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from kartograf._version import build_version
 from kartograf.catalog.spec import CHECK_OPTION
@@ -77,7 +84,7 @@ from kartograf.server.routes import (
 from kartograf.server.settings import ServerSettings
 from kartograf.server.stats import FLUSH_S, DailyStats
 
-__all__ = ["BODY_MAX_BYTES", "create_app"]
+__all__ = ["BODY_MAX_BYTES", "Page", "create_app"]
 
 BODY_MAX_BYTES: Final = 4 * 1024 * 1024
 """The largest body of a request (a saved plan of ``script generate`` among them)."""
@@ -86,8 +93,43 @@ _JSON: Final = "application/json"
 _ALL_METHODS: Final = ("GET", "POST", "PUT", "PATCH", "DELETE")
 _TRUE: Final = frozenset({"true", "1"})
 _FALSE: Final = frozenset({"false", "0"})
+_PAGE_VIEWS: Final = "page_views"
+_OK: Final = 200
 
 Endpoint = Callable[[Request], Awaitable[Response]]
+
+
+@dataclass(frozen=True)
+class Page:
+    """A GUI the application serves beside the API (``kartograf gui serve``).
+
+    Attributes
+    ----------
+    routes : sequence of BaseRoute
+        Its routes, after those of the API: its settings, its regulamin, its files
+        (a mount of ``/``, last).
+    paths : frozenset of str
+        The paths of its HTML pages: a request of one counts like a request of the
+        API (the visitors and the request limit) and, answered ``200``, as a page view
+        (DEV-15.9, DEV-15.11). Its other files are not counted.
+    refusal : callable
+        ``(request, error) -> Response``: the answer of a page over the request
+        limit, ``429`` with ``Retry-After`` (DEV-15.9).
+    headers : Mapping of str to str
+        Headers of every answer: the Content-Security-Policy and the other security
+        headers of the GUI.
+    gui : str
+        Its address, ``gui`` of the entry of ``nogat-server/1``.
+    terms : Mapping of str to str, optional
+        ``{url, version}`` of its regulamin, ``terms`` of that entry; ``None``: none.
+    """
+
+    routes: Sequence[BaseRoute]
+    paths: frozenset[str]
+    refusal: Callable[[Request, RateLimitedError], Response]
+    headers: Mapping[str, str]
+    gui: str
+    terms: Mapping[str, str] | None = None
 
 
 def _client(request: Request, state: ServerState) -> str:
@@ -294,35 +336,80 @@ async def _defect(request: Request, error: Exception) -> Response:
 
 
 class _RequestLimit:
-    """ASGI middleware: the request limit and the visitors of the API (DEV-15.9).
+    """ASGI middleware: the request limit and the visitors (DEV-15.9, DEV-15.11).
 
-    Every HTTP request under ``/api/`` counts: its visitor in the daily totals and
-    its client's request limit, over which it is answered ``429 rate_limited`` with
-    ``Retry-After`` and goes no further.
+    Every HTTP request under ``/api/``, and of an HTML page of a ``Page``, counts:
+    its visitor in the daily totals and its client's request limit, over which it is
+    answered ``429`` with ``Retry-After`` (the problem of ``rate_limited``, or the
+    page's refusal) and goes no further. A page answered ``200`` is a page view.
     """
 
-    def __init__(self, app: ASGIApp, state: ServerState) -> None:
+    def __init__(self, app: ASGIApp, state: ServerState, page: Page | None) -> None:
         self.app = app
         self.state = state
+        self.page = page
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Count a request of the API; refuse it over the limit."""
-        if scope["type"] != "http" or not str(scope.get("path", "")).startswith(
-            _COUNTED_PREFIX
-        ):
+        """Count a request of the API or of a page; refuse it over the limit."""
+        path = str(scope.get("path", "")) if scope["type"] == "http" else ""
+        page = self.page if self.page is not None and path in self.page.paths else None
+        if not path.startswith(_COUNTED_PREFIX) and page is None:
             await self.app(scope, receive, send)
             return
         request = Request(scope)
         address = _client(request, self.state)
-        if self.state.stats is not None:
-            self.state.stats.visit(address, request.headers.get("user-agent", ""))
+        stats = self.state.stats
+        if stats is not None:
+            stats.visit(address, request.headers.get("user-agent", ""))
         try:
             self.state.hit_request(address)
         except RateLimitedError as error:
-            response = _problem_response(error, request)
+            if page is not None:
+                response = page.refusal(request, error)
+            else:
+                response = _problem_response(error, request)
             await response(scope, receive, send)
             return
-        await self.app(scope, receive, send)
+        if page is None or stats is None:
+            await self.app(scope, receive, send)
+            return
+
+        async def counted(message: Message) -> None:
+            if message["type"] == "http.response.start" and message["status"] == _OK:
+                stats.count(_PAGE_VIEWS)
+            await send(message)
+
+        await self.app(scope, receive, counted)
+
+
+class _Headers:
+    """ASGI middleware: the headers of a ``Page`` on every answer (CSP and others)."""
+
+    def __init__(self, app: ASGIApp, headers: Mapping[str, str]) -> None:
+        self.app = app
+        self.headers = [
+            (name.lower().encode("latin-1"), value.encode("latin-1"))
+            for name, value in headers.items()
+        ]
+        self.names = {name for name, _ in self.headers}
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Add the headers to the start of every HTTP answer."""
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def headed(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                kept = [
+                    (name, value)
+                    for name, value in message.get("headers", [])
+                    if name.lower() not in self.names
+                ]
+                message["headers"] = [*kept, *self.headers]
+            await send(message)
+
+        await self.app(scope, receive, headed)
 
 
 async def _flush_every(stats: DailyStats) -> None:
@@ -344,6 +431,7 @@ def create_app(
     *,
     log: ServerLog | None = None,
     clock: Callable[[], float] = time.monotonic,
+    page: Page | None = None,
 ) -> Starlette:
     """Return the application of ``kartograf server``.
 
@@ -356,6 +444,8 @@ def create_app(
         starts and stops it.
     clock : callable, optional
         The monotonic clock of the limits [s]; tests pass their own.
+    page : Page, optional
+        A GUI to serve beside the API (``kartograf gui serve``).
 
     Returns
     -------
@@ -367,7 +457,11 @@ def create_app(
     network = anyio.CapacityLimiter(NETWORK_CALLS)
     version = build_version()
     openapi = _encoded(openapi_document(version))
-    server = _encoded(server_document(version))
+    server = _encoded(
+        server_document(version)
+        if page is None
+        else server_document(version, gui=page.gui, terms=page.terms)
+    )
 
     async def describe_server(request: Request) -> Response:
         return _document_response(server)
@@ -375,7 +469,7 @@ def create_app(
     async def describe_api(request: Request) -> Response:
         return _document_response(openapi)
 
-    routes = [
+    routes: list[BaseRoute] = [
         Route(SERVER_PATH, describe_server, methods=["GET"]),
         Route(OPENAPI_PATH, describe_api, methods=["GET"]),
         *(
@@ -390,6 +484,7 @@ def create_app(
             Route(local.path, _not_served_endpoint(local), methods=list(_ALL_METHODS))
             for local in local_commands()
         ),
+        *(page.routes if page is not None else ()),
     ]
 
     @contextlib.asynccontextmanager
@@ -407,9 +502,12 @@ def create_app(
         HTTPException: _http_error,
         Exception: _defect,
     }
+    middleware = [Middleware(_RequestLimit, state=state, page=page)]
+    if page is not None:
+        middleware.insert(0, Middleware(_Headers, headers=page.headers))
     app = Starlette(
         routes=routes,
-        middleware=[Middleware(_RequestLimit, state=state)],
+        middleware=middleware,
         exception_handlers=handlers,
         lifespan=lifespan,
     )

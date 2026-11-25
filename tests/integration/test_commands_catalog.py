@@ -40,12 +40,13 @@ from kartograf.exceptions import (
 )
 from kartograf.marker import MARKER, store_refusal
 from kartograf.testing import build_fixture_store
-from tests.contract.test_cli_json import OFFLINE, _offline_lines, released
+from tests.contract.test_cli_json import OFFLINE, SERVING, _offline_lines, released
 
 CATALOG = {command.id: command for command in declared().commands}
 # What runs offline has a command line in the CLI tests of ``--json``. The other
-# commands are the twelve data commands (``test_commands_layer``, the parity tests)
-# and ``elevation availability`` (``test_availability``, ``test_cli_json``).
+# commands are the twelve data commands (``test_commands_layer``, the parity tests),
+# ``elevation availability`` (``test_availability``, ``test_cli_json``) and the ones
+# that serve until they are stopped (``SERVING``: ``test_parity_gui``).
 NETWORK = {"elevation availability", *DATA_COMMANDS}
 PLANNED = {command.id for command in CATALOG.values() if command.check_function}
 # The commands that the generic check of a call applies to: the data commands have
@@ -85,8 +86,9 @@ def _base(command: Command) -> dict[str, object]:
 
 
 def test_every_command_of_the_catalog_is_driven_by_a_test():
-    assert set(OFFLINE) | NETWORK == set(CATALOG)
+    assert set(OFFLINE) | NETWORK | SERVING == set(CATALOG)
     assert not set(OFFLINE) & NETWORK
+    assert not (set(OFFLINE) | NETWORK) & SERVING
 
 
 @pytest.mark.usefixtures("frozen_clock")
