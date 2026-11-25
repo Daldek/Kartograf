@@ -165,11 +165,15 @@ kartograf ──> core, download, providers, landcover, hydrology, cache,
 __main__ ──> cli
 cli ──> catalog, error_report, sheet_info, source_info, cache_info,
         store_documents, download, landcover, hydrology, notices, sources,
-        interrupt, config, marker, output, envelope, guide
+        interrupt, config, marker, output, envelope, guide, server
 mcp_server ──> catalog, commands, error_report, download, cache, config,
         envelope, kartograf
         # SDK `mcp`, `anyio`, `jsonschema`: lazily only, inside functions
         # (create_server, _serve and their helpers)
+server ──> catalog, commands, script, download, cache, config, error_report,
+        envelope, _errors, _output_schema, _version
+        # Starlette and uvicorn: server.app at module level, server.serving
+        # lazily inside serve; the rest of server imports neither
 commands ──> catalog, data_commands, download, cache, notices, envelope,
         output, kartograf (l)
 catalog ──> sources, download, landcover, hydrology, providers, core,
@@ -363,6 +367,13 @@ Notes that are easy to overlook:
   helpers): `import kartograf` and `import
   kartograf.mcp_server` work without `mcp`. Tools as data are provided by
   `catalog.tools` (without `mcp`), execution by `commands`, errors by `error_report`.
+- `server` (`kartograf server`, ADR-063) is the only package that touches Starlette and
+  uvicorn (the extra `server`): `server.app` imports Starlette, `server.serving` imports
+  uvicorn and the app lazily inside `serve`, so `cli.server_cmd` imports `server.serving` at
+  module level and `kartograf --help` works without the extra. Routes are read from `catalog`,
+  calls run through `commands` (`validate_command`, `check_command(..., detached=True)`,
+  `run_command`), errors are written by `error_report`; nothing in the library imports
+  `server`.
 - `transport ──> transform`: `transport/mosaic.py` wraps the mosaic sources
   in a VRT through `transform.raster` (`vrt_xml`, `VRT_TYPES`; module-level
   import). `transform` reaches for `transport` and `sources` only under
@@ -650,6 +661,21 @@ kartograf/
 │                        # the URLs of its plan (direct script); writes text only
 ├── mcp_server.py        # MCP server (stdio; extra `mcp`, script kartograf-mcp): create_server,
 │                        # main, build_instructions, INSTRUCTIONS; the only module touching the SDK
+├── server/              # kartograf server (extra `server`, ADR-063 decisions 2, 7, 8): the read-only
+│   │                    # HTTP API /api/v1 of the catalog (section 4.11); only app.py and serving.py
+│   │                    # touch Starlette and uvicorn
+│   ├── routes.py        # served_commands (catalog `rest` != null), local_commands (`not_served`),
+│   │                    # query_options (a GET query in the JSON form of the options)
+│   ├── calls.py         # ServerState (settings, metadata cache, limiters, totals), prepare -> Call:
+│   │                    # refusals, validate_command, the detached plan or run_command, plan_max_units
+│   ├── problems.py      # problem(): RFC 9457 application/problem+json, errors[] pointers, Accept-Language
+│   ├── openapi.py       # openapi_document (OpenAPI 3.1 from the catalog), server_document (nogat-server/1)
+│   ├── app.py           # create_app: Starlette routes, request-limit middleware, 404/405/500 handlers
+│   ├── serving.py       # serve: bind, uvicorn with Nogat's ServerLog/AccessLog, graceful stop
+│   ├── settings.py      # ServerSettings.from_config: the limits, trusted_proxies, the files
+│   ├── limits.py        # RateLimiter (window per client), client_address (X-Forwarded-For, AGI-6.9)
+│   ├── stats.py         # DailyStats: the daily totals stats.jsonl (DEV-15.11)
+│   └── nogat_logging.py # Nogat's reference module, copied byte for byte (DEV-12.9); never edited
 ├── guide.py             # guide for agents from the catalog (AGI 8): agent_guide -> AgentGuide
 │                        # (kartograf-guide/1), inject_block; templates in _data/agents/*.md
 ├── testing.py           # Offline fixtures of the written formats for consumers: build_fixture_store
@@ -786,6 +812,7 @@ kartograf/
                          # agent_guide), config_cmd.py (config show: get_config), store_cmd.py (store
                          # overview/entries/sidecar/init: store_documents, marker), script_cmd.py
                          # (script generate: generate_script, the plan file of --plan),
+                         # server_cmd.py (kartograf server: outside the catalog, server.serving),
                          # commands.py (main entry point: exceptions -> error_report, the exit codes of the registry)
 ```
 
@@ -2032,6 +2059,7 @@ schema, and that every `result_schema` of the catalog is in the registry.
 | `kartograf-command-list/1` | `CommandList` | `catalog.model` | `tool, version, groups, commands` |
 | `kartograf-commands/1` | `CommandCatalog` | `catalog.model` | `tool, version, commands` |
 | `kartograf-guide/1` | `AgentGuide` | `guide` | `format, text` |
+| `kartograf-command-line/1` | `CommandLine` | `commands` | `command, options, run, line` |
 | `kartograf-script/1` | `ScriptResult` | `script` | `shell, kind, text, files, left_out, notices` |
 | `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `root, segments` |
 | `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `root, segment, units, limit, truncated, entries` |
@@ -4301,7 +4329,8 @@ rationale: ADR-046.
 CLI group (`MODULE_ORDER`: elevation, imagery, landcover, soil, boundaries, cadastre,
 models3d, hydro, names, maps, geodesy, misc, config); `declared()` finds the modules by
 name, so a new group is one new file. `Param` carries the name, kind (`str`, `int`,
-`flag`, `bbox`, `bbox_crs`, `path`, `per_country`, `str_list`, `plan`), the CLI flag,
+`flag`, `bbox`, `bbox_crs`, `path`, `per_country`, `str_list`, `plan`, `json`: a JSON object, its text on the
+CLI), the CLI flag,
 the API argument name (`argument`), whether it is required, `allowed`
 (a provider reading the source registry when the catalog is built, not at import), the description and fields
 for the parser only (`dest`, `metavar`...). The declarations produce:
@@ -4397,7 +4426,7 @@ SIGTERM: `sigterm_interrupts()` (CLI `main`) raises `Terminated` in the main thr
 `terminated`/143. Outside `main` (library, MCP server) the signal is not intercepted.
 
 **MCP server (`src/kartograf/mcp_server.py`, `catalog/tools.py`, `_output_schema.py`).** One tool per
-command of the catalog that has a family (35), named by the `operation_id` (`kartograf_<group>_<command>`, AGI-5.2).
+command of the catalog that has a family (37), named by the `operation_id` (`kartograf_<group>_<command>`, AGI-5.2).
 `catalog/tools.py` builds them from the declarations and `command_entries()` (descriptions, `enum` values, bounds,
 examples, `dependentRequired` `bbox` -> `bbox_crs`, JSON Schema 2020-12 with
 `additionalProperties: false`; `anyOf` for a value per country) and from the mode of the server:
@@ -4426,6 +4455,45 @@ of ADR-046 (D22) no longer holds (ADR-052, decision 9); `list_commands()` and a 
 the page of a form, `commands schema` with `form`, <= 50,000);
 tests enforce this (`tests/contract/test_mcp_tools.py`, the AGI-5.13 gate test in
 `tests/integration/test_mcp_server.py`). Usage and client configuration: USAGE 8.6.
+
+**HTTP server (`src/kartograf/server/`, ADR-063 decisions 2, 7 and 8).** `kartograf server`
+(`cli/server_cmd.py`, outside the catalog like `kartograf-mcp`: `cli.commands.main` hands it the
+words after `server`) serves the catalog read only at `/api/v1`. Its routes are data:
+`routes.served_commands()` takes every command whose `rest` is not `null` (the route, method and
+option kinds from the declaration), `routes.local_commands()` the others, whose paths answer
+`forbidden`/`not_served`; `openapi.py` writes OpenAPI 3.1 and `nogat-server/1` from the same
+declarations (`servers` `../v1`, so the document reads right behind Latarnik's
+`/kartograf/v1/`). The flow of a request:
+
+1. `AccessLog` (Nogat's middleware, outermost, so a `429` is logged too), then `_RequestLimit`:
+   the client (`limits.client_address`: the peer, or the right-most `X-Forwarded-For` address
+   that is no trusted proxy) is a visitor of the daily totals and a hit of the request limit
+   (`429 rate_limited`, `Retry-After`).
+2. Starlette's routing: no route is `404 not_found`, another method `405 method_not_allowed`
+   with `Allow` (`app._http_error`).
+3. The endpoint reads the options: the query of a `GET` (`routes.query_options`), the JSON body
+   of a `POST` (at most 4 MiB) and its only query parameter `check`.
+4. `calls.prepare` in a worker thread, without network: the refusals (`path_option`,
+   `writes_disabled`, an input file of the line of a direct script), then `validate_command`, so
+   a mistake costs no plan; the result is a `Call`.
+5. A call that plans hits the plan limit; `Call.run` runs in a worker thread, at most four with
+   the network at once: `check_command(..., detached=True, cache=...)` of a data command, else
+   `run_command`; a plan or direct script of more than `plan_max_units` units is
+   `too_many_units`. The server's `MetadataCache` has `refresh_ttl_seconds` = `index_max_age`, so
+   an index answer younger than that is reused.
+6. The answer: the envelope `kartograf-result/1` (`Content-Language: en`), and `analyses_run`
+   counts a plan or a script; any `KartografError` is a problem document (`problems.problem`,
+   texts in the language of `Accept-Language`, `errors[]` pointing into `/query/` or `/body/`);
+   another exception is `500 internal_error` with a fixed text, its cause in the app log.
+
+`serving.serve` binds the socket itself (`port_in_use` is a `ConflictError` before uvicorn
+starts), runs uvicorn with `log_config=None`, `access_log=False` and no proxy headers, writes the
+lifecycle records `start` and `stop` of `ServerLog` and stops on `SIGINT` or `SIGTERM` without
+raising, so the command ends with 0. The lifespan of the app writes `stats.jsonl` every 300 s
+and at shutdown and closes the metadata cache. Tests: `tests/integration/test_server_app.py`
+(TestClient), `tests/contract/test_server_contract.py` (the OpenAPI document against the OAS 3.1
+schema and the catalog, `nogat-server/1`, `result-1`), `tests/contract/test_server_cli.py`,
+`tests/unit/test_server_limits.py`, `tests/unit/test_server_stats.py`. Usage: USAGE 8.8.
 
 **New command through the catalog.** Six steps:
 

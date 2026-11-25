@@ -31,6 +31,16 @@ MESSAGES = {
         "debug must be a flag: true, false, 1 or 0",
         "debug musi byc flaga: true, false, 1 albo 0",
     ),
+    "not_positive": Text(
+        "the value must be a whole number of at least 1",
+        "wartosc musi byc liczba calkowita nie mniejsza niz 1",
+    ),
+    "not_addresses": Text(
+        "the value must be IP addresses or networks (127.0.0.1, 10.0.0.0/8), a TOML "
+        "list or joined by commas",
+        "wartosc musi byc adresami albo sieciami IP (127.0.0.1, 10.0.0.0/8), lista "
+        "TOML albo oddzielone przecinkami",
+    ),
     "setting_error": Text("{name} {key}: {error}", "{name} {key}: {error}"),
     "file_unusable": Text(
         "The settings file {path} cannot be used: {error}",

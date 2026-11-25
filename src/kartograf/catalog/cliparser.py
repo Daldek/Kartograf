@@ -26,7 +26,12 @@ from typing import Any, NoReturn, cast
 
 from kartograf._version import build_version
 from kartograf.catalog.formatting import example_command_line
-from kartograf.catalog.kinds import layer_codes, parse_bbox_arg, parse_per_country
+from kartograf.catalog.kinds import (
+    layer_codes,
+    parse_bbox_arg,
+    parse_json_object,
+    parse_per_country,
+)
 from kartograf.catalog.spec import Command, Group, Param, resolve, sorted_groups
 from kartograf.exceptions import UsageError, ValidationError
 from kartograf.messages import DEFAULT_LANG, Lang, Message, localize, message
@@ -377,6 +382,8 @@ def _json_value(param: Param, value: object) -> object:
         return list(cast(Sequence[str], value))
     if param.kind in ("path", "plan"):
         return str(value)
+    if param.kind == "json":
+        return parse_json_object(str(value), param.name)
     return value
 
 

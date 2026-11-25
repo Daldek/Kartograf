@@ -169,7 +169,7 @@ def test_the_command_index_has_every_command_once_with_its_tool():
     index = text.split("## Command index")[1].split("## Typical flows")[0]
     lines = [line for line in index.splitlines() if line.startswith("- ")]
 
-    assert len(lines) == len(command_entries()) == 40
+    assert len(lines) == len(command_entries()) == 42
     for entry, line in zip(command_entries(), lines, strict=True):
         assert line.startswith(f"- `{entry.name}` (")
         assert line.endswith(f": {entry.summary}")
@@ -182,7 +182,7 @@ def test_every_error_code_of_the_registry_is_in_the_table_with_its_exit_code():
     table = text.split("## Error codes")[1].split("## Command index")[0]
     rows = dict(re.findall(r"^\| `([a-z_]+)` \| (\d+) \|", table, re.M))
 
-    expected = {row.code: str(row.exit_code) for row in ERROR_CODES}
+    expected = {row.code: str(row.exit_code) for row in ERROR_CODES if row.cli}
     assert rows == expected
     for exit_code in EXIT_CODES:
         if exit_code.code in (0, 10, 11):

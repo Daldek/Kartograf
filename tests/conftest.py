@@ -102,10 +102,11 @@ def user_environment(monkeypatch, tmp_path_factory):
     """Keep the user environment of the machine out of every test (DEV-18).
 
     No ``KARTOGRAF_*`` or ``NOGAT_*`` variable of the machine applies, and the user
-    directories (``nogat.toml``, data, cache) point into a per-test directory: the
-    default metadata cache (``cache=True``) and the settings file never touch the
-    real ones. A test that wants a setting sets the variable or writes the file; the
-    fixture gives the directory of the three (``config``, ``data``, ``cache``).
+    directories (``nogat.toml``, data, cache, state) point into a per-test directory:
+    the default metadata cache (``cache=True``), the settings file and the logs never
+    touch the real ones. A test that wants a setting sets the variable or writes the
+    file; the fixture gives the directory of the four (``config``, ``data``,
+    ``cache``, ``state``).
     """
     import platformdirs
 
@@ -118,6 +119,7 @@ def user_environment(monkeypatch, tmp_path_factory):
     )
     monkeypatch.setattr(platformdirs, "user_data_path", lambda *a, **k: home / "data")
     monkeypatch.setattr(platformdirs, "user_cache_path", lambda *a, **k: home / "cache")
+    monkeypatch.setattr(platformdirs, "user_state_path", lambda *a, **k: home / "state")
     yield home
 
 

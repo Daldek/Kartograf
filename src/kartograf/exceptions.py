@@ -25,17 +25,21 @@ from kartograf.messages import Lang, localize, message
 from kartograf.serialization import encode
 
 
-def registry_exit_code(code: str) -> int:
+def registry_exit_code(code: str) -> int | None:
     """Return the exit code the Nogat error registry gives ``code``.
+
+    ``None`` for a code of the REST interface alone (``rate_limited``,
+    ``method_not_allowed``): only ``kartograf server`` answers it, and no command
+    line ends with it.
 
     Raises
     ------
     ValueError
-        The code is not in the registry or has no exit code (REST-only codes).
+        The code is not in the registry.
     """
     entry = BY_CODE.get(code)
-    if entry is None or entry.exit_code is None:
-        raise ValueError(f"{code!r} is not a registry code with an exit code")
+    if entry is None:
+        raise ValueError(f"{code!r} is not a code of the error registry")
     return entry.exit_code
 
 
@@ -56,9 +60,10 @@ class KartografError(Exception):
         ``no_coverage``), reported as ``details.reason``: a class attribute of a
         class that has one reason, the ``reason`` argument of a class that has
         several (``ConflictError``).
-    exit_code : int
+    exit_code : int or None
         Exit code of the CLI for this error: the registry's exit code of ``code``
-        (set when the class is created).
+        (set when the class is created); ``None`` for a code of the REST interface
+        alone (``rate_limited``, ``method_not_allowed``).
     DETAIL_FIELDS : tuple[str, ...]
         Names of the instance attributes reported by ``details()``.
     DEFAULT_HINT : str, optional
@@ -77,7 +82,7 @@ class KartografError(Exception):
 
     code: ClassVar[str] = "internal_error"
     reason: str | None = None
-    exit_code: ClassVar[int] = registry_exit_code("internal_error")
+    exit_code: ClassVar[int | None] = registry_exit_code("internal_error")
     DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ()
     DEFAULT_HINT: ClassVar[str | None] = None
 
@@ -634,11 +639,14 @@ class UnsupportedError(KartografError):
 
 class ForbiddenError(KartografError):
     """
-    A call the server refuses (AGI-5.8, ERR registry ``forbidden``).
+    A call the server refuses (AGI-5.8, AGI-6.1, ERR registry ``forbidden``).
 
     Raised by the MCP server before anything is read or written: a path outside the
     directories the server allows (``--allow-dir``), or a write on a server that does
-    not write (``--allow-writes``). The library functions never raise it.
+    not write (``--allow-writes``). Raised by ``kartograf server`` before anything is
+    read (ADR-063 decision 7): the run of a data command (``writes_disabled``), an
+    option with a ``path_role`` (``path_option``), a command the server does not
+    serve (``not_served``). The library functions never raise it.
 
     Attributes
     ----------
@@ -676,6 +684,128 @@ class ForbiddenError(KartografError):
         self.option = option
         self.path = path
         self.allowed = _names(allowed, "allowed")
+
+
+class NotFoundError(KartografError):
+    """
+    What a request names does not exist (ERR registry ``not_found``).
+
+    Raised by ``kartograf server`` for a route it does not have (``unknown_route``:
+    ``details.route`` is the path asked for). The library functions never raise it.
+
+    Attributes
+    ----------
+    reason : str
+        ``unknown_route`` (``details.reason``).
+    route : str, optional
+        The path of the request, without its query.
+
+    Examples
+    --------
+    >>> raise NotFoundError(
+    ...     "no route /api/v1/elevation/fetch", reason="unknown_route",
+    ...     route="/api/v1/elevation/fetch",
+    ... )
+    """
+
+    code = "not_found"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("route",)
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str,
+        route: str | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint, reason=reason)
+        self.route = route
+
+
+class MethodNotAllowedError(KartografError):
+    """
+    A route of ``kartograf server`` asked with a method it does not answer.
+
+    ERR registry ``method_not_allowed`` (``405``, REST only: no exit code); the
+    answer carries ``Allow``. The library functions never raise it.
+
+    Attributes
+    ----------
+    method : str
+        The method of the request.
+    allowed : tuple[str, ...]
+        The methods the route answers (``GET``, ``POST``).
+
+    Examples
+    --------
+    >>> raise MethodNotAllowedError(
+    ...     "GET is not a method of /api/v1/elevation/download", method="GET",
+    ...     allowed=["POST"],
+    ... )
+    """
+
+    code = "method_not_allowed"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("method", "allowed")
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        method: str,
+        allowed: Sequence[str],
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.method = method
+        self.allowed = _names(allowed, "allowed")
+
+
+class RateLimitedError(KartografError):
+    """
+    A client of ``kartograf server`` asked more than its limit (ADR-063 decision 8).
+
+    ERR registry ``rate_limited`` (``429``, REST only: no exit code), answered with
+    ``Retry-After``: ``request_limit`` requests per ``request_window`` (DEV-15.9,
+    reason ``request_limit``) or ``plan_limit`` plans per ``plan_window`` (reason
+    ``plan_limit``). The library functions never raise it.
+
+    Attributes
+    ----------
+    reason : str
+        ``request_limit`` or ``plan_limit`` (``details.reason``).
+    retry_after_s : int
+        Seconds until the client's window ends (``Retry-After``).
+    limit : int
+        What one client may ask in a window.
+    window_s : int
+        The window [s].
+
+    Examples
+    --------
+    >>> raise RateLimitedError(
+    ...     "20 plans in 600 s", reason="plan_limit", retry_after_s=42, limit=20,
+    ...     window_s=600,
+    ... )
+    """
+
+    code = "rate_limited"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("retry_after_s", "limit", "window_s")
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str,
+        retry_after_s: int,
+        limit: int,
+        window_s: int,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint, reason=reason)
+        self.retry_after_s = retry_after_s
+        self.limit = limit
+        self.window_s = window_s
 
 
 class MissingDependencyError(KartografError):

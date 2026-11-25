@@ -209,4 +209,12 @@ EXCERPTS: Final[Mapping[str, Mapping[str, object]]] = {
         ],
         "left_out": [],
     },
+    "kartograf-command-line/1": {
+        "schema": "kartograf-command-line/1",
+        "command": "elevation download",
+        "options": {"product": "nmt", "sheet": "N-34-130-D-d-2-4"},
+        "run": {"root": "./data"},
+        "line": "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
+        "--root ./data",
+    },
 }

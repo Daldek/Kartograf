@@ -1,5 +1,6 @@
 """The command layer of the library (spec 8.7; KB-2..KB-5): ``parse_command``,
-``validate_command``, ``format_command``, ``run_command``, ``check_command``."""
+``validate_command``, ``format_command``, ``run_command``, ``check_command``,
+``read_command_line`` and ``write_command_line``."""
 
 import json
 import shlex
@@ -19,8 +20,10 @@ from kartograf import (
     download_data,
     format_command,
     parse_command,
+    read_command_line,
     run_command,
     validate_command,
+    write_command_line,
 )
 from kartograf.catalog.commands import declared
 from kartograf.catalog.formatting import example_command_line
@@ -85,6 +88,9 @@ def test_parse_command_writes_the_json_form_of_every_kind():
         "landcover download --product bdot10k --teryt 1465 --layers SWRS,PTWP"
         " --keep-raw"
     )
+    call = parse_command(
+        """commands format --command 'cache stats' --options '{"a": [1, "\u0142"]}'"""
+    )
 
     assert area.options == {
         "product": "nmt",
@@ -100,6 +106,18 @@ def test_parse_command_writes_the_json_form_of_every_kind():
         "layers": ["SWRS", "PTWP"],
         "keep_raw": True,
     }
+    assert call.options == {"command": "cache stats", "options": {"a": [1, "\u0142"]}}
+
+
+@pytest.mark.parametrize("text", ["[1, 2]", "null", "nmt", "{"])
+def test_parse_command_refuses_a_json_option_that_is_no_object(text):
+    with pytest.raises(ValidationError) as caught:
+        parse_command(
+            ["commands", "format", "--command", "cache stats", "--options", text]
+        )
+
+    assert not isinstance(caught.value, UsageError)
+    assert caught.value.option == "options"
 
 
 def test_parse_command_bbox_always_comes_with_crs():
@@ -373,6 +391,56 @@ def test_format_command_writes_the_flags_of_a_valid_run():
         "workers": 4,
         "upgrade": True,
     }
+
+
+def test_write_command_line_sorts_the_options_and_reads_back_into_the_same_call():
+    options = {
+        "product": "nmt",
+        "sheet": G,
+        "resolution": "1m",
+        "root": "./data",
+        "update": "force",
+        "workers": 4,
+    }
+
+    written = write_command_line("elevation download", options=options)
+
+    assert written.options == {"product": "nmt", "sheet": G, "resolution": "1m"}
+    assert written.run == {"root": "./data", "update": "force", "workers": 4}
+    assert written.line == (
+        f"kartograf elevation download --product nmt --sheet {G} --resolution 1m"
+        " --root ./data --force -w 4"
+    )
+    assert read_command_line(written.line) == written
+
+
+@pytest.mark.parametrize("flag", ["upgrade", "force"])
+def test_read_command_line_names_the_update_flag_and_leaves_out_the_cli_flags(flag):
+    read = read_command_line(
+        f"kartograf {NMT} --sheet {G} --root ./data --{flag} -q --json"
+    )
+
+    assert read.command == "elevation download"
+    assert read.options == {"product": "nmt", "sheet": G}
+    assert read.run == {"root": "./data", "update": flag}
+    assert read.line == f"kartograf {NMT} --sheet {G} --root ./data --{flag}"
+
+
+@pytest.mark.parametrize(
+    ("options", "option"),
+    [
+        ({"plan": {"schema": "kartograf-plan/1", "items": []}}, "plan"),
+        ({"teryt": "1465"}, "teryt"),
+        ({"quiet": True}, "quiet"),
+        ({"update": "replace"}, "update"),
+    ],
+    ids=["plan-document", "foreign-option", "cli-only-flag", "update-value"],
+)
+def test_write_command_line_refuses_what_a_line_cannot_carry(options, option):
+    with pytest.raises(ValidationError) as caught:
+        write_command_line("elevation download", options={"product": "nmt", **options})
+
+    assert caught.value.option == option
 
 
 _EXAMPLES = [

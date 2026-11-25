@@ -337,6 +337,7 @@ BROKEN: dict[str, tuple[object, ...]] = {
     "per_country": (0, "bogus"),
     "options": (0,),
     "plan": (0,),
+    "json": (0, [1], {1: "x"}),
 }
 
 

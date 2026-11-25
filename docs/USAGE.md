@@ -44,6 +44,7 @@ list of the public API: `src/kartograf/__init__.py` (`__all__`).
    - [8.5 Command layer](#85-command-layer)
    - [8.6 MCP server](#86-mcp-server)
    - [8.7 Files for agents](#87-files-for-agents)
+   - [8.8 HTTP server (`kartograf server`)](#88-http-server-kartograf-server)
 9. [Settings and directories](#9-settings-and-directories)
 
 Commands are grouped by data type (`kartograf <group> <command>`, ADR-039):
@@ -65,7 +66,7 @@ Commands are grouped by data type (`kartograf <group> <command>`, ADR-039):
 
 Outside the data groups there are `kartograf sheet parse` and `kartograf sheet find` (group `sheet`), `kartograf cache`, `kartograf config` (settings, section 9),
 `kartograf script generate` (group `script`: a bash or PowerShell script of a data command for another machine, section 1.15)
-and `kartograf commands list`, `kartograf commands schema` and `kartograf commands guide` (group `commands`: the command catalog and the guide for agents, sections 8.4 and 8.7). `kartograf <group>
+and `kartograf commands list`, `kartograf commands schema`, `kartograf commands guide`, `kartograf commands parse` and `kartograf commands format` (group `commands`: the command catalog, the guide for agents and the line of a call, sections 8.4 and 8.7). `kartograf <group>
 --help` prints the group's commands, `<group> <command> --help` — options and command
 examples, `list-sources` — the group's sources from the registry (no network): `WYBOR` (the complete
 set of required source-selection flags; `a|b` = one of the values), `KRAJ`, `DOSTAWCA`,
@@ -3460,6 +3461,7 @@ the catalog, a script) is `ok` with no items, and the envelope carries the `noti
 | `kartograf-command-list/1` | `commands list` (MCP: `kartograf_commands_list`) | `list_commands` | - |
 | `kartograf-commands/1` | `commands schema --command` (MCP: `kartograf_commands_schema`) | `command_schema` | - |
 | `kartograf-guide/1` | `commands guide` (no MCP tool) | `agent_guide` | - |
+| `kartograf-command-line/1` | `commands parse --line`, `commands format --command` (MCP: `kartograf_commands_parse`, `kartograf_commands_format`) | `read_command_line`, `write_command_line` | - |
 | `kartograf-script/1` | `script generate` (MCP: `kartograf_script_generate`) | `generate_script` | - |
 | `kartograf-store-overview/1` | `store overview` (MCP: `kartograf_store_overview`) | `describe_store` | - |
 | `kartograf-store-entries/1` | `store entries` (MCP: `kartograf_store_entries`) | `list_store_entries` | - |
@@ -3492,7 +3494,7 @@ Common rules of the documents:
 
 ### 8.2 The `--json` contract
 
-The `--json` flag (no short form) is in every leaf command of the CLI (40 commands),
+The `--json` flag (no short form) is in every leaf command of the CLI (42 commands),
 after the command: `kartograf elevation availability --json ...`; `kartograf --json ...` does not
 exist.
 
@@ -3655,7 +3657,10 @@ failed units; the result lists them (`items`) and no error document is written.
 | `data_error` | `release_layout` | `ReleaseLayoutError` | 7 | the ZIP of a release of a published data set (CAMELS-PL) differs from what the registry pins for it (its length, a file not found by its path pattern or one of another size, CRC, method or SHA-256; details.version, details.member): nothing is written; a Kartograf release that checked the new layout reads it |
 | `conflict` | - | `ConflictError` | 4 | the target forbids the write (reasons: output_exists, duplicate_output_name, output_in_store, nested_store, not_empty): an output file that exists, two targets of one name, a plain directory in a store, a store in another store or a store root that is not empty |
 | `missing_dependency` | - | `MissingDependencyError` | 6 | an optional extra is not installed (kartograf[mcp] for the MCP server); the hint names the install command (uv add "kartograf[mcp]") |
-| `forbidden` | - | `ForbiddenError` | 12 | the MCP server refuses the call: a path outside its allowed directories (--allow-dir), or a write on a server that does not write (--allow-writes) |
+| `forbidden` | - | `ForbiddenError` | 12 | the MCP server refuses the call: a path outside its allowed directories (--allow-dir), or a write on a server that does not write (--allow-writes); kartograf server refuses the run of a data command (writes_disabled), an option with a path_role (path_option) and a command it does not serve (not_served) |
+| `not_found` | - | `NotFoundError` | 3 | kartograf server has no route of that path (reason unknown_route) |
+| `method_not_allowed` | - | `MethodNotAllowedError` | - | a route of kartograf server asked with another method than its rest (GET or POST; Allow names it) |
+| `rate_limited` | - | `RateLimitedError` | - | a client of kartograf server over its limit, with Retry-After (reasons: request_limit, request_limit per request_window; plan_limit, plan_limit plans per plan_window) |
 | `calculation_error` | `transform_failed` | `TransformError` | 13 | coordinate transformation failed (for example an infinite result) |
 | `unsupported` | `transform_unavailable` | `TransformUnavailableError` | 15 | no safe operation for the pair of coordinate systems |
 | `unsupported` | `command_not_rebuildable` | `CommandNotRebuildableError` | 15 | command_for_file: no command selects the stored file again (details.family; details.field names a missing sidecar field): a land cover, soil or collection file chosen by an area, soil hsg, a reprojected PL cutout |
@@ -3748,20 +3753,34 @@ kartograf commands list --json                                  # the list: kart
 kartograf commands schema --command "elevation download"        # description of a command: parameters, rules, examples (text)
 kartograf commands schema --command kartograf_soil_hsg --json   # kartograf-commands/1 with one command
 kartograf commands schema --command "elevation download" --form --json   # the page of a form: also the sections and Polish texts
+kartograf commands parse --line "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --root ./data --upgrade"   # the call of a line
+kartograf commands format --command "elevation download" --options '{"product": "nmt", "sheet": "N-34-130-D-d-2-4", "root": "./data"}' --json   # the line of a call
 ```
 
 ```python
-from kartograf import command_schema, list_commands
+from kartograf import command_schema, list_commands, read_command_line, write_command_line
 
 listing = list_commands()                       # = commands list --json (the `result` of the envelope)
 schema = command_schema("elevation download")   # = commands schema --command ... --json
 form = command_schema("elevation download", form=True)  # = ... --form --json
 print(schema.to_json())                         # to_dict() / to_json(): like every document
+line = read_command_line("kartograf soil list-layers --json")   # = commands parse --line ... --json
+call = write_command_line("sheet parse", options={"sheet": "N-34-130-D"})  # = commands format ...
 ```
 
 `--command` takes the name of a command (`elevation download`) or its `operation_id`
 (`kartograf_elevation_download`); an unknown or missing command is a `validation_error` with
 `details.option` `command` and `details.allowed` (the command names).
+
+**The line of a call** (`kartograf-command-line/1`, ADR-063 decision 6): `commands parse --line LINE` reads a
+command line of any command (with or without the leading `kartograf`, quoted as in a shell) and `commands format
+--command ID --options JSON` writes the line of a call; both answer `command`, `options` (the options of the call
+proper, in the JSON form of `commands schema`), `run` (the targets `output_dir`/`root` as typed, `check`, `update`
+`upgrade` or `force` for `--upgrade`/`--force`, `plan` as a file, `workers`, `summary`) and `line`, the canonical
+line. The flags only the CLI has (`--json`, `--quiet`, `--inject`, ...) are no part of a call and are left out;
+`commands format` refuses an option the command does not have, an `update` other than `upgrade` or `force` and a
+`plan` given as a document (`validation_error` with `details.option`). Neither checks the values against the rules
+of the command (that is `validate_command`, 8.5, or the command with `--check`); both work offline and write nothing.
 
 **The list** (`kartograf-command-list/1`, the Nogat schema `schemas/nogat/command-list-1.schema.json`; about
 16 thousand characters of compact JSON): `tool`, `version`,
@@ -3925,14 +3944,14 @@ failure to start prints `Error: ...` and the `kartograf-error/1` document as the
 | `--no-cache` | no metadata cache (exclusive with `--cache-file`) |
 | `--version` | the version |
 
-**Read only by default (AGI-1.3).** Without `--allow-writes` the 22 tools that only read work
+**Read only by default (AGI-1.3).** Without `--allow-writes` the 24 tools that only read work
 as usual, and each of the 13 tools that write and have a plan (the twelve data commands and
 `store init`) is offered as its **plan-only variant**: its input schema has no `update`,
 `plan`, `workers` or `summary`, `check` is fixed to `true` (the call may leave it
 out), its hints say `readOnlyHint: true`, and every call is the plan (`check: true` in the
 envelope, the document `kartograf-plan/1`).
 An argument of a run, or `check: false`, answers `forbidden` (12) with `details.option`
-and the hint to start the server with `--allow-writes`. With `--allow-writes` all 35
+and the hint to start the server with `--allow-writes`. With `--allow-writes` all 37
 tools are offered as declared, and `check: true` still plans.
 
 #### MCP server tools
@@ -3977,6 +3996,8 @@ not write does with the tool.
 | `kartograf_sheet_parse` | `sheet parse` | `describe_sheet` | `discovery` | `kartograf-sheet/1` | RO, I | same |
 | `kartograf_commands_list` | `commands list` | `list_commands` | `discovery`, `core` | `kartograf-command-list/1` | RO, I | same |
 | `kartograf_commands_schema` | `commands schema` | `command_schema` | `discovery`, `core` | `kartograf-commands/1` | RO, I | same |
+| `kartograf_commands_parse` | `commands parse` | `read_command_line` | `discovery` | `kartograf-command-line/1` | RO, I | same |
+| `kartograf_commands_format` | `commands format` | `write_command_line` | `discovery` | `kartograf-command-line/1` | RO, I | same |
 | `kartograf_sheet_find` | `sheet find` | `find_sheets` | `discovery`, `core` | `kartograf-sheets/1` | RO, I | same |
 | `kartograf_store_overview` | `store overview` | `describe_store` | `store`, `core` | `kartograf-store-overview/1` | RO, I | same |
 | `kartograf_store_entries` | `store entries` | `list_store_entries` | `store` | `kartograf-store-entries/1` | RO, I | same |
@@ -4058,9 +4079,9 @@ them with the meaning of every allowed value. The same task, run and then planne
   client cancels does not stop a running download (versions are committed atomically, the
   result is dropped); closing stdio ends the server process.
 - Cost for the context of the agent: `tools/list` is long, because every property has its
-  catalog description and every tool the 3,000-character `outputSchema`: about 204,000
-  characters of compact JSON for the 35 tools of a server that writes (94,000 without the
-  `outputSchema`), 198,000 (88,000) for the same 35 tools of a server that does not, and 67,000
+  catalog description and every tool the 3,000-character `outputSchema`: about 212,000
+  characters of compact JSON for the 37 tools of a server that writes (96,000 without the
+  `outputSchema`), 206,000 (90,000) for the same 37 tools of a server that does not, and 67,000
   (35,000) for `--tools core`; the answer of `kartograf_commands_list` is about 17,000
   characters, and `structuredContent` repeats `content`. Claude Code defers the definitions
   and loads only the names and the `alwaysLoad` tools; for a client that loads all of them,
@@ -4114,6 +4135,168 @@ Results. A result is the envelope kartograf-result/1: status (ok, partial, faile
   merge, push or tags without consent, review before a tag): `CLAUDE.md`, section "Rules for agents of
   other repositories".
 
+### 8.8 HTTP server (`kartograf server`)
+
+`kartograf server` serves the command catalog over HTTP, read only (ADR-063 decisions 2, 7 and
+8; Nogat AGI section 6): the catalog, the queries without paths, the plans of the data commands
+and `script generate`, for the page of the GUI and for any other client. It runs no download,
+writes no data, takes no path from a client and reads no key of any source. Like
+`kartograf-mcp` it is no catalog command (it starts a process); its answers are the documents
+of `--json` (8.1).
+
+**Installation and start.** The extra `server` adds Starlette (`>=1.9,<2`) and uvicorn
+(`>=0.54,<1`); a development checkout has it with `uv sync --locked --all-extras`. Without it
+the command ends with 6 (`missing_dependency`, the hint names the extra).
+
+```sh
+kartograf server                         # http://127.0.0.1:8065/, this computer only
+kartograf server --host 0.0.0.0 --port 8080 --lang en
+```
+
+| Option | Meaning |
+|---|---|
+| `--host HOST` | the address to listen on; default `127.0.0.1`, which a server behind a reverse proxy keeps |
+| `--port PORT` | the TCP port, 0 to 65535; default `8065`; `0` takes a free one, which the record `start` names |
+| `--lang pl\|en` | the language of the `Error:` line of a failed start; the answers do not depend on it |
+
+The command checks the settings first (an unusable `nogat.toml` or limit ends with 2,
+`invalid_config`), then serves until Ctrl+C or `SIGTERM`: both stop it gracefully (open
+requests get 5 s) and it ends with 0. A port in use ends with 4 (`conflict`, reason
+`port_in_use`), an unknown host with 2; a failure to start prints `Error: ...` and the
+`kartograf-error/1` document as the last line of stderr.
+
+**Routes.** Every command whose catalog entry has a `rest` (8.4) is served at its `path`,
+`/api/v1/<group>/<verb>`, with its `method`:
+
+| Route | Commands |
+|---|---|
+| `POST /api/v1/<group>/download?check=true`, `POST /api/v1/soil/hsg?check=true` | the twelve data commands (eleven `download` and `soil hsg`): the plan only |
+| `GET /api/v1/<group>/list-sources`, `GET .../list-layers`, `GET /api/v1/elevation/availability` | the sources, layers and availability |
+| `GET /api/v1/sheet/parse`, `GET /api/v1/sheet/find` | the sheets |
+| `GET /api/v1/commands/list`, `.../schema`, `.../guide`, `.../parse`; `POST /api/v1/commands/format` | the catalog, the guide and the line of a call |
+| `POST /api/v1/script/generate` | the scripts for another machine (section 1.15) |
+| `GET /api/v1/server` | `nogat-server/1` (AGI-6.7), below |
+| `GET /api/v1/openapi.json` | the OpenAPI 3.1 document of the routes (AGI-6.2), below |
+
+A `GET` takes its options from the query by the names of `commands schema`: a whole number, a
+switch as `true` or `false` (also `1` and `0`), `bbox` as four numbers joined by `,`, a list as
+its values joined by `,`, a value per country as on the command line (`resolution=pl=1m,cz=2m`);
+a name given twice is a `validation_error`. A `POST` takes a JSON object (an empty body: no
+options) of at most 4 MiB (`validation_error`, reason `body_too_large`), and its query holds
+nothing but `check` of a data command. A plan is the detached plan of the line
+(`check_command(..., detached=True)`, section 1.15): `output_dir` `"."`, the path of each item
+relative to it, every file `write`, with `fetch` and `sources`, so it tells nothing of the
+server's disk. An answer is the envelope `kartograf-result/1` as `--json` prints it, compact
+UTF-8 JSON with `Content-Language: en` (AGI-9.2):
+
+```bash
+curl -s 'http://127.0.0.1:8065/api/v1/sheet/parse?sheet=N-34-130-D-d-2-4'
+curl -s -X POST 'http://127.0.0.1:8065/api/v1/elevation/download?check=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"product": "nmt", "sheet": "N-34-130-D-d-2-4", "resolution": "1m", "vertical_crs": "EVRF2007"}'
+```
+
+**What it refuses.** `403 forbidden`, before anything is read, with `details.reason`:
+
+| Reason | When |
+|---|---|
+| `writes_disabled` | a data command without `check=true` (in the query or the body), or with an option of its run (`update`, `plan`, `workers`, `summary`) |
+| `path_option` | an option with a `path_role`: a target (`root`, `output_dir`), an input file (`geometry`) or a plan file; also the input file of a line `script generate` would plan (`--geometry` in the `command` of a direct script). A saved plan goes to `script generate` as the document in `plan`, never as a file |
+| `not_served` | a command whose `rest` is `null`: `store *`, `cache *` and `config show` work on the user's own machine (any method) |
+
+A path that is no route is `404 not_found` (reason `unknown_route`, `details.route`); a route
+asked with another method is `405 method_not_allowed` with `Allow` (`details.method`,
+`details.allowed`). A failure of the server is `500 internal_error` with a fixed text: the cause
+goes to the application log only.
+
+**Errors: problem documents (AGI-6.3, AGI-6.4).** Every error is `application/problem+json`
+(RFC 9457) with the HTTP status of the registry: `type` (the entry of the code on the page of the
+Nogat error registry), `title`, `status`, `detail`, `instance` (the path), `code`, `hint` when a
+fix is known, `details` as in `kartograf-error/1`, and for a `validation_error` that names its
+options `errors`, one `{pointer, type, message}` per option, `pointer` a JSON Pointer to the
+option in the query or the body. `title`, `detail` and `hint` follow `Accept-Language` (`pl` or
+`en`, English without it); the answer says so with `Content-Language` and `Vary:
+Accept-Language`, and the machine fields are the same in both:
+
+```json
+{
+  "type": "https://github.com/Daldek/Nogat/blob/main/standards/ERROR_REGISTRY.md#validation_error",
+  "title": "Invalid input",
+  "status": 400,
+  "detail": "--product 'xx': unknown value - available: nmt (...), nmpt (...), laz (...), contours (...)",
+  "instance": "/api/v1/elevation/download",
+  "code": "validation_error",
+  "hint": "Allowed values of --product: nmt, nmpt, laz, contours.",
+  "details": {"reason": "invalid_input", "option": "product", "allowed": ["nmt", "nmpt", "laz", "contours"]},
+  "errors": [{"pointer": "/body/product", "type": "invalid_input", "message": "--product 'xx': ..."}]
+}
+```
+
+`not_found`, `method_not_allowed` and `rate_limited` are codes of the REST interface: no command
+line ends with them, so the exit code table leaves them out, and `error_report` of
+`method_not_allowed` or `rate_limited` has `exit_code` `null`, the registry giving them none
+(8.3).
+
+**Limits (ADR-063 decision 8, DEV-15.9).** The settings of section 9; a client is its IP
+address: the address of the connection, or, when that is a trusted proxy (`trusted_proxies`,
+`127.0.0.1` by default), the right-most address of `X-Forwarded-For` that is no trusted proxy
+(AGI-6.9). An address stays in memory for its window only and is written nowhere.
+
+| Limit | Default | Over it |
+|---|---|---|
+| `request_limit` per `request_window`: every request under `/api/` | 300 per 60 s | `429 rate_limited`, reason `request_limit` |
+| `plan_limit` per `plan_window`: each plan, and each direct script of a line (it plans) | 20 per 600 s | `429 rate_limited`, reason `plan_limit` |
+| `plan_max_units`: the units of one plan or direct script | 500 | `400 validation_error`, reason `too_many_units` |
+
+A `429` carries `Retry-After` in seconds and `details` `retry_after_s`, `limit` and `window_s`.
+The options of a plan are checked before the plan limit counts it, so a mistake costs no plan.
+The plans read the sources' indexes through the server's metadata cache
+(`<cache_dir>/kartograf/metadata.db`), whose index answers younger than `index_max_age` (1 day)
+are reused without a request; at most four calls use the network at once. The data bytes never
+pass through the server: a URL of a plan is the source's.
+
+**`GET /api/v1/server`** answers `nogat-server/1` (AGI-6.7), the one request with which a page
+finds its API, the same under `kartograf server` and behind Latarnik, which routes
+`/kartograf/v1/...` to `/api/v1/...`:
+
+```json
+{"schema": "nogat-server/1", "services": [{"tool": "kartograf", "version": "0.9.0",
+  "api": {"1": "/api/v1"}, "capabilities": ["catalog", "plan", "script"]}]}
+```
+
+**`GET /api/v1/openapi.json`** is OpenAPI 3.1 built from the catalog: one operation per route,
+`operationId` the command's `operation_id`, its summary, its description with its rules, its
+options (the query of a `GET`, the JSON body of a `POST`; the options the server refuses left
+out), its examples and the problems it answers. Its paths are relative to the base of the API
+and `servers` is the relative URL `../v1`, so the document reads right at
+`/api/v1/openapi.json` and behind a proxy that serves it at `/kartograf/v1/openapi.json`.
+
+**Logs (DEV-12.4 to DEV-12.9, DEV-15.10).** Nogat's `nogat_logging.py`, copied byte for byte
+(`ServerLog`, `AccessLog`), writes `nogat-log/1` records to
+`<state_dir>/kartograf/logs/<kind>-YYYY-MM-DD.jsonl` (`access`, `app`, `lifecycle`; section 9)
+and deletes a file 14 days after its date. No record holds a client address, a cookie, a
+request body or a full User-Agent (only its class `agent`). Standard error gets only the
+lifecycle records (`start` names the address and the limits) and the errors reduced to their
+type. uvicorn runs with `access_log=False`, `log_config=None` and without its proxy headers.
+The logs of a server, the errors and the lifecycle in time order:
+
+```bash
+jq -cs 'sort_by(.time)[] | select(.kind != "access" or .status >= 500)' ~/.local/state/nogat/kartograf/logs/*.jsonl
+```
+
+**Daily totals (DEV-15.11).** Use is counted only as totals per UTC day, one JSON object per
+line of `<data_dir>/kartograf/stats.jsonl`, rewritten at most 5 minutes after a change and at
+shutdown (after a restart the day's line grows):
+
+| Key | What `kartograf server` counts |
+|---|---|
+| `date` | the UTC day, `YYYY-MM-DD` |
+| `visitors` | the distinct clients of the day's API requests: a client is the HMAC-SHA-256 of its address and its User-Agent under a 32-byte salt drawn at start and at each 00:00 UTC, kept in memory only |
+| `page_views` | the HTML pages of the GUI served; 0 from the server alone |
+| `stations_opened` | always 0: Kartograf has no stations |
+| `analyses_run` | the plans answered and the scripts generated |
+| `downloads` | always 0: the server downloads nothing for anyone, the data go between the user and the source |
+
 ---
 
 ## 9. Settings and directories
@@ -4123,7 +4306,7 @@ Kartograf keeps its settings where every Nogat tool does (Nogat DEV-18, ADR-050)
 
 1. the command-line option (`--lang` for `lang`, `--root` for `root`; the other keys have none);
 2. the variable `KARTOGRAF_<KEY>`;
-3. the shared variable `NOGAT_<KEY>`, for the shared keys `data_dir`, `cache_dir` and `lang`
+3. the shared variable `NOGAT_<KEY>`, for the shared keys `data_dir`, `cache_dir`, `state_dir` and `lang`
    only;
 4. the table `[kartograf]` of `nogat.toml`;
 5. the table `[nogat]` of `nogat.toml`, for the shared keys only;
@@ -4139,8 +4322,17 @@ and does not read a `.env` file ([.env.example](../.env.example) lists every var
 | `root` | `KARTOGRAF_ROOT` | `<data_dir>/kartograf` | root of the store of a command that names neither `--root` nor `--output-dir` (DEV-19.2); `config show` reports it and its source |
 | `data_dir` | `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR` | user data directory of `nogat` | parent of the stores |
 | `cache_dir` | `KARTOGRAF_CACHE_DIR`, `NOGAT_CACHE_DIR` | user cache directory of `nogat` | parent of the caches: the metadata cache is `<cache_dir>/kartograf/metadata.db` |
+| `state_dir` | `KARTOGRAF_STATE_DIR`, `NOGAT_STATE_DIR` | user state directory of `nogat` | parent of the state kept between runs: the logs of `kartograf server` are `<state_dir>/kartograf/logs` |
 | `lang` | `KARTOGRAF_LANG`, `NOGAT_LANG` | `pl` | `pl` or `en`, and `--lang` on every command: the language of the text for people (the `Error:` line, the status lines); the `--json` document, the error line on stderr and the MCP server are English (ADR-053) |
 | `debug` | `KARTOGRAF_DEBUG` | off | tracebacks of unexpected errors and every library log record in the `--json` mode |
+| `index_max_age` | `KARTOGRAF_INDEX_MAX_AGE` | `86400` | a setting of `kartograf server` (ADR-063 decision 8), as are the keys below: seconds an index answer of the metadata cache is reused by a plan |
+| `plan_limit`, `plan_window` | `KARTOGRAF_PLAN_LIMIT`, `KARTOGRAF_PLAN_WINDOW` | `20`, `600` | `kartograf server`: plans of one client per that many seconds |
+| `plan_max_units` | `KARTOGRAF_PLAN_MAX_UNITS` | `500` | `kartograf server`: units of one plan |
+| `request_limit`, `request_window` | `KARTOGRAF_REQUEST_LIMIT`, `KARTOGRAF_REQUEST_WINDOW` | `300`, `60` | `kartograf server`: requests of one client per that many seconds (DEV-15.9) |
+| `trusted_proxies` | `KARTOGRAF_TRUSTED_PROXIES` | `127.0.0.1` | `kartograf server`: the IP addresses or networks whose `X-Forwarded-For` it believes (AGI-6.9); a TOML list, or the addresses joined by `,` in the variable |
+
+The limits of the server are whole numbers of at least 1; another value, like an address that is not one,
+is refused as every invalid setting is (`invalid_config`) and `config show` reports it.
 
 The credential `CLMS_CREDENTIALS` (section 6) is read from the environment only, never from
 `nogat.toml`, and is never printed. A directory may start with `~`. Kartograf writes no cache
@@ -4176,7 +4368,7 @@ value and source, each credential as present or missing, and the store root with
 }
 ```
 
-(`keys` is shortened here: the real document has all five keys. `source` is `default`, `env`
+(`keys` is shortened here: the real document has all thirteen keys. `source` is `default`, `env`
 or `file`; `name` is the variable or the table.) `config_file.ignored` lists the keys of
 `[kartograf]` that nothing reads: an unknown key, or a credential (`clms_credentials`).
 

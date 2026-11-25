@@ -45,14 +45,17 @@ class ErrorCodeSpec:
 
     ``code`` is the registry code, ``reason`` its refinement in
     ``details.reason`` (``None``: none) and ``exit_code`` the exit code the
-    registry gives ``code``.
+    registry gives ``code`` (``None`` for a code of the REST interface alone).
+    ``cli`` is false for an error only ``kartograf server`` answers: no command line
+    ends with it, so the exit code table of the CLI leaves it out.
     """
 
     exception: str
     code: str
     reason: str | None
-    exit_code: int
+    exit_code: int | None
     meaning: str
+    cli: bool = True
 
 
 @dataclass(frozen=True)
@@ -204,7 +207,37 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         None,
         12,
         "the MCP server refuses the call: a path outside its allowed directories "
-        "(--allow-dir), or a write on a server that does not write (--allow-writes)",
+        "(--allow-dir), or a write on a server that does not write (--allow-writes); "
+        "kartograf server refuses the run of a data command (writes_disabled), an "
+        "option with a path_role (path_option) and a command it does not serve "
+        "(not_served)",
+    ),
+    ErrorCodeSpec(
+        "NotFoundError",
+        "not_found",
+        None,
+        3,
+        "kartograf server has no route of that path (reason unknown_route)",
+        cli=False,
+    ),
+    ErrorCodeSpec(
+        "MethodNotAllowedError",
+        "method_not_allowed",
+        None,
+        None,
+        "a route of kartograf server asked with another method than its rest "
+        "(GET or POST; Allow names it)",
+        cli=False,
+    ),
+    ErrorCodeSpec(
+        "RateLimitedError",
+        "rate_limited",
+        None,
+        None,
+        "a client of kartograf server over its limit, with Retry-After (reasons: "
+        "request_limit, request_limit per request_window; plan_limit, plan_limit "
+        "plans per plan_window)",
+        cli=False,
     ),
     ErrorCodeSpec(
         "TransformError",
@@ -279,6 +312,7 @@ def _exit_codes() -> tuple[ExitCodeSpec, ...]:
     The outcomes ``ok``, ``partial`` and ``failed`` (0, 10, 11) are named by their
     status, every other code by the registry code that owns it; the meaning is the
     one of the registry. The outcome ``cancelled`` is the error ``cancelled`` (130).
+    The errors only ``kartograf server`` answers have no row (``cli`` false).
     """
     rows = {
         code: ExitCodeSpec(code, status, OUTCOME_MEANINGS[status])
@@ -286,6 +320,8 @@ def _exit_codes() -> tuple[ExitCodeSpec, ...]:
         if status != "cancelled"
     }
     for row in ERROR_CODES:
+        if row.exit_code is None or not row.cli:
+            continue
         rows.setdefault(
             row.exit_code,
             ExitCodeSpec(row.exit_code, row.code, BY_CODE[row.code].meaning),
@@ -303,7 +339,8 @@ class ErrorReport(Document):
     ``code`` is a registry code and ``title`` its English title; ``message`` is
     what the CLI prints after ``Error: ``; ``hint`` is one ASCII line of at most
     400 characters or ``None`` (then the key is left out of the document);
-    ``exit_code`` is the exit code of the registry; ``command`` is the catalog id
+    ``exit_code`` is the exit code of the registry (``null`` for a code of the REST
+    interface alone, ``rate_limited``); ``command`` is the catalog id
     of the failed command (known to the CLI and the MCP server, ``None`` for a
     plain library call, or the command a ``UsageError`` names; left out of the
     document when ``None``); ``details`` is ``exc.details()`` (``reason`` first;
@@ -326,7 +363,7 @@ class ErrorReport(Document):
     title: str
     message: str
     hint: str | None
-    exit_code: int
+    exit_code: int | None
     command: str | None = None
     details: dict[str, object] = field(default_factory=dict)
 
@@ -337,6 +374,15 @@ class ErrorReport(Document):
             if document[key] is None:
                 del document[key]
         return document
+
+    @property
+    def exit_status(self) -> int:
+        """Return the status a process ends with for this error.
+
+        The registry's exit code; 1 (``internal_error``) for a code of the REST
+        interface alone, which no command line raises.
+        """
+        return 1 if self.exit_code is None else self.exit_code
 
 
 def error_line(report: ErrorReport) -> str:

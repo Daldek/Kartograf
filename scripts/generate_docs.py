@@ -46,8 +46,10 @@ def error_codes_table() -> str:
     ]
     for row in ERROR_CODES:
         reason = "-" if row.reason is None else f"`{row.reason}`"
+        # a code of the REST interface alone (rate_limited) has no exit code
+        exit_code = "-" if row.exit_code is None else row.exit_code
         lines.append(
-            f"| `{row.code}` | {reason} | `{row.exception}` | {row.exit_code} "
+            f"| `{row.code}` | {reason} | `{row.exception}` | {exit_code} "
             f"| {row.meaning} |"
         )
     return "\n".join(lines) + "\n"

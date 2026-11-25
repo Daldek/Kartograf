@@ -31,6 +31,8 @@ The lines install the CLI of the release 0.8.0, add the library to a project pin
 | Extra | Adds |
 |---|---|
 | `mcp` | the MCP server `kartograf-mcp` (SDK `mcp>=2.3.0,<3`, protocol revision 2026-07-28) |
+| `server` | the read-only HTTP server `kartograf server` (Starlette `>=1.9,<2`, uvicorn `>=0.54,<1`) |
+| `gui` | the same two packages, for the page of the GUI (`kartograf gui serve`, not yet released) |
 
 Development setup: `git clone https://github.com/Daldek/Kartograf.git && cd Kartograf && uv sync --locked --all-extras`.
 
@@ -169,7 +171,7 @@ The full list is `kartograf commands list --json`. Python names are keyword-only
 
 ## MCP server
 
-`kartograf-mcp` serves 35 tools named `kartograf_<group>_<verb>` over stdio. Each client below starts it as in the Install section:
+`kartograf-mcp` serves 37 tools named `kartograf_<group>_<verb>` over stdio. Each client below starts it as in the Install section:
 
 ```bash
 claude mcp add kartograf -- uvx --from "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git@v0.8.0" kartograf-mcp
@@ -209,6 +211,19 @@ VS Code reads `.vscode/mcp.json`, whose key is `servers`:
 | `--allow-writes` | data tools write (needs `--allow-dir`); without it they only plan (`check`) |
 
 Tool descriptions and instructions are English; the server plans until `--allow-writes` and never writes outside `--allow-dir`.
+
+### HTTP server: `kartograf server`
+
+`kartograf server` (extra `server`) serves the command catalog read only at `http://127.0.0.1:8065/api/v1/`: the catalog, the queries without paths, the plans of the data commands (`POST /api/v1/<group>/download?check=true`) and `script generate`. It downloads and writes no data; a run, a path option and the commands of the user's own store, cache and settings answer `forbidden`. Errors are `application/problem+json` in the language of `Accept-Language`; `GET /api/v1/server` answers `nogat-server/1` and `GET /api/v1/openapi.json` OpenAPI 3.1. Its limits per client (`request_limit`, `plan_limit`, `plan_max_units`), `index_max_age` and `trusted_proxies` are settings (below); the whole interface is in [USAGE 8.8](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md#88-http-server-kartograf-server).
+
+Its logs (`nogat-log/1`, no client address, deleted after 14 days) are in `<state_dir>/kartograf/logs`; the errors and the starts and stops, in time order:
+
+```sh
+kartograf server --port 8065
+jq -cs 'sort_by(.time)[] | select(.kind != "access" or .status >= 500)' ~/.local/state/nogat/kartograf/logs/*.jsonl
+```
+
+Use is counted only in daily totals, one line per UTC day in `<data_dir>/kartograf/stats.jsonl`: `visitors` the distinct clients of the day's API requests (an HMAC of the address and the User-Agent under a salt kept in memory only), `page_views` the HTML pages of the GUI (0 from the server alone), `stations_opened` always 0 (Kartograf has no stations), `analyses_run` the plans answered and the scripts generated, `downloads` always 0 (the data go from the source to the user, never through the server).
 
 ## Related tools
 
@@ -252,15 +267,23 @@ Files go to the directory of `--root` (`root`), one directory per product: `<roo
 
 ### Settings, directories and backup
 
-Settings come from the first of: the command-line option, the variable `KARTOGRAF_<KEY>`, the shared variable `NOGAT_<KEY>` (only `data_dir`, `cache_dir` and `lang`), the table `[kartograf]` and then `[nogat]` of `nogat.toml`, and the default (Nogat DEV-18). `nogat.toml` is in the user configuration directory (`~/.config/nogat/nogat.toml` on Linux) or at the path in `NOGAT_CONFIG`; Kartograf works without it, and refuses to run with a file it cannot read (`validation_error`, reason `invalid_config`). `kartograf config show [--json]` lists every setting with its value and source. [.env.example](https://github.com/Daldek/Kartograf/blob/main/.env.example) has every variable; Kartograf does not read a `.env` file.
+Settings come from the first of: the command-line option, the variable `KARTOGRAF_<KEY>`, the shared variable `NOGAT_<KEY>` (only `data_dir`, `cache_dir`, `state_dir` and `lang`), the table `[kartograf]` and then `[nogat]` of `nogat.toml`, and the default (Nogat DEV-18). `nogat.toml` is in the user configuration directory (`~/.config/nogat/nogat.toml` on Linux) or at the path in `NOGAT_CONFIG`; Kartograf works without it, and refuses to run with a file it cannot read (`validation_error`, reason `invalid_config`). `kartograf config show [--json]` lists every setting with its value and source. [.env.example](https://github.com/Daldek/Kartograf/blob/main/.env.example) has every variable; Kartograf does not read a `.env` file.
 
 | Variable | Key in `nogat.toml` | Meaning | Default |
 |---|---|---|---|
 | `KARTOGRAF_ROOT` | `[kartograf] root` | root of the store a command writes when it names neither `--root` nor `--output-dir` (ADR-054) | `<data_dir>/kartograf` |
 | `KARTOGRAF_DATA_DIR`, `NOGAT_DATA_DIR` | `data_dir` | parent of the stores | user data directory of `nogat` (`~/.local/share/nogat`) |
 | `KARTOGRAF_CACHE_DIR`, `NOGAT_CACHE_DIR` | `cache_dir` | parent of the caches; the metadata cache is `<cache_dir>/kartograf/metadata.db` | user cache directory of `nogat` (`~/.cache/nogat`) |
+| `KARTOGRAF_STATE_DIR`, `NOGAT_STATE_DIR` | `state_dir` | parent of the state kept between runs; the logs of `kartograf server` are `<state_dir>/kartograf/logs` | user state directory of `nogat` (`~/.local/state/nogat`) |
 | `KARTOGRAF_LANG`, `NOGAT_LANG` | `lang` | language of human-readable output, `pl` or `en`; `--lang` overrides it; the `--json` output and the error line are English | `pl` |
 | `KARTOGRAF_DEBUG` | `[kartograf] debug` | print tracebacks and every library log record | off |
+| `KARTOGRAF_INDEX_MAX_AGE` | `[kartograf] index_max_age` | a setting of `kartograf server` (ADR-063 decision 8), as are the six below: seconds an index answer of the metadata cache is reused by a plan; this and the five limits below are whole numbers of at least 1 | `86400` |
+| `KARTOGRAF_PLAN_LIMIT` | `[kartograf] plan_limit` | `kartograf server`: plans of one client per `plan_window` | `20` |
+| `KARTOGRAF_PLAN_WINDOW` | `[kartograf] plan_window` | `kartograf server`: seconds of the window of `plan_limit` | `600` |
+| `KARTOGRAF_PLAN_MAX_UNITS` | `[kartograf] plan_max_units` | `kartograf server`: units of one plan | `500` |
+| `KARTOGRAF_REQUEST_LIMIT` | `[kartograf] request_limit` | `kartograf server`: requests of one client per `request_window` (DEV-15.9) | `300` |
+| `KARTOGRAF_REQUEST_WINDOW` | `[kartograf] request_window` | `kartograf server`: seconds of the window of `request_limit` | `60` |
+| `KARTOGRAF_TRUSTED_PROXIES` | `[kartograf] trusted_proxies` | `kartograf server`: the IP addresses or networks whose `X-Forwarded-For` it believes (AGI-6.9); a TOML list in the file, the addresses joined by `,` in the variable | `127.0.0.1` |
 | `NOGAT_CONFIG` | - | path of `nogat.toml` | user configuration directory |
 | `CLMS_CREDENTIALS` | never in the file | CLMS API credentials for CORINE as GeoTIFF ([USAGE.md](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md), section 6); `config show` says present or missing | - |
 

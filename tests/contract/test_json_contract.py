@@ -518,6 +518,13 @@ def _command_schema() -> Document:
     return command_schema("elevation download")
 
 
+def _command_line() -> Document:
+    return kartograf.write_command_line(
+        "elevation download",
+        options={"product": "nmt", "sheet": SHEET, "root": str(STORE), "check": True},
+    )
+
+
 def _script_file() -> ScriptFile:
     return ScriptFile(
         f"{SHEET}.asc",
@@ -609,6 +616,7 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-command-list/1": (_command_list,),
     "kartograf-commands/1": (_command_schema,),
     "kartograf-guide/1": (_agent_guide,),
+    "kartograf-command-line/1": (_command_line,),
     "kartograf-script/1": (_script,),
 }
 
@@ -745,6 +753,7 @@ CONTRACT: dict[str, list[str]] = {
     "kartograf-command-list/1": ["schema", "tool", "version", "groups", "commands"],
     "kartograf-commands/1": ["schema", "tool", "version", "commands"],
     "kartograf-guide/1": ["schema", "format", "text"],
+    "kartograf-command-line/1": ["schema", "command", "options", "run", "line"],
     "kartograf-script/1": [
         "schema",
         "shell",

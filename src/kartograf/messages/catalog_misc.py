@@ -192,6 +192,67 @@ MESSAGES = {
         "The schema of a command by its operation id, as JSON",
         "Schemat komendy wg operation_id, jako JSON",
     ),
+    "commands_parse_summary": Text(
+        "Read a command line of any command into its call and canonical line",
+        "Odczytaj linie polecenia dowolnej komendy: wywolanie i linia kanoniczna",
+    ),
+    "commands_parse_description": Text(
+        "Offline, read only: what a pasted `kartograf ...` line calls "
+        "(`kartograf-command-line/1`): the command, the options of the call, the "
+        "targets and run options as `commands schema` names them, and the canonical "
+        "line. The parser of the CLI decides; `--json` and `--quiet` are no part of a "
+        "call. Not a check of the values: use the command with `check` for that.",
+        "Bez sieci i bez zapisu: co wywoluje wklejona linia `kartograf ...` (dokument "
+        "kartograf-command-line/1): komenda, opcje wywolania, cele zapisu i opcje "
+        "uruchomienia (nazwy jak w commands schema) oraz linia kanoniczna. Decyduje "
+        "parser CLI; --json i --quiet nie sa czescia wywolania. To nie sprawdzenie "
+        "wartosci: do tego komenda z --check.",
+    ),
+    "line_description": Text(
+        "The command line to read, with or without the leading `kartograf`, quoted "
+        "as in a shell.",
+        "Linia polecenia do odczytania, z poczatkowym `kartograf` albo bez, w "
+        "cudzyslowach jak w powloce",
+    ),
+    "metavar_line": Text("LINE", "LINIA"),
+    "example_parse_line": Text(
+        "The call of a pasted line",
+        "Wywolanie wklejonej linii",
+    ),
+    "commands_format_summary": Text(
+        "Write the canonical command line of a call of any command",
+        "Zapisz kanoniczna linie polecenia wywolania dowolnej komendy",
+    ),
+    "commands_format_description": Text(
+        "Offline, read only: the `kartograf ...` line of a call "
+        "(`kartograf-command-line/1`), as a command form shows it; `commands parse` "
+        "reads it back. The options are those `commands schema` lists, the targets "
+        "and run options among them; a path is text, never resolved. Not a check of "
+        "the values: use the command with `check` for that.",
+        "Bez sieci i bez zapisu: linia `kartograf ...` wywolania (dokument "
+        "kartograf-command-line/1), jak pokazuje ja formularz komendy; commands "
+        "parse odczytuje ja z powrotem. Opcje jak w commands schema, z celami zapisu "
+        "i opcjami uruchomienia; sciezka to tekst, nigdy nie rozwijany. To nie "
+        "sprawdzenie wartosci: do tego komenda z --check.",
+    ),
+    "format_command_description": Text(
+        "The command of the call (required): its name, such as `elevation "
+        "download`, or its `operation_id`.",
+        "Komenda wywolania (wymagana): nazwa z katalogu (np. elevation download) "
+        "albo jej operation_id",
+    ),
+    "format_options_description": Text(
+        "The options of the call as a JSON object, by the names of `commands "
+        "schema`: the options of the command, `output_dir` or `root`, `check`, "
+        "`update` (`upgrade` or `force`), `plan` (a file), `workers`, `summary`.",
+        "Opcje wywolania jako obiekt JSON, nazwy jak w commands schema: opcje "
+        "komendy, output_dir albo root, check, update (upgrade albo force), plan "
+        "(plik), workers, summary",
+    ),
+    "example_format_call": Text(
+        "The line of the plan of a call in a store",
+        "Linia planu wywolania w magazynie",
+    ),
     "commands_guide_summary": Text(
         "Render the guide for AI agents (AGENTS.md, llms.txt or its block)",
         "Wygeneruj przewodnik dla agentow AI (AGENTS.md, llms.txt, blok)",

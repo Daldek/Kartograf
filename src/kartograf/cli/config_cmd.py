@@ -30,6 +30,8 @@ def _origin(source: str, name: str | None) -> str:
 def _shown(setting: Setting) -> str:
     if isinstance(setting.value, bool):
         return yes_no(setting.value)
+    if isinstance(setting.value, tuple):
+        return ", ".join(setting.value)
     return str(setting.value)
 
 

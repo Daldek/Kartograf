@@ -3,7 +3,7 @@ The user environment of Kartograf: ``nogat.toml``, variables and user directorie
 
 A setting comes from the first of: the command-line option, the environment
 variable ``KARTOGRAF_<KEY>``, the shared variable ``NOGAT_<KEY>`` (only the
-shared keys ``data_dir``, ``cache_dir`` and ``lang``), the section
+shared keys ``data_dir``, ``cache_dir``, ``state_dir`` and ``lang``), the section
 ``[kartograf]`` of ``nogat.toml``, the section ``[nogat]`` of it (shared keys
 only) and the built-in default (DEV-18.1, ECO-028). An empty variable counts as
 unset. The file is ``nogat.toml`` in ``platformdirs.user_config_path("nogat")``
@@ -18,8 +18,20 @@ The settings are:
   stores, default the user data directory of ``nogat``;
 - ``cache_dir`` (``KARTOGRAF_CACHE_DIR``, ``NOGAT_CACHE_DIR``): the parent of
   the caches, default the user cache directory of ``nogat``;
+- ``state_dir`` (``KARTOGRAF_STATE_DIR``, ``NOGAT_STATE_DIR``): the parent of the
+  state kept between runs, the logs of ``kartograf server`` among it
+  (``<state_dir>/kartograf/logs``, DEV-12.6), default the user state directory of
+  ``nogat`` (DEV-18.2);
 - ``lang`` (``KARTOGRAF_LANG``, ``NOGAT_LANG``): ``pl`` or ``en``, default ``pl``;
-- ``debug`` (``KARTOGRAF_DEBUG``): print tracebacks and every library log record.
+- ``debug`` (``KARTOGRAF_DEBUG``): print tracebacks and every library log record;
+- the limits of ``kartograf server`` (ADR-063), each a whole number of at least 1:
+  ``index_max_age`` (seconds an index answer of the metadata cache is reused by a
+  plan, default 86400), ``plan_limit`` per ``plan_window`` (plans of one client per
+  that many seconds, default 20 per 600), ``plan_max_units`` (units of one plan,
+  default 500) and ``request_limit`` per ``request_window`` (requests of one client,
+  default 300 per 60, DEV-15.9); and ``trusted_proxies``, the addresses or networks
+  whose ``X-Forwarded-For`` the server believes (AGI-6.9), a TOML list or the
+  addresses joined by ``,`` in the variable, default ``127.0.0.1``.
 
 The command-line options of a call (there are none for these keys yet) go
 before every layer here; ``get_config`` reports what the environment and the
@@ -33,6 +45,7 @@ Examples
 'pl'
 """
 
+import ipaddress
 import os
 import tomllib
 from collections.abc import Mapping
@@ -60,9 +73,12 @@ __all__ = [
     "debug",
     "get_config",
     "human_language",
+    "limit",
     "resolve",
     "resolve_root",
+    "state_dir",
     "store_root",
+    "trusted_proxies",
 ]
 
 APP: Final = "nogat"
@@ -71,11 +87,31 @@ PREFIX: Final = "KARTOGRAF_"
 SHARED_PREFIX: Final = "NOGAT_"
 CONFIG_ENV: Final = "NOGAT_CONFIG"
 CONFIG_FILENAME: Final = "nogat.toml"
-SHARED_KEYS: Final[tuple[str, ...]] = ("data_dir", "cache_dir", "lang")
+SHARED_KEYS: Final[tuple[str, ...]] = ("data_dir", "cache_dir", "state_dir", "lang")
 """Keys of ``[nogat]`` and ``NOGAT_<KEY>``: the same for every tool of the ecosystem."""
-KEYS: Final[tuple[str, ...]] = ("root", "data_dir", "cache_dir", "lang", "debug")
+INT_KEYS: Final[Mapping[str, int]] = {
+    "index_max_age": 86400,
+    "plan_limit": 20,
+    "plan_window": 600,
+    "plan_max_units": 500,
+    "request_limit": 300,
+    "request_window": 60,
+}
+"""The limits of ``kartograf server`` with their defaults (ADR-063 decision 8)."""
+LIST_KEYS: Final[Mapping[str, tuple[str, ...]]] = {"trusted_proxies": ("127.0.0.1",)}
+"""Settings that are lists of texts, with their defaults (AGI-6.9)."""
+KEYS: Final[tuple[str, ...]] = (
+    "root",
+    "data_dir",
+    "cache_dir",
+    "state_dir",
+    "lang",
+    "debug",
+    *INT_KEYS,
+    *LIST_KEYS,
+)
 """Every setting of Kartograf, in the order of ``config show``."""
-PATH_KEYS: Final[tuple[str, ...]] = ("root", "data_dir", "cache_dir")
+PATH_KEYS: Final[tuple[str, ...]] = ("root", "data_dir", "cache_dir", "state_dir")
 CREDENTIALS: Final[tuple[str, ...]] = ("CLMS_CREDENTIALS",)
 """Variables that only the environment may give (DEV-18.4); never printed."""
 LANGUAGES: Final[tuple[str, ...]] = ("pl", "en")
@@ -141,9 +177,11 @@ class Setting:
 
     Attributes
     ----------
-    value : pathlib.Path, str or bool
-        The value in force: a directory (``root``, ``data_dir``, ``cache_dir``;
-        ``~`` expanded), ``pl`` or ``en`` (``lang``) or a flag (``debug``).
+    value : pathlib.Path, str, bool, int or tuple of str
+        The value in force: a directory (``root``, ``data_dir``, ``cache_dir``,
+        ``state_dir``; ``~`` expanded), ``pl`` or ``en`` (``lang``), a flag
+        (``debug``), a whole number (a limit of the server) or the addresses of
+        ``trusted_proxies``.
     source : {"default", "env", "file"}
         The layer: the built-in default, a variable or ``nogat.toml``.
     name : str or None
@@ -153,7 +191,7 @@ class Setting:
         when it is valid.
     """
 
-    value: Path | str | bool
+    value: Path | str | bool | int | tuple[str, ...]
     source: SettingSource
     name: str | None
     error: str | None = None
@@ -369,10 +407,47 @@ def _flag(raw: object) -> bool:
     return str(raw).strip().lower() not in _FALSE_WORDS
 
 
+def _number(raw: object) -> int | None:
+    """Return a limit as a whole number of at least 1, or ``None`` when it is none."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, str) and raw.strip().isdigit():
+        raw = int(raw.strip())
+    return raw if isinstance(raw, int) and raw >= 1 else None
+
+
+def _addresses(raw: object) -> tuple[str, ...] | None:
+    """Return ``trusted_proxies`` as addresses or networks, or ``None`` when invalid.
+
+    A list of texts (``nogat.toml``) or the texts joined by ``,`` (a variable);
+    each is an IPv4 or IPv6 address or network (``127.0.0.1``, ``10.0.0.0/8``).
+    """
+    if isinstance(raw, str):
+        items: list[object] = [part.strip() for part in raw.split(",") if part.strip()]
+    elif isinstance(raw, list):
+        items = list(raw)
+    else:
+        return None
+    found: list[str] = []
+    for item in items:
+        if not isinstance(item, str):
+            return None
+        try:
+            ipaddress.ip_network(item.strip(), strict=False)
+        except ValueError:
+            return None
+        found.append(item.strip())
+    return tuple(found)
+
+
 def _invalid(key: str, raw: object) -> Message | None:
     """Return why ``raw`` is not a valid value of ``key`` (``None``: it is valid)."""
     if key in PATH_KEYS:
         return None if isinstance(raw, str) else message("config.directory_not_text")
+    if key in INT_KEYS:
+        return None if _number(raw) is not None else message("config.not_positive")
+    if key in LIST_KEYS:
+        return None if _addresses(raw) is not None else message("config.not_addresses")
     if key == "lang":
         value = raw.strip().lower() if isinstance(raw, str) else raw
         if value not in LANGUAGES:
@@ -382,12 +457,23 @@ def _invalid(key: str, raw: object) -> Message | None:
     return None
 
 
-def _default(key: str) -> Path | str | bool:
+def default_state_dir() -> Path:
+    """Return the default ``state_dir``: the user state directory of ``nogat``."""
+    return Path(platformdirs.user_state_path(APP))
+
+
+def _default(key: str) -> Path | str | bool | int | tuple[str, ...]:
+    if key in INT_KEYS:
+        return INT_KEYS[key]
+    if key in LIST_KEYS:
+        return LIST_KEYS[key]
     match key:
         case "data_dir":
             return default_data_dir()
         case "cache_dir":
             return default_cache_dir()
+        case "state_dir":
+            return default_state_dir()
         case "root":
             return data_dir() / TOOL
         case "lang":
@@ -426,13 +512,18 @@ def resolve(key: str) -> Setting:
     if error is not None:
         error = message("config.setting_error", name=found.name, key=key, error=error)
         return Setting(_default(key), "default", None, error)
-    value: Path | str | bool
+    value: Path | str | bool | int | tuple[str, ...] | None
     if key in PATH_KEYS:
         value = Path(found.value).expanduser()
+    elif key in INT_KEYS:
+        value = _number(found.value)
+    elif key in LIST_KEYS:
+        value = _addresses(found.value)
     elif key == "lang":
         value = found.value.strip().lower()
     else:
         value = _flag(found.value)
+    assert value is not None  # _invalid
     return Setting(value, found.source, found.name)
 
 
@@ -448,6 +539,33 @@ def data_dir() -> Path:
 def cache_dir() -> Path:
     """Return ``cache_dir``: the parent of the caches (``<cache_dir>/kartograf``)."""
     return _path("cache_dir")
+
+
+def state_dir() -> Path:
+    """Return ``state_dir``: the parent of the state (``<state_dir>/kartograf``)."""
+    return _path("state_dir")
+
+
+def limit(key: str) -> int:
+    """Return a limit of ``kartograf server`` (``plan_limit``, ...; ``INT_KEYS``).
+
+    Raises
+    ------
+    KeyError
+        ``key`` is not a limit.
+    """
+    if key not in INT_KEYS:
+        raise KeyError(key)
+    value = resolve(key).value
+    assert isinstance(value, int)  # INT_KEYS resolve to int
+    return value
+
+
+def trusted_proxies() -> tuple[str, ...]:
+    """Return the addresses and networks whose ``X-Forwarded-For`` counts (AGI-6.9)."""
+    value = resolve("trusted_proxies").value
+    assert isinstance(value, tuple)  # LIST_KEYS resolve to tuples
+    return value
 
 
 def store_root() -> StoreRoot:

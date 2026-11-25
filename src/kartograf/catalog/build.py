@@ -71,6 +71,7 @@ _TYPES = {
     "per_country": "string",
     "str_list": "array",
     "plan": "object",
+    "json": "object",
 }
 _ITEMS = {"bbox": "number", "str_list": "string"}
 _UNITS = {"bbox": "m, or degrees for EPSG:4326"}

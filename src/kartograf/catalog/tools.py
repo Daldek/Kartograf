@@ -208,8 +208,15 @@ def _string(values: list[Any] | None) -> dict[str, Any]:
     return schema
 
 
-def _property(command: Command, param: Param, option: OptionEntry) -> dict[str, Any]:
-    """Return the JSON Schema of one option (AGI-5.5)."""
+def option_schema(
+    command: Command, param: Param, option: OptionEntry
+) -> dict[str, Any]:
+    """Return the JSON Schema of one option (AGI-5.5).
+
+    The schema of the option in an MCP tool and in the OpenAPI document of
+    ``kartograf server``: its type, allowed values, bounds, description, default and
+    examples, from the catalog entry ``option`` of the parameter ``param``.
+    """
     values = allowed_values(command, option)
     schema: dict[str, Any]
     match param.kind:
@@ -247,7 +254,7 @@ def _property(command: Command, param: Param, option: OptionEntry) -> dict[str, 
             }
         case "str_list":
             schema = {"type": "array", "items": _string(values)}
-        case "plan":
+        case "plan" | "json":
             schema = {"type": "object"}
         case _:
             raise ValueError(f"{command.id}: kind {param.kind!r} has no JSON Schema")
@@ -281,7 +288,7 @@ def _input_schema(command: Command, entry: CommandEntry, *, plan_only: bool) -> 
         if plan_only and name in RUN_OPTIONS:
             refused.add(name)
             continue
-        schema = _property(command, param, option)
+        schema = option_schema(command, param, option)
         if name == CHECK_OPTION and plan_only:
             schema.update(const=True, default=True)
             schema["description"] += _PLAN_ONLY_CHECK

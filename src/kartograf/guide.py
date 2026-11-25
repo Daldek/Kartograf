@@ -105,7 +105,8 @@ _ERROR_ADVICE: Final[Mapping[str, str]] = {
     "`invalid_layout`: see `details.problems`",
     "missing_dependency": "an extra is missing: install it as `hint` says",
     "forbidden": "MCP refused: a path outside `--allow-dir` or a write without "
-    "`--allow-writes`",
+    "`--allow-writes`; the HTTP server refuses a run, a path option and the "
+    "commands it does not serve (`details.reason`): plan with `?check=true`",
     "calculation_error": "a coordinate transformation failed: change the CRS or area",
     "unsupported": "no safe transformation for these coordinate systems: use another",
     "io_error": "a directory or file is unavailable: check `details.path`",
@@ -357,11 +358,15 @@ def _group_names() -> str:
 
 
 def _errors() -> str:
-    """Return the table of the error codes with what to do about each."""
+    """Return the table of the error codes with what to do about each.
+
+    The codes of the CLI, the library and the MCP server: an error only ``kartograf
+    server`` answers (``ErrorCodeSpec.cli`` false) is in its OpenAPI document.
+    """
     rows = []
     seen: set[str] = set()
     for spec in ERROR_CODES:
-        if spec.code in seen:
+        if spec.code in seen or not spec.cli:
             continue
         seen.add(spec.code)
         advice = _ERROR_ADVICE.get(spec.code)
@@ -374,9 +379,10 @@ def _errors() -> str:
 
 
 def _error_codes() -> str:
-    seen: dict[str, int] = {}
+    seen: dict[str, int | None] = {}
     for spec in ERROR_CODES:
-        seen.setdefault(spec.code, spec.exit_code)
+        if spec.cli:
+            seen.setdefault(spec.code, spec.exit_code)
     return ", ".join(f"{_code(code)} ({exit_code})" for code, exit_code in seen.items())
 
 

@@ -73,6 +73,13 @@ REPOSITORY: Final = "https://github.com/Daldek/Kartograf.git"
 """The repository whose released tag a Kartograf script installs."""
 UV_GUIDE: Final = "https://docs.astral.sh/uv/getting-started/installation/"
 """The installation guide of uv, which a Kartograf script names when uv is missing."""
+PLANNED_LINES: Final[Mapping[str, tuple[str, str]]] = {
+    "script generate": ("command", "direct")
+}
+"""The commands whose call plans a command line it is given: the option of the line
+and the switch that makes the call plan it (a direct script reads the input files of
+the line, ``geometry``). An interface that confines paths (the MCP server's
+``--allow-dir``, ``kartograf server``) checks them as the call's own options."""
 
 
 @dataclass(frozen=True)

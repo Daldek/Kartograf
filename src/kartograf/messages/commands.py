@@ -33,6 +33,12 @@ MESSAGES = {
         "option {name!r} is given as an option and as a run flag",
         "opcja {name!r} podana jako opcja i jako flaga uruchomienia",
     ),
+    "plan_on_line": Text(
+        "plan of {command}: on a command line a plan is a file (--plan FILE), not a "
+        "document",
+        "plan komendy {command}: w linii polecenia plan to plik (--plan PLIK), nie "
+        "dokument",
+    ),
     "summary_only_for_hsg": Text(
         "summary applies only to the command {summary_command} (HSG statistics)",
         "summary dotyczy tylko komendy {summary_command} (statystyki HSG)",

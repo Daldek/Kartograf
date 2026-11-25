@@ -1,8 +1,9 @@
 """Declare the commands outside the data groups.
 
-``sheet parse`` and ``sheet find``, ``commands list``, ``commands schema`` and
-``commands guide``, the ``cache`` group and the read access to the store
-(``store overview``, ``store entries``, ``store sidecar``).
+``sheet parse`` and ``sheet find``, ``commands list``, ``commands schema``,
+``commands guide``, ``commands parse`` and ``commands format`` (the line of a call,
+ADR-063), the ``cache`` group and the read access to the store (``store overview``,
+``store entries``, ``store sidecar``).
 """
 
 from dataclasses import replace
@@ -97,6 +98,48 @@ _SCHEMA_PARAMS = (
         "flag",
         message("catalog_misc.form_description"),
         default=False,
+    ),
+    shared.JSON,
+)
+
+# The line of the examples of ``commands parse`` and ``commands format``.
+_EXAMPLE_OPTIONS = {
+    "product": "nmt",
+    "sheet": "N-34-130-D-d-2-4",
+    "resolution": "1m",
+    "vertical_crs": "EVRF2007",
+}
+
+_LINE_PARAMS = (
+    Param(
+        "line",
+        "str",
+        message("catalog_misc.line_description"),
+        required=True,
+        metavar=message("catalog_misc.metavar_line"),
+        examples=(
+            "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
+            "--resolution 1m --vertical-crs EVRF2007 --root ./data",
+        ),
+    ),
+    shared.JSON,
+)
+
+_FORMAT_PARAMS = (
+    Param(
+        "command",
+        "str",
+        message("catalog_misc.format_command_description"),
+        required=True,
+        metavar=message("catalog.metavar_command"),
+        examples=("elevation download",),
+    ),
+    Param(
+        "options",
+        "json",
+        message("catalog_misc.format_options_description"),
+        metavar="JSON",
+        examples=({**_EXAMPLE_OPTIONS, "root": "./data"},),
     ),
     shared.JSON,
 )
@@ -326,6 +369,51 @@ COMMANDS = (
         ),
         rules=(message("catalog_misc.commands_guide_rule"),),
         errors=("validation_error",),
+        cardinality="single",
+    ),
+    Command(
+        "commands parse",
+        message("catalog_misc.commands_parse_summary"),
+        "query",
+        "read_command_line",
+        "kartograf-command-line/1",
+        _LINE_PARAMS,
+        description=message("catalog_misc.commands_parse_description"),
+        examples=(
+            Example(
+                {
+                    "line": "kartograf elevation download --product nmt --sheet "
+                    "N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 "
+                    "--root ./data --json"
+                },
+                title=message("catalog_misc.example_parse_line"),
+            ),
+        ),
+        rules=(),
+        errors=("validation_error",),
+        family="discovery",
+        cardinality="single",
+    ),
+    Command(
+        "commands format",
+        message("catalog_misc.commands_format_summary"),
+        "query",
+        "write_command_line",
+        "kartograf-command-line/1",
+        _FORMAT_PARAMS,
+        description=message("catalog_misc.commands_format_description"),
+        examples=(
+            Example(
+                {
+                    "command": "elevation download",
+                    "options": {**_EXAMPLE_OPTIONS, "root": "./data", "check": True},
+                },
+                title=message("catalog_misc.example_format_call"),
+            ),
+        ),
+        rules=(),
+        errors=("validation_error",),
+        family="discovery",
         cardinality="single",
     ),
     Command(

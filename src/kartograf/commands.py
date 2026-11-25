@@ -41,11 +41,11 @@ import shlex
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.arguments import check_call
-from kartograf.catalog.build import unknown_command
+from kartograf.catalog.build import is_option, unknown_command
 from kartograf.catalog.cliparser import (
     build_parser,
     parse_command_line,
@@ -371,6 +371,192 @@ def format_command(
     convert_arguments(_option_kinds(declaration), given_options)
     convert_arguments(_run_kinds(declaration), given_run)
     return format_command_line(declaration, given_options, given_run)
+
+
+@dataclass(frozen=True)
+class CommandLine(Document):
+    """A call of a catalog command with its line (``kartograf-command-line/1``).
+
+    What ``commands parse`` and ``commands format`` answer (ADR-063 decision 6): the
+    form a client of the server or a GUI's command form (DEV-15.17) reads and writes.
+
+    Attributes
+    ----------
+    command : str
+        The command id (``elevation download``).
+    options : dict
+        The options of the call (``Command.call_options``), in the JSON form.
+    run : dict
+        The other options of the call as ``commands schema`` names them: the write
+        targets (``output_dir``, ``root``) as typed, ``check``, ``update``
+        (``upgrade`` or ``force``), ``plan`` (a file), ``workers``, ``summary``.
+    line : str
+        The canonical line (``format_command``); the flags of the CLI alone
+        (``--json``, ``--quiet``, ``--inject``) are no part of a call and not in it.
+    """
+
+    SCHEMA: ClassVar[str] = "kartograf-command-line/1"
+
+    command: str
+    options: Mapping[str, object]
+    run: Mapping[str, object]
+    line: str
+
+
+# The flags of a line that spell the option ``update`` of a call.
+_UPDATE_FLAGS = ("upgrade", "force")
+
+
+def _run_options(declaration: Command) -> tuple[str, ...]:
+    """Return the options of a call that are no option of the call proper.
+
+    The options of ``commands schema`` (``is_option``) outside ``call_options``: the
+    targets, ``check`` and the options of a run, in declaration order.
+    """
+    proper = {param.name for param in declaration.call_options}
+    return tuple(
+        param.name
+        for param in declaration.params
+        if is_option(declaration, param) and param.name not in proper
+    )
+
+
+def _catalog_run(declaration: Command, run: Mapping[str, object]) -> dict[str, object]:
+    """Return the flags of a line as the options of a call (``upgrade`` -> ``update``).
+
+    The flags of the CLI alone (``json``, ``quiet``, ``inject``) are left out.
+    """
+    names = _run_options(declaration)
+    found: dict[str, object] = {}
+    for name in names:
+        if name == "update":
+            flags = [flag for flag in _UPDATE_FLAGS if run.get(flag) is True]
+            if flags:
+                found["update"] = flags[-1]
+        elif name in run:
+            found[name] = run[name]
+    return found
+
+
+def _line_run(declaration: Command, run: Mapping[str, object]) -> dict[str, object]:
+    """Return the options of a run of a call as the flags of its line.
+
+    Raises
+    ------
+    ValidationError
+        ``update`` other than ``upgrade`` or ``force``, or ``plan`` given as a
+        document: on a line a plan is a file.
+    """
+    flags: dict[str, object] = {}
+    for name, value in run.items():
+        if name == "update":
+            if value not in _UPDATE_FLAGS:
+                raise ValidationError(
+                    message(
+                        "commands.value_not_allowed",
+                        name=name,
+                        value=value,
+                        allowed=", ".join(_UPDATE_FLAGS),
+                    ),
+                    option=name,
+                    allowed=list(_UPDATE_FLAGS),
+                )
+            flags[str(value)] = True
+        elif name == "plan" and not isinstance(value, str | Path):
+            raise ValidationError(
+                message("commands.plan_on_line", command=declaration.id),
+                option="plan",
+            )
+        else:
+            flags[name] = value
+    return flags
+
+
+def write_command_line(
+    command: str, *, options: Mapping[str, object] | None = None
+) -> CommandLine:
+    """Write the canonical line of a call: ``kartograf commands format``.
+
+    The library function of the catalog command ``commands format`` (ADR-063 decision
+    6): what a GUI's command form shows as its line. Nothing is checked against the
+    rules of the command (``validate_command`` and ``check_command`` do that).
+
+    Parameters
+    ----------
+    command : str
+        A command of the catalog or its ``operation_id``.
+    options : Mapping or None
+        The options of the call as ``commands schema`` lists them, in the JSON form:
+        the options of the call proper and beside them the write targets (as typed:
+        a path is text here, never resolved), ``check``, ``update``, ``plan`` (a
+        file), ``workers`` and ``summary``; ``None``: a call without options.
+
+    Returns
+    -------
+    CommandLine
+        ``kartograf-command-line/1``: the options sorted into the call proper and the
+        rest, and the line; ``read_command_line`` reads it back into the same call.
+
+    Raises
+    ------
+    ValidationError
+        An unknown command, an option the command does not have, a value of a wrong
+        form, ``update`` other than ``upgrade`` or ``force``, or ``plan`` given as a
+        document (``option`` names the option).
+    """
+    declaration = _declaration(command)
+    proper = {param.name for param in declaration.call_options}
+    run_names = _run_options(declaration)
+    call: dict[str, object] = {}
+    run: dict[str, object] = {}
+    for name, value in (options or {}).items():
+        if name in proper:
+            call[name] = value
+        elif name in run_names:
+            run[name] = value
+        else:
+            raise ValidationError(
+                message(
+                    "commands.option_not_of_command", name=name, command=declaration.id
+                ),
+                option=name,
+            )
+    line = format_command(declaration.id, call, run=_line_run(declaration, run))
+    return CommandLine(declaration.id, call, run, line)
+
+
+def read_command_line(line: str) -> CommandLine:
+    """Read a command line into its call: ``kartograf commands parse``.
+
+    The library function of the catalog command ``commands parse`` (ADR-063 decision
+    6): what a GUI's command form does with a pasted line.
+
+    Parameters
+    ----------
+    line : str
+        A line of any command, with or without the leading ``kartograf``.
+
+    Returns
+    -------
+    CommandLine
+        ``kartograf-command-line/1``: the options of the call proper, the other
+        options of the call as ``commands schema`` names them and the canonical line
+        (the flags of the CLI alone left out).
+
+    Raises
+    ------
+    UsageError
+        A mistake of the line, as ``parse_command`` raises it.
+    ValidationError
+        A value of a wrong form, as ``parse_command`` raises it.
+    """
+    call = parse_command(line)
+    declaration = _declaration(call.command)
+    run = _catalog_run(declaration, call.run)
+    canonical = format_command(
+        call.command, call.options, run=_line_run(declaration, run)
+    )
+    return CommandLine(call.command, call.options, run, canonical)
 
 
 def _function(name: str) -> Callable[..., Any]:

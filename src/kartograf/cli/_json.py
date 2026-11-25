@@ -70,4 +70,4 @@ def emit_error(report: ErrorReport) -> int:
     (AGI-3.3); stdout stays empty.
     """
     print(error_line(report), file=sys.stderr, flush=True)
-    return report.exit_code
+    return report.exit_status

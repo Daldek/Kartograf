@@ -29,7 +29,8 @@ from typing import Final, Literal, get_args
 from kartograf.serialization import SCHEMA_PATTERN
 
 # Value kinds of a parameter: the JSON kinds of the options of a call plus ``plan``
-# (an update plan: a file on the CLI, a document in the API).
+# (an update plan: a file on the CLI, a document in the API) and ``json`` (a JSON
+# object: its text on the CLI, the object in the API).
 Kind = Literal[
     "str",
     "int",
@@ -40,6 +41,7 @@ Kind = Literal[
     "per_country",
     "str_list",
     "plan",
+    "json",
 ]
 Normalize = Literal["lower", "upper", "strip"]
 Nargs = Literal["?", "*"]

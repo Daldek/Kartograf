@@ -9,6 +9,7 @@ of the ``epilog`` of the command, of ``ExampleInfo.command_line`` and of the
 hint of an error (the three agree because there is one formatter).
 """
 
+import json
 import os
 import shlex
 from collections.abc import Mapping, Sequence
@@ -143,6 +144,8 @@ def _text(param: Param, value: object) -> str:
     if kind in ("path", "plan") and isinstance(value, os.PathLike):
         path: str = os.fspath(value)
         return path
+    if kind == "json" and isinstance(value, Mapping):
+        return json.dumps(value, ensure_ascii=False)
     if isinstance(value, str):
         return value
     raise ValueError(f"{param.name}: cannot write {value!r} on a command line")

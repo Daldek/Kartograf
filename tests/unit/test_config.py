@@ -12,6 +12,7 @@ from kartograf import config as environment
 from kartograf.cache.defaults import default_cache_path
 from kartograf.cli import main
 from kartograf.envelope import wrap
+from kartograf.messages import message
 from tests.support.errors import error_document
 
 
@@ -388,6 +389,107 @@ def test_a_directory_must_be_a_text_in_the_file(tmp_path, monkeypatch):
     assert environment.cache_dir() == environment.default_cache_dir()
 
 
+def test_the_state_directory_is_a_shared_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOGAT_STATE_DIR", str(tmp_path / "state"))
+
+    assert source_of("state_dir") == (
+        (tmp_path / "state").as_posix(),
+        "env",
+        "NOGAT_STATE_DIR",
+    )
+    assert environment.state_dir() == tmp_path / "state"
+    monkeypatch.delenv("NOGAT_STATE_DIR")
+    assert environment.state_dir() == environment.default_state_dir()
+
+
+def test_a_limit_comes_from_a_variable_or_the_file_as_a_whole_number(
+    tmp_path, monkeypatch
+):
+    assert environment.limit("plan_limit") == 20
+    write_config(tmp_path, monkeypatch, "[kartograf]\nplan_limit = 5\n")
+    assert source_of("plan_limit") == ("5", "file", "[kartograf]")
+    monkeypatch.setenv("KARTOGRAF_PLAN_LIMIT", " 7 ")
+
+    assert source_of("plan_limit") == ("7", "env", "KARTOGRAF_PLAN_LIMIT")
+    assert environment.limit("plan_limit") == 7
+    with pytest.raises(KeyError):
+        environment.limit("lang")
+
+
+@pytest.mark.parametrize("text", ["0", "-3", "1.5", "x"])
+def test_a_limit_below_1_or_not_a_number_is_dropped_with_its_message(monkeypatch, text):
+    monkeypatch.setenv("KARTOGRAF_REQUEST_WINDOW", text)
+
+    with pytest.raises(ConfigError) as caught:
+        environment.check_config()
+
+    setting = get_config().keys["request_window"]
+    assert caught.value.details()["option"] == "KARTOGRAF_REQUEST_WINDOW"
+    assert (setting.value, setting.source) == (60, "default")
+    assert str(message("config.not_positive")) in str(setting.error)
+    assert environment.limit("request_window") == 60
+
+
+@pytest.mark.parametrize("value", ["0", "true", '"many"'])
+def test_a_limit_of_the_file_that_is_no_whole_number_of_at_least_1_is_dropped(
+    tmp_path, monkeypatch, value
+):
+    write_config(tmp_path, monkeypatch, f"[kartograf]\nplan_max_units = {value}\n")
+
+    with pytest.raises(ConfigError) as caught:
+        environment.check_config()
+
+    assert caught.value.details()["option"] == "[kartograf] plan_max_units"
+    assert environment.limit("plan_max_units") == 500
+
+
+def test_trusted_proxies_come_from_a_variable_or_a_list_of_the_file(
+    tmp_path, monkeypatch
+):
+    assert environment.trusted_proxies() == ("127.0.0.1",)
+    write_config(
+        tmp_path, monkeypatch, '[kartograf]\ntrusted_proxies = ["::1", "10.0.0.0/8"]\n'
+    )
+    assert environment.trusted_proxies() == ("::1", "10.0.0.0/8")
+    monkeypatch.setenv("KARTOGRAF_TRUSTED_PROXIES", "192.168.1.5, 172.16.0.0/12")
+
+    assert environment.trusted_proxies() == ("192.168.1.5", "172.16.0.0/12")
+    assert get_config().keys["trusted_proxies"].name == "KARTOGRAF_TRUSTED_PROXIES"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'trusted_proxies = ["10.0.0.1", "proxy.local"]',
+        "trusted_proxies = [1]",
+        "trusted_proxies = 5",
+    ],
+    ids=["name", "number-item", "number"],
+)
+def test_trusted_proxies_that_are_no_addresses_are_dropped_with_their_message(
+    tmp_path, monkeypatch, line
+):
+    write_config(tmp_path, monkeypatch, f"[kartograf]\n{line}\n")
+
+    with pytest.raises(ConfigError) as caught:
+        environment.check_config()
+
+    setting = get_config().keys["trusted_proxies"]
+    assert caught.value.details()["option"] == "[kartograf] trusted_proxies"
+    assert (setting.value, setting.source) == (("127.0.0.1",), "default")
+    assert str(message("config.not_addresses")) in str(setting.error)
+
+
+def test_a_variable_with_an_address_that_is_not_valid_is_dropped(monkeypatch):
+    monkeypatch.setenv("KARTOGRAF_TRUSTED_PROXIES", "10.0.0.1, 10.0.0.300")
+
+    with pytest.raises(ConfigError) as caught:
+        environment.check_config()
+
+    assert caught.value.details()["option"] == "KARTOGRAF_TRUSTED_PROXIES"
+    assert environment.trusted_proxies() == ("127.0.0.1",)
+
+
 def test_config_show_json_gives_every_key_its_source_and_the_store_size(
     tmp_path, monkeypatch, capsys
 ):
@@ -410,7 +512,22 @@ def test_config_show_json_gives_every_key_its_source_and_the_store_size(
         "kartograf",
         kartograf.__version__,
     )
-    assert list(report["keys"]) == ["root", "data_dir", "cache_dir", "lang", "debug"]
+    assert list(report["keys"]) == [
+        "root",
+        "data_dir",
+        "cache_dir",
+        "state_dir",
+        "lang",
+        "debug",
+        "index_max_age",
+        "plan_limit",
+        "plan_window",
+        "plan_max_units",
+        "request_limit",
+        "request_window",
+        "trusted_proxies",
+    ]
+    assert report["keys"]["trusted_proxies"]["value"] == ["127.0.0.1"]
     assert report["keys"]["lang"] == {
         "value": "en",
         "source": "env",

@@ -1,5 +1,8 @@
 """
-``kartograf commands list``, ``commands schema --command ID`` and ``commands guide``.
+``kartograf commands list``, ``schema``, ``guide``, ``parse`` and ``format``.
+
+``commands schema --command ID``, ``commands parse --line LINE`` and
+``commands format --command ID --options JSON`` take the object of their query.
 
 The commands are queries: they read the catalog from the library (``list_commands``,
 ``command_schema``), need no network and write nothing. With ``--json`` they print the
@@ -11,6 +14,9 @@ the declarations, whose texts are catalog messages of both languages.
 
 ``commands guide`` prints the guide for agents of the library (``agent_guide``: English,
 AGI-9.2) and, with ``--inject FILE``, puts its compact block into that file instead.
+``commands parse`` and ``commands format`` print the canonical line of a call
+(``read_command_line``, ``write_command_line``; ``--json``:
+``kartograf-command-line/1``).
 """
 
 import argparse
@@ -24,9 +30,11 @@ from pathlib import Path
 from kartograf.catalog import command_schema, list_commands
 from kartograf.catalog.commands import declared, declared_commands
 from kartograf.catalog.formatting import example_command_line
+from kartograf.catalog.kinds import parse_json_object
 from kartograf.catalog.spec import Command, Group, Param, resolve
 from kartograf.cli._json import command_id, emit_result, wants_json
 from kartograf.cli._language import language, localized, yes_no
+from kartograf.commands import read_command_line, write_command_line
 from kartograf.exceptions import ValidationError
 from kartograf.guide import agent_guide, inject_block
 from kartograf.messages import message
@@ -283,4 +291,25 @@ def cmd_commands_guide(args: argparse.Namespace) -> int:
         return emit_result(command_id(args), document)
     if args.inject is None:
         sys.stdout.write(document.text)
+    return 0
+
+
+def cmd_commands_parse(args: argparse.Namespace) -> int:
+    """Print the canonical line of a line (``--json``: the call it reads)."""
+    document = read_command_line(args.line)
+    if wants_json(args):
+        return emit_result(command_id(args), document)
+    print(document.line)
+    return 0
+
+
+def cmd_commands_format(args: argparse.Namespace) -> int:
+    """Print the line of a call (``--json``: ``kartograf-command-line/1``)."""
+    options = (
+        None if args.options is None else parse_json_object(args.options, "options")
+    )
+    document = write_command_line(args.command, options=options)
+    if wants_json(args):
+        return emit_result(command_id(args), document)
+    print(document.line)
     return 0

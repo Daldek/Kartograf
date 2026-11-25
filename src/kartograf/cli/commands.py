@@ -7,7 +7,9 @@ The parser is built from the declarations of the command catalog
 of the parsed command to its handler, and the translation to the library is in
 the ``*_cmd`` modules. This module re-exports public names only
 (``create_parser``, ``cmd_*``, formatters); private helpers are imported from
-the target module (e.g. ``kartograf.cli.download_cmd``).
+the target module (e.g. ``kartograf.cli.download_cmd``). ``kartograf server`` is
+no command of the catalog (ADR-063 decision 7): ``main`` hands a line that starts
+with ``server`` to ``kartograf.cli.server_cmd``.
 
 Every command except ``config show`` first checks the user settings
 (``kartograf.config.check_config``: a ``nogat.toml`` that cannot be used is a
@@ -29,6 +31,7 @@ import argparse
 import logging
 import sys
 
+from kartograf.cli import server_cmd
 from kartograf.cli._handlers import HANDLERS
 from kartograf.cli._json import emit_error, json_mode, use_utf8_stdout
 from kartograf.cli._language import language, language_of, set_language
@@ -187,6 +190,9 @@ def main(args: list[str] | None = None) -> int:
     argv = sys.argv[1:] if args is None else args
     as_json = json_mode(argv)
     set_language(language_of(argv))
+    if argv[:1] == [server_cmd.SERVER_COMMAND]:
+        # outside the catalog (ADR-063 decision 7): it serves until a signal stops it
+        return server_cmd.main(argv[1:])
     _stderr_lines(as_json)
     if as_json:
         use_utf8_stdout()

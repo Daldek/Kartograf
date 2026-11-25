@@ -406,7 +406,7 @@ def test_list_tools_equals_tool_specs(mode, tmp_path):
     tools = run_session(scenario, **arguments)
     specs = tool_specs(allow_writes=mode == "writes")
 
-    assert len(tools) == 35
+    assert len(tools) == 37
     assert [t.name for t in tools] == [s.name for s in specs]
     for tool, spec in zip(tools, specs, strict=True):
         assert tool.title == spec.title
@@ -1454,7 +1454,7 @@ def test_tools_flag_selects_families(monkeypatch):
 
     names = run_session(scenario, server=server)
 
-    assert len(names) == 35  # 17 + 1 + 13 + 4: the plans of the data tools
+    assert len(names) == 37  # 19 + 1 + 13 + 4: the plans of the data tools
     assert names == [s.name for s in tool_specs(families, allow_writes=False)]
 
 
@@ -1585,7 +1585,7 @@ def test_allow_writes_flag_lists_the_tools_that_write(tmp_path, monkeypatch):
 
     tools = run_session(scenario, server=server)
 
-    assert len(tools) == 35
+    assert len(tools) == 37
     download = tools["kartograf_elevation_download"]
     assert download.annotations.read_only_hint is False
     assert download.annotations.destructive_hint is False
@@ -1662,7 +1662,7 @@ def test_the_gate_of_agi_5_13_over_stdio(tmp_path):
     names = [tool.name for tool in listed]
     assert names == [tool.name for tool in again]  # deterministic (AGI-5.2)
     assert names == [s.name for s in tool_specs(allow_writes=False)]
-    assert len(set(names)) == len(names) == 35
+    assert len(set(names)) == len(names) == 37
     for tool in listed:
         assert re.fullmatch(r"kartograf_[a-z0-9_]+", tool.name) and len(tool.name) <= 48
         hints = tool.annotations  # AGI-5.4: the title and the four hints are set
@@ -1746,7 +1746,7 @@ def test_stdio_server_with_writes_downloads_inside_its_directory(tmp_path):
 
     tools, refused, created = anyio.run(scenario)
 
-    assert len(tools) == 35
+    assert len(tools) == 37
     assert error_of(refused, code="forbidden")["details"]["allowed"] == [
         inside.resolve().as_posix()
     ]
@@ -1833,7 +1833,7 @@ def test_stdio_stdout_has_only_protocol_frames(monkeypatch):
     assert by_id[1]["instructions"] == INSTRUCTIONS
     # the keys of the protocol are camelCase; the five hints are always set
     tools = {t["name"]: t for t in by_id[2]["tools"]}
-    assert len(tools) == 35
+    assert len(tools) == 37
     plan = tools["kartograf_elevation_download"]
     assert plan["annotations"] == {
         "title": plan["title"],

@@ -123,6 +123,79 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The MCP server holds the input paths of a line `kartograf_script_generate` plans with
   `direct: true` (`geometry`) to the rule of its own paths: absolute, inside `--allow-dir`.
 
+#### The line of a call: `commands parse` and `commands format` (ADR-063 decision 6)
+
+- `kartograf commands parse --line LINE` (library `read_command_line(line)`, MCP tool
+  `kartograf_commands_parse`) and `kartograf commands format --command COMMAND --options JSON`
+  (`write_command_line(command, *, options=None)`, `kartograf_commands_format`; both read-only,
+  no network, family `discovery`) answer the new document `kartograf-command-line/1`
+  (`CommandLine` `{command, options, run, line}`): the options of the call proper, the other
+  options of the call as `commands schema` names them (`output_dir` or `root` as typed, `check`,
+  `update` `upgrade` or `force`, `plan` a file, `workers`, `summary`) and the canonical line
+  (`format_command`, without the flags of the CLI alone: `--json`, `--quiet`, `--inject`).
+  `read_command_line` reads back the line `write_command_line` writes, the form a GUI's command
+  form reads and shows (DEV-15.17). Neither checks the values against the rules of the command
+  (`validate_command`, `check_command`); an option the command does not have, `update` other than
+  `upgrade` or `force` and a `plan` given as a document are a `validation_error` naming it.
+- The catalog kind `json`: an option whose value is a JSON object, its text on the CLI
+  (`--options '{"product": "nmt"}'`; not an object: `validation_error` naming the option),
+  `{"type": "object"}` in the MCP schema.
+
+#### The read-only HTTP server: `kartograf server` (ADR-063 decisions 2, 7 and 8)
+
+- `kartograf server [--host 127.0.0.1] [--port 8065] [--lang pl|en]` (extra `server`, Starlette
+  `>=1.9,<2` and uvicorn `>=0.54,<1`; `kartograf.server`) serves the catalog read only at
+  `/api/v1/<group>/<verb>`, each route the `rest` of its catalog entry: the catalog and the
+  queries without paths (`GET`, the options in the query), `commands format` and `script
+  generate` (`POST`, a JSON body of at most 4 MiB, reason `body_too_large` over it) and the plans
+  of the twelve data commands (`POST ...?check=true` only: the detached plan, ADR-063 decision 4).
+  The answer is the envelope `kartograf-result/1` with `Content-Language: en`. Like
+  `kartograf-mcp` it is outside the catalog; it stops gracefully on Ctrl+C or `SIGTERM` and ends
+  with 0, a port in use is `conflict` (`port_in_use`, exit 4), a missing extra
+  `missing_dependency` (6).
+- It runs nothing, writes no data and reads no key: `403 forbidden` with `details.reason`
+  `writes_disabled` (a data command without `check=true`, or with `update`, `plan`, `workers` or
+  `summary`), `path_option` (an option with a `path_role`, and the input file of a line a direct
+  script would plan) and `not_served` (`store *`, `cache *`, `config show`: `rest` `null`).
+- Errors are `application/problem+json` (RFC 9457, AGI-6.3): `type` (the registry page of the
+  code), `title`, `status`, `detail`, `instance`, `code`, `hint`, `details` and, for a
+  `validation_error` naming its options, `errors[]` with a JSON Pointer into `/query/` or
+  `/body/`; their texts follow `Accept-Language` (`pl`, `en`; `Content-Language`, `Vary`,
+  AGI-6.4). No route is `404 not_found`, another method `405 method_not_allowed` with `Allow`, a
+  failure of the server `500 internal_error` with a fixed text (the cause in the app log).
+- `GET /api/v1/server` answers `nogat-server/1` (`api` `{"1": "/api/v1"}`, capabilities
+  `catalog`, `plan`, `script`; AGI-6.7) and `GET /api/v1/openapi.json` OpenAPI 3.1 built from the
+  catalog (`operationId` the `operation_id`, options, examples, problems; `servers` the relative
+  `../v1`, so it reads right behind Latarnik's `/kartograf/v1/`; AGI-6.2).
+- Limits per client (the peer address, or the right-most `X-Forwarded-For` address that is no
+  trusted proxy, AGI-6.9; addresses in memory for their window only): `request_limit` per
+  `request_window` (300 per 60 s, DEV-15.9) and `plan_limit` per `plan_window` (20 per 600 s; a
+  plan or a direct script of a line, counted after its options are checked) answer `429
+  rate_limited` with `Retry-After` (`details` `reason` `request_limit` or `plan_limit`,
+  `retry_after_s`, `limit`, `window_s`); `plan_max_units` (500) bounds the units of a plan
+  (`validation_error`, reason `too_many_units`). The plans share the server's metadata cache,
+  whose index answers younger than `index_max_age` (1 day) are reused.
+- Logs `nogat-log/1` with Nogat's `nogat_logging.py` copied byte for byte
+  (`kartograf/server/nogat_logging.py`; DEV-12.4 to DEV-12.9): access, application and
+  lifecycle records in `<state_dir>/kartograf/logs/<kind>-YYYY-MM-DD.jsonl`, deleted after 14
+  days, no client address; standard error gets the lifecycle and the errors reduced to their
+  type. Daily totals in `<data_dir>/kartograf/stats.jsonl` (DEV-15.11): `visitors`,
+  `analyses_run` (plans and scripts), `page_views`, and `stations_opened` and `downloads`
+  always 0.
+- Settings (DEV-18.1; `nogat.toml` `[kartograf]` and `KARTOGRAF_<KEY>`, `config show`):
+  `state_dir` (also `NOGAT_STATE_DIR` and `[nogat]`; the user state directory of `nogat`),
+  `index_max_age` (86400), `plan_limit` (20), `plan_window` (600), `plan_max_units` (500),
+  `request_limit` (300), `request_window` (60), whole numbers of at least 1, and
+  `trusted_proxies` (`127.0.0.1`; a TOML list, or addresses joined by `,`); an invalid value is
+  `invalid_config`. Library: `kartograf.config.state_dir`, `limit`, `trusted_proxies`.
+- Three exceptions of the REST interface, in `kartograf.__all__`: `NotFoundError` (`not_found`,
+  reason `unknown_route`, `details.route`), `MethodNotAllowedError` (`method_not_allowed`,
+  `details.method`, `details.allowed`) and `RateLimitedError` (`rate_limited`); the last two have
+  no exit code in the registry. `ForbiddenError` gains the reasons `writes_disabled`,
+  `path_option` and `not_served`.
+- The extras `server` and `gui` (the same two packages; `gui` for the page of a later step);
+  `httpx2` in `dev` for Starlette's `TestClient`.
+
 ### Changed
 
 - `src/kartograf/_output_schema.py` is regenerated from the new commands-1, whose `command_name`
@@ -132,8 +205,17 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   targets are paths. `--plan` needs `--check` or `--upgrade` only in the commands that have
   `--upgrade`. A document without a verdict passes its `notices` to the envelope
   (`outcome_of`), so `--json` of a direct script carries the notices of its plan.
-- The MCP server serves 35 tools (`kartograf_script_generate`), the catalog has 40 commands and
-  the group `script`; `AGENTS.md`, `llms.txt` and the USAGE tables 8.3 and 8.6 are regenerated.
+- The MCP server serves 37 tools (`kartograf_script_generate`, `kartograf_commands_parse`,
+  `kartograf_commands_format`), the catalog has 42 commands and the group `script`;
+  `AGENTS.md`, `llms.txt` and the USAGE tables 8.3 and 8.6 are regenerated.
+- `ErrorReport.exit_code` and `registry_exit_code` are `int | None`: `None` (`null` in
+  `kartograf-error/1`) for a code of the REST interface alone, which no command line raises
+  (`method_not_allowed`, `rate_limited`); `ErrorReport.exit_status` is the status a process ends
+  with (1 for those). `ErrorCodeSpec.cli` false keeps them out of the exit code table of the CLI,
+  the guide for agents and the error table of USAGE 8.3 shows `-` for their exit code.
+- `kartograf.catalog.tools.option_schema` (was `_property`) is public, the schema of an option in
+  an MCP tool and in the OpenAPI document, and `PLANNED_LINES` (the line `script generate` plans)
+  moved from `mcp_server` to `kartograf.script`, shared by both servers.
 - The description of `commands schema` names the rules of the options and the server route, and
   the command has a third example, `--form --json`; USAGE 8.4 and ARCHITECTURE 4.11 describe the
   fields, `--form` and `rest`.

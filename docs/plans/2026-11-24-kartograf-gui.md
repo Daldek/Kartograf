@@ -303,3 +303,23 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
   of its own paths. The PowerShell scripts are ASCII and were checked by structure only: `pwsh` was not installed, so
   none was parsed or run (`tests/unit/test_script.py` parses them where it is); the bash (c) ran against a stub
   `curl`. Open: a run of (b) and (c) on the author's machine (K7).
+- K4 (2026-11-25, ADR-063 decisions 2, 6 to 8): `kartograf server` (extra `server`, `kartograf.server`; outside the
+  catalog like `kartograf-mcp`) on 127.0.0.1:8065 serves every command whose `rest` is not `null` at
+  `/api/v1/<group>/<verb>`, the data commands as their detached plan only (`POST …?check=true`), with `GET
+  /api/v1/server` (`nogat-server/1`) and `GET /api/v1/openapi.json` (OpenAPI 3.1 from the catalog, validated
+  against the official OAS 3.1 schema in the tests). A run, an option with a `path_role` (and `--geometry` in the line
+  of a direct script) and a command with `rest` `null` are `403 forbidden` (`writes_disabled`, `path_option`,
+  `not_served`); errors are RFC 9457 problem documents in the language of `Accept-Language`; the limits of D5 answer
+  `429 rate_limited` with `Retry-After` (`request_limit`, `plan_limit`) and `plan_max_units` a `validation_error`
+  `too_many_units`; logs `nogat-log/1` with Nogat's `nogat_logging.py` copied byte for byte, daily totals in
+  `stats.jsonl`. With it: the catalog commands `commands parse` and `commands format` (`kartograf-command-line/1`,
+  decision 6), the kind `json`, the setting `state_dir` and the server's seven settings, the exceptions
+  `NotFoundError`, `MethodNotAllowedError` and `RateLimitedError` (the last two with no exit code). Beyond this plan:
+  a wrong method is `405 method_not_allowed` with `Allow`; OpenAPI's `servers` is the relative `../v1`, so the
+  document reads right at `/api/v1/` and behind Latarnik's `/kartograf/v1/`; answers carry `Content-Language: en`
+  and problems follow `Accept-Language` with `Vary`; a `500` has a fixed text, its cause only in the app log; a
+  body is at most 4 MiB (`body_too_large`), a limit ADR-063 does not name. Checked: TestClient over every route,
+  refusal, language and limit; a live GUGiK plan through the app (a detached plan, `output_dir` `.`, relative paths,
+  `source` and `fetch` filled); the real process served `curl`, wrote the lifecycle records to stderr, access records
+  without an address and `stats.jsonl`, and stopped gracefully on `SIGTERM`. Open: the limits revisited after the
+  first days of public traffic (question 7).

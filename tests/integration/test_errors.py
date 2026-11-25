@@ -54,6 +54,9 @@ SPEC_ERROR_TABLE = [
     ("ConflictError", "conflict", None, 4),
     ("MissingDependencyError", "missing_dependency", None, 6),
     ("ForbiddenError", "forbidden", None, 12),
+    ("NotFoundError", "not_found", None, 3),
+    ("MethodNotAllowedError", "method_not_allowed", None, None),
+    ("RateLimitedError", "rate_limited", None, None),
     ("TransformError", "calculation_error", "transform_failed", 13),
     ("TransformUnavailableError", "unsupported", "transform_unavailable", 15),
     ("CommandNotRebuildableError", "unsupported", "command_not_rebuildable", 15),
@@ -136,7 +139,7 @@ def test_error_table_matches_the_classes():
             rows[cls.__name__].exit_code,
         )
     exit_codes = {r.code for r in EXIT_CODES}
-    assert {r.exit_code for r in ERROR_CODES} <= exit_codes
+    assert {r.exit_code for r in ERROR_CODES if r.cli} <= exit_codes
     for row in ERROR_CODES:
         assert BY_CODE[row.code].exit_code == row.exit_code
 

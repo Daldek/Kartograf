@@ -123,11 +123,14 @@ from kartograf.catalog import command_schema, list_commands
 from kartograf.catalog.model import CommandCatalog, CommandList
 from kartograf.commands import (
     CommandCall,
+    CommandLine,
     check_command,
     format_command,
     parse_command,
+    read_command_line,
     run_command,
     validate_command,
+    write_command_line,
 )
 from kartograf.config import Config, StoreRoot, get_config, store_root
 from kartograf.core.bbox import BBox, transform_bbox
@@ -221,9 +224,12 @@ from kartograf.exceptions import (
     InvalidLayoutError,
     InvalidSidecarError,
     KartografError,
+    MethodNotAllowedError,
     MissingDependencyError,
     NoCoverageError,
+    NotFoundError,
     ParseError,
+    RateLimitedError,
     ReleaseLayoutError,
     ResolutionMismatchError,
     StoreUnavailableError,
@@ -470,6 +476,9 @@ __all__ = [
     "MissingDependencyError",
     "CommandNotRebuildableError",
     "UnsupportedError",
+    "NotFoundError",
+    "MethodNotAllowedError",
+    "RateLimitedError",
     # Sources, layers and the metadata cache as data (spec 5.4.6-5.4.9)
     "list_sources",
     "SourceList",
@@ -500,6 +509,9 @@ __all__ = [
     "parse_command",
     "validate_command",
     "format_command",
+    "CommandLine",
+    "read_command_line",
+    "write_command_line",
     "run_command",
     "check_command",
     "command_for_file",

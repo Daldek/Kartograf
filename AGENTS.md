@@ -62,7 +62,7 @@ An error is a `kartograf-error/1` document (`code`, `title`, `message`, `hint`, 
 | `data_error` | 7 | a sidecar is unreadable or of another schema: see `details.path`; `invalid_layout`: see `details.problems` |
 | `conflict` | 4 | the target cannot be written (`details.reason`): `output_exists` (add `--force` or change `output_dir`), `output_in_store` (use `root`), a store root not new or empty or inside another store; see `hint` |
 | `missing_dependency` | 6 | an extra is missing: install it as `hint` says |
-| `forbidden` | 12 | MCP refused: a path outside `--allow-dir` or a write without `--allow-writes` |
+| `forbidden` | 12 | MCP refused: a path outside `--allow-dir` or a write without `--allow-writes`; the HTTP server refuses a run, a path option and the commands it does not serve (`details.reason`): plan with `?check=true` |
 | `calculation_error` | 13 | a coordinate transformation failed: change the CRS or area |
 | `unsupported` | 15 | no safe transformation for these coordinate systems: use another |
 | `io_error` | 9 | a directory or file is unavailable: check `details.path` |
@@ -104,6 +104,8 @@ One line per command: name, `operation_id`, summary. Options, allowed values, un
 - `commands list` (`kartograf_commands_list`): List the commands with their groups, products and MCP families
 - `commands schema` (`kartograf_commands_schema`): Describe one command: its options, result, effects, rules and examples
 - `commands guide` (no MCP tool): Render the guide for AI agents (AGENTS.md, llms.txt or its block)
+- `commands parse` (`kartograf_commands_parse`): Read a command line of any command into its call and canonical line
+- `commands format` (`kartograf_commands_format`): Write the canonical command line of a call of any command
 - `cache stats` (no MCP tool): Show the statistics of the metadata cache
 - `cache clear` (no MCP tool): Delete every entry of the metadata cache
 - `cache path` (no MCP tool): Show the path of the metadata cache file

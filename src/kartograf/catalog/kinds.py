@@ -5,9 +5,9 @@ the library arguments.
 
 ``--bbox`` is four numbers with the CRS of ``--bbox-crs``, a per-country value
 is a text for every country or ``pl=..,cz=..`` pairs, ``--layers`` and
-``--direction`` are comma-separated codes. The parsers raise the library's
-``ValidationError`` with the messages of the CLI (Polish), so a command line and
-a call of the API read a value the same way.
+``--direction`` are comma-separated codes, a ``json`` value is the text of a JSON
+object. The parsers raise the library's ``ValidationError`` with the messages of
+the CLI (Polish), so a command line and a call of the API read a value the same way.
 
 Options exist in two forms: library arguments (``BBox``, ``Path``, per-country
 mappings, sequences) and the JSON form (``CommandCall.options``, the arguments of an
@@ -16,6 +16,7 @@ arguments; its ``kinds`` is the mapping of an option name to the ``kind`` of the
 parameter of a catalog command.
 """
 
+import json
 import math
 import os
 from collections.abc import Mapping, Sequence
@@ -63,6 +64,31 @@ def parse_per_country(raw: str | None, flag: str) -> str | dict[str, str] | None
             )
         values[key] = value.strip()
     return values
+
+
+def parse_json_object(raw: str, name: str) -> dict[str, object]:
+    """Read the text of a ``json`` parameter (``--options '{"product": "nmt"}'``).
+
+    Raises
+    ------
+    ValidationError
+        The text is not JSON or not a JSON object (``option`` is ``name``).
+    """
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        value = None
+    if not isinstance(value, dict):
+        raise ValidationError(
+            message(
+                "kinds.option_expected_got",
+                name=name,
+                kind_text=_KIND_TEXT["json"],
+                value=raw,
+            ),
+            option=name,
+        )
+    return value
 
 
 def parse_bbox_arg(text: str, crs: str) -> BBox:
@@ -121,6 +147,7 @@ _KIND_TEXT: dict[Kind, str] = {
     "per_country": message("kinds.string_object"),
     "str_list": message("kinds.list_strings"),
     "plan": message("kinds.document_kartograf_plan_1"),
+    "json": message("kinds.json_object"),
 }
 
 
@@ -152,6 +179,10 @@ def _json_value(kind: Kind, value: object) -> object | None:
         if isinstance(value, Sequence) and not isinstance(value, str):
             items = list(value)
             return items if all(isinstance(item, str) for item in items) else None
+        return None
+    if kind == "json":
+        if isinstance(value, Mapping) and all(isinstance(k, str) for k in value):
+            return dict(value)
         return None
     return None
 
@@ -252,7 +283,7 @@ def convert_arguments(
             arguments[name] = Path(str(value))
         elif kind == "str_list":
             arguments[name] = tuple(cast(Sequence[str], value))
-        elif kind == "per_country" and isinstance(value, Mapping):
+        elif kind in ("per_country", "json") and isinstance(value, Mapping):
             arguments[name] = dict(value)
         elif kind == "plan":
             arguments[name] = _plan(name, value)

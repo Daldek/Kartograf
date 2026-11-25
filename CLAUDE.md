@@ -76,6 +76,9 @@ stored_command.py  command_for_file: the command that selects a stored file agai
 script.py          generate_script: the bash/PowerShell script of a data command (ADR-063 decision 5)
 cache/  auth/      metadata cache (SQLite WAL); CLMS Auth Proxy
 mcp_server.py      MCP server on the catalog (extra mcp); guide.py generates AGENTS.md, llms.txt
+server/            kartograf server (extra server): the read-only REST API /api/v1 of the catalog, OpenAPI,
+                   problem documents, limits, nogat-log/1 logs, daily totals (ADR-063); nogat_logging.py is
+                   Nogat's reference module, copied byte for byte: never edit it
 exceptions.py  error_report.py  envelope.py  notices.py  serialization.py  config.py
 attribution.py     provider lines of Nogat DEV §20 (_data/provider_lines.json), ATTRIBUTION.txt
 _errors.py  _output_schema.py   generated; _data/agents/ holds the guide templates
@@ -123,7 +126,7 @@ The place of Kartograf in the ecosystem, its dependencies and consumers: https:/
 - AGI-3.8, AGI-5.1: no `kartograf mcp`; the console script `kartograf-mcp` starts the server (ADR-052, decision 10; PROGRESS, Next 6).
 - AGI-4.1: the domain JSON Schemas are not published in `src/kartograf/schemas` (PROGRESS, Next 6).
 - DEV-12.2: no `--verbose` and no `KARTOGRAF_LOG_LEVEL`; `--quiet`/`-q` drops the progress bar and the status lines of stdout, and `KARTOGRAF_DEBUG=1` lets every library record through and prints the traceback of an unexpected error.
-- DEV-12.4 to DEV-12.9: no command answers HTTP (`kartograf-mcp` is stdio), so nothing writes `nogat-log/1` files under `<state_dir>/kartograf/logs`; the CLMS Auth Proxy (`python -m kartograf.auth.proxy`, started by `kartograf.auth.AuthProxyClient` for a CORINE GeoTIFF download on 127.0.0.1) logs plain text to its stderr (`logging.basicConfig`), with the client address in its request lines.
+- DEV-12.4 to DEV-12.9: `kartograf server` keeps the logs of DEV-12 (`kartograf.server`, Nogat's `nogat_logging.py`); the CLMS Auth Proxy (`python -m kartograf.auth.proxy`, started by `kartograf.auth.AuthProxyClient` for a CORINE GeoTIFF download on 127.0.0.1) does not: it writes no `nogat-log/1` files and logs plain text to its stderr (`logging.basicConfig`), with the client address in its request lines.
 - DEV-20: the GUGiK, ISRIC and ČÚZK products do not carry the provider lines G, SG and Z: their sidecar `license.attribution` holds Kartograf's own text per source (`sources/registry.py`, `messages/legal.py`) and a plain directory of them has no `ATTRIBUTION.txt`. The CAMELS-PL files carry S, P and L of their release and the terms line RD (DEV-20.7, DEV-20.12, ADR-062 erratum 1) in the sidecar (`license.attribution`, `extra.attribution`, `extra.terms_notice`) and in `ATTRIBUTION.txt` of a plain write (`kartograf.attribution`, `_data/provider_lines.json`). The result documents carry no lines (no `attribution` or `terms_notice`).
 - DEV-2.1, ECO-005: `docs/research` and `docs/superpowers` are Polish records (PROGRESS, Next 26).
 - DEV-13.7, DEV-16.2, DEV-3.6, DEV-4.2: `SECURITY.md`, `CONTRIBUTING.md`, `docs/CLA.md`, `CONTRIBUTORS.md`, the GitHub rulesets and the single author identity of the history are the author's steps (PROGRESS, Next 3).

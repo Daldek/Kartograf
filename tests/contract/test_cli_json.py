@@ -615,6 +615,11 @@ def _offline_lines(base: Path) -> dict[str, list[str]]:
         "commands list": ["commands", "list"],
         "commands schema": ["commands", "schema", "--command", "sheet parse"],
         "commands guide": ["commands", "guide", "--format", "llms"],
+        "commands parse": ["commands", "parse", "--line", SCRIPTED_LINE],
+        "commands format": [
+            *("commands", "format", "--command", "sheet parse"),
+            *("--options", '{"sheet": "N-34-130-D", "hierarchy": true}'),
+        ],
         "cache stats": ["cache", "stats"],
         "cache path": ["cache", "path"],
         "cache clear": ["cache", "clear"],

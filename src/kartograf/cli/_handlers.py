@@ -15,8 +15,10 @@ from functools import partial
 from kartograf.cli.availability_cmd import cmd_availability
 from kartograf.cli.cache_cmd import cmd_cache
 from kartograf.cli.catalog_cmd import (
+    cmd_commands_format,
     cmd_commands_guide,
     cmd_commands_list,
+    cmd_commands_parse,
     cmd_commands_schema,
 )
 from kartograf.cli.collection_cmd import cmd_collection_download
@@ -56,6 +58,8 @@ HANDLERS: dict[str, Handler] = {
     "commands list": cmd_commands_list,
     "commands schema": cmd_commands_schema,
     "commands guide": cmd_commands_guide,
+    "commands parse": cmd_commands_parse,
+    "commands format": cmd_commands_format,
     "elevation download": partial(cmd_download, products=ELEVATION_PRODUCTS),
     "elevation availability": cmd_availability,
     "imagery download": partial(cmd_download, products=IMAGERY_PRODUCTS),

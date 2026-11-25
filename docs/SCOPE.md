@@ -442,7 +442,8 @@ kartograf commands list --json                   # command catalog (groups, comm
 kartograf commands guide --format agents|llms|agents-md-block # guide for AI agents (AGENTS.md, llms.txt) generated from the catalog
 kartograf script generate --shell bash|powershell --command "<line>" [--direct [--target DIR]] # script of a data command for another machine: runs the line with the pinned release, or curl/Invoke-WebRequest of the URLs of its plan; `--direct --plan FILE` of a saved plan (USAGE 1.15)
 kartograf elevation availability --product nmt --sheet <sheet_code> --json # --json in every command: one kartograf-result/1 envelope, error kartograf-error/1 on stderr, exit codes of the Nogat registry (USAGE 8.3)
-kartograf-mcp                              # MCP server (stdio; extra `kartograf[mcp]`): 35 tools, one per command except `commands guide`, `cache` and `config show`; read only and plans by default; `--allow-writes --allow-dir DIR` allows writing (USAGE 8.6)
+kartograf-mcp                              # MCP server (stdio; extra `kartograf[mcp]`): 37 tools, one per command except `commands guide`, `cache` and `config show`; read only and plans by default; `--allow-writes --allow-dir DIR` allows writing (USAGE 8.6)
+kartograf server [--host 127.0.0.1] [--port 8065] # read-only HTTP server (extra `kartograf[server]`): the catalog, the queries without paths, the plans and `script generate` at /api/v1, OpenAPI, problem documents, limits per client; never runs or writes (USAGE 8.8, ADR-063)
 # Full list of options: kartograf <group> <command> --help
 ```
 
@@ -906,14 +907,14 @@ from kartograf import (
 
 ```text
 # The same result in three ways (ADR-046; guide: USAGE 8):
-# - CLI: `--json` in every command (40 leaf commands) — stdout is a single `kartograf-result/1`
-#   envelope around a `kartograf-<kind>/1` document (17 documents), an error is `kartograf-error/1`
+# - CLI: `--json` in every command (42 leaf commands) — stdout is a single `kartograf-result/1`
+#   envelope around a `kartograf-<kind>/1` document (18 documents), an error is `kartograf-error/1`
 #   on the last line of stderr with a stable `code`, `hint` and the exit code of the Nogat
 #   registry (0; 10 and 11 for a partial or failed batch; input error = 2);
 # - library: `to_dict()`/`to_json()` of every report, exceptions with a stable `code`,
 #   `exit_code` and `hint` (`ValidationError.option`/`allowed`), `error_report`;
 # - MCP server `kartograf-mcp` (stdio; optional extra `kartograf[mcp]`, `mcp>=2.3.0,<3`):
-#   35 tools, one per command except `commands guide`, `cache stats|clear|path` and `config show`
+#   37 tools, one per command except `commands guide`, `cache stats|clear|path` and `config show`
 #   (`kartograf_<group>_<command>`), result = the `kartograf-result/1` envelope
 #   with `outputSchema`, `is_error` only for an error, progress via MCP notifications, absolute paths,
 #   `--tools`, `--allow-dir`, `--allow-writes` (without it only plans), no default values
@@ -985,7 +986,7 @@ from kartograf import (
 # Version 1.0+:
 - GUI: QGIS plugin (roadmap in section 3.3); the web GUI is the separate Archiwista project
 - PostGIS integration
-- REST API server
+- REST API server that downloads and writes (the read-only `kartograf server` exists: ADR-063)
 ```
 
 ### 3.2 Technical limitations

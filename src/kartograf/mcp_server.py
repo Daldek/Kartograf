@@ -79,6 +79,7 @@ from kartograf.exceptions import (
     UsageError,
     ValidationError,
 )
+from kartograf.script import PLANNED_LINES
 
 if TYPE_CHECKING:
     import anyio
@@ -104,10 +105,6 @@ _WRITES_HINT = (
     "Start kartograf-mcp with --allow-writes and --allow-dir DIR to run and write; "
     "check=true plans without writing."
 )
-# The option of a tool whose value is the command line its call plans, and the switch
-# that makes it plan: the plan of a direct script reads the input files of the line
-# (``geometry``), which the rule of paths covers as the tool's own options.
-_PLANNED_LINES: dict[str, tuple[str, str]] = {"script generate": ("command", "direct")}
 
 
 def _tool(command: str) -> str:
@@ -543,12 +540,12 @@ class _Toolbox:
                 )
 
     def _check_planned_line(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> None:
-        """Check the input paths of the command line a call plans (``_PLANNED_LINES``).
+        """Check the input paths of the command line a call plans (``PLANNED_LINES``).
 
         As the paths of the call itself: absolute, inside ``--allow-dir``. A line the
         parser refuses is the library's to report.
         """
-        planned = _PLANNED_LINES.get(spec.command)
+        planned = PLANNED_LINES.get(spec.command)
         if planned is None or arguments.get(planned[1]) is not True:
             return
         line = arguments.get(planned[0])
@@ -1018,7 +1015,7 @@ def _fail(error: KartografError) -> int:
     report = error_report(error)
     print(f"Error: {report.message}", file=sys.stderr)
     print(error_line(report), file=sys.stderr, flush=True)
-    return report.exit_code
+    return report.exit_status
 
 
 def _start_line(args: argparse.Namespace) -> str:

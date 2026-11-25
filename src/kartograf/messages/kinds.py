@@ -41,6 +41,10 @@ MESSAGES = {
         "document kartograf-plan/1 (object)",
         "dokument kartograf-plan/1 (obiekt)",
     ),
+    "json_object": Text(
+        "a JSON object ({{...}})",
+        "obiekt JSON ({{...}})",
+    ),
     "option_expected_got": Text(
         "option {name}: expected {kind_text}, got {value!r}",
         "opcja {name}: oczekiwano {kind_text}, podano {value!r}",

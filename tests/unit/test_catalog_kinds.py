@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from kartograf.catalog.kinds import convert_arguments, layer_codes, parse_per_country
+from kartograf.catalog.kinds import (
+    convert_arguments,
+    layer_codes,
+    parse_json_object,
+    parse_per_country,
+)
 from kartograf.catalog.spec import Kind
 from kartograf.core.bbox import BBox
 from kartograf.download.plan import UpdatePlan
@@ -22,6 +27,7 @@ KINDS: dict[str, Kind] = {
     "layers": "str_list",
     "cutout": "flag",
     "plan": "plan",
+    "options": "json",
 }
 
 
@@ -44,6 +50,7 @@ def test_convert_arguments_by_kind():
             "cutout": True,
             "year": 2024,
             "plan": plan.to_dict(),
+            "options": {"product": "nmt", "root": "./data"},
         },
     )
 
@@ -56,6 +63,7 @@ def test_convert_arguments_by_kind():
         "cutout",
         "year",
         "plan",
+        "options",
     ]
     assert arguments["bbox"] == BBox(1, 2.5, 3, 4, "EPSG:2180")
     assert arguments["geometry"] == Path("obszar/zlewnia.gpkg")
@@ -63,6 +71,7 @@ def test_convert_arguments_by_kind():
     assert arguments["layers"] == ("SWRS", "PTWP")
     assert arguments["cutout"] is True and arguments["year"] == 2024
     assert arguments["plan"] == plan
+    assert arguments["options"] == {"product": "nmt", "root": "./data"}
     assert convert_arguments(KINDS, {"resolution": "1m"}) == {"resolution": "1m"}
 
 
@@ -98,6 +107,8 @@ def test_convert_arguments_paths_and_not_given_values(tmp_path):
         ({"bbox": [1, 2, 3, float("nan")], "bbox_crs": "EPSG:2180"}, "bbox"),
         ({"plan": {"schema": "kartograf-plan/2"}}, "plan"),
         ({"plan": []}, "plan"),
+        ({"options": [1, 2]}, "options"),
+        ({"options": {1: "x"}}, "options"),
     ],
 )
 def test_convert_arguments_names_the_wrong_option(data, option):
@@ -138,3 +149,21 @@ def test_parse_per_country_names_the_flag_of_a_malformed_value(raw):
 )
 def test_layer_codes_split_on_commas(text, codes):
     assert layer_codes(text) == codes
+
+
+def test_parse_json_object_reads_the_text_of_an_object():
+    assert parse_json_object('{"product": "nmt", "workers": 4}', "options") == {
+        "product": "nmt",
+        "workers": 4,
+    }
+
+
+@pytest.mark.parametrize("raw", ["[1, 2]", '"nmt"', "null", "4", "{", ""])
+def test_parse_json_object_refuses_a_text_that_is_no_object(raw):
+    with pytest.raises(ValidationError) as caught:
+        parse_json_object(raw, "options")
+
+    assert caught.value.option == "options"
+    assert str(caught.value) == (
+        f"option options: expected a JSON object ({{...}}), got {raw!r}"
+    )
