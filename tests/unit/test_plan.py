@@ -6,15 +6,24 @@ import json
 import pytest
 
 from kartograf.download.plan import (
+    DETACHED,
     TRACKS,
+    Fetch,
     PlanItem,
+    PlanSource,
     UpdatePlan,
+    detached_directory,
+    detached_plan,
+    fetch_fields,
+    new_plan,
     require_store,
     select_planned,
     store_id,
 )
 from kartograf.exceptions import ValidationError
 from kartograf.notices import Notice
+from kartograf.output import Staging
+from kartograf.sources.registry import get_source
 
 
 def _item(track="laz_tile", name="a.laz", status="missing", **kwargs) -> PlanItem:
@@ -84,6 +93,7 @@ def test_plan_to_dict_schema_first():
         "items",
         "notices",
         "ok",
+        "sources",
     ]
     assert data["schema"] == "kartograf-plan/1" == plan.schema
     assert data["notices"] == [
@@ -278,3 +288,149 @@ def test_plans_of_a_store_and_of_a_directory_do_not_merge(tmp_path):
 
     with pytest.raises(ValidationError, match="different stores"):
         _plan(_item()).merge(plain)
+
+
+# --- where the files come from (ADR-063 decision 3) ----------------------------
+
+NMT = "pl.gugik.nmt_1m"
+LAZ = "pl.gugik.laz"
+CORINE = "eu.clms.corine"
+
+
+def test_new_plan_lists_each_source_once_in_the_order_of_its_first_position(
+    tmp_path,
+):
+    items = [
+        _item(name="a.laz", source=LAZ),
+        _item(name="b.asc", source=NMT),
+        _item(name="c.laz", source=LAZ),
+        _item(track="store", name="root", source=None),
+    ]
+
+    plan = new_plan(tmp_path, items)
+
+    assert [source.key for source in plan.sources] == [LAZ, NMT]
+    nmt = get_source(NMT)
+    assert plan.sources[1] == PlanSource(NMT, nmt.provider_name, nmt.license, nmt.auth)
+    assert plan.to_dict()["sources"][1] == {
+        "key": NMT,
+        "provider": "GUGiK",
+        "license": {
+            "id": nmt.license.id,
+            "attribution": nmt.license.attribution,
+            "url": nmt.license.url,
+        },
+        "auth": "none",
+    }
+
+
+def test_merge_joins_the_sources_of_both_plans_without_repeats(tmp_path):
+    pl = new_plan(tmp_path, [_item(source=NMT), _item(name="b.laz", source=LAZ)])
+    cz = new_plan(tmp_path, [_item(name="c.laz", source=LAZ), _item(source=CORINE)])
+
+    assert [s.key for s in pl.merge(cz).sources] == [NMT, LAZ, CORINE]
+    assert [s.key for s in cz.merge(pl).sources] == [LAZ, CORINE, NMT]
+
+
+def test_plan_round_trip_keeps_the_source_and_the_fetch_of_each_position(tmp_path):
+    fetched = _item(
+        source=LAZ, fetch=Fetch("https://example.test/a.laz", 1024, "ab" * 32)
+    )
+    built = _item(name="b.tif", source=NMT, fetch_reason="built")
+    keyed = _item(name="c.tif", source=CORINE, fetch_reason="credentials")
+    plan = new_plan(tmp_path, [fetched, built, keyed])
+
+    again = UpdatePlan.from_json(plan.to_json())
+
+    assert again == plan
+    assert again.items[0].fetch == Fetch("https://example.test/a.laz", 1024, "ab" * 32)
+    assert [item.fetch_reason for item in again.items] == [None, "built", "credentials"]
+    assert [s.key for s in again.sources] == [LAZ, NMT, CORINE]
+    assert json.loads(plan.to_json())["items"][0]["fetch"] == {
+        "url": "https://example.test/a.laz",
+        "size_bytes": 1024,
+        "sha256": "ab" * 32,
+    }
+
+
+def test_a_plan_of_0_9_0_without_sources_and_fetch_still_loads():
+    """A plan written by 0.9.0: no ``sources``, no ``source``, ``fetch`` or
+    ``fetch_reason`` in its positions."""
+    plan = _plan(_item(), _item(name="b.laz", status="current", local_label="x"))
+    old = plan.to_dict()
+    del old["sources"]
+    for item in old["items"]:  # type: ignore[attr-defined]
+        for key in ("source", "fetch", "fetch_reason"):
+            del item[key]
+
+    loaded = UpdatePlan.from_dict(old)
+
+    assert loaded == plan
+    assert loaded.sources == ()
+    assert {(i.source, i.fetch, i.fetch_reason) for i in loaded.items} == {
+        (None, None, None)
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("fetch_reason", "proxy", "Unknown plan item fetch_reason 'proxy'"),
+        ("fetch", {"url": "https://example.test/a"}, "Incomplete update plan"),
+        (
+            "fetch",
+            {"url": None, "size_bytes": "10", "sha256": None},
+            "Incomplete update plan",
+        ),
+    ],
+)
+def test_a_malformed_fetch_of_a_position_is_validation_error(field, value, match):
+    payload = json.loads(_plan(_item()).to_json())
+    payload["items"][0][field] = value
+
+    with pytest.raises(ValidationError, match=match):
+        UpdatePlan.from_dict(payload)
+
+
+def test_a_source_without_a_licence_is_validation_error():
+    payload = json.loads(_plan(_item()).to_json())
+    payload["sources"] = [{"key": NMT, "provider": "GUGiK", "auth": "none"}]
+
+    with pytest.raises(ValidationError, match="Incomplete update plan"):
+        UpdatePlan.from_dict(payload)
+
+
+def test_fetch_fields_name_the_key_exchange_before_anything_the_track_says():
+    url = Fetch("https://example.test/a.tif")
+
+    assert fetch_fields(LAZ, url) == (url, None)
+    assert fetch_fields(NMT, None) == (None, "built")
+    assert fetch_fields(CORINE, url) == (None, "credentials")
+    assert fetch_fields(CORINE, None) == (None, "credentials")
+    assert fetch_fields(None, url) == (None, None)
+
+
+def test_detached_plan_is_the_write_into_dot_with_relative_posix_paths():
+    directory = detached_directory()
+    with Staging(directory) as write:
+        plan = new_plan(
+            write.handle,
+            [
+                _item(name="N-34-130-D-d-2-4.asc", source=NMT),
+                _item(name="teryt/1465.zip", source=LAZ),
+                _item(name="c.asc", status="check_failed", error="HTTP 503"),
+            ],
+        )
+
+    detached = detached_plan(plan, directory)
+    data = detached.to_dict()
+
+    assert not directory.exists()
+    assert (data["mode"], data["root"], data["output_dir"]) == ("plain", None, DETACHED)
+    assert [i["path"] for i in data["items"]] == [
+        "N-34-130-D-d-2-4.asc",
+        "teryt/1465.zip",
+        None,
+    ]
+    assert [i["action"] for i in data["items"]] == ["write", "write", None]
+    assert UpdatePlan.from_dict(data).to_dict() == data

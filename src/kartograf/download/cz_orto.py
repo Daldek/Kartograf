@@ -253,8 +253,17 @@ def _edition(release: Callable[[], AtomFile]) -> Callable[[], Edition]:
 def _inspect(
     slots: dict[str, FileSlot], sheet: str, edition: Callable[[], Edition]
 ) -> list[PlanItem]:
+    """Return the positions of the four files of a sheet: members of its ZIP, built."""
     return [
-        inspect_version(slot, track=_TRACK, unit=sheet, signal=_SIGNAL, edition=edition)
+        inspect_version(
+            slot,
+            track=_TRACK,
+            unit=sheet,
+            signal=_SIGNAL,
+            source=_KEY,
+            fetch=None,
+            edition=edition,
+        )
         for slot in slots.values()
     ]
 

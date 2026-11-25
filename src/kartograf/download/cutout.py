@@ -435,16 +435,20 @@ def _pl_cutout_slot(cutout: PlCutout) -> FileSlot:
 
 
 def _check_prepared(cutout: PlCutout) -> UpdatePlan:
-    """Plan of a prepared cutout from the local store only (signal ``none``)."""
+    """Plan of a prepared cutout from the local store only (signal ``none``).
+
+    The cutout is built (``fetch_reason`` ``built``): a WCS cutout masked to the land
+    of the PRG, warped onto the target grid when it is not the grid of the source.
+    """
     slot = _pl_cutout_slot(cutout)
+    key = _cutout_descriptor_key(cutout.product, cutout.vertical_crs)
     item = inspect_version(
         slot,
         track="pl_cutout",
         unit=slot.std.stem,
-        signal=channel_signal(
-            _cutout_descriptor_key(cutout.product, cutout.vertical_crs),
-            TransportKind.WCS,
-        ),
+        signal=channel_signal(key, TransportKind.WCS),
+        source=key,
+        fetch=None,
     )
     return new_plan(store_id(cutout.root), (item,))
 
@@ -552,14 +556,18 @@ def _run_pl_wcs_cutout(
         _require_matching_provider(cutout, provider)
     slot = _pl_cutout_slot(cutout)
     preflight(cutout.root, [slot.name])
-    signal = channel_signal(
-        _cutout_descriptor_key(cutout.product, cutout.vertical_crs), TransportKind.WCS
-    )
+    key = _cutout_descriptor_key(cutout.product, cutout.vertical_crs)
+    signal = channel_signal(key, TransportKind.WCS)
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
         require_store(plan, store_id(cutout.root))
         current = inspect_version(
-            slot, track="pl_cutout", unit=slot.std.stem, signal=signal
+            slot,
+            track="pl_cutout",
+            unit=slot.std.stem,
+            signal=signal,
+            source=key,
+            fetch=None,
         )
         todo, excluded = select_planned(plan, [current], "pl_cutout")
         stale = tuple(excluded)

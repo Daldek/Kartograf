@@ -53,12 +53,14 @@ from kartograf.download.fetch import (
 )
 from kartograf.download.options import validate_request_bbox
 from kartograf.download.plan import (
+    Fetch,
     PlanItem,
     UpdatePlan,
     new_plan,
     refusal_plan,
     require_store,
     select_planned,
+    source_of,
     store_id,
 )
 from kartograf.download.storage import FileStorage
@@ -235,16 +237,23 @@ def _check_selection(
     provider: GugikLazProvider,
     root: str | Path,
 ) -> UpdatePlan:
-    """Inspect selected WFS tiles without downloading any LAZ bytes."""
+    """Inspect selected WFS tiles without downloading any LAZ bytes.
+
+    A tile is the bytes of its OpenData URL, unchanged: the ``fetch`` of its position
+    (the WFS record names no size).
+    """
     storage = FileStorage(
         root, resolution=None, vertical_crs=provider.vertical_crs, product="laz"
     )
+    source = source_of(provider)
     items = tuple(
         inspect_version(
             laz_slot(storage, tile),
             track="laz_tile",
             unit=tile.sheet,
             signal="index",
+            source=source,
+            fetch=Fetch(tile.url),
             available=(
                 laz_version_ref(tile).label,
                 {"url": tile.url, "year": tile.year, "date": tile.date},

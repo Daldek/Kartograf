@@ -19,7 +19,9 @@ Python value                           JSON
                                        ``ValueError``
 type with ``__json__(self, ctx)``      its result, encoded further
 ``Path``                               ``Path.absolute().as_posix()`` (the file
-                                       system and symlinks are not touched)
+                                       system and symlinks are not touched);
+                                       ``Path.as_posix()`` under
+                                       ``ctx.relative_paths``
 ``Decimal``                            a string (finite values only)
 ``datetime``                           ISO 8601 in UTC (``+00:00``), to seconds;
                                        a naive value raises ``ValueError``
@@ -65,9 +67,13 @@ class EncodeContext:
     omit : frozenset of (str, str)
         ``(class name, field name)`` pairs left out of the encoded dataclasses
         (``StoreEntries`` leaves out ``("Sidecar", "raw")``).
+    relative_paths : bool
+        Write a relative path as it is, not made absolute: the paths of a document
+        relative to a directory it does not name (a detached ``UpdatePlan``).
     """
 
     omit: frozenset[tuple[str, str]] = frozenset()
+    relative_paths: bool = False
 
 
 # schema name -> every Document class producing it (filled by __init_subclass__)
@@ -180,7 +186,7 @@ def _encode(value: object, ctx: EncodeContext) -> object:
     if hook is not None:
         return _encode(hook(ctx), ctx)
     if isinstance(value, Path):
-        return value.absolute().as_posix()
+        return value.as_posix() if ctx.relative_paths else value.absolute().as_posix()
     if isinstance(value, Decimal):
         if not value.is_finite():
             raise ValueError(f"{value!r} is not a JSON number")

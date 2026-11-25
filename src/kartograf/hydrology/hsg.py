@@ -857,7 +857,14 @@ class HSGCalculator:
                 bbox=selection.get("bbox_obj"), sheet=selection.get("sheet")
             )
             slot = self._slot(selection, layers, stat)
-            item = inspect_version(slot, track=_HSG_TRACK, unit=unit, signal="none")
+            item = inspect_version(  # computed from the inputs: built
+                slot,
+                track=_HSG_TRACK,
+                unit=unit,
+                signal="none",
+                source=_SOILGRIDS,
+                fetch=None,
+            )
             return new_plan(self._root, [item])
         inputs = self._input_items(selection, layers, stat, sink)
         return new_plan(
@@ -892,10 +899,12 @@ class HSGCalculator:
 
         Plan position of the HSG: ``current`` when a version of the current
         local inputs exists and every input is current; ``check_failed`` when an
-        input could not be checked; otherwise ``missing`` (to compute).
+        input could not be checked; otherwise ``missing`` (to compute). The file is
+        computed from the inputs (``fetch_reason`` ``built``), stored with the
+        SoilGrids source of its inputs.
         """
         from kartograf.download.fetch import local_version
-        from kartograf.download.plan import PlanItem
+        from kartograf.download.plan import PlanItem, fetch_fields
         from kartograf.landcover.store import selection_unit
 
         slot = self._slot(selection, layers, stat)
@@ -912,6 +921,7 @@ class HSGCalculator:
             status = "current"
         else:
             status = "missing"
+        fetch, why = fetch_fields(_SOILGRIDS, None)
         return PlanItem(
             track=_HSG_TRACK,
             segment=slot.segment,
@@ -926,6 +936,9 @@ class HSGCalculator:
             available_signal=None,
             status=status,
             error=failed[0].error if failed else None,
+            source=_SOILGRIDS,
+            fetch=fetch,
+            fetch_reason=why,
         )
 
     def _calculate(

@@ -2006,7 +2006,8 @@ touching the file system); `Decimal` -> string; `datetime` -> ISO 8601 UTC to se
 dataclass -> object with fields in declaration order (`metadata={"json": False}` and `ctx.omit`
 pairs skipped); `Mapping` -> object; `tuple`/`list` -> array; `set` -> sorted
 array; any other type is `TypeError` (never `str(obj)`). `EncodeContext` carries `omit` (pairs
-`(class, field)`: `StoreEntries` omits `Sidecar.raw`). The `SCHEMAS` registry
+`(class, field)`: `StoreEntries` omits `Sidecar.raw`) and `relative_paths` (a relative path stays
+relative: the paths of a detached `UpdatePlan`, ADR-063 decision 4). The `SCHEMAS` registry
 (`__init_subclass__`) collects classes per schema; a test checks the name pattern
 (`^kartograf-[a-z][a-z0-9-]*/[1-9][0-9]*$`), the same set and order of keys of the classes of one
 schema, and that every `result_schema` of the catalog is in the registry.
@@ -2014,7 +2015,7 @@ schema, and that every `result_schema` of the catalog is in the registry.
 | Schema | Library type | Module | Keys after `schema` |
 |---|---|---|---|
 | `kartograf-download/1` | `DataReport`, `CollectionReport`, `LandCoverReport`, `SoilReport`, `HsgReport` | `download.data`, `download.collections`, `landcover.manager`, `hydrology.hsg` | `mode, root, output_dir, files, raw, inputs, failed, skipped, stale, superseded, summary, notices, ok` |
-| `kartograf-plan/1` | `UpdatePlan` | `download.plan` | `mode, root, output_dir, checked_at, kartograf_version, items, notices, ok` |
+| `kartograf-plan/1` | `UpdatePlan` | `download.plan` | `mode, root, output_dir, checked_at, kartograf_version, items, notices, ok, sources` |
 | `kartograf-result/1` | `CommandResult` | `envelope` | `tool, version, command, check, status, result, items, notices` |
 | `kartograf-availability/1` | `AvailabilityReport` | `download.availability` | `request, checked_at, areas, combinations, failed, notices, ok` |
 | `kartograf-sheet/1` | `SheetInfo` | `sheet_info` | `sheet, system, country, sheet_system, scale, components, zone, crs, bounds, commands, hierarchy, children, descendants` |
@@ -2042,7 +2043,8 @@ section 5; usage: USAGE 8.1):
   and the property `schema`): they are not built with `schema=`, and an unknown schema is rejected by
   `UpdatePlan.from_dict`; a plan of 0.8.0-dev without `notices` and `ok` still loads (one with
   the key `store` does not, 3.6);
-- paths in documents are absolute (exception: `request.geometry` of the availability report);
+- paths in documents are absolute (exceptions: `request.geometry` of the availability report, and
+  the `path` of each item of a detached plan, relative to its `output_dir` `"."`);
 - the key is always present (no value `null`, no elements `[]`), lists are not
   silently truncated (`kartograf-store-entries/1` carries `limit` and `truncated`);
 - `ok` is present in result documents (`-download/1`, `-plan/1`, `-availability/1`):
@@ -2128,6 +2130,27 @@ of a plain plan has `action` (`write`, `replace`, `conflict`), `path` and `reaso
 position whose source could not be checked: it stays `check_failed` without them, as in the store,
 and the plan is not `ok`; the one position of a store root that is a conflict has the track
 `store` and the same three fields.
+
+**Where the files of a plan come from (ADR-063 decisions 3 and 4).** Every item of a plan, store
+or plain, says it from what the check reads, with no request more (`download/plan.py`): `source`
+is the registry key of its source (`null` for the track `store`), `fetch` (`Fetch`) the URL whose
+bytes the file is, unchanged, with `size_bytes` (the `Content-Length` of the probe of an `http`
+channel in a store plan, the length of an ATOM feed) and `sha256` (only where the registry pins it)
+each `null` when unknown, and otherwise `fetch_reason`: `credentials` for a source whose `auth` is
+not `none` (CORINE, its WMS preview too, before `built`) or `built` for a file Kartograf builds
+(`fetch_fields`). The plan lists `sources` (`PlanSource`: `key, provider, license, auth` as
+`list-sources`) in the order of their first item; `merge` joins them by key. Per track: `fetch` for
+`pl_sheet` (the URL of the index record), `laz_tile` (the OpenData URL), the ZIP of `cz_contours`
+(track `cz_sheet`), a package of `unit_package` stored as published, a file of an ATOM feed (in a
+plain plan its URL is unknown: only the run reads the feed) and the BDOT10k SHP package and raw
+GPKG package; `built` for `cz_sheet` of `cz_sheets` (the GeoTIFF unpacked from openzu with its
+CRS written, or an ImageServer export), `cz_laz` (unpacked), `pl_cutout`, `cz_cutout`, `cz_orto`
+(members of the sheet ZIP), the merged BDOT10k GeoPackage, SoilGrids, `hsg`, `feature_bbox` and
+the GeoPackage of an archive area, a member unpacked from a package or the ZIP of chosen classes,
+and the CAMELS-PL members and `ATTRIBUTION.txt` of `release_files` (`zip_range`). A detached plan
+(`check_command(detached=True)`, `detached_directory`, `detached_plan`) is the plain write into a
+directory that does not exist, answered as the write into `.`: `output_dir` `"."`, each `path`
+relative to it, every file `write`.
 
 **The target in the interfaces (ADR-054 decisions 1, 11, 13, 14).** The catalog declares the two
 targets once: `catalog/shared.py` `target(files, sheets=)` gives the two `Param`s (`output_dir`

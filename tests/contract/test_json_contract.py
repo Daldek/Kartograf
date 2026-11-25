@@ -38,7 +38,7 @@ from kartograf.download.availability import (
 from kartograf.download.collections import CollectionReport
 from kartograf.download.data import DataReport, SkippedUnit, UnitFailure, UnitFile
 from kartograf.download.fetch import VersionedFile
-from kartograf.download.plan import PlanItem, UpdatePlan
+from kartograf.download.plan import Fetch, PlanItem, PlanSource, UpdatePlan
 from kartograf.envelope import ResultItem, wrap
 from kartograf.error_report import error_report
 from kartograf.exceptions import ValidationError
@@ -63,6 +63,7 @@ from kartograf.source_info import (
     SourceList,
     YearInfo,
 )
+from kartograf.sources.descriptor import LicenseInfo
 from kartograf.store import Sidecar, StoreEntry, describe_segment
 from kartograf.store_documents import StoreEntries, StoreOverview, StoreSidecar
 
@@ -98,6 +99,19 @@ def _unit_failure() -> UnitFailure:
     return UnitFailure("N-34-130-D", "PL", "HTTP 500", "download")
 
 
+def _fetch() -> Fetch:
+    return Fetch("https://example.test/a.asc", 48, SHA256)
+
+
+def _plan_source() -> PlanSource:
+    return PlanSource(
+        "pl.gugik.nmt_1m",
+        "GUGiK",
+        LicenseInfo("pl-gugik", "Dane GUGiK", "https://example.org/licencja"),
+        "none",
+    )
+
+
 def _plan_item() -> PlanItem:
     return PlanItem(
         track="pl_sheet",
@@ -113,6 +127,9 @@ def _plan_item() -> PlanItem:
         action="write",
         path=STORE / f"{SHEET}.asc",
         reason="output_exists",
+        source="pl.gugik.nmt_1m",
+        fetch=_fetch(),
+        fetch_reason="built",
     )
 
 
@@ -201,6 +218,7 @@ def _plan() -> Document:
         kartograf_version="0.8.0",
         items=(_plan_item(),),
         notices=(_notice(),),
+        sources=(_plan_source(),),
     )
 
 
@@ -588,6 +606,7 @@ CONTRACT: dict[str, list[str]] = {
         "items",
         "notices",
         "ok",
+        "sources",
     ],
     "kartograf-availability/1": [
         "schema",
@@ -741,7 +760,16 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "action",
             "path",
             "reason",
+            "source",
+            "fetch",
+            "fetch_reason",
         ],
+    ),
+    "Fetch": (_fetch, ["url", "size_bytes", "sha256"]),
+    "PlanSource": (_plan_source, ["key", "provider", "license", "auth"]),
+    "LicenseInfo": (
+        lambda: _plan_source().license,
+        ["id", "attribution", "url"],
     ),
     "LazTile": (
         _laz_tile,

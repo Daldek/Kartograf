@@ -47,6 +47,43 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   commit of each file); `tests/contract/test_commands_schema.py` validates both pages of every
   command against commands-1 and the list against command-list-1.
 
+#### Where the files of a plan come from, and the detached plan (ADR-063 decisions 3 and 4)
+
+- `kartograf-plan/1` grows additive keys (store and plain plans alike), filled from what the
+  check already reads and with no request more (no `HEAD` for a size): each item has `source`
+  (the registry key of its source, `null` for the position of the track `store`), `fetch`
+  `{url, size_bytes, sha256}` when the file is the bytes at `url` unchanged (a field `null` when
+  the check does not know it: the size comes from the `Content-Length` of the probe of an `http`
+  channel in a store plan or the length of an ATOM feed; the GUGiK and WFS index records name
+  none, and the only SHA-256 the registry pins, those of the CAMELS-PL members, belong to files
+  read out of a ZIP), otherwise `fetch_reason`: `credentials` for a source whose `auth` is not
+  `none` (CORINE of CLMS, the WMS preview too; before `built`) or `built` for a file Kartograf
+  builds. The plan lists `sources`, one `{key, provider, license: {id, attribution, url}, auth}`
+  per source in the order of its first item, as `<group> list-sources` writes them; `merge`
+  joins them without repeats; a 0.9.0 plan without them still loads (`UpdatePlan.from_dict`).
+  Library types `kartograf.download.plan.Fetch` and `PlanSource`; `PlanItem.source`, `fetch`,
+  `fetch_reason`, `UpdatePlan.sources`.
+- The tracks, classified by what they store: `fetch` for a PL sheet (`pl_sheet`: the URL of its
+  index record; a sheet whose index failed has a `fetch` without a URL), a PL LAZ tile
+  (`laz_tile`), a CZ contour ZIP (`cz_sheet` of `cz_contours`), a package of `unit_package`
+  stored as published (a URL template or the record of an index), a file of an ATOM feed (its
+  URL and length from the feed in a store plan; in a plain plan, whose check reads no feed, a
+  `fetch` without a URL), the SHP package and the raw GPKG package (`keep_raw`) of BDOT10k;
+  `built` for a CZ sheet (`cz_sheet`: the GeoTIFF unpacked from the openzu ZIP with its CRS
+  written, or an ImageServer export), a CZ LAZ file (`cz_laz`: unpacked from its ZIP), a PL or
+  CZ cutout (`pl_cutout`, `cz_cutout`), the GeoPackage merged from a BDOT10k package, a
+  SoilGrids raster and HSG (`landcover`, `hsg`), a GeoPackage written from features
+  (`feature_bbox`, the layers of an archive), a member unpacked from a package or the ZIP of the
+  chosen classes (`unit_package` with `unpack` or `layers`), the members of a CAMELS-PL release
+  read by range requests and its `ATTRIBUTION.txt` (`release_files`, `zip_range`), and the four
+  files of a CZ orthophoto sheet (`cz_orto`: members of its ZIP).
+- `check_command(..., detached=True)`: the plan of a request for another machine, as a plain write
+  into a directory that does not exist (a fresh name in the temporary directory, never created),
+  answered as the write into `.`: `output_dir` `"."`, the `path` of each item relative to it (a
+  relative POSIX path in the document: `EncodeContext.relative_paths`), every file `write`.
+  `detached` with `output_dir` or `root` is a `validation_error` naming the option
+  (`exclusive_options`); the options a plain write refuses (`all_campaigns`) stay refused.
+
 ### Changed
 
 - `src/kartograf/_output_schema.py` is regenerated from the new commands-1, whose `command_name`
@@ -54,6 +91,9 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The description of `commands schema` names the rules of the options and the server route, and
   the command has a third example, `--form --json`; USAGE 8.4 and ARCHITECTURE 4.11 describe the
   fields, `--form` and `rest`.
+- `kartograf.download.fetch.inspect_version` takes the `source` and the `fetch` of its position
+  (keyword-only, required); the callable type of a download of `fetch_version` is `Download`
+  (was `Fetch`, now the type of the plan).
 
 ## [0.9.0] - 2026-11-25
 
