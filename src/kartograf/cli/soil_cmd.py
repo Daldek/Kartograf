@@ -10,7 +10,7 @@ import sys
 from typing import Any
 
 from kartograf.cli._args import library_arguments, target_arguments
-from kartograf.cli._language import language, localized
+from kartograf.cli._language import localized
 from kartograf.cli.download_cmd import (
     _plan_context,
     _present,
@@ -130,38 +130,40 @@ def _print_hsg(
         _print_summary(result.summary)
     if result.files and not args.quiet:
         print()
-        print(message("cli.hsg_legend_first", lang=language()))
-        print(message("cli.hsg_legend_second", lang=language()))
-        print(message("cli.hsg_scs_cn_method", lang=language()))
+        print(localized(message("cli.hsg_legend_first")))
+        print(localized(message("cli.hsg_legend_second")))
+        print(localized(message("cli.hsg_scs_cn_method")))
     return exit_code_of(result)
 
 
 def _print_summary(summary: dict[str, Any]) -> None:
     """Print the statistics of the HSG raster (``report.summary``) as text."""
     print()
-    print(message("cli.hsg_statistics_header", lang=language()))
+    print(localized(message("cli.hsg_statistics_header")))
     groups = dict(summary)
     nodata = groups.pop("nodata")
     for group, data in groups.items():
         pct = data["percent"]
         area = data["area_ha"]
         print(
-            message(
-                "cli.hsg_group_line",
-                lang=language(),
-                group=group,
-                percent=pct,
-                area_ha=area,
+            localized(
+                message(
+                    "cli.hsg_group_line",
+                    group=group,
+                    percent=pct,
+                    area_ha=area,
+                )
             )
         )
         print(f"           {localized(data['description'])}")
     print(
-        message(
-            "cli.hsg_nodata_area",
-            lang=language(),
-            nodata_percent=nodata["percent"],
-            nodata_area_ha=nodata["area_ha"],
+        localized(
+            message(
+                "cli.hsg_nodata_area",
+                nodata_percent=nodata["percent"],
+                nodata_area_ha=nodata["area_ha"],
+            )
         )
     )
     total = nodata["area_ha"] + sum(data["area_ha"] for data in groups.values())
-    print(message("cli.hsg_task_area_total", lang=language(), total=total))
+    print(localized(message("cli.hsg_task_area_total", total=total)))

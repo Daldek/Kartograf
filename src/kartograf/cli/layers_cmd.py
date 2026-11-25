@@ -12,7 +12,7 @@ import argparse
 import textwrap
 
 from kartograf.cli._json import command_id, emit_result, wants_json
-from kartograf.cli._language import language, localized
+from kartograf.cli._language import localized
 from kartograf.landcover.manager import soil_choices
 from kartograf.messages import message
 from kartograf.source_info import LayerInfo, LayerList, PropertyInfo, list_layers
@@ -48,8 +48,8 @@ def _description(item: LayerInfo) -> str:
 def _classes(layers: LayerList) -> list[str]:
     """Class codes of a source of packages (BDOO) per release (``--year``)."""
     lines: list[str] = [
-        message("cli.classes_header_line1", lang=language()),
-        message("cli.classes_header_line2", lang=language()),
+        localized(message("cli.classes_header_line1")),
+        localized(message("cli.classes_header_line2")),
     ]
     for year, codes in (layers.classes or {}).items():
         lines += [
@@ -71,7 +71,7 @@ def _depths(layers: LayerList) -> list[str]:
     for depth in layers.depths or ():
         owners = [p.code for p in properties if depth in p.depths]
         only = (
-            message("cli.depths_only_owners", lang=language(), owners=", ".join(owners))
+            localized(message("cli.depths_only_owners", owners=", ".join(owners)))
             if len(owners) * 2 < len(properties)
             else ""
         )
@@ -82,22 +82,22 @@ def _depths(layers: LayerList) -> list[str]:
 def _soil(layers: LayerList) -> list[str]:
     """Properties, depths and statistics of SoilGrids."""
     return [
-        message("cli.soil_properties_header", lang=language()),
+        localized(message("cli.soil_properties_header")),
         *(
             f"    {item.code:11} - {_description(item)}"
             for item in layers.properties or ()
         ),
         "",
-        message("cli.soil_depths_header", lang=language(), depth_note=_depth_note()),
+        localized(message("cli.soil_depths_header", depth_note=_depth_note())),
         *_depths(layers),
         "",
-        message("cli.soil_statistics_header", lang=language()),
+        localized(message("cli.soil_statistics_header")),
         *(
             f"    {item.code:11} - {_description(item)}"
             for item in layers.statistics or ()
         ),
         "",
-        message("cli.soil_download_selection", lang=language()),
+        localized(message("cli.soil_download_selection")),
         "",
         _wrapped(localized(_SOIL_NOTE), "  "),
     ]
@@ -106,8 +106,8 @@ def _soil(layers: LayerList) -> list[str]:
 def _corine(layers: LayerList) -> list[str]:
     """Return the release years of CORINE: CLMS data or the WMS preview."""
     return [
-        message("cli.corine_intro", lang=language()),
-        message("cli.corine_available_years", lang=language()),
+        localized(message("cli.corine_intro")),
+        localized(message("cli.corine_available_years")),
         *(
             f"    {item.year}  ({localized(item.description)})"
             for item in layers.years or ()
@@ -126,10 +126,11 @@ def _named(layers: LayerList) -> list[str]:
             *(f"    {layer.code}  - {_description(layer)}" for layer in layers.layers),
             "",
             _wrapped(
-                message(
-                    "cli.bdot10k_classes_note",
-                    lang=language(),
-                    count=len(layers.layers),
+                localized(
+                    message(
+                        "cli.bdot10k_classes_note",
+                        count=len(layers.layers),
+                    )
                 ),
                 "  ",
             ),
@@ -153,7 +154,7 @@ def format_layers(layers: LayerList) -> str:
         body = _named(layers)
     return "\n".join(
         [
-            message("cli.source_layers_header", lang=language(), source=layers.source),
+            localized(message("cli.source_layers_header", source=layers.source)),
             "",
             *body,
         ]

@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from kartograf.catalog.commands import declared_commands
 from kartograf.catalog.kinds import parse_bbox_arg
 from kartograf.cli._json import command_id, emit_result, wants_json
-from kartograf.cli._language import language, localized
+from kartograf.cli._language import localized
 from kartograf.messages import message
 from kartograf.sheet_info import (
     SheetDescendants,
@@ -44,10 +44,10 @@ _CRS_NAMES = {"EPSG:5514": "S-JTSK", "EPSG:3045": "ETRS89 / UTM 33N"}
 def _cz_system(info: SheetInfo) -> str:
     """Return the wording of the line ``System:`` of a CZ system."""
     if info.system == "cz_tm33":
-        return message("cli.system_cz_tm33", lang=language())
+        return localized(message("cli.system_cz_tm33"))
     if info.system == "cz_sm5":
-        return message("cli.system_cz_sm5", lang=language())
-    return message("cli.system_cz_ztm", lang=language(), sheet_system=info.sheet_system)
+        return localized(message("cli.system_cz_sm5"))
+    return localized(message("cli.system_cz_ztm", sheet_system=info.sheet_system))
 
 
 def _commands_text(info: SheetInfo) -> str:
@@ -66,14 +66,15 @@ def _commands_text(info: SheetInfo) -> str:
     listed = (
         names[0]
         if len(names) == 1
-        else message(
-            "cli.commands_and",
-            lang=language(),
-            head=", ".join(names[:-1]),
-            last=names[-1],
+        else localized(
+            message(
+                "cli.commands_and",
+                head=", ".join(names[:-1]),
+                last=names[-1],
+            )
         )
     )
-    return message("cli.sheet_in_commands", lang=language(), commands=listed)
+    return localized(message("cli.sheet_in_commands", commands=listed))
 
 
 def _format_cz(info: SheetInfo) -> str:
@@ -85,20 +86,21 @@ def _format_cz(info: SheetInfo) -> str:
     system = _cz_system(info)
     extent: str
     if info.bounds is None:
-        extent = message("cli.extent_from_cuzk_index", lang=language())
+        extent = localized(message("cli.extent_from_cuzk_index"))
     else:
         b = info.bounds
         extent = f"{b.min_x:.0f},{b.min_y:.0f},{b.max_x:.0f},{b.max_y:.0f}"
     return "\n".join(
         [
-            message("cli.label_sheet_code", lang=language(), sheet=info.sheet),
-            message("cli.label_system", lang=language(), system=system),
+            localized(message("cli.label_sheet_code", sheet=info.sheet)),
+            localized(message("cli.label_system", system=system)),
             f"CRS:       {info.crs} ({_CRS_NAMES[info.crs]})",
-            message("cli.label_extent", lang=language(), extent=extent),
-            message(
-                "cli.label_commands",
-                lang=language(),
-                commands_text=_commands_text(info),
+            localized(message("cli.label_extent", extent=extent)),
+            localized(
+                message(
+                    "cli.label_commands",
+                    commands_text=_commands_text(info),
+                )
             ),
         ]
     )
@@ -110,22 +112,22 @@ def _format_basics(info: SheetInfo) -> str:
     The sheet, scale, system and parts (PL-2000 also the zone and the native CRS).
     """
     lines: list[str] = [
-        message("cli.label_sheet_code", lang=language(), sheet=info.sheet),
-        message("cli.label_scale", lang=language(), scale=info.scale),
-        message("cli.label_system", lang=language(), system=info.sheet_system),
-        message("cli.label_components", lang=language()),
+        localized(message("cli.label_sheet_code", sheet=info.sheet)),
+        localized(message("cli.label_scale", scale=info.scale)),
+        localized(message("cli.label_system", system=info.sheet_system)),
+        localized(message("cli.label_components")),
     ]
     for name, value in (info.components or {}).items():
         lines.append(f"  {name}: {value}")
     if info.zone is not None:
-        lines.append(message("cli.label_zone", lang=language(), zone=info.zone))
-        lines.append(message("cli.label_native_crs", lang=language(), crs=info.crs))
+        lines.append(localized(message("cli.label_zone", zone=info.zone)))
+        lines.append(localized(message("cli.label_native_crs", crs=info.crs)))
     return "\n".join(lines)
 
 
 def _format_hierarchy(sheet_scale: str | None, levels: Sequence[SheetLevel]) -> str:
     top_scale = levels[-1].scale if levels else sheet_scale
-    lines = [message("cli.hierarchy_header", lang=language(), top_scale=top_scale), ""]
+    lines = [localized(message("cli.hierarchy_header", top_scale=top_scale)), ""]
     for i, level in enumerate(levels):
         arrow = "`- " if i > 0 else ""
         lines.append(f"{'  ' * i}{arrow}{level.sheet} ({level.scale})")
@@ -134,15 +136,16 @@ def _format_hierarchy(sheet_scale: str | None, levels: Sequence[SheetLevel]) -> 
 
 def _format_children(info: SheetInfo, children: Sequence[SheetLevel]) -> str:
     if not children:
-        return message(
-            "cli.no_child_sheets", lang=language(), sheet=info.sheet, scale=info.scale
+        return localized(
+            message("cli.no_child_sheets", sheet=info.sheet, scale=info.scale)
         )
     lines = [
-        message(
-            "cli.child_sheets_header",
-            lang=language(),
-            sheet=info.sheet,
-            children_count=len(children),
+        localized(
+            message(
+                "cli.child_sheets_header",
+                sheet=info.sheet,
+                children_count=len(children),
+            )
         ),
         "",
     ]
@@ -152,12 +155,13 @@ def _format_children(info: SheetInfo, children: Sequence[SheetLevel]) -> str:
 
 def _format_descendants(sheet: str, found: SheetDescendants) -> str:
     lines = [
-        message(
-            "cli.descendant_sheets_header",
-            lang=language(),
-            sheet=sheet,
-            scale=found.scale,
-            count=found.count,
+        localized(
+            message(
+                "cli.descendant_sheets_header",
+                sheet=sheet,
+                scale=found.scale,
+                count=found.count,
+            )
         ),
         "",
     ]
@@ -221,12 +225,13 @@ def format_sheets(found: SheetList) -> str:
     """
     request = found.request
     system = f"PL-{request.sheet_system}"
-    header = message(
-        "cli.sheets_list_header",
-        lang=language(),
-        system=system,
-        scale=request.scale,
-        count=found.count,
+    header = localized(
+        message(
+            "cli.sheets_list_header",
+            system=system,
+            scale=request.scale,
+            count=found.count,
+        )
     )
     return "\n".join([header, "", *(f"  {code}" for code in found.sheets)])
 

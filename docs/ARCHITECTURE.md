@@ -638,8 +638,9 @@ kartograf/
 │                        # plan); compatibility tests freeze it (frozen_clock)
 ├── notices.py           # Notice(level, code, message), NoticeSink, notice codes (Z3, ADR-037)
 ├── messages/            # Message catalog (AGI-9.2, DEV-2.3): every text for a person as a Text (English
-│                        # default and Polish variant), one module per area (MESSAGES); message ->
-│                        # Message (rendered again in the caller's language by localize), reason
+│                        # default, ASCII, and Polish variant with its diacritics), one module per area
+│                        # (MESSAGES); message -> Message (rendered again in the caller's language by
+│                        # localize; folded=True folds its Polish letters for a terminal, fold), reason
 ├── sheet_info.py        # describe_sheet -> SheetInfo, find_sheets -> SheetList
 │                        # (kartograf-sheet/1, -sheets/1; `parse` logic moved from the CLI)
 ├── source_info.py       # list_sources -> SourceList, list_layers -> LayerList
@@ -802,7 +803,8 @@ kartograf/
                          # declarations, ADR-039), _handlers.py (HANDLERS: command id -> handler),
                          # _args.py (library_arguments: flags -> function arguments via the catalog),
                          # _json.py (--json mode: json_mode, emit_result/emit_error, UTF-8),
-                         # _language.py (language of the human output: --lang, set_language/language, localized),
+                         # _language.py (language of the human output: --lang, set_language/language,
+                         # localized: a catalog text in that language, folded to ASCII for the terminal),
                          # download_cmd.py (download_data/check_data),
                          # availability_cmd.py (check_availability: PL and CZ tables, --details, --json),
                          # collection_cmd.py (download_collection/check_collection),

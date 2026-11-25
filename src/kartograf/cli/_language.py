@@ -9,9 +9,10 @@ the language of ``--lang``, else of ``KARTOGRAF_LANG``, ``NOGAT_LANG`` and
 ``nogat.toml``, else Polish (``kartograf.config.human_language``).
 
 ``main`` sets the language once per command line (``set_language``); the modules of
-the CLI read it (``language``) and render the catalog messages they print
-(``localized`` for a text the library made, ``message("cli.<name>", lang=language())``
-for a text of the CLI).
+the CLI read it (``language``) and render every catalog message they print with
+``localized``: a text the library made, and ``localized(message("cli.<name>", ...))``
+for a text of the CLI. A terminal reads ASCII whatever its code page, so
+``localized`` folds the Polish letters of the catalog to ASCII (ADR-053 amendment 1).
 """
 
 from collections.abc import Sequence
@@ -36,19 +37,21 @@ def set_language(lang: Lang) -> None:
 
 
 def localized(text: str) -> str:
-    """Return ``text`` in the language of the command line.
+    """Return ``text`` for the terminal, in the language of the command line.
 
-    A catalog message of the library is rendered again in that language; any other
-    text (the text of a foreign exception, a name) is returned as it is.
+    A catalog message is rendered in that language with the Polish letters of its
+    catalog texts folded to ASCII (``ą`` -> ``a``, ``ł`` -> ``l``) and its values (a
+    path, the name of a unit) as they are; any other text (the text of a foreign
+    exception, a name) is returned as it is.
     """
-    return localize(text, _language)
+    return localize(text, _language, folded=True)
 
 
 def yes_no(value: bool) -> str:
     """Return ``yes`` or ``no`` in the language of the command line."""
     if value:
-        return message("cli.yes", lang=_language)
-    return message("cli.no", lang=_language)
+        return localized(message("cli.yes"))
+    return localized(message("cli.no"))
 
 
 def language_of(argv: Sequence[str]) -> Lang:

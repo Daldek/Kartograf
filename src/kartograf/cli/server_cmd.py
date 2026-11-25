@@ -16,11 +16,11 @@ from collections.abc import Sequence
 from typing import NoReturn
 
 from kartograf.cli._json import emit_error
-from kartograf.cli._language import language
+from kartograf.cli._language import localized
 from kartograf.config import LANGUAGES, check_config
 from kartograf.error_report import error_report
 from kartograf.exceptions import KartografError, UsageError
-from kartograf.messages import message
+from kartograf.messages import message, reason
 from kartograf.server.serving import DEFAULT_HOST, DEFAULT_PORT, serve
 
 __all__ = ["SERVER_COMMAND", "main", "server_parser"]
@@ -47,29 +47,28 @@ def _port(text: str) -> int:
 
 def server_parser() -> argparse.ArgumentParser:
     """Return the parser of ``kartograf server`` in the language of the line."""
-    lang = language()
     parser = _Parser(
         prog=f"kartograf {SERVER_COMMAND}",
-        description=message("server.cli_description", lang),
-        epilog=message("server.cli_epilog", lang),
+        description=localized(message("server.cli_description")),
+        epilog=localized(message("server.cli_epilog")),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--host",
         default=DEFAULT_HOST,
-        help=message("server.cli_host", lang),
+        help=localized(message("server.cli_host")),
     )
     parser.add_argument(
         "--port",
         type=_port,
         default=DEFAULT_PORT,
-        help=message("server.cli_port", lang),
+        help=localized(message("server.cli_port")),
     )
     parser.add_argument(
         "--lang",
         choices=LANGUAGES,
         type=str.lower,
-        help=message("catalog.lang_description", lang),
+        help=localized(message("catalog.lang_description")),
     )
     return parser
 
@@ -89,6 +88,6 @@ def main(argv: Sequence[str]) -> int:
         check_config()
         serve(host=args.host, port=args.port)
     except KartografError as error:
-        print(f"Error: {error.localized(language())}", file=sys.stderr)
+        print(f"Error: {localized(reason(error))}", file=sys.stderr)
         return emit_error(error_report(error))
     return 0

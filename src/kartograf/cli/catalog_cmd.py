@@ -33,7 +33,7 @@ from kartograf.catalog.formatting import example_command_line
 from kartograf.catalog.kinds import parse_json_object
 from kartograf.catalog.spec import Command, Group, Param, resolve
 from kartograf.cli._json import command_id, emit_result, wants_json
-from kartograf.cli._language import language, localized, yes_no
+from kartograf.cli._language import localized, yes_no
 from kartograf.commands import read_command_line, write_command_line
 from kartograf.exceptions import ValidationError
 from kartograf.guide import agent_guide, inject_block
@@ -87,10 +87,10 @@ def _group_view(group: Group, commands: list[Command]) -> list[str]:
     lines += _wrap(localized(group.description), "  ")
     products = resolve(group.products)
     if products:
-        lines.append(message("cli.group_products_header", lang=language()))
+        lines.append(localized(message("cli.group_products_header")))
         for name, summary in products:
             lines += _wrap(f"{name} - {localized(summary)}", "      ", "    ")
-    lines.append(message("cli.group_commands_header", lang=language()))
+    lines.append(localized(message("cli.group_commands_header")))
     lines += _command_lines(commands, "    ")
     return lines
 
@@ -136,10 +136,10 @@ def _param_lines(command: Command, indent: str) -> list[str]:
     if not params:
         return []
     header = (
-        message("cli.param_header_flag", lang=language()),
+        localized(message("cli.param_header_flag")),
         "ARGUMENT",
-        message("cli.param_header_kind", lang=language()),
-        message("cli.param_header_required", lang=language()),
+        localized(message("cli.param_header_kind")),
+        localized(message("cli.param_header_required")),
     )
     rows = [
         (
@@ -152,7 +152,7 @@ def _param_lines(command: Command, indent: str) -> list[str]:
     ]
     widths = [max(len(row[i]) for row in (header, *rows)) for i in range(len(header))]
     lines: list[str] = [
-        message("cli.parameters_header", lang=language()),
+        localized(message("cli.parameters_header")),
         _row(header, widths, indent),
     ]
     for cells, param in zip(rows, params, strict=True):
@@ -160,9 +160,7 @@ def _param_lines(command: Command, indent: str) -> list[str]:
         allowed = resolve(param.allowed)
         if allowed:
             lines += _wrap(
-                message(
-                    "cli.allowed_values", lang=language(), allowed=", ".join(allowed)
-                ),
+                localized(message("cli.allowed_values", allowed=", ".join(allowed))),
                 indent + "    ",
             )
         lines += _wrap(localized(resolve(param.description)), indent + "    ")
@@ -173,7 +171,7 @@ def _constraint_lines(command: Command) -> list[str]:
     if not command.constraints:
         return []
     return [
-        message("cli.constraints_header", lang=language()),
+        localized(message("cli.constraints_header")),
         *(f"  - {localized(c.message)}" for c in command.constraints),
     ]
 
@@ -182,13 +180,13 @@ def _rule_lines(command: Command) -> list[str]:
     if not command.rules:
         return []
     return [
-        message("cli.rules_header", lang=language()),
+        localized(message("cli.rules_header")),
         *(f"  - {localized(rule)}" for rule in command.rules),
     ]
 
 
 def _example_lines(command: Command) -> list[str]:
-    lines: list[str] = [message("cli.examples_header", lang=language())]
+    lines: list[str] = [localized(message("cli.examples_header"))]
     for example in command.examples:
         lines.append(f"  {localized(example.title or '')}:")
         lines.append(f"    {example_command_line(command, example)}")
@@ -205,28 +203,28 @@ def format_command(command: Command) -> str:
     lines = [f"{command.id}: {localized(command.summary)}", ""]
     lines += _wrap(localized(resolve(command.description)), "")
     facts: list[str] = [
-        message("cli.fact_kind", lang=language(), kind=command.kind),
-        message(
-            "cli.fact_function",
-            lang=language(),
-            function=command.function,
-            result_schema=command.result_schema,
+        localized(message("cli.fact_kind", kind=command.kind)),
+        localized(
+            message(
+                "cli.fact_function",
+                function=command.function,
+                result_schema=command.result_schema,
+            )
         ),
     ]
     if command.check_function is not None:
         facts.append(
-            message(
-                "cli.fact_check",
-                lang=language(),
-                check_function=command.check_function,
-                check_result_schema=command.check_result_schema,
+            localized(
+                message(
+                    "cli.fact_check",
+                    check_function=command.check_function,
+                    check_result_schema=command.check_result_schema,
+                )
             )
         )
     if command.effects:
         facts.append(
-            message(
-                "cli.fact_effects", lang=language(), effects=", ".join(command.effects)
-            )
+            localized(message("cli.fact_effects", effects=", ".join(command.effects)))
         )
     facts.append(f"operation_id: {command.operation_id}")
     lines += ["", *_fact_lines(facts)]

@@ -3821,13 +3821,15 @@ A value per country (`resolution`, `vertical_crs`) is a string or an object with
 
 **The page of a form** (`--form`, `form=True`, MCP `form`; up to about 31 thousand characters, at most 50,000,
 DOC-1.7) is the same document whose options also carry `section` (the English title of the section of
-`--help`) and `i18n.pl`: the Polish `description` (the text of `--help --lang pl`), `section` and `enum`, the
-Polish meaning of each allowed value by the value as text (ADR-063, the Nogat command form
+`--help`) and `i18n.pl`: the Polish `description` (the text of `--help --lang pl`, with its diacritics), `section`
+and `enum`, the Polish meaning of each allowed value by the value as text (ADR-063, the Nogat command form
 `<nogat-command-form>`). The default page has neither.
 
 The exit codes and error codes are not in the catalog any more: the tables are in 8.3, and the codes of a command in its `errors`.
 The command descriptions are in English (AGI-9.1); the CLI text and `--help` are Polish by default and
-English with `--lang en` (ADR-053).
+English with `--lang en` (ADR-053). The Polish texts of the catalog have their diacritics (`i18n.pl` of the
+documents, the GUI); the terminal reads them folded to ASCII (`ą` -> `a`, `ł` -> `l`), the values in them as
+they are (ADR-053 amendment 1).
 
 ### 8.5 Command layer
 

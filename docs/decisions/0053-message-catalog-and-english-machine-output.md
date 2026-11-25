@@ -4,7 +4,9 @@
 **Status:** Accepted. The catalog, the language switch of the CLI and the error document
 (decisions 1 to 6) are implemented; erratum 1: the migration of decision 7 is complete and
 `_PENDING` of decision 6 is gone; erratum 2: every validation error is raised with a catalog
-message, checked by the guard. Amends ADR-037 (Z5, S6: the language of messages).
+message, checked by the guard; amendment 1 (2026-11-25): the Polish texts have their
+diacritics, and ASCII is a rule of the terminal, which folds them. Amends ADR-037 (Z5, S6:
+the language of messages; erratum 4).
 
 **Context:** AGI-9.2 makes every machine output English (`--json`, the error document on
 the last line of stderr, MCP results, descriptions and instructions, `AGENTS.md`,
@@ -111,3 +113,41 @@ message (`reason(exc)`), a function names the bounds of a year by the names its 
 (`validate_year_bounds(names=...)`), and the settings errors of `check_config` are catalog
 messages too. The MCP server is outside the first test: everything it says is English
 (decision 4), so its texts stay plain English.
+
+**Amendment 1 (2026-11-25, the coordinator's decision for the GUI of ADR-063):** The page of
+`kartograf gui serve` is Polish (ADR-063 decision 9, DEV-15.2) and shows the catalog's Polish
+texts (`i18n.pl` of `commands schema --form`, ADR-063 decision 1), so the form read „Gorna
+granica” beside the page's own words with their diacritics. The ASCII of decisions 1 and 6
+came from the terminal (ADR-037, Z5): a code page or a pipe that cannot print a Polish
+letter. Of the three ways the GUI's review found, B is chosen: ASCII becomes a rule of the
+terminal, not of the catalog. A, the server answering in Polish, is kept for the notices of a
+document only, in an additive form beside their English text; C, a dictionary of the page
+that restores the letters, would be ambiguous (`lat`, `ze`) and follow every catalog edit.
+
+1. The Polish texts of the catalog are written with their diacritics (ą ć ę ł ń ó ś ź ż and
+   the capitals); the English texts stay ASCII. The formulas of `messages/legal.py` keep one
+   ASCII wording in both languages, since the sidecars persist them.
+2. The CLI folds at the terminal. `kartograf.messages.fold` maps each of the 18 Polish
+   letters to its ASCII letter by a table (`ł` does not decompose) and keeps every other
+   character; `localize(text, lang, folded=True)` renders a message from the folds of its
+   catalog texts (and of the messages among its values) and keeps the values it carries (a
+   path, the name of a unit) as they are, so the terminal shows what it showed before the
+   letters came. `cli._language.localized` renders every catalog text the CLI prints so: the
+   status lines and tables (`localized(message("cli.<name>", ...))`, which replaces
+   `message("cli.<name>", lang=language(), ...)`), the `Info:` and `Warning:` lines of the
+   notices, the log lines of the library (`_StderrLines`), the `Error:` line
+   (`localized(reason(error))`, also of `kartograf server`), and the parser folds its help,
+   its sections, metavars and usage errors (`catalog.cliparser._text`).
+3. Everything else gets the letters: `KartografError.localized`, `Notice.localized` and
+   `error_report(lang="pl")` of the library, the `i18n.pl` of `kartograf-commands/1` and
+   `kartograf-command-list/1` (the form among them), the problem documents of `kartograf
+   server` for `Accept-Language: pl` and the pages of the GUI. The English message of a
+   notice stays ASCII (`Notice` checks its English text only).
+4. Decision 6 changes: the guard checks the English text ASCII, a Polish text with no
+   character outside ASCII but the Polish letters, and the same placeholders in both;
+   `tests/contract/test_cli_language.py` runs lines of the CLI (the help, a sheet, a table,
+   errors of the library and of the parser, a log line) with the Polish catalog accented and
+   folded and asserts the same ASCII output, a value outside ASCII kept.
+
+The amendment's first commit changes no text of the catalog; the diacritics follow in their
+own commit, each Polish text checked to fold to the text it replaces.

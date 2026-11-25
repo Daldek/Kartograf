@@ -34,7 +34,7 @@ import sys
 from kartograf.cli import server_cmd
 from kartograf.cli._handlers import HANDLERS
 from kartograf.cli._json import emit_error, json_mode, use_utf8_stdout
-from kartograf.cli._language import language, language_of, set_language
+from kartograf.cli._language import language_of, localized, set_language
 from kartograf.cli._parser import (
     create_parser,
     parse_command_line,
@@ -47,7 +47,7 @@ from kartograf.config import check_config, debug
 from kartograf.error_report import error_report
 from kartograf.exceptions import KartografError, UsageError, ValidationError
 from kartograf.interrupt import sigterm_interrupts
-from kartograf.messages import Message, localize, message
+from kartograf.messages import Message, localize, message, reason
 
 __all__ = [
     "create_parser",
@@ -109,9 +109,11 @@ class _StderrLines(logging.Handler):
         prefix = "Error" if record.levelno >= logging.ERROR else "Warning"
         shown = record.getMessage()
         if isinstance(record.msg, Message) and not record.args:
-            # a catalog message: the text for a person follows --lang, the lines of
-            # the --json mode are English like the rest of that mode
-            shown = localize(record.msg, "en" if self.as_json else language())
+            # a catalog message: the text for a person follows --lang (folded to
+            # ASCII), the lines of the --json mode are English like the rest of it
+            shown = (
+                localize(record.msg, "en") if self.as_json else localized(record.msg)
+            )
         print(f"{prefix}: {shown}", file=sys.stderr)
 
 
@@ -142,31 +144,28 @@ def _fail(
 
     The last line of stderr is the document ``kartograf-error/1`` in both modes
     (``given``: the arguments the line gave, for the example of its hint); stdout
-    stays empty. Text mode first prints one ``Error:`` line - the message of a
-    ``KartografError`` (its hint is not printed twice: the texts of ``hints`` are in
-    the message), with the remedy of an unavailable coordinate transformation; any
-    other exception with its class and the way to a traceback.
+    stays empty. Text mode first prints one ``Error:`` line in the language of the
+    line, folded to ASCII - the message of a ``KartografError`` (its hint is not
+    printed twice: the texts of ``hints`` are in the message), with the remedy of an
+    unavailable coordinate transformation; any other exception with its class and the
+    way to a traceback.
     """
     report = error_report(error, command=command, given=given)
     if as_json:
         return emit_error(report)
-    lang = language()
     if isinstance(error, KeyboardInterrupt):
         # versions are committed atomically from .incoming/ staging (a stale
         # leftover is removed by a later run): no half-written file is kept
-        text = error_report(error, command=command, lang=lang).message
-        print(f"Error: {text}", file=sys.stderr)
+        print(f"Error: {localized(report.message)}", file=sys.stderr)
     elif isinstance(error, KartografError):
         remedy = getattr(error, "remedy", None)  # TransformUnavailableError
-        text = f"Error: {error.localized(lang)}"
+        text = f"Error: {localized(reason(error))}"
         if remedy:
-            text += " " + message(
-                "cli.remedy", lang=lang, remedy=localize(remedy, lang)
-            )
+            text += " " + localized(message("cli.remedy", remedy=remedy))
         print(text, file=sys.stderr)
     else:
         print(f"Error: {type(error).__name__}: {error}", file=sys.stderr)
-        print(message("cli.debug_hint", lang=lang), file=sys.stderr)
+        print(localized(message("cli.debug_hint")), file=sys.stderr)
     return emit_error(report)
 
 

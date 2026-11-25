@@ -277,6 +277,18 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`atom_cache`, under a key of its own; `cached_atom_file` reads it back without a request,
   `MetadataCache.peek_atom_entries` in refresh mode too), and `cache stats` counts these entries
   with the feed indexes: its line is `ATOM feed entries` (was `ATOM feed indexes`).
+- ASCII is a rule of the terminal, not of the message catalog (ADR-053 amendment 1, ADR-037
+  erratum 4): a Polish text of the catalog may carry its diacritics, the English one stays ASCII.
+  `kartograf.messages.fold` folds the 18 Polish letters to ASCII one for one, and
+  `localize(text, lang, folded=True)` renders a catalog message for a terminal: its catalog texts
+  folded, the values it carries (a path, the name of a unit) as they are. The CLI prints every
+  catalog text so (`cli._language.localized`): the status lines and tables, the `Info:`,
+  `Warning:` and log lines, the `Error:` line (also of `kartograf server`), and the help, the
+  metavars and the usage errors of the parser; what the terminal shows does not change. A
+  `Notice` checks only its English message for ASCII, so `Notice.localized("pl")` may carry
+  Polish letters. The guard test checks the English texts for ASCII and the Polish ones for the
+  placeholders and the Polish letters, and `tests/contract/test_cli_language.py` runs lines of
+  the CLI with the Polish catalog accented and folded and asserts the same ASCII output.
 
 ## [0.9.0] - 2026-11-25
 

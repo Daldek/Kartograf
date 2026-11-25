@@ -11,7 +11,9 @@ value in its own words (rule Z1); only positional arguments are.
 ``usage:`` and exiting with 2 (``parse_command``, the ``--json`` mode of the
 CLI). The module needs only the standard library, the library's exceptions and
 the declarations (and ``kartograf.error_report`` when a usage error ends the
-process, which prints the error document).
+process, which prints the error document). argparse prints on a terminal, so the
+texts of the parser are catalog messages with their Polish letters folded to ASCII
+(``_text``, ADR-053 amendment 1).
 
 ``parsed_options`` is the way back: the flags of a parsed line, read by the
 declarations, as the JSON form of the options (what ``parse_command`` returns and
@@ -34,7 +36,7 @@ from kartograf.catalog.kinds import (
 )
 from kartograf.catalog.spec import Command, Group, Param, resolve, sorted_groups
 from kartograf.exceptions import UsageError, ValidationError
-from kartograf.messages import DEFAULT_LANG, Lang, Message, localize, message
+from kartograf.messages import DEFAULT_LANG, Lang, Message, localize, message, reason
 
 _NORMALIZERS: dict[str, Callable[[str], str]] = {
     "lower": str.lower,
@@ -103,7 +105,7 @@ class _Parser(argparse.ArgumentParser):
         if self.usage_errors:
             raise error
         try:
-            super().error(error.localized(self.lang))
+            super().error(_text(reason(error), self.lang))
         except SystemExit:
             from kartograf.error_report import error_line, error_report
 
@@ -467,9 +469,14 @@ def parsed_options(
     return {name: options[name] for name in order if name in options}, run
 
 
+def _text(text: str, lang: Lang) -> str:
+    """Return a text of the parser in ``lang``, folded to ASCII for the terminal."""
+    return localize(text, lang, folded=True)
+
+
 def _help(text: str, lang: Lang) -> str:
     """Text of an argparse ``help`` in ``lang``: ``%`` starts a format of the parser."""
-    return localize(text, lang).replace("%", "%%")
+    return _text(text, lang).replace("%", "%%")
 
 
 def _epilog(command: Command, lang: Lang) -> str | None:
@@ -480,7 +487,7 @@ def _epilog(command: Command, lang: Lang) -> str | None:
     if not command.examples:
         return None
     lines = (f"  {example_command_line(command, e)}" for e in command.examples)
-    return message("catalog.examples_header", lang=lang) + "\n" + "\n".join(lines)
+    return _text(message("catalog.examples_header"), lang) + "\n" + "\n".join(lines)
 
 
 def _type(param: Param) -> Callable[[str], Any] | None:
@@ -513,7 +520,7 @@ def _argument_kwargs(param: Param, given_only: bool, lang: Lang) -> dict[str, An
             kwargs["default"] = argparse.SUPPRESS
         return kwargs
     if param.metavar is not None:
-        kwargs["metavar"] = localize(param.metavar, lang)
+        kwargs["metavar"] = _text(param.metavar, lang)
     default = param.cli_default if param.cli_default is not None else param.default
     if given_only:
         kwargs["default"] = argparse.SUPPRESS
@@ -546,7 +553,7 @@ def _add_params(
             continue
         container: Any = parser
         if param.section is not None:
-            title = localize(param.section, lang)
+            title = _text(param.section, lang)
             if title not in sections:
                 sections[title] = parser.add_argument_group(title)
             container = sections[title]
@@ -572,7 +579,7 @@ def _add_command(
     parser = subparsers.add_parser(
         command.name,
         help=_help(command.summary, lang),
-        description=localize(resolve(command.description), lang) or None,
+        description=_text(resolve(command.description), lang) or None,
         epilog=_epilog(command, lang),
         usage_errors=usage_errors,
         lang=lang,
@@ -611,37 +618,38 @@ def build_parser(
         with its default value from one that was not given). The help differs
         from the CLI's only in that it shows no defaults.
     lang : {"en", "pl"}
-        The language of the help and of the usage errors a parser prints (the
-        error document stays English); English for the API.
+        The language of the help and of the usage errors a parser prints, its Polish
+        letters folded to ASCII (the error document stays English); English for the
+        API.
     """
     parser = _Parser(
         prog=prog,
-        description=localize(message("catalog.parser_description"), lang),
-        epilog=localize(message("catalog.parser_epilog"), lang),
+        description=_text(message("catalog.parser_description"), lang),
+        epilog=_text(message("catalog.parser_epilog"), lang),
         usage_errors=usage_errors,
         lang=lang,
     )
     parser.add_argument(
         "--version",
         action=_LazyVersionAction,
-        help=localize(message("catalog.version_help"), lang),
+        help=_text(message("catalog.version_help"), lang),
     )
     subparsers = parser.add_subparsers(
-        dest="command", help=localize(message("catalog.commands_help"), lang)
+        dest="command", help=_text(message("catalog.commands_help"), lang)
     )
     for group in sorted_groups(groups):
         group_parser = subparsers.add_parser(
             group.name,
             help=_help(group.summary, lang),
-            description=localize(group.description, lang),
+            description=_text(group.description, lang),
             usage_errors=usage_errors,
             lang=lang,
         )
         group_parser.set_defaults(_group_parser=group_parser)
         group_commands = group_parser.add_subparsers(
             dest=f"{group.name}_command",
-            title=localize(message("catalog.commands_title"), lang),
-            metavar=localize(message("catalog.metavar_command"), lang),
+            title=_text(message("catalog.commands_title"), lang),
+            metavar=_text(message("catalog.metavar_command"), lang),
         )
         for command in commands:
             if command.group == group.name:

@@ -5,9 +5,12 @@ Machine output is English (AGI-9.2): the message and the hint of an error, the t
 of a notice, the texts of a result envelope and everything the MCP server says. The
 Polish variants serve human-readable output (the CLI help, its status lines and its
 ``Error:`` line when ``--lang pl`` or ``KARTOGRAF_LANG=pl`` asks for them, which is
-the default of a person at a terminal) and live next to the English text, so a text
-and its translation are edited together (DEV-2.3). Polish texts are ASCII (ADR-044,
-rule Z5).
+the default of a person at a terminal; the page of ``kartograf gui serve``) and live
+next to the English text, so a text and its translation are edited together
+(DEV-2.3). English texts are ASCII; Polish texts are written with their diacritics,
+and a terminal reads them folded to ASCII (ADR-053 amendment 1): the CLI renders a
+message with the Polish letters of its catalog texts folded (`fold`: ``ą`` -> ``a``,
+``ł`` -> ``l``) and its values as they are (``localize(text, lang, folded=True)``).
 
 A catalog is the module ``kartograf.messages.<area>``; its mapping ``MESSAGES``
 holds a `Text` per name. The key of a message is ``<area>.<name>`` in snake_case
@@ -18,7 +21,7 @@ language of its caller (`Message.localized`, `localize`) instead of parsing text
 
 A template is ``str.format`` text with named placeholders; a counted noun is
 written ``{count} {count:plural(file|files)}`` (two forms: one and other) or
-``{count:plural(plik|pliki|plikow)}`` (three forms: one, few and many, as Polish
+``{count:plural(plik|pliki|plików)}`` (three forms: one, few and many, as Polish
 needs them), so a text and its plural forms stay in one entry per language. A list of
 messages or names is written ``{items:join}`` (joined with ``", "``) or
 ``{items:join(; )}``; a `Message` among the items is rendered in the language of
@@ -51,6 +54,7 @@ __all__ = [
     "Message",
     "Text",
     "catalogs",
+    "fold",
     "localize",
     "message",
     "placeholders",
@@ -70,6 +74,8 @@ _AREA = re.compile(r"[a-z][a-z0-9_]*")
 _PLURAL = re.compile(r"plural\(([^|()]+(?:\|[^|()]+){1,2})\)")
 _JOIN = re.compile(r"join(?:\(([^()]*)\))?")
 _COMMA = re.compile(r"comma\(([^()]*)\)")
+_POLISH_LETTERS = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
+_FOLD = str.maketrans(_POLISH_LETTERS, "acelnoszzACELNOSZZ")
 
 
 class Text(NamedTuple):
@@ -82,7 +88,8 @@ class Text(NamedTuple):
         English template, ``str.format`` syntax with named placeholders
         (``{name}``); a brace that is text is written ``{{`` or ``}}``.
     pl : str
-        Polish template (ASCII) with exactly the placeholders of ``en``.
+        Polish template with exactly the placeholders of ``en``; its letters outside
+        ASCII are the Polish ones, which `fold` turns into ASCII.
     """
 
     en: str
@@ -229,6 +236,17 @@ def _localized_value(value: object, lang: Lang) -> object:
     return value
 
 
+def _folded_value(value: object, lang: Lang) -> object:
+    """Render a `Message` value, or each one in a list or tuple, folded in ``lang``."""
+    if isinstance(value, Message):
+        return _folded(value, lang)
+    if type(value) is list:
+        return [_folded_value(item, lang) for item in value]
+    if type(value) is tuple:
+        return tuple(_folded_value(item, lang) for item in value)
+    return value
+
+
 _FORMATTER = _Formatter()
 
 
@@ -272,6 +290,13 @@ def message(key: str, /, lang: Lang = DEFAULT_LANG, **params: object) -> Message
     ValueError
         If ``lang`` is not a catalog language.
     """
+    template = _template(key, lang)
+    values = {name: _localized_value(value, lang) for name, value in params.items()}
+    return Message(_FORMATTER.vformat(template, (), values), key, values, lang)
+
+
+def _template(key: str, lang: Lang) -> str:
+    """Return the template of ``key`` in ``lang`` (`message` lists the errors)."""
     area, _, name = key.partition(".")
     try:
         text = _catalog(area)[name]
@@ -279,12 +304,35 @@ def message(key: str, /, lang: Lang = DEFAULT_LANG, **params: object) -> Message
         raise KeyError(f"Unknown message key {key!r}") from None
     if lang not in LANGS:
         raise ValueError(f"Unknown message language {lang!r}; allowed: {LANGS}")
-    template = text.pl if lang == "pl" else text.en
-    values = {name: _localized_value(value, lang) for name, value in params.items()}
-    return Message(_FORMATTER.vformat(template, (), values), key, values, lang)
+    return text.pl if lang == "pl" else text.en
 
 
-def localize(text: str, lang: Lang) -> str:
+def _folded(text: Message, lang: Lang) -> str:
+    """Render ``text`` in ``lang`` from the folds of its templates and its values."""
+    values = {name: _folded_value(value, lang) for name, value in text.params.items()}
+    return _FORMATTER.vformat(fold(_template(text.key, lang)), (), values)
+
+
+def fold(text: str) -> str:
+    """
+    Fold the Polish letters of ``text`` to ASCII.
+
+    Parameters
+    ----------
+    text : str
+        Any text.
+
+    Returns
+    -------
+    str
+        ``text`` with ``ą ć ę ł ń ó ś ź ż`` (and the capitals) replaced by ``a c e l n o
+        s z z``, one letter for one: the Polish text of the catalog as a terminal
+        reads it. Any other character is kept.
+    """
+    return text.translate(_FOLD)
+
+
+def localize(text: str, lang: Lang, *, folded: bool = False) -> str:
     """
     Return ``text`` in ``lang`` when it is a catalog message.
 
@@ -294,6 +342,11 @@ def localize(text: str, lang: Lang) -> str:
         A `Message`, or any other string (a foreign error text, a name).
     lang : {"en", "pl"}
         Target language.
+    folded : bool, optional
+        Render the message for a terminal: the Polish letters of its catalog texts
+        (its template and those of the messages among its values) are folded to ASCII
+        (`fold`), the values it carries (a path, the name of a unit) are kept as
+        they are (ADR-053 amendment 1).
 
     Returns
     -------
@@ -301,7 +354,9 @@ def localize(text: str, lang: Lang) -> str:
         The message rendered in ``lang`` as a plain string (a final text, which
         a later conversion must not render again); another string unchanged.
     """
-    return str(text.localized(lang)) if isinstance(text, Message) else text
+    if not isinstance(text, Message):
+        return text
+    return _folded(text, lang) if folded else str(text.localized(lang))
 
 
 def placeholders(template: str) -> frozenset[str]:

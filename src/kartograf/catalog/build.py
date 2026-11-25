@@ -314,7 +314,10 @@ def _enum(param: Param, summaries: dict[str, str]) -> tuple[EnumValue, ...] | No
 def _polish(
     param: Param, description: str, enum: tuple[EnumValue, ...] | None
 ) -> OptionI18nEntry:
-    """Return the Polish texts of an option: those of ``--help --lang pl``."""
+    """Return the Polish texts of an option: those of ``--help --lang pl``.
+
+    They keep their Polish letters; only the terminal folds them (ADR-053 amendment 1).
+    """
     return OptionI18nEntry(
         OptionPolishTexts(
             description=localize(description, "pl"),

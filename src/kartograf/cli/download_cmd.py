@@ -22,7 +22,7 @@ from typing import Any, Protocol
 
 from kartograf.cli._args import library_arguments, store_dir, target_arguments
 from kartograf.cli._json import command_id, emit_result, wants_json
-from kartograf.cli._language import language, localized
+from kartograf.cli._language import localized
 from kartograf.download.data import DataReport, check_data, download_data
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
@@ -64,44 +64,48 @@ class _ProgressPrinter:
         if progress.status == "start":
             if progress.total > 1:  # a sheet hierarchy: "<code> w skali <scale>"
                 print(
-                    message(
-                        "cli.download_sheets_progress",
-                        lang=language(),
-                        total=progress.total,
-                        sheet=progress.sheet,
-                        message=progress.message,
+                    localized(
+                        message(
+                            "cli.download_sheets_progress",
+                            total=progress.total,
+                            sheet=progress.sheet,
+                            message=progress.message,
+                        )
                     )
                 )
                 print()
             else:
                 print(
-                    message(
-                        "cli.download_sheet_progress",
-                        lang=language(),
-                        sheet=progress.sheet,
-                        message=progress.message,
+                    localized(
+                        message(
+                            "cli.download_sheet_progress",
+                            sheet=progress.sheet,
+                            message=progress.message,
+                        )
                     )
                 )
             return
         if progress.status == "tiles":
             if progress.current == 0:
                 print(
-                    message(
-                        "cli.laz_tiles_found",
-                        lang=language(),
-                        total=progress.total,
-                        workers=self.workers,
+                    localized(
+                        message(
+                            "cli.laz_tiles_found",
+                            total=progress.total,
+                            workers=self.workers,
+                        )
                     )
                 )
                 print()
                 return
             print(
                 "\r"
-                + message(
-                    "cli.tiles_progress",
-                    lang=language(),
-                    current=progress.current,
-                    total=progress.total,
+                + localized(
+                    message(
+                        "cli.tiles_progress",
+                        current=progress.current,
+                        total=progress.total,
+                    )
                 ),
                 end="",
                 flush=True,
@@ -147,25 +151,27 @@ class _ProgressPrinter:
         self.used = True
         if progress.status == "campaigns":
             print(
-                message(
-                    "cli.campaigns_to_download",
-                    lang=language(),
-                    sheet=progress.sheet,
-                    current=progress.current,
-                    total=progress.total,
-                    message=progress.message,
+                localized(
+                    message(
+                        "cli.campaigns_to_download",
+                        sheet=progress.sheet,
+                        current=progress.current,
+                        total=progress.total,
+                        message=progress.message,
+                    )
                 ),
                 flush=True,
             )
         else:
             print(
-                message(
-                    "cli.campaign_download_progress",
-                    lang=language(),
-                    sheet=progress.sheet,
-                    message=progress.message,
-                    current=progress.current,
-                    total=progress.total,
+                localized(
+                    message(
+                        "cli.campaign_download_progress",
+                        sheet=progress.sheet,
+                        message=progress.message,
+                        current=progress.current,
+                        total=progress.total,
+                    )
                 ),
                 flush=True,
             )
@@ -366,12 +372,12 @@ def run_with_plan_file(
         return emit_result(command_id(args), ctx.document, check=check)
     if wrote_plan:
         print(
-            message("cli.plan_saved_info", lang=language(), plan_file=plan_file),
+            localized(message("cli.plan_saved_info", plan_file=plan_file)),
             file=sys.stderr,
         )
     elif getattr(args, "upgrade", False) and plan_file and _ran_nothing(ctx.document):
         print(
-            message("cli.plan_nothing_to_do", lang=language(), plan_file=plan_file),
+            localized(message("cli.plan_nothing_to_do", plan_file=plan_file)),
             file=sys.stderr,
         )
     return rc
@@ -422,10 +428,11 @@ def plan_line(item: PlanItem) -> str:
         if item.action in _ACTION_TEXT:
             text = localized(_ACTION_TEXT[item.action])
         else:
-            text = message(
-                "cli.plan_conflict",
-                lang=language(),
-                reason=_CONFLICT_TEXT.get(item.reason or "", item.reason),
+            text = localized(
+                message(
+                    "cli.plan_conflict",
+                    reason=_CONFLICT_TEXT.get(item.reason or "", item.reason),
+                )
             )
         return f"{item.store_path}: {text}"
     if item.status == "newer":
@@ -433,14 +440,15 @@ def plan_line(item: PlanItem) -> str:
         available = (
             item.available_label or signal.get("etag") or signal.get("last_modified")
         )
-        text = message(
-            "cli.plan_newer",
-            lang=language(),
-            available=available,
-            local_label=item.local_label,
+        text = localized(
+            message(
+                "cli.plan_newer",
+                available=available,
+                local_label=item.local_label,
+            )
         )
     elif item.status == "check_failed":
-        text = message("cli.plan_check_failed", lang=language(), error=item.error)
+        text = localized(message("cli.plan_check_failed", error=item.error))
     else:
         text = localized(_PLAN_TEXT[item.status])
         label = item.local_label or item.available_label
@@ -469,11 +477,12 @@ def _report_stale(stale: Sequence[PlanItem]) -> int:
     """``--upgrade --plan``: positions whose source changed since the plan."""
     for item in stale:
         print(
-            message(
-                "cli.plan_source_stale",
-                lang=language(),
-                store_path=item.store_path,
-                available_label=item.available_label or item.available_signal,
+            localized(
+                message(
+                    "cli.plan_source_stale",
+                    store_path=item.store_path,
+                    available_label=item.available_label or item.available_signal,
+                )
             ),
             file=sys.stderr,
         )
@@ -505,14 +514,14 @@ def _status_lines(
         label = dirname.rsplit("_", 1)[0] if status != "new" else dirname
         text = f"{sheet}: {localized(_STATUS_TEXT.get(status, status))} {label}"
         if status == "relabeled":
-            text += message(
-                "cli.relabeled_same_as",
-                lang=language(),
-                same_as=file.same_as
-                or message("cli.existing_version", lang=language()),
+            text += localized(
+                message(
+                    "cli.relabeled_same_as",
+                    same_as=file.same_as or localized(message("cli.existing_version")),
+                )
             )
         if status == "local" and newer is not None:
-            text += message("cli.newer_available", lang=language(), newer=newer)
+            text += localized(message("cli.newer_available", newer=newer))
             newer = None
         lines.append(text)
     return lines
@@ -528,7 +537,7 @@ def _status_line(unit: str, file: VersionedFile, update: UpdateMode | None) -> s
     (line,) = _status_lines(unit, (file,), file.newer)
     unchecked = file.unverified in ("none", "unchecked")
     if file.status == "local" and unchecked and update is None:
-        line += message("cli.unchecked_hint", lang=language())
+        line += localized(message("cli.unchecked_hint"))
     return line
 
 
@@ -588,32 +597,34 @@ def _print_version_summary(
     counts = Counter(statuses)
     if plain:
         print(
-            message(
-                "cli.plain_summary",
-                lang=language(),
-                counts_written=counts["written"],
-                counts_replaced=counts["replaced"],
-                failed=failed,
-                root=root,
+            localized(
+                message(
+                    "cli.plain_summary",
+                    counts_written=counts["written"],
+                    counts_replaced=counts["replaced"],
+                    failed=failed,
+                    root=root,
+                )
             )
         )
         return
     reused = (
-        message("cli.summary_reused", lang=language(), counts_reused=counts["reused"])
+        localized(message("cli.summary_reused", counts_reused=counts["reused"]))
         if counts["reused"]
         else ""
     )
     print(
-        message(
-            "cli.version_summary",
-            lang=language(),
-            counts_new=counts["new"],
-            counts_relabeled=counts["relabeled"],
-            counts_unchanged=counts["unchanged"],
-            counts_local=counts["local"],
-            reused=reused,
-            failed=failed,
-            root=root,
+        localized(
+            message(
+                "cli.version_summary",
+                counts_new=counts["new"],
+                counts_relabeled=counts["relabeled"],
+                counts_unchanged=counts["unchanged"],
+                counts_local=counts["local"],
+                reused=reused,
+                failed=failed,
+                root=root,
+            )
         )
     )
 

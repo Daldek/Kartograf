@@ -53,7 +53,7 @@ from kartograf.download.options import (
 )
 from kartograf.download.orto_cutout import ORTO_CUTOUT_CRS
 from kartograf.landcover.manager import LANDCOVER_PRODUCTS
-from kartograf.messages import LANGS, Message, localize
+from kartograf.messages import LANGS, Message, fold, localize
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
     cutout_resolution_labels,
@@ -584,13 +584,16 @@ def _texts(command: Command) -> list[tuple[str, str]]:
 
 
 @pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
-def test_texts_are_ascii_in_both_languages(command):
+def test_texts_are_ascii_on_a_terminal_in_both_languages(command):
+    """English is ASCII, Polish once its letters are folded (ADR-053 amendment 1)."""
     for where, text in _texts(command):
         for lang in LANGS:
-            assert localize(text, lang).isascii(), (where, lang)
+            assert localize(text, lang, folded=True).isascii(), (where, lang)
     for param in command.params:
         for lang in LANGS:
-            assert localize(param.metavar or "", lang).isascii(), param.name
+            assert localize(param.metavar or "", lang, folded=True).isascii(), (
+                param.name
+            )
 
 
 @pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
@@ -698,14 +701,15 @@ def _has(command: Command, name: str) -> bool:
     return any(param.name == name for param in command.params)
 
 
-def test_group_texts_are_catalog_messages_and_ascii_in_both_languages():
+def test_group_texts_are_catalog_messages_and_ascii_on_a_terminal_in_both_languages():
     for group in _DECLARED.groups:
         for text in (group.summary, group.description):
             assert isinstance(text, Message), group.name
             for lang in LANGS:
-                assert localize(text, lang).isascii(), group.name
+                assert localize(text, lang, folded=True).isascii(), group.name
         for name, summary in resolve(group.products):
-            assert name.isascii() and localize(summary, "pl").isascii() and summary
+            polish = localize(summary, "pl", folded=True)
+            assert name.isascii() and polish.isascii() and summary
 
 
 @pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
@@ -723,7 +727,8 @@ def test_every_allowed_value_has_a_meaning(command):
 def test_every_allowed_value_has_a_polish_meaning(command):
     """The page of a form gives each allowed value its Polish meaning too
     (``i18n.pl.enum``, ADR-063): the meaning is a catalog message, its Polish twin
-    edited beside it in ``kartograf.messages.meanings``, ASCII (ADR-044, Z5)."""
+    edited beside it in ``kartograf.messages.meanings``, with its Polish letters
+    (ADR-053 amendment 1)."""
     for param in command.params:
         if param.allowed is None or param.name in ("command", "group"):
             continue
@@ -732,7 +737,7 @@ def test_every_allowed_value_has_a_polish_meaning(command):
             polish = localize(english, "pl")
             where = (command.id, param.name, value)
             assert isinstance(english, Message), where
-            assert polish and polish != english and polish.isascii(), where
+            assert polish and polish != english and fold(polish).isascii(), where
 
 
 def test_a_value_without_a_meaning_is_refused_and_a_pattern_gives_one():

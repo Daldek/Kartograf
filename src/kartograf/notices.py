@@ -8,7 +8,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from kartograf.messages import Lang, localize, message
+from kartograf.messages import DEFAULT_LANG, Lang, Message, message
 
 SHEET_LIST = "sheet_list"
 GEOMETRY_LAYER_DEFAULT = "geometry_layer_default"
@@ -119,10 +119,10 @@ def cli_flag(name: str) -> str:
 
 @dataclass(frozen=True)
 class Notice:
-    """An ASCII message about data, identified independently of its wording.
+    """A message about data, identified independently of its wording.
 
-    ``message`` is English; a catalog `kartograf.messages.Message` there can be
-    rendered in another language (`localized`).
+    ``message`` is English and ASCII; a catalog `kartograf.messages.Message` there
+    can be rendered in another language (`localized`), Polish with its diacritics.
     """
 
     level: Literal["info", "warning"]
@@ -130,13 +130,17 @@ class Notice:
     message: str
 
     def __post_init__(self) -> None:
-        """Check that the message of the notice is ASCII."""
-        if not self.message.isascii():
+        """Check that the English message of the notice is ASCII."""
+        english = getattr(self.message, "lang", DEFAULT_LANG) == DEFAULT_LANG
+        if english and not self.message.isascii():
             raise ValueError("The message of a notice must be ASCII")
 
     def localized(self, lang: Lang) -> "Notice":
         """Return the notice with its message rendered in ``lang``."""
-        return replace(self, message=localize(self.message, lang))
+        text = self.message
+        return replace(
+            self, message=text.localized(lang) if isinstance(text, Message) else text
+        )
 
 
 class NoticeSink:

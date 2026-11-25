@@ -15,7 +15,7 @@ import json
 
 from kartograf.cli._args import store_dir
 from kartograf.cli._json import command_id, emit_result, wants_json
-from kartograf.cli._language import language, localized
+from kartograf.cli._language import localized
 from kartograf.cli.download_cmd import plan_line
 from kartograf.envelope import exit_code_of
 from kartograf.exceptions import ValidationError
@@ -47,7 +47,7 @@ def format_overview(overview: StoreOverview) -> str:
     segment no source produces is marked), or the note that the store is empty.
     """
     if not overview.segments:
-        return message("cli.store_empty", lang=language(), root=overview.root)
+        return localized(message("cli.store_empty", root=overview.root))
     header = tuple(localized(cell) for cell in _OVERVIEW_HEADER)
     rows = [
         (
@@ -57,21 +57,23 @@ def format_overview(overview: StoreOverview) -> str:
             info.dataset_key or _NONE,
             localized(info.name)
             if info.known
-            else message(
-                "cli.segment_unknown_registry",
-                lang=language(),
-                name=localized(info.name),
+            else localized(
+                message(
+                    "cli.segment_unknown_registry",
+                    name=localized(info.name),
+                )
             ),
         )
         for info in overview.segments
     ]
     widths = [max(len(row[i]) for row in (header, *rows)) for i in range(len(header))]
     lines = [
-        message(
-            "cli.store_segments_header",
-            lang=language(),
-            root=overview.root,
-            rows_count=len(rows),
+        localized(
+            message(
+                "cli.store_segments_header",
+                root=overview.root,
+                rows_count=len(rows),
+            )
         ),
         "",
     ]
@@ -88,17 +90,16 @@ def format_entries(listed: StoreEntries) -> str:
     per entry: its kind, label, the first digits of its SHA-256 and its path; a problem
     names what is wrong with the file.
     """
-    more = (
-        message("cli.more_entries_suffix", lang=language()) if listed.truncated else ""
-    )
+    more = localized(message("cli.more_entries_suffix")) if listed.truncated else ""
     lines = [
-        message(
-            "cli.segment_entries_header",
-            lang=language(),
-            segment=listed.segment,
-            entries_count=len(listed.entries),
-            limit=listed.limit,
-            more=more,
+        localized(
+            message(
+                "cli.segment_entries_header",
+                segment=listed.segment,
+                entries_count=len(listed.entries),
+                limit=listed.limit,
+                more=more,
+            )
         ),
         "",
     ]
@@ -156,7 +157,7 @@ def cmd_store_init(args: argparse.Namespace) -> int:
     if wants_json(args):
         return emit_result(command_id(args), marker)
     key = "store.init_written" if marker.created else "store.init_present"
-    print(message(key, lang=language(), marker=marker.marker))
+    print(localized(message(key, marker=marker.marker)))
     return 0
 
 

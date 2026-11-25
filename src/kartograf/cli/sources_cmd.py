@@ -15,7 +15,7 @@ from collections.abc import Sequence
 
 from kartograf.catalog.commands import declared
 from kartograf.cli._json import command_id, emit_result, wants_json
-from kartograf.cli._language import language, localized
+from kartograf.cli._language import localized
 from kartograf.messages import message
 from kartograf.source_info import SelectValue, list_sources
 
@@ -73,8 +73,8 @@ def _choice(select: dict[str, SelectValue], metavars: dict[str, str]) -> str:
 
 def _directory(path: str) -> str:
     """Return the directory of a source, its placeholders in the line's language."""
-    return path.replace("<crs>", message("cli.directory_crs", lang=language())).replace(
-        "<vertical-crs>", message("cli.directory_vertical_crs", lang=language())
+    return path.replace("<crs>", localized(message("cli.directory_crs"))).replace(
+        "<vertical-crs>", localized(message("cli.directory_vertical_crs"))
     )
 
 
@@ -97,11 +97,11 @@ def cmd_list_sources(args: argparse.Namespace, group: str) -> int:
         for source in sources.sources
     ]
     widths = [max(len(row[i]) for row in (header, *rows)) for i in range(len(header))]
-    print(message("cli.sources_of_group", lang=language(), group=group))
+    print(localized(message("cli.sources_of_group", group=group)))
     for row in (header, *rows):
         cells = (cell.ljust(width) for cell, width in zip(row, widths, strict=True))
         print("  " + "  ".join(cells).rstrip())
     print()
     print(textwrap.fill(localized(_NOTE), width=78))
-    print(message("cli.download_options_hint", lang=language(), group=group))
+    print(localized(message("cli.download_options_hint", group=group)))
     return 0

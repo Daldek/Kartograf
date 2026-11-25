@@ -21,7 +21,7 @@ import argparse
 
 from kartograf.catalog.kinds import parse_bbox_arg
 from kartograf.cli._json import command_id, emit_result
-from kartograf.cli._language import language, localized
+from kartograf.cli._language import localized
 from kartograf.cli.download_cmd import notice_printer
 from kartograf.download.availability import (
     AvailabilityArea,
@@ -121,10 +121,11 @@ def _span(dates: tuple[str, str] | None) -> str:
 
 def _resolution(combination: AvailabilityCombination) -> str:
     if combination.densities:
-        return message(
-            "cli.points_per_m2",
-            lang=language(),
-            densities=", ".join(map(str, combination.densities)),
+        return localized(
+            message(
+                "cli.points_per_m2",
+                densities=", ".join(map(str, combination.densities)),
+            )
         )
     return combination.resolution or "-"
 
@@ -144,37 +145,40 @@ def _complete(combination: AvailabilityCombination, land_m2: float) -> str:
     if combination.complete:
         # no land to cover: "yes" would promise data the area does not need
         return (
-            message("cli.yes", lang=language())
+            localized(message("cli.yes"))
             if land_m2 > 0
-            else message("cli.complete_no_land", lang=language())
+            else localized(message("cli.complete_no_land"))
         )
     parts = []
     if combination.sheets_partial:
         parts.append(
-            message(
-                "cli.sheets_incomplete_count",
-                lang=language(),
-                count=len(combination.sheets_partial),
+            localized(
+                message(
+                    "cli.sheets_incomplete_count",
+                    count=len(combination.sheets_partial),
+                )
             )
         )
     if combination.sheets_missing:
         parts.append(
-            message(
-                "cli.sheets_missing_file",
-                lang=language(),
-                sheets_missing_count=len(combination.sheets_missing),
-                area_text=area_text(combination.uncovered_m2),
+            localized(
+                message(
+                    "cli.sheets_missing_file",
+                    sheets_missing_count=len(combination.sheets_missing),
+                    area_text=area_text(combination.uncovered_m2),
+                )
             )
         )
     elif combination.uncovered:
         parts.append(
-            message(
-                "cli.no_sheets_for_area",
-                lang=language(),
-                area_text=area_text(combination.uncovered_m2),
+            localized(
+                message(
+                    "cli.no_sheets_for_area",
+                    area_text=area_text(combination.uncovered_m2),
+                )
             )
         )
-    return message("cli.complete_no_parts", lang=language(), parts=", ".join(parts))
+    return localized(message("cli.complete_no_parts", parts=", ".join(parts)))
 
 
 def _label(combination: AvailabilityCombination) -> str:
@@ -225,22 +229,23 @@ def _print_pl(report: AvailabilityReport, area: AvailabilityArea) -> None:
     product = str(report.request["product"])
     name = product.upper()
     print(
-        message(
-            "cli.pl_availability_header",
-            lang=language(),
-            name=name,
-            area_text=area_text(area.area_m2),
-            land_text=area_text(area.land_m2),
+        localized(
+            message(
+                "cli.pl_availability_header",
+                name=name,
+                area_text=area_text(area.area_m2),
+                land_text=area_text(area.land_m2),
+            )
         )
     )
     found = _of(report, "PL")
     if not found:
         unit = (
-            message("cli.unit_tiles", lang=language())
+            localized(message("cli.unit_tiles"))
             if product == "laz"
-            else message("cli.unit_sheets", lang=language())
+            else localized(message("cli.unit_sheets"))
         )
-        print(message("cli.pl_no_sheets_found", lang=language(), unit=unit, name=name))
+        print(localized(message("cli.pl_no_sheets_found", unit=unit, name=name)))
         return
     _print_rows(
         _HEADER,
@@ -263,17 +268,18 @@ def _print_pl(report: AvailabilityReport, area: AvailabilityArea) -> None:
 def _print_cz(report: AvailabilityReport, area: AvailabilityArea) -> None:
     name = str(report.request["product"]).upper()
     print(
-        message(
-            "cli.cz_availability_header",
-            lang=language(),
-            name=name,
-            area_text=area_text(area.area_m2),
+        localized(
+            message(
+                "cli.cz_availability_header",
+                name=name,
+                area_text=area_text(area.area_m2),
+            )
         )
     )
     print(localized(_CZ_DATES))
     found = _of(report, "CZ")
     if not found:
-        print(message("cli.cz_no_sheets_found", lang=language(), name=name))
+        print(localized(message("cli.cz_no_sheets_found", name=name)))
         return
     _print_rows(
         _CZ_HEADER,
@@ -299,34 +305,37 @@ def _print_details(report: AvailabilityReport) -> None:
         return
     land = {area.country: area.land_m2 for area in report.areas}
     print()
-    print(message("cli.combination_details", lang=language()))
+    print(localized(message("cli.combination_details")))
     for combination in report.combinations:
         complete = _complete(combination, land[combination.country])
         print(f"  {_label(combination)}: {complete}")
         if combination.sheets_partial:
             print(
-                message(
-                    "cli.sheets_partial_list",
-                    lang=language(),
-                    sheets_partial_count=len(combination.sheets_partial),
-                    sheets_partial=", ".join(combination.sheets_partial),
+                localized(
+                    message(
+                        "cli.sheets_partial_list",
+                        sheets_partial_count=len(combination.sheets_partial),
+                        sheets_partial=", ".join(combination.sheets_partial),
+                    )
                 )
             )
         if combination.sheets_missing:
             print(
-                message(
-                    "cli.sheets_without_file",
-                    lang=language(),
-                    sheets_missing_count=len(combination.sheets_missing),
-                    sheets_missing=", ".join(combination.sheets_missing),
+                localized(
+                    message(
+                        "cli.sheets_without_file",
+                        sheets_missing_count=len(combination.sheets_missing),
+                        sheets_missing=", ".join(combination.sheets_missing),
+                    )
                 )
             )
         elif combination.uncovered:
             print(
-                message(
-                    "cli.uncovered_land_area",
-                    lang=language(),
-                    area_text=area_text(combination.uncovered_m2),
+                localized(
+                    message(
+                        "cli.uncovered_land_area",
+                        area_text=area_text(combination.uncovered_m2),
+                    )
                 )
             )
         if combination.country == "PL":
@@ -343,40 +352,42 @@ def _print_campaigns(combination: AvailabilityCombination, land_m2: float) -> No
     """
     if not combination.complete:
         print(
-            message(
-                "cli.land_in_full_sheets",
-                lang=language(),
-                share_text=share_text(combination.full_m2, land_m2),
-                area_text=area_text(combination.full_m2),
+            localized(
+                message(
+                    "cli.land_in_full_sheets",
+                    share_text=share_text(combination.full_m2, land_m2),
+                    area_text=area_text(combination.full_m2),
+                )
             )
         )
     if combination.campaign_coverage:
-        done = message("cli.campaign_complete", lang=language())
+        done = localized(message("cli.campaign_complete"))
         coverage = ", ".join(
             f"{c.campaign} ({done if c.complete else share_text(c.full_m2, land_m2)})"
             for c in combination.campaign_coverage
         )
-        print(message("cli.campaigns_coverage", lang=language(), coverage=coverage))
+        print(localized(message("cli.campaigns_coverage", coverage=coverage)))
     if combination.sheet_records:
         counts: dict[str, int] = {}
         for record in combination.sheet_records:
-            name = record.campaign or message("cli.campaign_no_number", lang=language())
+            name = record.campaign or localized(message("cli.campaign_no_number"))
             counts[name] = counts.get(name, 0) + 1
         sheets = len({record.sheet for record in combination.sheet_records})
         unit = (
-            message("cli.unit_tiles", lang=language())
+            localized(message("cli.unit_tiles"))
             if combination.product == "laz"
-            else message("cli.unit_sheets_short", lang=language())
+            else localized(message("cli.unit_sheets_short"))
         )
         print(
-            message(
-                "cli.records_to_download",
-                lang=language(),
-                sheets=sheets,
-                unit=unit,
-                texts=", ".join(
-                    f"{name} ({count})" for name, count in sorted(counts.items())
-                ),
+            localized(
+                message(
+                    "cli.records_to_download",
+                    sheets=sheets,
+                    unit=unit,
+                    texts=", ".join(
+                        f"{name} ({count})" for name, count in sorted(counts.items())
+                    ),
+                )
             )
         )
 
@@ -394,31 +405,27 @@ def _print_pl_footer(found: list[AvailabilityCombination], land_m2: float) -> No
     print()
     if land_m2 <= 0:
         # every combination is complete for lack of land: nothing is proposed
-        print(message("cli.no_pl_land", lang=language()))
+        print(localized(message("cli.no_pl_land")))
         return
     if newest is None:
-        print(message("cli.no_full_combination", lang=language()))
+        print(localized(message("cli.no_full_combination")))
         return
-    print(
-        message(
-            "cli.newest_complete_combination", lang=language(), label=_label(newest)
-        )
-    )
+    print(localized(message("cli.newest_complete_combination", label=_label(newest))))
     hints = newest.download_hint
     for hint in hints[:MAX_HINT_LINES]:
-        print(message("cli.download_hint_line", lang=language(), hint=hint))
+        print(localized(message("cli.download_hint_line", hint=hint)))
     rest = len(hints) - MAX_HINT_LINES
     if rest > 0:
-        print(message("cli.remaining_commands_pl", lang=language(), rest=rest))
+        print(localized(message("cli.remaining_commands_pl", rest=rest)))
 
 
 def _print_cz_footer(found: list[AvailabilityCombination]) -> None:
     complete = [c for c in found if c.complete]
     print()
     if not complete:
-        print(message("cli.no_complete_cz_combination", lang=language()))
+        print(localized(message("cli.no_complete_cz_combination")))
         return
-    print(message("cli.complete_cz_combinations", lang=language()))
+    print(localized(message("cli.complete_cz_combinations")))
     for combination in complete:
         print(f"  {_label(combination)}")
         hints = combination.download_hint
@@ -426,4 +433,4 @@ def _print_cz_footer(found: list[AvailabilityCombination]) -> None:
             print(f"    kartograf {hint}")
         rest = len(hints) - MAX_HINT_LINES
         if rest > 0:
-            print(message("cli.remaining_commands_cz", lang=language(), rest=rest))
+            print(localized(message("cli.remaining_commands_cz", rest=rest)))

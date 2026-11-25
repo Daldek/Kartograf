@@ -18,6 +18,7 @@ from kartograf.messages import (
     Message,
     Text,
     catalogs,
+    fold,
     localize,
     message,
     placeholders,
@@ -27,9 +28,10 @@ from kartograf.messages import (
 )
 
 SRC = Path(kartograf.__file__).parent
-# Polish diacritics, or words that no English text uses. The texts of this package
-# are Polish without diacritics (ADR-044, rule Z5), so the words are the ASCII ones.
-# Domain names that are identifiers (powiat, godlo, arkusz_200k) are not in the list.
+# Polish diacritics, or words that no English text uses. A Polish literal outside the
+# catalog may be written with or without its diacritics, so the words are the ASCII
+# ones too. Domain names that are identifiers (powiat, godlo, arkusz_200k) are not in
+# the list.
 POLISH = re.compile(
     "[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]"
     r"|\b(?:nie|brak|albo|lub|oraz|jest|dla|musi|musza|gdy|jesli|tylko|przez|bez|przy"
@@ -133,8 +135,14 @@ def test_every_entry_has_both_languages_with_the_same_placeholders():
         for lang in LANGS:
             if not getattr(text, lang).strip():
                 problems.append(f"{key}: empty {lang} text")
-            if not getattr(text, lang).isascii():
-                problems.append(f"{key}: the {lang} text is not ASCII")
+        # English is ASCII; Polish has its diacritics, which a terminal reads folded
+        # (ADR-053 amendment 1), so no other letter may be outside ASCII
+        if not text.en.isascii():
+            problems.append(f"{key}: the English text is not ASCII")
+        if not fold(text.pl).isascii():
+            problems.append(
+                f"{key}: a character of the Polish text is no Polish letter"
+            )
         try:
             english, polish = placeholders(text.en), placeholders(text.pl)
         except ValueError as exc:
@@ -456,6 +464,38 @@ def test_localize_changes_only_catalog_messages():
     assert localize("plain text", "pl") == "plain text"
 
 
+def test_fold_turns_each_polish_letter_into_its_ascii_letter_and_keeps_the_rest():
+    assert fold("Zażółć gęślą jaźń, ŻÓŁW Ćma Ęą Ńś Ź") == (
+        "Zazolc gesla jazn, ZOLW Cma Ea Ns Z"
+    )
+    assert fold("Třebíč: 12 °C") == "Třebíč: 12 °C"
+
+
+def test_a_message_for_a_terminal_folds_its_catalog_texts_and_keeps_its_values(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        messages,
+        "_catalog",
+        lambda area: {
+            "bound": Text(
+                "Upper bound of {name}: {items:join}",
+                "Górna granica {name}: {items:join}",
+            ),
+            "files": Text(
+                "{n} {n:plural(file|files)}", "{n} {n:plural(plik|pliki|plików)}"
+            ),
+        },
+    )
+    items = [message("x.files", n=5), "żółw"]
+    text = message("x.bound", name="Łódź", items=items)
+
+    assert localize(text, "pl", folded=True) == "Gorna granica Łódź: 5 plikow, żółw"
+    assert localize(text, "pl") == "Górna granica Łódź: 5 plików, żółw"
+    assert localize(text, "en", folded=True) == "Upper bound of Łódź: 5 files, żółw"
+    assert localize("Zażółć", "pl", folded=True) == "Zażółć"
+
+
 def test_a_counted_noun_takes_its_form_from_the_count_in_each_language(monkeypatch):
     monkeypatch.setattr(
         messages,
@@ -562,13 +602,22 @@ def test_the_error_document_is_english_unless_a_person_asks_for_polish():
     )
 
 
-def test_a_notice_is_rendered_again_in_the_language_asked_for():
+def test_a_notice_is_rendered_again_in_the_language_asked_for(monkeypatch):
     from kartograf.notices import Notice
 
     notice = Notice("info", "demo", message("errors.interrupted"))
 
     assert notice.localized("pl").message == "przerwano (Ctrl-C)"
     assert Notice("info", "demo", "plain").localized("pl").message == "plain"
+    monkeypatch.setattr(
+        messages,
+        "_catalog",
+        lambda area: {"skip": Text("{n} skipped", "pominięto {n}")},
+    )
+    skipped = Notice("info", "demo", message("x.skip", n=2))
+    assert skipped.localized("pl").message == "pominięto 2"
+    with pytest.raises(ValueError, match="ASCII"):
+        Notice("info", "demo", "pominięto 2")  # the English text of a notice
 
 
 def test_the_language_of_a_command_line_is_the_flag_then_the_settings(monkeypatch):

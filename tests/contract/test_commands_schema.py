@@ -16,7 +16,7 @@ from kartograf import command_schema, format_command, list_commands, parse_comma
 from kartograf.catalog.cliparser import parse_command_line
 from kartograf.catalog.commands import declared
 from kartograf.cli._parser import create_parser
-from kartograf.messages import localize
+from kartograf.messages import fold, localize
 
 SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "schemas" / "nogat"
 NAMES = [command.id for command in declared().commands]
@@ -98,7 +98,8 @@ def test_the_page_of_a_form_adds_only_the_sections_and_the_polish_texts(name):
     """``--form`` (ADR-063, J2): each option of the default page with its section
     (the English title of its ``--help`` section) and ``i18n.pl``: the Polish
     description, section and the meaning of every allowed value by the value as text,
-    in ASCII (ADR-044, Z5). The default page has none of them."""
+    with their Polish letters, which only a terminal folds (ADR-053 amendment 1). The
+    default page has none of them."""
     command = next(c for c in declared().commands if c.id == name)
     sections = {param.name: param.section for param in command.params}
     default = json.loads(command_schema(name).to_json(indent=None))["commands"][0]
@@ -115,10 +116,12 @@ def test_the_page_of_a_form_adds_only_the_sections_and_the_polish_texts(name):
         assert polish.get("section") == (
             None if section is None else localize(section, "pl")
         )
-        assert polish["description"] and polish["description"].isascii(), where
+        assert polish["description"] and fold(polish["description"]).isascii(), where
         values = [str(item["value"]) for item in plain.get("enum", ())]
         assert list(polish.get("enum", {})) == values, where
-        assert all(text and text.isascii() for text in polish.get("enum", {}).values())
+        assert all(
+            text and fold(text).isascii() for text in polish.get("enum", {}).values()
+        )
     assert {k: v for k, v in entry.items() if k != "options"} == {
         k: v for k, v in default.items() if k != "options"
     }
