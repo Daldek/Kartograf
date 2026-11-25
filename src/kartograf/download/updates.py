@@ -1,9 +1,21 @@
-"""Internal PL-sheet plan item construction for ``DownloadManager.check_sheets``."""
+"""Internal PL-sheet plan item construction for ``DownloadManager.check_sheets``.
+
+A sheet file is the bytes of the URL of its index record, unchanged (verified, never
+converted): its ``fetch`` names that URL, without a size (the GUGiK index records
+have none); a sheet whose index could not be checked, or a provider without
+campaigns, has a ``fetch`` without a URL.
+"""
 
 from typing import Any
 
 from kartograf.download.manager import DownloadManager, SheetInspection, _Pick
-from kartograf.download.plan import ItemStatus, PlanItem
+from kartograf.download.plan import (
+    Fetch,
+    ItemStatus,
+    PlanItem,
+    fetch_fields,
+    source_of,
+)
 from kartograf.download.versions import LocalVersion, newest_version
 from kartograf.output import plain_of
 
@@ -34,6 +46,7 @@ def _items(manager: DownloadManager, inspection: SheetInspection) -> list[PlanIt
     sheet = inspection.sheet
     plain = plain_of(manager.storage.root) is not None
     segment, hierarchy = ("", "") if plain else _where(manager, sheet)
+    source = source_of(manager.provider)
 
     def item(
         name: str,
@@ -42,7 +55,9 @@ def _items(manager: DownloadManager, inspection: SheetInspection) -> list[PlanIt
         signal: dict[str, Any] | None,
         status: ItemStatus,
         error: str | None = None,
+        url: str | None = None,
     ) -> PlanItem:
+        fetch, why = fetch_fields(source, Fetch(url))
         return PlanItem(
             track="pl_sheet",
             segment=segment,
@@ -55,6 +70,9 @@ def _items(manager: DownloadManager, inspection: SheetInspection) -> list[PlanIt
             available_signal=signal,
             status=status,
             error=error,
+            source=source,
+            fetch=fetch,
+            fetch_reason=why,
         )
 
     std = inspection.std.name
@@ -65,7 +83,14 @@ def _items(manager: DownloadManager, inspection: SheetInspection) -> list[PlanIt
         status: ItemStatus = "unverifiable" if local is not None else "missing"
         return [item(std, local, None, None, status)]
     items = [
-        item(pick.name, pick.local, pick.ref.dirname, _signal(pick), _status(pick))
+        item(
+            pick.name,
+            pick.local,
+            pick.ref.dirname,
+            _signal(pick),
+            _status(pick),
+            url=pick.record.url,
+        )
         for pick in inspection.picks
     ]
     items.extend(

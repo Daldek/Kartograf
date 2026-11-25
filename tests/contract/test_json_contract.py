@@ -20,7 +20,12 @@ import pytest
 import kartograf
 from kartograf.cache_info import CacheEntries, CacheInfo
 from kartograf.catalog import command_schema, list_commands
-from kartograf.catalog.model import EnumValue, OptionEntry
+from kartograf.catalog.model import (
+    EnumValue,
+    OptionEntry,
+    OptionI18nEntry,
+    OptionPolishTexts,
+)
 from kartograf.config import Config, ConfigFileInfo, IgnoredKey, Setting, StoreInfo
 from kartograf.core.bbox import BBox
 from kartograf.download.availability import (
@@ -33,7 +38,7 @@ from kartograf.download.availability import (
 from kartograf.download.collections import CollectionReport
 from kartograf.download.data import DataReport, SkippedUnit, UnitFailure, UnitFile
 from kartograf.download.fetch import VersionedFile
-from kartograf.download.plan import PlanItem, UpdatePlan
+from kartograf.download.plan import Fetch, PlanItem, PlanSource, UpdatePlan
 from kartograf.envelope import ResultItem, wrap
 from kartograf.error_report import error_report
 from kartograf.exceptions import ValidationError
@@ -58,6 +63,7 @@ from kartograf.source_info import (
     SourceList,
     YearInfo,
 )
+from kartograf.sources.descriptor import LicenseInfo
 from kartograf.store import Sidecar, StoreEntry, describe_segment
 from kartograf.store_documents import StoreEntries, StoreOverview, StoreSidecar
 
@@ -93,6 +99,19 @@ def _unit_failure() -> UnitFailure:
     return UnitFailure("N-34-130-D", "PL", "HTTP 500", "download")
 
 
+def _fetch() -> Fetch:
+    return Fetch("https://example.test/a.asc", 48, SHA256)
+
+
+def _plan_source() -> PlanSource:
+    return PlanSource(
+        "pl.gugik.nmt_1m",
+        "GUGiK",
+        LicenseInfo("pl-gugik", "Dane GUGiK", "https://example.org/licencja"),
+        "none",
+    )
+
+
 def _plan_item() -> PlanItem:
     return PlanItem(
         track="pl_sheet",
@@ -108,6 +127,9 @@ def _plan_item() -> PlanItem:
         action="write",
         path=STORE / f"{SHEET}.asc",
         reason="output_exists",
+        source="pl.gugik.nmt_1m",
+        fetch=_fetch(),
+        fetch_reason="built",
     )
 
 
@@ -196,6 +218,7 @@ def _plan() -> Document:
         kartograf_version="0.8.0",
         items=(_plan_item(),),
         notices=(_notice(),),
+        sources=(_plan_source(),),
     )
 
 
@@ -503,6 +526,18 @@ def _full_option() -> OptionEntry:
         examples=(["0-5cm"],),
         one_of="area",
         path_role="input",
+        section="Product parameters",
+        requires=("property",),
+        excludes=("depth_rule",),
+        applies_to={"product": ("soil",)},
+        required_when={"stat": True},
+        i18n=OptionI18nEntry(
+            OptionPolishTexts(
+                "Przedzialy glebokosci.",
+                "Parametry produktu",
+                {"0-5cm": "Przedzial glebokosci 0-5cm ponizej powierzchni."},
+            )
+        ),
     )
 
 
@@ -571,6 +606,7 @@ CONTRACT: dict[str, list[str]] = {
         "items",
         "notices",
         "ok",
+        "sources",
     ],
     "kartograf-availability/1": [
         "schema",
@@ -724,7 +760,16 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "action",
             "path",
             "reason",
+            "source",
+            "fetch",
+            "fetch_reason",
         ],
+    ),
+    "Fetch": (_fetch, ["url", "size_bytes", "sha256"]),
+    "PlanSource": (_plan_source, ["key", "provider", "license", "auth"]),
+    "LicenseInfo": (
+        lambda: _plan_source().license,
+        ["id", "attribution", "url"],
     ),
     "LazTile": (
         _laz_tile,
@@ -875,7 +920,16 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
     ),
     "CommandRow": (
         lambda: list_commands().commands[0],
-        ["name", "operation_id", "summary", "families", "read_only", "check"],
+        [
+            "name",
+            "operation_id",
+            "summary",
+            "families",
+            "read_only",
+            "check",
+            "effects",
+            "rest",
+        ],
     ),
     "CommandEntry": (
         _command_entry,
@@ -889,7 +943,9 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "result",
             "effects",
             "check",
+            "rest",
             "families",
+            "one_of",
             "rules",
             "examples",
             "errors",
@@ -912,13 +968,28 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "description",
             "one_of",
             "path_role",
+            "section",
+            "requires",
+            "excludes",
+            "applies_to",
+            "required_when",
+            "i18n",
         ],
+    ),
+    "OptionI18nEntry": (lambda: _full_option().i18n, ["pl"]),
+    "OptionPolishTexts": (
+        lambda: _full_option().i18n.pl,  # type: ignore[union-attr]
+        ["description", "section", "enum"],
     ),
     "EnumValue": (lambda: _full_option().enum[0], ["value", "meaning"]),  # type: ignore[index]
     "ResultEntry": (lambda: _command_entry().result, ["schema", "cardinality"]),  # type: ignore[attr-defined]
     "EffectsEntry": (
         lambda: _command_entry().effects,  # type: ignore[attr-defined]
         ["read_only", "writes", "idempotent", "network", "destructive"],
+    ),
+    "RestEntry": (
+        lambda: _command_entry().rest,  # type: ignore[attr-defined]
+        ["method", "path", "key"],
     ),
     "ExampleEntry": (
         lambda: _command_entry().examples[0],  # type: ignore[attr-defined]

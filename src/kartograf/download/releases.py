@@ -68,6 +68,7 @@ from kartograf.download.plan import (
     PlanItem,
     Track,
     UpdatePlan,
+    fetch_fields,
     new_plan,
     select_planned,
 )
@@ -306,7 +307,7 @@ def run_release(
     planned: set[_SlotKey] | None = None
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
-        fresh = [_item(job, release, track) for job in jobs]
+        fresh = [_item(job, release, track, descriptor.key) for job in jobs]
         todo, stale_items = select_planned(plan, fresh, track)
         planned = {(item.segment, item.hierarchy, item.name) for item in todo}
         stale = tuple(stale_items)
@@ -766,14 +767,19 @@ def newer_release(
     )
 
 
-def _item(job: ReleaseJob, release: DatasetRelease, track: Track) -> PlanItem:
+def _item(
+    job: ReleaseJob, release: DatasetRelease, track: Track, source: str
+) -> PlanItem:
     """Return the plan position of one file, without a request.
 
     In the store: ``current`` when a version has the bytes of the release, ``newer``
     when the slot holds other versions only, ``missing`` without a version; the
     available label is the version label of the release's bytes and the signal names
-    the release and their SHA-256. In a plain write: the position of its target.
+    the release and their SHA-256. In a plain write: the position of its target. The
+    file is a member read out of the ZIP of the release (``fetch_reason`` ``built``):
+    no URL serves its bytes alone.
     """
+    fetch, why = fetch_fields(source, None)
     plain = plain_of(job.slot.root)
     if plain is not None:  # the position of a plain target: judged by `new_plan`
         return PlanItem(
@@ -789,6 +795,9 @@ def _item(job: ReleaseJob, release: DatasetRelease, track: Track) -> PlanItem:
             status="missing",
             action="write",
             path=plain.target(job.slot.name),
+            source=source,
+            fetch=fetch,
+            fetch_reason=why,
         )
     lenient_store(job.slot.root)
     stored = _stored(job)
@@ -810,11 +819,15 @@ def _item(job: ReleaseJob, release: DatasetRelease, track: Track) -> PlanItem:
             "sha256": job.member.sha256,
         },
         status="current" if stored else "newer" if local else "missing",
+        source=source,
+        fetch=fetch,
+        fetch_reason=why,
     )
 
 
 def plan_release(
     root: Path,
+    descriptor: SourceDescriptor,
     channel: AccessChannel,
     release: DatasetRelease,
     *,
@@ -829,14 +842,15 @@ def plan_release(
 
     The positions of ``_item`` - no transfer, the registry pins the bytes - and, in a
     plain write, the position of ``ATTRIBUTION.txt`` (``write``, ``replace`` when it
-    lacks a line, ``conflict`` when it is no readable UTF-8 file). The record of the
-    concept DOI is asked for a newer release (``newer_release``).
+    lacks a line, ``conflict`` when it is no readable UTF-8 file; written by
+    Kartograf: ``built``). The record of the concept DOI is asked for a newer release
+    (``newer_release``).
     """
     params = release_params(channel)
     jobs = release_jobs(
         root, params, release, segment=segment, ext=ext, country=country
     )
-    items = [_item(job, release, track) for job in jobs]
+    items = [_item(job, release, track, descriptor.key) for job in jobs]
     newer_release(params, session, sink, check=True)
     plan = new_plan(root, items)
     write = plain_of(root)
@@ -845,6 +859,7 @@ def plan_release(
     entry = plan_attribution(write, release_lines(params, release))
     if entry is None:
         return plan
+    fetch, why = fetch_fields(descriptor.key, None)
     attribution = PlanItem(
         track=track,
         segment="",
@@ -859,5 +874,8 @@ def plan_release(
         action=entry.action,
         path=entry.path,
         reason=entry.reason,
+        source=descriptor.key,
+        fetch=fetch,
+        fetch_reason=why,
     )
     return replace(plan, items=(*plan.items, attribution))

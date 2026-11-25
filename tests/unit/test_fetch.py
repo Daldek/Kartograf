@@ -18,8 +18,10 @@ from kartograf.download.fetch import (
     store_file,
     use_local,
 )
+from kartograf.download.plan import Fetch
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.marker import prepare_store
+from kartograf.output import Staging
 from kartograf.sources.edition import Edition
 
 NAME = "CTES96.tif"
@@ -290,12 +292,14 @@ def test_fetch_version_legacy_plain_file_replaced_by_link(tmp_path):
 # --- inspect_version -----------------------------------------------------
 
 
-def inspect(slot, src, signal="http", available=(None, None)):
+def inspect(slot, src, signal="http", available=(None, None), fetch=None, source=None):
     return inspect_version(
         slot,
         track="cz_sheet",
         unit="CTES96",
         signal=signal,
+        source=source,
+        fetch=fetch,
         probe=src.probe if signal == "http" else None,
         available=available,
     )
@@ -337,6 +341,58 @@ def test_inspect_version_index_keeps_callers_signal(tmp_path):
     item = inspect(make_slot(tmp_path), src, "index", ("2025-04-05_83998", sig))
     assert item.available_label == "2025-04-05_83998"
     assert item.available_signal == sig and item.status == "missing"
+
+
+ZIP_URL = "https://example.test/CTES96.zip"
+DMR4G = "cz.cuzk.dmr4g"
+
+
+@pytest.mark.parametrize(
+    ("head", "known", "size"),
+    [
+        (E1, None, 3),
+        (E1, 7, 7),
+        ({**E1, "content_length": None}, None, None),
+        (DownloadError("HEAD 503"), None, None),
+    ],
+    ids=["probe-length", "known-size-kept", "no-length", "probe-failed"],
+)
+def test_inspect_version_sizes_the_fetch_by_the_length_the_probe_read(
+    tmp_path, head, known, size
+):
+    src = Source(head=head)
+
+    item = inspect(make_slot(tmp_path), src, fetch=Fetch(ZIP_URL, known), source=DMR4G)
+
+    assert (item.source, item.fetch, item.fetch_reason) == (
+        DMR4G,
+        Fetch(ZIP_URL, size),
+        None,
+    )
+    assert src.probes == 1
+
+
+def test_inspect_version_of_a_plain_target_asks_no_probe_for_a_size(tmp_path):
+    src = Source(head=E1)
+    with Staging(tmp_path / "out") as write:
+        item = inspect(make_slot(write.handle), src, fetch=Fetch(ZIP_URL), source=DMR4G)
+
+    assert (item.action, item.fetch, item.fetch_reason) == (
+        "write",
+        Fetch(ZIP_URL),
+        None,
+    )
+    assert src.probes == 0
+
+
+@pytest.mark.parametrize("plain", [False, True], ids=["store", "plain"])
+def test_inspect_version_of_a_built_file_names_why_it_has_no_url(tmp_path, plain):
+    src = Source(head=E1)
+    with Staging(tmp_path / "out") as write:
+        root = write.handle if plain else tmp_path
+        item = inspect(make_slot(root), src, source=DMR4G)
+
+    assert (item.source, item.fetch, item.fetch_reason) == (DMR4G, None, "built")
 
 
 def test_inspect_version_never_calls_fetch(tmp_path):
@@ -486,7 +542,13 @@ def test_inspect_version_metadata_statuses(tmp_path, local, current, status, lab
     elif local is not None:
         seed_meta(slot, local)
     item = inspect_version(
-        slot, track="landcover", unit="u", signal="metadata", edition=Editions(current)
+        slot,
+        track="landcover",
+        unit="u",
+        signal="metadata",
+        source=None,
+        fetch=None,
+        edition=Editions(current),
     )
     assert (item.status, item.available_label) == (status, label)
     if label is not None:
@@ -498,7 +560,12 @@ def test_inspect_version_metadata_statuses(tmp_path, local, current, status, lab
 def test_inspect_version_metadata_requires_edition(tmp_path):
     with pytest.raises(ValidationError):
         inspect_version(
-            make_slot(tmp_path), track="landcover", unit="u", signal="metadata"
+            make_slot(tmp_path),
+            track="landcover",
+            unit="u",
+            signal="metadata",
+            source=None,
+            fetch=None,
         )
 
 

@@ -1,251 +1,208 @@
 """
 The meanings of the allowed values of the options (AGI-2.3 ``enum``).
 
-The catalog document gives every allowed value of an option a one-line meaning in
-English (``{"value", "meaning"}``). The values themselves come from the registries
-(``Param.allowed`` is a provider); their meanings are text and live here, keyed by
-the name of the option: the same value means the same in every command (``GPKG``,
-``EVRF2007``), and a product name is unique across the groups. Values of a regular
-form (a grid label, a depth interval, a scale, a year) get their meaning from a
-pattern, so a value a registry adds later needs no entry; another new value has none
-and ``meaning`` raises ``KeyError``, which a contract test turns into the reminder to
-add one.
+The catalog document gives every allowed value of an option a one-line meaning
+(``{"value", "meaning"}``) in English, and the page of a form (``commands schema
+--form``) its Polish twin (``i18n.pl.enum``). The values themselves come from the
+registries (``Param.allowed`` is a provider); their meanings are catalog messages of the
+area ``meanings`` (``kartograf.messages.meanings``, both languages of a text side by
+side), mapped here by the name of the option: the same value means the same in every
+command (``GPKG``, ``EVRF2007``), and a product name is unique across the groups. Values
+of a regular form (a grid label, a depth interval, a scale, a year, a release) get their
+meaning from a pattern, so a value a registry adds later needs no entry; another new
+value has none and ``meaning`` raises ``KeyError``, which a contract test turns into the
+reminder to add one.
 """
 
 import re
 from collections.abc import Mapping
 from typing import Final
 
-MEANINGS: Final[Mapping[str, Mapping[str, str]]] = {
+from kartograf.messages import Message, message
+
+MEANINGS: Final[Mapping[str, Mapping[str, Message]]] = {
     "product": {
-        "nmt": "Digital terrain model (bare earth); PL and CZ.",
-        "nmpt": "Digital surface model (with the objects on the ground); PL and CZ.",
-        "laz": "LIDAR point cloud; PL and CZ.",
-        "contours": "ZABAGED contours, 2D vector, SM5 sheets, SHP or DGN; CZ.",
-        "orto": "RGB orthophoto; PL and CZ.",
-        "intensity": "LIDAR intensity images, one band, 0.25 m; PL.",
-        "true-orto": "True orthophoto of selected cities, 0.05 m; PL.",
-        "oblique-orto": (
-            "Oblique orthophoto of selected cities; a sheet is four files "
-            "(n, e, s, w); PL."
-        ),
-        "bdot10k": "BDOT10k topographic object database; PL.",
-        "bdoo": "BDOO general geographic object database (1:250000); PL.",
-        "corine": "CORINE Land Cover; EU.",
-        "zabaged": (
-            "ZABAGED, the basic geographic database of Czechia (land "
-            "cover, waters); CZ."
-        ),
-        "data50": "Data50, the digital geographic model of Czechia at 1:50000; CZ.",
-        "data250": "Data250, the digital geographic model of Czechia at 1:250000; CZ.",
-        "soil": "SoilGrids soil property layers (ISRIC); global.",
-        "admin": "Administrative and cadastral unit boundaries: PRG (PL), RUIAN (CZ).",
-        "addresses": "PRG address points and streets; PL.",
-        "special": "PRG special boundaries (44 kinds); PL.",
-        "geomorphology": "Geomorphological units of Czechia, subprovince to part; CZ.",
-        "map": "Cadastral map: EGiB (PL) and the cadastral map of Czechia (CZ).",
-        "prices": "RCN register of real-estate transaction prices; PL.",
-        "buildings": "3D building models (CityGML, LoD1 and LoD2); PL.",
-        "mesh": "3D city mesh models (OBJ with textures); PL.",
-        "trees": "3D tree models (CityGML, LoD1); PL.",
-        "network": "HY-NET hydrographic network (INSPIRE Hydrography - Network); CZ.",
-        "pgw": "IIaPGW geodatabase of the water management plans (PGW); PL.",
-        "camels": (
-            "CAMELS-PL catchment boundaries and gauging stations of the gauges of "
-            "IMGW-PIB, as published on Zenodo; PL."
-        ),
-        "geographic": "Geographic names: PRNG (PL), Geonames (CZ).",
-        "world": "Polish geographic names of the world (PRNG); PL.",
-        "topographic": "Topographic maps: BDOT10k visualisations (PL), ZTM (CZ).",
-        "control": "Geodetic control networks: GUGiK (PL), Bodove pole (CZ).",
-        "geoid": "Quasi-geoid model: PL-geoid2021 (PL), QGZU-2013 (CZ).",
+        "nmt": message("meanings.product_nmt"),
+        "nmpt": message("meanings.product_nmpt"),
+        "laz": message("meanings.product_laz"),
+        "contours": message("meanings.product_contours"),
+        "orto": message("meanings.product_orto"),
+        "intensity": message("meanings.product_intensity"),
+        "true-orto": message("meanings.product_true_orto"),
+        "oblique-orto": message("meanings.product_oblique_orto"),
+        "bdot10k": message("meanings.product_bdot10k"),
+        "bdoo": message("meanings.product_bdoo"),
+        "corine": message("meanings.product_corine"),
+        "zabaged": message("meanings.product_zabaged"),
+        "data50": message("meanings.product_data50"),
+        "data250": message("meanings.product_data250"),
+        "soil": message("meanings.product_soil"),
+        "admin": message("meanings.product_admin"),
+        "addresses": message("meanings.product_addresses"),
+        "special": message("meanings.product_special"),
+        "geomorphology": message("meanings.product_geomorphology"),
+        "map": message("meanings.product_map"),
+        "prices": message("meanings.product_prices"),
+        "buildings": message("meanings.product_buildings"),
+        "mesh": message("meanings.product_mesh"),
+        "trees": message("meanings.product_trees"),
+        "network": message("meanings.product_network"),
+        "pgw": message("meanings.product_pgw"),
+        "camels": message("meanings.product_camels"),
+        "geographic": message("meanings.product_geographic"),
+        "world": message("meanings.product_world"),
+        "topographic": message("meanings.product_topographic"),
+        "control": message("meanings.product_control"),
+        "geoid": message("meanings.product_geoid"),
     },
     "country": {
-        "pl": "Poland (GUGiK sources).",
-        "cz": "Czechia (CUZK sources).",
-        "auto": (
-            "Both: the area is split by the bounding boxes of PL and CZ, one file per "
-            "country."
-        ),
+        "pl": message("meanings.country_pl"),
+        "cz": message("meanings.country_cz"),
+        "auto": message("meanings.country_auto"),
     },
     "format": {
-        "ASC": "ESRI ASCII grid.",
-        "XYZ": "ASCII XYZ grid, ZIP.",
-        "ASCII-NMT": "ASCII NMT points X Y Z, ZIP.",
-        "TBD": "ASCII TBD structure points and lines, ZIP.",
-        "TIN": "ESRI TIN, ZIP.",
-        "TTN": "Intergraph TTN.",
-        "GRD": "Intergraph GRD.",
-        "DXF": "DXF (contours; CZ cadastral map).",
-        "DGN": "DGN (contours, cadastral map, topographic map).",
-        "SHP": "Shapefile.",
-        "GPKG": "GeoPackage.",
-        "GML": "GML.",
-        "TIFF": "GeoTIFF.",
-        "PDF": "PDF.",
-        "XLSX": "Excel workbook.",
-        "FGDB": "ESRI file geodatabase.",
-        "VFK": "VFK exchange format of the Czech cadastre.",
-        "agents": "AGENTS.md: the full guide for agents.",
-        "llms": "llms.txt: the short guide in the llmstxt.org layout.",
-        "agents-md-block": (
-            "The compact block for the AGENTS.md of a repository that uses Kartograf."
-        ),
+        "ASC": message("meanings.format_asc"),
+        "XYZ": message("meanings.format_xyz"),
+        "ASCII-NMT": message("meanings.format_ascii_nmt"),
+        "TBD": message("meanings.format_tbd"),
+        "TIN": message("meanings.format_tin"),
+        "TTN": message("meanings.format_ttn"),
+        "GRD": message("meanings.format_grd"),
+        "DXF": message("meanings.format_dxf"),
+        "DGN": message("meanings.format_dgn"),
+        "SHP": message("meanings.format_shp"),
+        "GPKG": message("meanings.format_gpkg"),
+        "GML": message("meanings.format_gml"),
+        "TIFF": message("meanings.format_tiff"),
+        "PDF": message("meanings.format_pdf"),
+        "XLSX": message("meanings.format_xlsx"),
+        "FGDB": message("meanings.format_fgdb"),
+        "VFK": message("meanings.format_vfk"),
+        "agents": message("meanings.format_agents"),
+        "llms": message("meanings.format_llms"),
+        "agents-md-block": message("meanings.format_agents_md_block"),
     },
     "sheet_system": {
-        "1992": "PL-1992 sheets (1:10000 and coarser).",
-        "2000": "PL-2000 sheets (zones EPSG:2176-2179).",
-        "sjtsk": "ZTM sheets in S-JTSK.",
-        "etrs89": "ZTM sheets in ETRS89.",
+        "1992": message("meanings.sheet_system_1992"),
+        "2000": message("meanings.sheet_system_2000"),
+        "sjtsk": message("meanings.sheet_system_sjtsk"),
+        "etrs89": message("meanings.sheet_system_etrs89"),
     },
     "lang": {
-        "pl": "Polish text for people (the default).",
-        "en": "English text for people.",
+        "pl": message("meanings.lang_pl"),
+        "en": message("meanings.lang_en"),
     },
     "bbox_crs": {
-        "EPSG:2176": "PL-2000 zone 5.",
-        "EPSG:2177": "PL-2000 zone 6.",
-        "EPSG:2178": "PL-2000 zone 7.",
-        "EPSG:2179": "PL-2000 zone 8.",
-        "EPSG:2180": "PL-1992 (ETRS89 / Poland CS92).",
-        "EPSG:3045": "ETRS89 / UTM zone 33N.",
-        "EPSG:4326": "WGS 84 geographic coordinates, in degrees.",
-        "EPSG:5514": "S-JTSK / Krovak East North (CZ).",
+        "EPSG:2176": message("meanings.bbox_crs_epsg_2176"),
+        "EPSG:2177": message("meanings.bbox_crs_epsg_2177"),
+        "EPSG:2178": message("meanings.bbox_crs_epsg_2178"),
+        "EPSG:2179": message("meanings.bbox_crs_epsg_2179"),
+        "EPSG:2180": message("meanings.bbox_crs_epsg_2180"),
+        "EPSG:3045": message("meanings.bbox_crs_epsg_3045"),
+        "EPSG:4326": message("meanings.bbox_crs_epsg_4326"),
+        "EPSG:5514": message("meanings.bbox_crs_epsg_5514"),
     },
     "vertical_crs": {
-        "EVRF2007": (
-            "European Vertical Reference Frame 2007: the current PL height system "
-            "(PL-EVRF2007-NH) and the native one of CZ TM33 files."
-        ),
-        "KRON86": "Kronstadt 86: the historical PL height system (PL-KRON86-NH).",
-        "Bpv": (
-            "Baltic after adjustment: native for CZ S-JTSK, SM5 and ImageServer data."
-        ),
+        "EVRF2007": message("meanings.vertical_crs_evrf2007"),
+        "KRON86": message("meanings.vertical_crs_kron86"),
+        "Bpv": message("meanings.vertical_crs_bpv"),
     },
     "model": {
-        "dmr5g": "Terrain model DMR 5G.",
-        "dmr4g": "Terrain model on a 5 m grid (DMR 4G).",
-        "dmp1g": "Surface model DMP 1G.",
-        "dmpok": "Surface model from image correlation (DMP OK).",
+        "dmr5g": message("meanings.model_dmr5g"),
+        "dmr4g": message("meanings.model_dmr4g"),
+        "dmp1g": message("meanings.model_dmp1g"),
+        "dmpok": message("meanings.model_dmpok"),
     },
     "coverage": {
-        "standard": "The newest available orthophotos.",
-        "high": "Orthophotos with a pixel of 10 cm or finer.",
+        "standard": message("meanings.coverage_standard"),
+        "high": message("meanings.coverage_high"),
     },
     "direction": {
-        "n": "North.",
-        "e": "East.",
-        "s": "South.",
-        "w": "West.",
+        "n": message("meanings.direction_n"),
+        "e": message("meanings.direction_e"),
+        "s": message("meanings.direction_s"),
+        "w": message("meanings.direction_w"),
     },
     "level": {
-        "wojewodztwo": "Voivodeship (PL).",
-        "powiat": "County (PL).",
-        "gmina": "Municipality (PL).",
-        "jednostka-ewidencyjna": "Cadastral unit (PL).",
-        "obreb": "Cadastral precinct (PL).",
-        "kraj": "Region, kraj (CZ).",
-        "okres": "District, okres (CZ).",
-        "obec": "Municipality, obec (CZ).",
-        "katastralni-uzemi": "Cadastral area, katastralni uzemi (CZ).",
-        "subprovincie": "Geomorphological subprovince (CZ).",
-        "oblast": "Geomorphological area, oblast (CZ).",
-        "celek": "Geomorphological unit, celek (CZ).",
-        "podcelek": "Geomorphological subunit, podcelek (CZ).",
-        "okrsek": "Geomorphological district, okrsek (CZ).",
-        "podokrsek": "Geomorphological subdistrict, podokrsek (CZ).",
-        "cast": "Geomorphological part, cast (CZ).",
+        "wojewodztwo": message("meanings.level_wojewodztwo"),
+        "powiat": message("meanings.level_powiat"),
+        "gmina": message("meanings.level_gmina"),
+        "jednostka-ewidencyjna": message("meanings.level_jednostka_ewidencyjna"),
+        "obreb": message("meanings.level_obreb"),
+        "kraj": message("meanings.level_kraj"),
+        "okres": message("meanings.level_okres"),
+        "obec": message("meanings.level_obec"),
+        "katastralni-uzemi": message("meanings.level_katastralni_uzemi"),
+        "subprovincie": message("meanings.level_subprovincie"),
+        "oblast": message("meanings.level_oblast"),
+        "celek": message("meanings.level_celek"),
+        "podcelek": message("meanings.level_podcelek"),
+        "okrsek": message("meanings.level_okrsek"),
+        "podokrsek": message("meanings.level_podokrsek"),
+        "cast": message("meanings.level_cast"),
     },
     "lod": {
-        "1": "Level of detail 1 (LoD1).",
-        "2": "Level of detail 2 (LoD2).",
+        "1": message("meanings.lod_1"),
+        "2": message("meanings.lod_2"),
     },
     "network": {
-        "horizontal": "Horizontal control network.",
-        "vertical": "Vertical (height) control network.",
-        "gravity": "Gravimetric control network.",
-        "magnetic": "Magnetic control network.",
-        "archive-1942": (
-            "Archive catalogues of the control points, 1942 (sheets 1:100000)."
-        ),
-        "archive-kronsztadt60": (
-            "Archive catalogues of the control points, Kronstadt 60 (sheets 1:100000)."
-        ),
-        "gnss": "GNSS control points (CZ).",
-        "densification": "Densification control network (CZ).",
-        "horizontal-detailed": "Detailed horizontal control network (CZ).",
-        "vertical-detailed": "Detailed vertical control network (CZ).",
+        "horizontal": message("meanings.network_horizontal"),
+        "vertical": message("meanings.network_vertical"),
+        "gravity": message("meanings.network_gravity"),
+        "magnetic": message("meanings.network_magnetic"),
+        "archive-1942": message("meanings.network_archive_1942"),
+        "archive-kronsztadt60": message("meanings.network_archive_kronsztadt60"),
+        "gnss": message("meanings.network_gnss"),
+        "densification": message("meanings.network_densification"),
+        "horizontal-detailed": message("meanings.network_horizontal_detailed"),
+        "vertical-detailed": message("meanings.network_vertical_detailed"),
     },
     "property": {
-        "bdod": (
-            "Bulk density of the fine earth; file unit cg/cm3 (kg/dm3 = value / 100)."
-        ),
-        "cec": (
-            "Cation exchange capacity; file unit mmol(c)/kg (cmol(c)/kg = value / 10)."
-        ),
-        "cfvo": (
-            "Coarse fragments by volume; file unit cm3/dm3 (cm3/100cm3 = value / 10)."
-        ),
-        "clay": "Clay content; file unit g/kg (percent = value / 10).",
-        "nitrogen": "Total nitrogen; file unit cg/kg (g/kg = value / 100).",
-        "ocd": "Organic carbon density; file unit hg/m3 (kg/m3 = value / 10).",
-        "ocs": (
-            "Organic carbon stock, depth 0-30cm only; file unit t/ha "
-            "(kg/m2 = value / 10)."
-        ),
-        "phh2o": "Soil pH in water; the file holds pH x 10 (pH = value / 10).",
-        "sand": "Sand content; file unit g/kg (percent = value / 10).",
-        "silt": "Silt content; file unit g/kg (percent = value / 10).",
-        "soc": "Soil organic carbon; file unit dg/kg (g/kg = value / 10).",
+        "bdod": message("meanings.property_bdod"),
+        "cec": message("meanings.property_cec"),
+        "cfvo": message("meanings.property_cfvo"),
+        "clay": message("meanings.property_clay"),
+        "nitrogen": message("meanings.property_nitrogen"),
+        "ocd": message("meanings.property_ocd"),
+        "ocs": message("meanings.property_ocs"),
+        "phh2o": message("meanings.property_phh2o"),
+        "sand": message("meanings.property_sand"),
+        "silt": message("meanings.property_silt"),
+        "soc": message("meanings.property_soc"),
     },
     "stat": {
-        "mean": "Mean.",
-        "Q0.05": "5th percentile.",
-        "Q0.5": "Median.",
-        "Q0.95": "95th percentile.",
-        "uncertainty": (
-            "Prediction uncertainty: the file holds 10 * (Q0.95 - Q0.05) / Q0.5, "
-            "unitless."
-        ),
+        "mean": message("meanings.stat_mean"),
+        "Q0.05": message("meanings.stat_q0_05"),
+        "Q0.5": message("meanings.stat_q0_5"),
+        "Q0.95": message("meanings.stat_q0_95"),
+        "uncertainty": message("meanings.stat_uncertainty"),
     },
     "depth_rule": {
-        "least-permeable": (
-            "Classify the SoilGrids layers 0-5cm to 60-100cm and take, per cell, the "
-            "group of the layer with the lowest saturated hydraulic conductivity of "
-            "its USDA texture class (Rawls, Brakensiek & Saxton 1982)."
-        ),
+        "least-permeable": message("meanings.depth_rule_least_permeable"),
     },
     "update": {
-        "upgrade": "Fetch newer content when the source signals it.",
-        "force": "Fetch every file again; nothing is overwritten.",
+        "upgrade": message("meanings.update_upgrade"),
+        "force": message("meanings.update_force"),
     },
 }
 
-# Values of a regular form: (the options, the form, the meaning with {} for the value).
+# Values of a regular form: (the options, the form, the message of the meaning, whose
+# placeholder ``value`` is the value).
 _PATTERNS: Final[tuple[tuple[frozenset[str], re.Pattern[str], str], ...]] = (
-    (
-        frozenset({"resolution"}),
-        re.compile(r"[0-9.]+m"),
-        "Cell or pixel size {} (metres).",
-    ),
-    (
-        frozenset({"depth"}),
-        re.compile(r"[0-9]+-[0-9]+cm"),
-        "Depth interval {} below the surface.",
-    ),
-    (frozenset({"scale"}), re.compile(r"1:[0-9]+"), "Sheets or maps at the scale {}."),
-    (frozenset({"year"}), re.compile(r"[0-9]{4}"), "Year {}."),
+    (frozenset({"resolution"}), re.compile(r"[0-9.]+m"), "meanings.resolution"),
+    (frozenset({"depth"}), re.compile(r"[0-9]+-[0-9]+cm"), "meanings.depth"),
+    (frozenset({"scale"}), re.compile(r"1:[0-9]+"), "meanings.scale"),
+    (frozenset({"year"}), re.compile(r"[0-9]{4}"), "meanings.year"),
     (
         frozenset({"version"}),
         re.compile(r"[0-9]+\.[0-9]+\.[0-9]+"),
-        "Release {} of the published data set (CAMELS-PL), as its publisher numbers "
-        "it.",
+        "meanings.version",
     ),
 )
 
 
-def meaning(option: str, value: str) -> str:
-    """Return the one-line English meaning of an allowed value of an option.
+def meaning(option: str, value: str) -> Message:
+    """Return the one-line meaning of an allowed value of an option.
 
     Parameters
     ----------
@@ -255,15 +212,21 @@ def meaning(option: str, value: str) -> str:
     value : str
         One of its allowed values.
 
+    Returns
+    -------
+    Message
+        The English text; ``localize(text, "pl")`` renders its Polish twin.
+
     Raises
     ------
     KeyError
-        The value has no meaning here: add it to ``MEANINGS``.
+        The value has no meaning here: add its entry to ``kartograf.messages.meanings``
+        and its line to ``MEANINGS``.
     """
     table = MEANINGS.get("bbox_crs" if option == "horizontal_crs" else option, {})
     if value in table:
         return table[value]
-    for options, form, text in _PATTERNS:
+    for options, form, key in _PATTERNS:
         if option in options and form.fullmatch(value):
-            return text.format(value)
+            return message(key, value=value)
     raise KeyError(f"no meaning of the value {value!r} of the option {option!r}")

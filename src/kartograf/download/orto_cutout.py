@@ -495,7 +495,14 @@ def _run(
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
         require_store(plan, store_id(slot.root))
-        current = inspect_version(slot, track=_TRACK, unit=slot.std.stem, signal=signal)
+        current = inspect_version(
+            slot,
+            track=_TRACK,
+            unit=slot.std.stem,
+            signal=signal,
+            source=cutout.key,
+            fetch=None,
+        )
         todo, excluded = select_planned(plan, [current], _TRACK)
         stale = tuple(excluded)
         if not todo:
@@ -616,8 +623,13 @@ def check_image_cutout(
         if (refused := refusal_plan(store)) is not None:
             return refused
         slot = cutout.slot
-        item = inspect_version(
-            slot, track=_TRACK, unit=slot.std.stem, signal=cutout.channel.update_signal
+        item = inspect_version(  # a WCS cutout: built
+            slot,
+            track=_TRACK,
+            unit=slot.std.stem,
+            signal=cutout.channel.update_signal,
+            source=cutout.key,
+            fetch=None,
         )
         return new_plan(store_id(slot.root), (item,))
 

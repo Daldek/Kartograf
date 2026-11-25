@@ -655,9 +655,11 @@ kartograf/
 ├── catalog/             # Command catalog - the single source of truth (section 4.11), no cli/mcp import
 │   ├── spec.py          # Command, Param, Constraint, Example, Group (data; value providers from the registry)
 │   ├── model.py         # documents kartograf-command-list/1 and kartograf-commands/1: CommandList, GroupRow,
-│   │                    # CommandRow, CommandCatalog, CommandEntry, OptionEntry, EnumValue, ResultEntry,
-│   │                    # EffectsEntry, ExampleEntry, I18nEntry, PolishTexts
-│   ├── build.py         # list_commands(), command_schema(command), is_option, effects; entries built once
+│   │                    # CommandRow, CommandCatalog, CommandEntry, OptionEntry, EnumValue, OptionI18nEntry,
+│   │                    # OptionPolishTexts, ResultEntry, EffectsEntry, RestEntry, ExampleEntry, I18nEntry,
+│   │                    # PolishTexts
+│   ├── build.py         # list_commands(), command_schema(command, form=), is_option, effects, rest
+│   │                    # (the route on kartograf server); the rules as option fields; entries built once
 │   ├── shared.py        # shared command parameters (area, output, update modes, --json...)
 │   ├── kinds.py         # value kinds: flag text parsers, convert_arguments (JSON options ->
 │   │                    # library arguments)
@@ -668,7 +670,8 @@ kartograf/
 │   ├── arguments.py     # check_call: a call in its JSON form against the declaration (names, kinds,
 │   │                    # required, allowed values, bounds, Constraint); check_constraints
 │   ├── excerpts.py      # EXCERPTS: the result excerpt of the catalog examples per document schema
-│   ├── meanings.py      # MEANINGS, meaning(): the one-line meaning of every allowed value of an option
+│   ├── meanings.py      # MEANINGS, meaning(): the meaning of every allowed value of an option, a message
+│   │                    # of messages/meanings.py (English and its Polish twin)
 │   └── commands/        # declarations, one module = one group (elevation, imagery, landcover, soil, boundaries,
 │                        # cadastre, models3d, hydro, names, maps, geodesy, config, misc: sheet,
 │                        # commands, cache and store); _collection.py = shape of the collection groups
@@ -2003,7 +2006,8 @@ touching the file system); `Decimal` -> string; `datetime` -> ISO 8601 UTC to se
 dataclass -> object with fields in declaration order (`metadata={"json": False}` and `ctx.omit`
 pairs skipped); `Mapping` -> object; `tuple`/`list` -> array; `set` -> sorted
 array; any other type is `TypeError` (never `str(obj)`). `EncodeContext` carries `omit` (pairs
-`(class, field)`: `StoreEntries` omits `Sidecar.raw`). The `SCHEMAS` registry
+`(class, field)`: `StoreEntries` omits `Sidecar.raw`) and `relative_paths` (a relative path stays
+relative: the paths of a detached `UpdatePlan`, ADR-063 decision 4). The `SCHEMAS` registry
 (`__init_subclass__`) collects classes per schema; a test checks the name pattern
 (`^kartograf-[a-z][a-z0-9-]*/[1-9][0-9]*$`), the same set and order of keys of the classes of one
 schema, and that every `result_schema` of the catalog is in the registry.
@@ -2011,7 +2015,7 @@ schema, and that every `result_schema` of the catalog is in the registry.
 | Schema | Library type | Module | Keys after `schema` |
 |---|---|---|---|
 | `kartograf-download/1` | `DataReport`, `CollectionReport`, `LandCoverReport`, `SoilReport`, `HsgReport` | `download.data`, `download.collections`, `landcover.manager`, `hydrology.hsg` | `mode, root, output_dir, files, raw, inputs, failed, skipped, stale, superseded, summary, notices, ok` |
-| `kartograf-plan/1` | `UpdatePlan` | `download.plan` | `mode, root, output_dir, checked_at, kartograf_version, items, notices, ok` |
+| `kartograf-plan/1` | `UpdatePlan` | `download.plan` | `mode, root, output_dir, checked_at, kartograf_version, items, notices, ok, sources` |
 | `kartograf-result/1` | `CommandResult` | `envelope` | `tool, version, command, check, status, result, items, notices` |
 | `kartograf-availability/1` | `AvailabilityReport` | `download.availability` | `request, checked_at, areas, combinations, failed, notices, ok` |
 | `kartograf-sheet/1` | `SheetInfo` | `sheet_info` | `sheet, system, country, sheet_system, scale, components, zone, crs, bounds, commands, hierarchy, children, descendants` |
@@ -2039,7 +2043,8 @@ section 5; usage: USAGE 8.1):
   and the property `schema`): they are not built with `schema=`, and an unknown schema is rejected by
   `UpdatePlan.from_dict`; a plan of 0.8.0-dev without `notices` and `ok` still loads (one with
   the key `store` does not, 3.6);
-- paths in documents are absolute (exception: `request.geometry` of the availability report);
+- paths in documents are absolute (exceptions: `request.geometry` of the availability report, and
+  the `path` of each item of a detached plan, relative to its `output_dir` `"."`);
 - the key is always present (no value `null`, no elements `[]`), lists are not
   silently truncated (`kartograf-store-entries/1` carries `limit` and `truncated`);
 - `ok` is present in result documents (`-download/1`, `-plan/1`, `-availability/1`):
@@ -2125,6 +2130,27 @@ of a plain plan has `action` (`write`, `replace`, `conflict`), `path` and `reaso
 position whose source could not be checked: it stays `check_failed` without them, as in the store,
 and the plan is not `ok`; the one position of a store root that is a conflict has the track
 `store` and the same three fields.
+
+**Where the files of a plan come from (ADR-063 decisions 3 and 4).** Every item of a plan, store
+or plain, says it from what the check reads, with no request more (`download/plan.py`): `source`
+is the registry key of its source (`null` for the track `store`), `fetch` (`Fetch`) the URL whose
+bytes the file is, unchanged, with `size_bytes` (the `Content-Length` of the probe of an `http`
+channel in a store plan, the length of an ATOM feed) and `sha256` (only where the registry pins it)
+each `null` when unknown, and otherwise `fetch_reason`: `credentials` for a source whose `auth` is
+not `none` (CORINE, its WMS preview too, before `built`) or `built` for a file Kartograf builds
+(`fetch_fields`). The plan lists `sources` (`PlanSource`: `key, provider, license, auth` as
+`list-sources`) in the order of their first item; `merge` joins them by key. Per track: `fetch` for
+`pl_sheet` (the URL of the index record), `laz_tile` (the OpenData URL), the ZIP of `cz_contours`
+(track `cz_sheet`), a package of `unit_package` stored as published, a file of an ATOM feed (in a
+plain plan its URL is unknown: only the run reads the feed) and the BDOT10k SHP package and raw
+GPKG package; `built` for `cz_sheet` of `cz_sheets` (the GeoTIFF unpacked from openzu with its
+CRS written, or an ImageServer export), `cz_laz` (unpacked), `pl_cutout`, `cz_cutout`, `cz_orto`
+(members of the sheet ZIP), the merged BDOT10k GeoPackage, SoilGrids, `hsg`, `feature_bbox` and
+the GeoPackage of an archive area, a member unpacked from a package or the ZIP of chosen classes,
+and the CAMELS-PL members and `ATTRIBUTION.txt` of `release_files` (`zip_range`). A detached plan
+(`check_command(detached=True)`, `detached_directory`, `detached_plan`) is the plain write into a
+directory that does not exist, answered as the write into `.`: `output_dir` `"."`, each `path`
+relative to it, every file `write`.
 
 **The target in the interfaces (ADR-054 decisions 1, 11, 13, 14).** The catalog declares the two
 targets once: `catalog/shared.py` `target(files, sheets=)` gives the two `Param`s (`output_dir`
@@ -4265,12 +4291,25 @@ the API argument name (`argument`), whether it is required, `allowed`
 (a provider reading the source registry when the catalog is built, not at import), the description and fields
 for the parser only (`dest`, `metavar`...). The declarations produce:
 
-- `list_commands()` -> `CommandList` (`kartograf-command-list/1`) and `command_schema(command)` ->
+- `list_commands()` -> `CommandList` (`kartograf-command-list/1`) and `command_schema(command, *, form=False)` ->
   `CommandCatalog` (`kartograf-commands/1`, one command: the name or the `operation_id`;
   `catalog/build.py`, `model.py`): `build.command_entries()` builds the entries once from the declarations
   (an option = `is_option`, enums from `meanings.py`, examples from `excerpts.py`); the page budget of
-  20,000 characters (DOC-1.7) and conformance with `schemas/nogat/commands-1.schema.json` are guarded by
-  `tests/contract/test_commands_schema.py`. The exit code and error tables:
+  20,000 characters (DOC-1.7) and conformance with `schemas/nogat/commands-1.schema.json` and
+  `command-list-1.schema.json` are guarded by `tests/contract/test_commands_schema.py`. The constraints become
+  the fields a form reads (AGI-2.3, ADR-063 decision 1): `requires` and `excludes` on the option of a rule (the
+  names that are options; `--upgrade`, a flag only the CLI has, is left out), `applies_to` and `required_when`
+  its `when` as `{option: true | [values]}` (several `applies_to` rules on one option hold together, several
+  `required_when` rules join the values of one option; another merge is a `ValueError` of the build), the
+  command's `one_of` the first non-optional `one_of` constraint, one alternative per option (`soil hsg`'s
+  `depth` group stays a group of its options); an `any_of` constraint has no field, only its message. `form=True`
+  (`commands schema --form`, J2) builds a second set of entries whose options also carry `section` and
+  `i18n.pl` (the Polish `description`, `section` and the meaning of each allowed value: the catalog messages
+  rendered with `localize`, the meanings from `messages/meanings.py`); its page may have 50,000 characters.
+  `build.rest(command)` derives the route on `kartograf server` of every entry and list row (decision 2):
+  `null` for the groups `store`, `cache`, `config` and `gui`, `POST` with `key` for a data command, `POST`
+  for a read-only command with an option of type `object`, `GET` for another read-only command, `null` for a
+  command that writes; the path `/api/v1/<group>/<verb>`. The exit code and error tables:
   `error_report.EXIT_CODES`, `ERROR_CODES` (USAGE 8.3); the 12 data commands: kind `data`
   in the declarations (`data_commands.DATA_COMMANDS`, KB-1);
 - the CLI parser (`catalog/cliparser.py::build_parser`; `cli/_parser.py::create_parser` is a
@@ -4368,7 +4407,8 @@ run options next to `check`,
 characters) are built by `build_instructions` from the tool names of the catalog and the state of the server. Context
 budget: `tools/list` is about 187,000 characters (83,000 without `outputSchema`; `--tools core` 66,000 and 35,000), because
 every property carries the description from the catalog and every tool an `outputSchema`; the budget of 30,000 characters
-of ADR-046 (D22) no longer holds (ADR-052, decision 9); `list_commands()` and a result page <= 20,000 characters (DOC-1.7);
+of ADR-046 (D22) no longer holds (ADR-052, decision 9); `list_commands()` and a result page <= 20,000 characters (DOC-1.7;
+the page of a form, `commands schema` with `form`, <= 50,000);
 tests enforce this (`tests/contract/test_mcp_tools.py`, the AGI-5.13 gate test in
 `tests/integration/test_mcp_server.py`). Usage and client configuration: USAGE 8.6.
 

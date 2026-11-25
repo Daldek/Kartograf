@@ -3678,6 +3678,7 @@ kartograf commands list                                         # groups with pr
 kartograf commands list --json                                  # the list: kartograf-command-list/1
 kartograf commands schema --command "elevation download"        # description of a command: parameters, rules, examples (text)
 kartograf commands schema --command kartograf_soil_hsg --json   # kartograf-commands/1 with one command
+kartograf commands schema --command "elevation download" --form --json   # the page of a form: also the sections and Polish texts
 ```
 
 ```python
@@ -3685,6 +3686,7 @@ from kartograf import command_schema, list_commands
 
 listing = list_commands()                       # = commands list --json (the `result` of the envelope)
 schema = command_schema("elevation download")   # = commands schema --command ... --json
+form = command_schema("elevation download", form=True)  # = ... --form --json
 print(schema.to_json())                         # to_dict() / to_json(): like every document
 ```
 
@@ -3692,21 +3694,27 @@ print(schema.to_json())                         # to_dict() / to_json(): like ev
 (`kartograf_elevation_download`); an unknown or missing command is a `validation_error` with
 `details.option` `command` and `details.allowed` (the command names).
 
-**The list** (`kartograf-command-list/1`, about 10 thousand characters of compact JSON): `tool`, `version`,
+**The list** (`kartograf-command-list/1`, the Nogat schema `schemas/nogat/command-list-1.schema.json`; about
+16 thousand characters of compact JSON): `tool`, `version`,
 `groups` (`name`, `summary`, `products`: the product names) and `commands` (`name` =
 `<group> <command>`, `operation_id` = `kartograf_<group>_<command>`, `summary`, `families`,
 `read_only`, `check`: the command that plans this command without effects, that is, itself with the option
-`check`, or `null`).
+`check`, or `null`; `effects` and `rest`, as in the schema of the command).
 
 **The schema** (`kartograf-commands/1`, the Nogat schema `schemas/nogat/commands-1.schema.json`; up to
 about 17 thousand characters of compact JSON, the CLI prints it indented) carries one command: `name`,
 `operation_id`, `function` (the library function), `summary`, `description` (when to use, when not,
 the main limitation), `options`, `result` (`schema` and `cardinality`: `single`, `bounded`,
 `unbounded`), `effects` (`read_only`, `writes`: `none`, `add`, `replace`, `delete`;
-`idempotent`, `network`, `destructive`), `check`, `families` (the MCP tool families; `core` is the
-main tasks), `rules`, `examples` (`call` = the full CLI command, `result` = an excerpt of the result,
+`idempotent`, `network`, `destructive`), `check`, `rest`, `families` (the MCP tool families; `core` is the
+main tasks), `one_of`, `rules`, `examples` (`call` = the full CLI command, `result` = an excerpt of the result,
 `title`), `errors` (codes of the error registry, 8.3) and `i18n.pl` (the Polish `summary`, `description`,
-`rules`; the document does not carry the Polish option descriptions, they are in `--help`).
+`rules`). `rest` is the route of the command on Kartograf's server (ADR-063): `{method, path, key}` with the
+path `/api/v1/<group>/<command>`, `POST` with `key` true for a data command (the server plans it and runs
+nothing), `POST` for a read-only command that takes an object, `GET` for another read-only command, `null`
+for the commands of `store`, `cache`, `config` and `gui` and for a command that writes. `one_of` is the
+choice a command requires, one alternative per option (`[["sheet"], ["bbox"], ["geometry"]]`, the area);
+a command without one has no key.
 
 An option (`options[]`) is a parameter with an argument of the library function, or `check` of a command with a
 plan; the flags only the CLI has (`--json`, `--quiet`, `--lang`, `--details`, `--inject`, `--upgrade` and the `--force` of a write) are not options
@@ -3714,9 +3722,19 @@ plan; the flags only the CLI has (`--json`, `--quiet`, `--lang`, `--details`, `-
 call and the `--flag`), `type` (`string`, `integer`, `boolean`, `array`, `object`), `required`,
 `description` (in English) and, when it has the value: `items`, `unit`, `default`, `enum` (`value`
 and a one-line `meaning`), `min`, `max`, `examples`, `one_of` (a group of mutually exclusive options:
-`area`, the choice of the area, exactly one of them; `target`, `output_dir` or `root`, at most one; `depth`, `depth` or `depth_rule` of `soil hsg`, exactly one) and `path_role` (`input`, `output`, `root`:
-a path that the MCP server checks). A value per country (`resolution`, `vertical_crs`) is a string
-or an object with the keys `pl` and `cz`.
+`area`, the choice of the area, exactly one of them; `target`, `output_dir` or `root`, at most one; `depth`, `depth` or `depth_rule` of `soil hsg`, exactly one), `path_role` (`input`, `output`, `root`:
+a path that the MCP server checks), and the rules among the options that a form reads (AGI-2.3):
+`requires` and `excludes` (the options a call that gives this one also gives, or does not give: `cutout`
+requires `horizontal_crs` and excludes `sheet`), `applies_to` and `required_when` (where the option applies
+and where it is required: `{option: true | [values]}`, `true` for an option given, e.g. `model` applies to
+`{"product": ["laz"]}`). A rule that asks for at least one of several options (`any_of`) has no field.
+A value per country (`resolution`, `vertical_crs`) is a string or an object with the keys `pl` and `cz`.
+
+**The page of a form** (`--form`, `form=True`, MCP `form`; up to about 31 thousand characters, at most 50,000,
+DOC-1.7) is the same document whose options also carry `section` (the English title of the section of
+`--help`) and `i18n.pl`: the Polish `description` (the text of `--help --lang pl`), `section` and `enum`, the
+Polish meaning of each allowed value by the value as text (ADR-063, the Nogat command form
+`<nogat-command-form>`). The default page has neither.
 
 The exit codes and error codes are not in the catalog any more: the tables are in 8.3, and the codes of a command in its `errors`.
 The command descriptions are in English (AGI-9.1); the CLI text and `--help` are Polish by default and
@@ -3735,7 +3753,7 @@ knowing the per-product functions:
 | `validate_command(command, options, root=None, output_dir=None)` | validation without network and without writing: a data command gets the checks of its function, any other command is checked against its declaration (names, forms, required options, allowed values, bounds, rules among the options): `ValidationError` with `option`/`allowed` |
 | `format_command(command, options, run=None)` | canonical line `kartograf <group> <command> --flag ...` (the inverse of `parse_command`) |
 | `run_command(command, options, root=, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | calls the function of the command (`download_data`, `describe_sheet`, `init_store`, ...) and returns its envelope `CommandResult` (8.1; `result` is the document of the command, `kartograf-download/1` for a download); the mode is `update="upgrade"` or `"force"` (the caller makes it of `run`: `upgrade`/`force` -> `update`, `check` -> `check_command`), `plan` is `check_command(...).result`; an option the command does not have is refused |
-| `check_command(command, options, root=, output_dir=, force=, cache=, on_notice=)` | the `check_*` of a command that has a check, without downloading or writing (a data command, `store init`): the envelope with `check: true`, `result` is `kartograf-plan/1`; any other command is `validation_error`, `details.reason` `no_check` |
+| `check_command(command, options, root=, output_dir=, force=, detached=, cache=, on_notice=)` | the `check_*` of a command that has a check, without downloading or writing (a data command, `store init`): the envelope with `check: true`, `result` is `kartograf-plan/1` (each item with its `source` and its `fetch` `{url, size_bytes, sha256}` or `fetch_reason` `credentials`/`built`, the plan with its `sources`; ADR-063); `detached=True` plans for another machine: the plain write into a directory that does not exist, answered as the write into `.` (`output_dir` `"."`, relative `path`s, every file `write`; with `root` or `output_dir` a `validation_error`); any other command is `validation_error`, `details.reason` `no_check` |
 | `command_for_file(sidecar)` | the command that selects a stored file again (KB-6, ADR-057), read-only and without network: the `Sidecar` of `read_sidecar` -> the store-mode `CommandCall` (`run` empty: give `root` to `run_command`/`check_command`), rebuilt from `dataset`, `request` and `extra`, with the options that choose a version pinned (a PL sheet or LAZ tile: its data year and `all_campaigns`; the height system, resolution, format, CUZK model, view direction). Families (`details.family`): `sheet`, `cutout`, `laz`, `unit` (TERYT, KU, sheet, whole country) are rebuilt; `area` (a land cover, soil or collection file chosen by a box or an area tile, also CZ; a NMT 100 m voivodeship file), `hsg` (`soil hsg`), a PL WCS cutout reprojected to EPSG:5514/3045, an unknown dataset or a sidecar without a needed field (`details.field`) are `unsupported` with `details.reason` `command_not_rebuildable` (`CommandNotRebuildableError`); a field of a wrong form is `data_error` (`InvalidSidecarError`, `details.field`) |
 
 ```python

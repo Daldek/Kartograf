@@ -43,6 +43,7 @@ from kartograf.download.fetch import (
 )
 from kartograf.download.plan import (
     TODO_STATUSES,
+    Fetch,
     PlanItem,
     Track,
     UpdatePlan,
@@ -205,12 +206,16 @@ def _probe(session: requests.Session, url: str) -> Callable[[], dict[str, Any]]:
 def _inspect(
     session: requests.Session, source: SourceDescriptor, sheet: str, slot: FileSlot
 ) -> PlanItem:
+    """Return the plan position of the ZIP of a sheet: the openzu ZIP as published."""
+    url = _url(source, sheet)
     return inspect_version(
         slot,
         track=_TRACK,
         unit=sheet,
         signal=_SIGNAL,
-        probe=_probe(session, _url(source, sheet)),
+        source=source.key,
+        fetch=Fetch(url),
+        probe=_probe(session, url),
     )
 
 

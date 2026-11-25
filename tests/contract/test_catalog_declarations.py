@@ -306,13 +306,13 @@ def test_cache_parse_catalog_sheet_search_and_store_commands_are_declared():
     assert next(g for g in _DECLARED.groups if g.name == "cache").position == 2
 
 
-def test_the_catalog_commands_take_no_options_but_the_command_to_describe():
+def test_the_catalog_commands_take_only_the_command_to_describe_and_the_form_switch():
     listing = _COMMAND_BY_ID["commands list"]
     schema = _COMMAND_BY_ID["commands schema"]
     params = {p.name: p for p in schema.params}
 
     assert [p.name for p in listing.params] == ["json", "lang"]
-    assert [p.name for p in schema.params] == ["command", "json", "lang"]
+    assert [p.name for p in schema.params] == ["command", "form", "json", "lang"]
     assert resolve(params["command"].allowed) == _IDS  # every command, no copy
     assert callable(params["command"].allowed)
     assert (params["command"].required, params["command"].choices) == (True, False)
@@ -320,6 +320,9 @@ def test_the_catalog_commands_take_no_options_but_the_command_to_describe():
         "--command",
         False,
     )
+    # the page of a form is asked for (ADR-063, J2): the default page stays short
+    assert (params["form"].kind, params["form"].default) == ("flag", False)
+    assert params["form"].cli_flag == "--form"
     assert (listing.function, listing.result_schema) == (
         "list_commands",
         "kartograf-command-list/1",
@@ -715,8 +718,27 @@ def test_every_allowed_value_has_a_meaning(command):
             assert meaning(param.name, str(value)), (command.id, param.name, value)
 
 
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_every_allowed_value_has_a_polish_meaning(command):
+    """The page of a form gives each allowed value its Polish meaning too
+    (``i18n.pl.enum``, ADR-063): the meaning is a catalog message, its Polish twin
+    edited beside it in ``kartograf.messages.meanings``, ASCII (ADR-044, Z5)."""
+    for param in command.params:
+        if param.allowed is None or param.name in ("command", "group"):
+            continue
+        for value in resolve(param.allowed):
+            english = meaning(param.name, str(value))
+            polish = localize(english, "pl")
+            where = (command.id, param.name, value)
+            assert isinstance(english, Message), where
+            assert polish and polish != english and polish.isascii(), where
+
+
 def test_a_value_without_a_meaning_is_refused_and_a_pattern_gives_one():
     assert meaning("resolution", "0.25m") == "Cell or pixel size 0.25m (metres)."
+    assert localize(meaning("resolution", "0.25m"), "pl") == (
+        "Rozmiar komorki albo piksela 0.25m (metry)."
+    )
     assert meaning("depth", "5-15cm").endswith("below the surface.")
     assert meaning("horizontal_crs", "EPSG:5514") == meaning("bbox_crs", "EPSG:5514")
     with pytest.raises(KeyError, match="nope"):

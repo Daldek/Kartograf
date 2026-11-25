@@ -18,7 +18,14 @@ from kartograf.catalog.build import (
     list_commands,
 )
 from kartograf.catalog.commands import Declared
-from kartograf.catalog.model import CommandCatalog, CommandList, OptionEntry
+from kartograf.catalog.model import (
+    CommandCatalog,
+    CommandList,
+    OptionEntry,
+    OptionI18nEntry,
+    OptionPolishTexts,
+    RestEntry,
+)
 from kartograf.catalog.spec import (
     Command,
     Constraint,
@@ -28,7 +35,7 @@ from kartograf.catalog.spec import (
 )
 from kartograf.exceptions import ValidationError
 from kartograf.messages import Text, message
-from kartograf.serialization import SCHEMAS
+from kartograf.serialization import SCHEMAS, encode
 
 _PRODUCTS = ("nmt", "nmpt")
 
@@ -284,6 +291,15 @@ def test_a_row_of_the_list_is_short_and_says_what_the_command_does_to_the_world(
         "families": ("data", "core"),
         "read_only": False,
         "check": "elevation download",  # the plan is the command with check
+        "effects": {
+            "read_only": False,
+            "writes": "add",
+            "idempotent": True,
+            "network": True,
+            "destructive": False,
+        },
+        # a proxy (Latarnik) routes the plan of a data command by the list
+        "rest": {"method": "POST", "path": "/api/v1/elevation/download", "key": True},
     }
     assert (rows["cache clear"].read_only, rows["cache clear"].families) == (False, ())
     assert (rows["sheet parse"].read_only, rows["sheet parse"].check) == (True, None)
@@ -306,9 +322,9 @@ def test_the_list_is_built_once_and_a_schema_reuses_its_entries(synthetic, monke
     built = []
     original = build.command_entry
 
-    def counting(command, summaries):
+    def counting(command, summaries, **kwargs):
         built.append(command.id)
-        return original(command, summaries)
+        return original(command, summaries, **kwargs)
 
     monkeypatch.setattr(build, "command_entry", counting)
 
@@ -438,6 +454,118 @@ def test_two_choices_of_an_area_in_one_command_are_refused():
         build_entries((command,), _groups()[:1])
 
 
+def _options(command: Command, *, form: bool = False) -> dict[str, OptionEntry]:
+    entry = build.command_entry(command, {}, form=form)
+    return {option.name: option for option in entry.options}
+
+
+def test_the_rules_on_an_option_name_what_it_requires_and_excludes():
+    command = dataclasses.replace(
+        _commands()[0],
+        constraints=(
+            Constraint("requires", ("bbox_crs",), "x", "bbox"),
+            Constraint("excludes", ("sheet", "quiet"), "y", "bbox"),
+            Constraint("excludes", ("resolution", "sheet"), "z", "bbox"),
+        ),
+    )
+
+    options = _options(command)
+
+    assert options["bbox"].requires == ("bbox_crs",)
+    # two rules of a kind merge in the order of the declaration; ``quiet`` is a flag
+    # only the CLI has, so a form has no field of it to disable
+    assert options["bbox"].excludes == ("sheet", "resolution")
+    assert not {"requires", "excludes"} & set(encode(options["sheet"]))  # type: ignore[arg-type]
+
+
+def test_the_conditions_of_the_rules_say_where_an_option_applies_and_is_required():
+    command = dataclasses.replace(
+        _commands()[0],
+        constraints=(
+            Constraint("applies_to", (), "x", "limit", {"product": ["nmt", "nmpt"]}),
+            Constraint(
+                "applies_to", (), "y", "limit", {"product": ["nmpt"], "bbox": True}
+            ),
+            Constraint("required_when", (), "z", "resolution", {"product": ["nmt"]}),
+            Constraint("required_when", (), "w", "resolution", {"product": ["nmpt"]}),
+        ),
+    )
+
+    options = {name: encode(option) for name, option in _options(command).items()}
+
+    # the option applies where every one of its rules holds...
+    assert options["limit"]["applies_to"] == {"product": ["nmpt"], "bbox": True}  # type: ignore[index]
+    # ...and is required where any of them does
+    assert options["resolution"]["required_when"] == {"product": ["nmt", "nmpt"]}  # type: ignore[index]
+    assert "applies_to" not in options["resolution"]  # type: ignore[operator]
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        (
+            Constraint("applies_to", (), "x", "limit", {"product": ["nmt"]}),
+            Constraint("applies_to", (), "y", "limit", {"product": ["nmpt"]}),
+        ),
+        (
+            Constraint("required_when", (), "x", "limit", {"product": ["nmt"]}),
+            Constraint("required_when", (), "y", "limit", {"bbox": True}),
+        ),
+    ],
+    ids=["applies-nowhere", "required-where-either"],
+)
+def test_rules_of_one_kind_that_no_single_condition_says_are_refused(rules):
+    command = dataclasses.replace(_commands()[0], constraints=rules)
+
+    with pytest.raises(ValueError, match="'limit'"):
+        build.command_entry(command, {})
+
+
+def test_an_any_of_rule_and_a_rule_about_a_cli_flag_stay_in_the_prose():
+    command = dataclasses.replace(
+        _commands()[0],
+        constraints=(
+            Constraint("any_of", ("sheet", "bbox"), "x"),
+            Constraint("applies_to", (), "y", "limit", {"quiet": True}),
+            Constraint("required_when", (), "z", "quiet", {"bbox": True}),
+        ),
+    )
+
+    data = encode(build.command_entry(command, {}))
+
+    assert "one_of" not in data  # type: ignore[operator]
+    fields = {"one_of", "requires", "excludes", "applies_to", "required_when"}
+    for option in data["options"]:  # type: ignore[index]
+        assert not fields & set(option), option["name"]
+
+
+def test_the_choice_of_a_command_is_its_required_one_of_never_the_optional_target():
+    command = dataclasses.replace(
+        _commands()[0],
+        params=(
+            *_commands()[0].params,
+            Param("output_dir", "path", "Plain files.", path_role="output"),
+        ),
+        constraints=(
+            Constraint(
+                "one_of", ("output_dir", "root"), "x", group="target", optional=True
+            ),
+            Constraint("one_of", ("sheet", "bbox"), "y"),
+            Constraint("one_of", ("resolution", "format"), "z", group="grid"),
+        ),
+    )
+
+    entry = build.command_entry(command, {})
+    options = {option.name: option for option in entry.options}
+
+    # one alternative per option; commands-1 holds one choice, the first one required
+    assert encode(entry)["one_of"] == [["sheet"], ["bbox"]]  # type: ignore[index]
+    # the options keep their groups, the others too
+    assert options["sheet"].one_of == options["bbox"].one_of == "area"
+    assert options["output_dir"].one_of == options["root"].one_of == "target"
+    assert options["resolution"].one_of == "grid"
+
+
 def test_the_allowed_values_come_from_the_provider_with_their_meanings(synthetic):
     options = {o.name: o for o in _entry("elevation download").options}
 
@@ -544,6 +672,42 @@ def test_a_read_only_command_is_never_destructive():
     assert effects(command).destructive is False
 
 
+def test_a_data_command_is_served_as_a_post_that_needs_the_key():
+    """Its plan is ``POST ...?check=true``; the server refuses its run (ADR-063)."""
+    assert build.rest(_commands()[0]) == RestEntry(
+        "POST", "/api/v1/elevation/download", key=True
+    )
+
+
+@pytest.mark.parametrize(
+    ("params", "method"),
+    [((), "GET"), ((Param("plan", "plan", "A saved plan."),), "POST")],
+    ids=["query", "object"],
+)
+def test_a_read_only_command_is_a_get_unless_an_option_is_an_object(params, method):
+    command = dataclasses.replace(_commands()[3], params=params)  # sheet parse
+
+    assert build.rest(command) == RestEntry(method, "/api/v1/sheet/parse", key=False)
+
+
+@pytest.mark.parametrize(
+    ("name", "declared_effects"),
+    [
+        ("store overview", ()),
+        ("cache stats", ()),
+        ("config show", ()),
+        ("gui serve", ()),
+        ("sheet keep", ("cache_write",)),
+    ],
+)
+def test_a_command_of_the_user_s_machine_or_one_that_writes_has_no_route(
+    name, declared_effects
+):
+    command = dataclasses.replace(_commands()[3], id=name, effects=declared_effects)
+
+    assert build.rest(command) is None
+
+
 def test_the_examples_have_the_call_a_result_excerpt_and_the_title(synthetic):
     first, second = _entry("elevation download").examples
 
@@ -565,7 +729,10 @@ def test_the_texts_are_english_with_the_polish_ones_in_i18n(synthetic, monkeypat
         ),
         "rule": Text("Check first.", "Najpierw sprawdz."),
     }
-    monkeypatch.setattr(messages, "_catalog", lambda area: texts)
+    real = messages._catalog
+    monkeypatch.setattr(
+        messages, "_catalog", lambda area: texts if area == "x" else real(area)
+    )
     command = dataclasses.replace(
         _commands()[0],
         summary=message("x.summary"),
@@ -594,6 +761,56 @@ def test_the_texts_are_english_with_the_polish_ones_in_i18n(synthetic, monkeypat
     )
     assert (entry.result.cardinality, entry.families) == ("single", ("data", "core"))
     assert _entry("elevation list-sources").result.cardinality == "bounded"
+
+
+def test_the_page_of_a_form_gives_each_option_its_section_and_polish_texts():
+    product, sheet, bbox = _commands()[0].params[:3]
+    command = dataclasses.replace(
+        _commands()[0],
+        params=(
+            dataclasses.replace(product, section=message("catalog.section_selection")),
+            dataclasses.replace(
+                sheet, description=message("catalog.sheet_description")
+            ),
+            bbox,
+            Param("lod", "int", "Level of detail.", allowed=("1", "2")),
+        ),
+        constraints=(Constraint("one_of", ("sheet", "bbox"), "x"),),
+        examples=(Example({"product": "nmt"}, title="x"),),
+    )
+
+    plain = _options(command)
+    form = _options(command, form=True)
+
+    assert form["product"].section == "Product and area"
+    assert form["product"].i18n == OptionI18nEntry(
+        OptionPolishTexts(
+            "Product (required).",  # a text that is no catalog message stays as it is
+            "Produkt i obszar",
+            {
+                "nmt": "Numeryczny model terenu (sam grunt, bez obiektow); PL i CZ.",
+                "nmpt": (
+                    "Numeryczny model pokrycia terenu (z obiektami na powierzchni); "
+                    "PL i CZ."
+                ),
+            },
+        )
+    )
+    # the rule of the group is said in Polish after the Polish description
+    assert form["sheet"].i18n.pl.description == (  # type: ignore[union-attr]
+        message("catalog.sheet_description", "pl")
+        + ". Podaj dokladnie jedno z: `sheet`, `bbox`."
+    )
+    assert form["sheet"].description == plain["sheet"].description
+    # an integer value is keyed by its text; an option without a section has none
+    assert form["lod"].i18n.pl.enum == {  # type: ignore[union-attr]
+        "1": "Poziom szczegolowosci 1 (LoD1).",
+        "2": "Poziom szczegolowosci 2 (LoD2).",
+    }
+    assert form["bbox"].section is None
+    assert "section" not in encode(form["bbox"].i18n)["pl"]  # type: ignore[index]
+    # the default page carries neither (DOC-1.7: it stays within its budget)
+    assert all(o.section is None and o.i18n is None for o in plain.values())
 
 
 def test_a_provider_description_is_resolved_when_the_document_is_built(synthetic):

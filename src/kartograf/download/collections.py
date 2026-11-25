@@ -134,10 +134,12 @@ from kartograf.download.options import (
     validate_request_bbox,
 )
 from kartograf.download.plan import (
+    Fetch,
     ItemStatus,
     PlanItem,
     Track,
     UpdatePlan,
+    fetch_fields,
     new_plan,
     refusal_plan,
     require_store,
@@ -3247,6 +3249,34 @@ def _record_edition(job: UnitJob) -> Callable[[], Edition] | None:
     return lambda: Edition(id=record.label, url=url)
 
 
+def _job_fetch(job: UnitJob) -> Fetch | None:
+    """Return what a plan says of the URL whose bytes the file of ``job`` is.
+
+    ``None`` for a file built rather than fetched (ADR-063 decision 3): the objects of
+    an area written into a GeoPackage (``feature_bbox``, the layers of an archive), the
+    member unpacked from a package (``UnitPackageParams.unpack``) or the ZIP of the
+    members of the chosen classes. Any other package (a URL template or the record of
+    an index) and a file of an ATOM feed are stored as published: their URL, with the
+    size a volume check read; the URL of a feed file is the feed's, unknown here.
+    """
+    params = job.channel.params
+    if job.layers:
+        return None
+    if isinstance(params, UnitPackageParams) and (
+        job.classes
+        or (
+            job.variant is not None
+            and job.variant.file_kind == "zip"
+            and params.unpack is not None
+        )
+    ):
+        return None
+    if job.atom:
+        found = job.atom_file
+        return Fetch(None) if found is None else Fetch(found.url, found.length)
+    return Fetch(job.url, job.size)
+
+
 def inspect_job(
     job: UnitJob,
     *,
@@ -3261,25 +3291,40 @@ def inspect_job(
     of the ATOM feeds (``None``: one per thread of this module); ``cache``:
     the metadata cache of the ATOM feed index (revalidated: a check must see
     a new edition). A file of an index record is compared by the record's
-    label (signal ``index``), never downloaded.
+    label (signal ``index``), never downloaded. The ``fetch`` of the position
+    (`_job_fetch`) takes the URL and the length of a feed file from the answer the
+    edition read, never from a request of its own.
     """
     edition: Callable[[], Edition] | None
+    found: list[AtomFile] = []
     if job.atom:
-        edition = _atom_edition(_atom_file(job, session, cache, refresh=True))
+        lookup = _atom_file(job, session, cache, refresh=True)
+
+        def atom() -> AtomFile:
+            file = lookup()
+            found.append(file)
+            return file
+
+        edition = _atom_edition(atom)
     else:
         edition = _record_edition(job)
     available: tuple[str | None, dict[str, Any] | None] = (None, None)
     if job.record is not None and edition is not None:
         available = (job.record.label, {"url": job.url, **job.record.raw})
-    return inspect_version(
+    item = inspect_version(
         job.slot,
         track=track,
         unit=job.unit,
         signal=job.signal,
+        source=job.descriptor.key,
+        fetch=_job_fetch(job),
         probe=_probe(job, session),
         edition=edition,
         available=available,
     )
+    if found and item.fetch is not None:
+        item = replace(item, fetch=Fetch(found[-1].url, found[-1].length))
+    return item
 
 
 def _input_keys(jobs: Sequence[UnitJob]) -> set[_SLOT_KEY]:
@@ -3336,14 +3381,25 @@ def _layers_item(job: UnitJob, archive: PlanItem | None, track: Track) -> PlanIt
     ``current`` when a version written from the local archive exists,
     ``missing`` otherwise or without a local archive, ``check_failed`` (with its
     error) when the archive could not be checked; the label is the edition of
-    the archive. In a plain write: the position of its target.
+    the archive. In a plain write: the position of its target. The GeoPackage is
+    written from the layers of the archive (``fetch_reason`` ``built``).
     """
     assert job.archive is not None
+    source = job.descriptor.key
     if plain_of(job.slot.root) is not None:
-        return inspect_version(job.slot, track=track, unit=job.unit, signal=job.signal)
+        return inspect_version(
+            job.slot,
+            track=track,
+            unit=job.unit,
+            signal=job.signal,
+            source=source,
+            fetch=None,
+        )
     local = local_version(job.slot)
-    source = local_version(job.archive.slot)
-    written = _layers_version(job.slot, source.sha256) if source is not None else None
+    written_by = local_version(job.archive.slot)
+    written = (
+        _layers_version(job.slot, written_by.sha256) if written_by is not None else None
+    )
     status: ItemStatus
     error: str | None = None
     if archive is not None and archive.status == "check_failed":
@@ -3353,6 +3409,7 @@ def _layers_item(job: UnitJob, archive: PlanItem | None, track: Track) -> PlanIt
     else:
         status = "missing"
     variant = job.archive.variant
+    fetch, why = fetch_fields(source, None)
     return PlanItem(
         track=track,
         segment=job.slot.segment,
@@ -3365,6 +3422,9 @@ def _layers_item(job: UnitJob, archive: PlanItem | None, track: Track) -> PlanIt
         available_signal=None,
         status=status,
         error=error,
+        source=source,
+        fetch=fetch,
+        fetch_reason=why,
     )
 
 
@@ -4561,6 +4621,7 @@ def plan_request(
         assert release.release is not None
         return plan_release(
             request.root,
+            release.descriptor,
             release.channel,
             release.release,
             segment=release.segment,

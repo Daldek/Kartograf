@@ -33,6 +33,7 @@ from kartograf.download.plan import (
     refusal_plan,
     require_store,
     select_planned,
+    source_of,
     store_id,
 )
 from kartograf.download.storage import bbox_slot
@@ -199,13 +200,19 @@ def _check_cutout(
     root: str | Path,
     image_crs: str | None,
 ) -> UpdatePlan:
-    """Plan of a CZ bbox version without raster access or network requests."""
+    """Plan of a CZ bbox version without raster access or network requests.
+
+    The cutout is built (``fetch_reason`` ``built``): an ImageServer export, warped
+    when the CRS of the result is not native.
+    """
     _, _, slot = _cutout_slot(provider, bbox, root, image_crs)
     item = inspect_version(
         slot,
         track="cz_cutout",
         unit=slot.std.stem,
         signal="none",
+        source=source_of(provider),
+        fetch=None,
     )
     return new_plan(store_id(root), (item,))
 
@@ -243,6 +250,8 @@ def _run_cz_cutout(
             track="cz_cutout",
             unit=slot.std.stem,
             signal="none",
+            source=source_of(provider),
+            fetch=None,
         )
         todo, skipped = select_planned(plan, [fresh], "cz_cutout")
         stale = tuple(skipped)

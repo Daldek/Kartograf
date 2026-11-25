@@ -244,7 +244,7 @@ def cmd_commands_list(args: argparse.Namespace) -> int:
 
 def cmd_commands_schema(args: argparse.Namespace) -> int:
     """Print one command (``--json``: the library document)."""
-    document = command_schema(args.command)
+    document = command_schema(args.command, form=args.form)
     if wants_json(args):
         return emit_result(command_id(args), document)
     sys.stdout.write(format_command(declared_commands()[document.commands[0].name]))

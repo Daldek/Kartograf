@@ -99,6 +99,7 @@ from kartograf.download.options import (
     validate_request_bbox,
 )
 from kartograf.download.plan import (
+    Fetch,
     PlanItem,
     Track,
     UpdatePlan,
@@ -467,7 +468,8 @@ class _Job:
 
     ``selection`` is the sidecar ``request`` of the file without content
     parameters (``teryt``, ``bbox``/``bbox_crs`` or ``sheet``); ``bbox`` /
-    ``sheet`` the raster download selection.
+    ``sheet`` the raster download selection. ``source`` and ``fetch`` are what its
+    plan position says of where the file comes from (``fetch`` ``None``: built).
     """
 
     slot: FileSlot
@@ -477,6 +479,8 @@ class _Job:
     edition: EditionLookup | None = None  # signal "metadata"
     bbox: BBox | None = None
     sheet: str | None = None
+    source: str | None = None
+    fetch: Fetch | None = None
 
     @property
     def key(self) -> _SlotKey:
@@ -1606,7 +1610,13 @@ class LandCoverManager:
         sheet: str | None = None,
         kwargs: dict[str, Any],
     ) -> list[_Job]:
-        """Files of one selection (BDOT10k: by TERYT; ``keep_raw`` = 2 files)."""
+        """Files of one selection (BDOT10k: by TERYT; ``keep_raw`` = 2 files).
+
+        Where each file comes from (ADR-063 decision 3): the SHP package of BDOT10k
+        and its raw GPKG package (``keep_raw``) are the ZIPs of their URLs, unchanged;
+        the GeoPackage merged from the layers of a package, a SoilGrids raster (a WCS
+        cutout) and a CORINE file (a key exchange, or the WMS preview) have no URL.
+        """
         provider = self._provider
         key = self._descriptor_key()
         out = self._root
@@ -1616,8 +1626,10 @@ class LandCoverManager:
             params = self._content_params(kwargs)
             signal = channel_signal(key, TransportKind.DIRECT_FILES)
             layers = params.get("layers")
+            fetch: Fetch | None = None  # the GeoPackage merged from the package
             if params["format"] == "SHP":
                 tokens, ext = ("shp",), ".zip"
+                fetch = Fetch(provider.package_url(teryt, "SHP"))
             elif isinstance(layers, list):
                 tokens, ext = ("gpkg", "-".join(layers)), ".gpkg"
             else:
@@ -1630,12 +1642,17 @@ class LandCoverManager:
                     teryt,
                     signal,
                     selection,
+                    source=key,
+                    fetch=fetch,
                 )
             ]
             if kwargs.get("keep_raw"):
                 raw = content_segment(key, ("gpkg", "zip"))
                 raw_slot = unit_slot(out, raw, ".zip", teryt=teryt)
-                jobs.append(_Job(raw_slot, teryt, signal, selection))
+                package = Fetch(provider.package_url(teryt, "GPKG"))
+                jobs.append(
+                    _Job(raw_slot, teryt, signal, selection, source=key, fetch=package)
+                )
             return jobs
         unit = selection_unit(bbox=bbox, sheet=sheet)
         if bbox is not None:
@@ -1673,6 +1690,7 @@ class LandCoverManager:
                 edition if signal == "metadata" else None,
                 bbox=bbox,
                 sheet=unit if sheet is not None else None,
+                source=key,
             )
         ]
 
@@ -1745,6 +1763,8 @@ class LandCoverManager:
             track=_TRACK,
             unit=job.unit,
             signal=job.signal,
+            source=job.source,
+            fetch=job.fetch,
             edition=job.edition,
         )
 

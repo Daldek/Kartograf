@@ -2,7 +2,8 @@
 
 Approved: 2026-11-24, the author (in session: „Ok, podoba mi się ten plan. Zapisz to.”; the answers to the open questions: „GUI Kartografa: wszystkie podkłady mapowe powinny być wspólne między projektami. Wciąż jest to pewna niejednolitość, którą trzeba załatwić. Jako wzór: Hydrograf. Reszta ok.”)
 
-Status: approved on 2026-11-24, its open questions answered the same day (below); nothing started.
+Status: approved on 2026-11-24, its open questions answered the same day (below); N1 done in Nogat on 2026-11-25;
+K1 (ADR-063) and the steps after it on `feat/gui` from `develop` (results below).
 
 The author asked for a Kartograf GUI that „pozwalał na pobieranie danych przestrzennych wprost ze źródeł, generując
 skrypt do basha/powershella lub dając ich treść. Wszystkie ewentualne klucze API byłyby po stronie użytkownika”; after
@@ -263,3 +264,22 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
 ## Results
 
 (filled in per step)
+
+- N1 done 2026-11-25 in Nogat (`40bae70` on develop): the kit's `<nogat-command-form>` (DEV-15.17, ECO-093);
+  commands-1 and AGI-2.3 gain the option fields the form reads; `nogat-server/1` (ECO-094) names Kartograf's
+  capabilities `catalog`, `plan`, `script`; Kartograf's planned `kartograf server` routed by Latarnik at
+  `/kartograf/v1/…` in the registry.
+- K1 (2026-11-25, `feat/gui`, `develop` with the release merge of `v0.9.0`): ADR-063, indexed in
+  `docs/DECISIONS.md`; it reads the plan differently in six places (its own section): `plan_max_units` is a
+  `validation_error`, (b) needs no plan, the server's plans are detached plain plans, the form's line goes through
+  the new catalog commands `commands format` and `commands parse`, the options' sections and Polish texts come with
+  `commands schema --form` (DOC-1.7), and the group `gui` and the port 8065 are its.
+- The form's fields (2026-11-25, ADR-063 decisions 1 and 2): the rules of the options, the command's `one_of`,
+  `commands schema --form` with `section` and `i18n.pl` (the Polish meaning of every allowed value), `rest` in the
+  catalog and the command list, and Nogat's commands-1, command-list-1 and server-1 vendored. `soil hsg` has two
+  required groups; its `one_of` is the area.
+- K2 (2026-11-25, decisions 3 and 4): `source`, `fetch`, `fetch_reason` and `sources` in `kartograf-plan/1`, and
+  `check_command(..., detached=True)`. Open: the CAMELS-PL members are `built` (ZIP members), so no pinned SHA-256
+  reaches a `fetch`. A plain or detached plan of an ATOM file has a `fetch` without a URL because its check reads no
+  feed, so (c) cannot download those files. Per-track tests for collections, land cover, HSG, releases and the CZ
+  tracks are still missing.

@@ -412,6 +412,10 @@ MESSAGES = {
         "Unknown plan notice level {level!r}",
         "Nieznany poziom komunikatu planu {level!r}",
     ),
+    "plan_unknown_fetch_reason": Text(
+        "Unknown plan item fetch_reason {fetch_reason!r}",
+        "Nieznany fetch_reason pozycji planu {fetch_reason!r}",
+    ),
     "plan_other_store": Text(
         "Plan is for a different store ({target}), not {store}",
         "Plan dotyczy innego magazynu ({target}), nie {store}",

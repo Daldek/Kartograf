@@ -84,6 +84,7 @@ each relation is recorded on both sides.
 | [ADR-060](decisions/0060-grid-cell-size-against-the-index-record.md) | The cell size of a downloaded grid against its index record: a failed unit `resolution_mismatch` | 2026-11-09 | Accepted |
 | [ADR-061](decisions/0061-hsg-from-the-least-permeable-layer.md) | HSG from the least permeable SoilGrids layer of 0-100 cm: `depth_rule="least-permeable"` | 2026-11-09 | Accepted |
 | [ADR-062](decisions/0062-camels-pl-catchments-and-gauging-stations.md) | CAMELS-PL catchments and gauging stations: `hydro download --product camels`, the files of a release read from its ZIP | 2026-11-23 | Accepted; amends [ADR-042](#adr-042-channel-engines-unit_package-feature_bbox-atom_files-and-plan-cd-data) (D1: the engine `release_files`; D2: `--whole-country` of a data set published in releases, `--version`; D6: the signal of the bytes the registry pins and the label of the first release with a file's bytes) and [ADR-054](decisions/0054-data-output-plain-mode-store-and-default-root.md) (decisions 3 and 6: `ATTRIBUTION.txt` in a plain write of CAMELS-PL and its plan position) |
+| [ADR-063](decisions/0063-gui-plans-scripts-and-a-read-only-server.md) | The GUI, plans and scripts for the user's own machine, and a read-only `kartograf server` | 2026-11-25 | Accepted |
 
 ---
 

@@ -59,7 +59,7 @@ from kartograf.catalog.spec import Command, Kind
 from kartograf.data_commands import DATA_COMMANDS
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.manager import DownloadProgress
-from kartograf.download.plan import UpdatePlan
+from kartograf.download.plan import UpdatePlan, detached_directory, detached_plan
 from kartograf.envelope import CommandResult, wrap
 from kartograf.exceptions import UsageError, ValidationError
 from kartograf.messages import message, reason
@@ -523,6 +523,7 @@ def check_command(
     output_dir: str | Path | None = None,
     root: str | Path | None = None,
     force: bool = False,
+    detached: bool = False,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> CommandResult[UpdatePlan]:
@@ -547,6 +548,13 @@ def check_command(
         Where the command would write (at most one).
     force : bool
         Plan the replacement of existing plain files.
+    detached : bool
+        Plan the request for another machine (ADR-063 decision 4): as a plain write
+        into a directory that does not exist (a fresh name, never created), answered
+        as the write into ``.``: ``output_dir`` is ``"."``, the ``path`` of each
+        position relative to it, every file ``write``. Neither ``output_dir`` nor
+        ``root`` is given with it, and the options a plain write refuses
+        (``all_campaigns``) are refused as ``output_dir`` refuses them.
     cache : MetadataCache or bool
         As in the library functions. The check asks the source for every
         answer the cache holds, except those a ``MetadataCache`` got less than
@@ -568,7 +576,8 @@ def check_command(
     ------
     ValidationError
         As ``validate_command``; a command that has no check (``details.reason``
-        ``no_check``).
+        ``no_check``); ``detached`` with ``output_dir`` or ``root`` (``option`` the
+        target, ``details.reason`` ``exclusive_options``).
     """
     declaration = _declaration(command)
     if declaration.check_function is None:
@@ -578,6 +587,16 @@ def check_command(
             hint=message("commands.no_check_hint"),
             reason="no_check",
         )
+    if detached:
+        for name, value in (("output_dir", output_dir), ("root", root)):
+            if value is not None:
+                raise ValidationError(
+                    message("commands.detached_with_target", option=name),
+                    option=name,
+                    options=("detached", name),
+                    reason="exclusive_options",
+                )
+        output_dir = detached_directory()
     if declaration.kind == "data":
         entry = DATA_COMMANDS[declaration.id]
         arguments = convert_arguments(entry.options, options)
@@ -591,10 +610,14 @@ def check_command(
             cache=cache,
             on_notice=on_notice,
         )
-        return wrap(declaration.id, plan, check=True)
-    arguments = check_call(
-        declaration, options, _targets(declaration, output_dir, root)
-    )
-    function = _function(declaration.check_function)
-    hooks = _hooks(function, cache=cache, on_notice=on_notice, force=force)
-    return wrap(declaration.id, function(**arguments, **hooks), check=True)
+    else:
+        arguments = check_call(
+            declaration, options, _targets(declaration, output_dir, root)
+        )
+        function = _function(declaration.check_function)
+        hooks = _hooks(function, cache=cache, on_notice=on_notice, force=force)
+        plan = function(**arguments, **hooks)
+    if detached:
+        assert output_dir is not None  # the directory of the detached plan
+        plan = detached_plan(plan, Path(output_dir))
+    return wrap(declaration.id, plan, check=True)

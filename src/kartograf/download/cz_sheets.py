@@ -46,6 +46,7 @@ from kartograf.download.plan import (
     refusal_plan,
     require_store,
     select_planned,
+    source_of,
     store_id,
 )
 from kartograf.download.storage import storage_for_provider
@@ -130,7 +131,12 @@ def _sheet_slot(provider: CuzkRasterProvider, sheet: str, root: str | Path) -> F
 def _check_sheet(
     provider: CuzkRasterProvider, sheet: str, *, root: str | Path
 ) -> UpdatePlan:
-    """Inspect one CZ sheet without transferring raster bytes."""
+    """Inspect one CZ sheet without transferring raster bytes.
+
+    The file is built (``fetch_reason`` ``built``): the GeoTIFF unpacked from the
+    openzu ZIP with the CRS of its channel written into it (and the heights shifted
+    when they are not native), or an ImageServer export warped onto the tile grid.
+    """
     sheet = sheet.strip()
     route = provider.route(sheet)
     item = inspect_version(
@@ -138,6 +144,8 @@ def _check_sheet(
         track="cz_sheet",
         unit=sheet,
         signal=route.channel.update_signal,
+        source=source_of(provider),
+        fetch=None,
         probe=(lambda: provider.file_signal(sheet)) if route.files else None,
     )
     return new_plan(store_id(root), (item,))

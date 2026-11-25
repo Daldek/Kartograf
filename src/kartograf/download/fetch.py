@@ -17,12 +17,12 @@ import functools
 import logging
 import shutil
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
 from kartograf.download.links import ensure_link
-from kartograf.download.plan import ItemStatus, PlanItem, Track
+from kartograf.download.plan import Fetch, ItemStatus, PlanItem, Track, fetch_fields
 from kartograf.download.versions import (
     ContentDigest,
     LocalVersion,
@@ -61,7 +61,7 @@ FileStatus = Literal[
 
 # Download into the staged path; returns the HTTP signal of the response
 # (``response_signal``) or ``None`` for a channel without one.
-Fetch = Callable[[Path], dict[str, Any] | None]
+Download = Callable[[Path], dict[str, Any] | None]
 # Current HTTP signal of the source file (``HEAD``); raises ``DownloadError``.
 Probe = Callable[[], dict[str, Any]]
 # Current edition of the source (signal ``metadata``, D29/D30); raises
@@ -568,7 +568,7 @@ def fetch_version(
     update: UpdateMode | None,
     *,
     signal: SignalKind,
-    fetch: Fetch,
+    fetch: Download,
     write_sidecar: WriteSidecar,
     version: VersionRef | None = None,
     probe: Probe | None = None,
@@ -629,6 +629,8 @@ def inspect_version(
     track: Track,
     unit: str,
     signal: SignalKind,
+    source: str | None,
+    fetch: Fetch | None,
     probe: Probe | None = None,
     edition: EditionLookup | None = None,
     available: tuple[str | None, dict[str, Any] | None] = (None, None),
@@ -648,6 +650,12 @@ def inspect_version(
     the signal is the probe's, with ``metadata`` ``(edition id, {"edition":
     id})``; with ``index`` + ``edition`` the label is the edition id.
 
+    ``source`` is the registry key of the file's source and ``fetch`` what the caller
+    knows of the URL whose bytes the file is, unchanged, ``None`` for a file Kartograf
+    builds (`kartograf.download.plan.fetch_fields`); the ``Content-Length`` a probe
+    read is the size of a ``fetch`` that has none. The position of a plain target asks
+    nothing (no probe, no edition): it says what the caller knows.
+
     Raises
     ------
     ValidationError
@@ -657,6 +665,7 @@ def inspect_version(
         raise ValidationError(message("download.metadata_signal_needs_edition"))
     plain = plain_of(slot.root)
     if plain is not None:  # the position of a plain target: judged by `new_plan`
+        file, why = fetch_fields(source, fetch)
         return PlanItem(
             track=track,
             segment="",
@@ -670,6 +679,9 @@ def inspect_version(
             status="missing",
             action="write",
             path=plain.target(slot.name),
+            source=source,
+            fetch=file,
+            fetch_reason=why,
         )
     lenient_store(slot.root)
     local = local_version(slot)
@@ -679,6 +691,7 @@ def inspect_version(
     try:
         if signal == "http" and probe is not None:
             remote = probe()
+            fetch = _sized(fetch, remote)
         elif signal == "metadata" and edition is not None:
             label = edition().id
             remote = {"edition": label}
@@ -702,6 +715,7 @@ def inspect_version(
             status = "current"
         else:
             status = "unverifiable"
+    file, why = fetch_fields(source, fetch)
     return PlanItem(
         track=track,
         segment=slot.segment,
@@ -714,4 +728,15 @@ def inspect_version(
         available_signal=remote,
         status=status,
         error=error,
+        source=source,
+        fetch=file,
+        fetch_reason=why,
     )
+
+
+def _sized(fetch: Fetch | None, signal: dict[str, Any] | None) -> Fetch | None:
+    """Return ``fetch`` with the ``Content-Length`` of a probe when it has no size."""
+    length = (signal or {}).get("content_length")
+    if fetch is None or fetch.size_bytes is not None or not isinstance(length, int):
+        return fetch
+    return replace(fetch, size_bytes=length)

@@ -27,7 +27,12 @@ def _list_text(capsys, **given) -> str:
 
 
 def _schema_text(capsys, command, **given) -> str:
-    words = {"command": command, "json": False, "_command_id": "commands schema"}
+    words = {
+        "command": command,
+        "form": False,
+        "json": False,
+        "_command_id": "commands schema",
+    }
     assert cmd_commands_schema(argparse.Namespace(**{**words, **given})) == 0
     captured = capsys.readouterr()
     assert captured.err == ""

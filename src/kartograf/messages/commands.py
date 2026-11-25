@@ -73,6 +73,12 @@ MESSAGES = {
         "Uruchom ja: bez skutkow planuje sie tylko komende z opcja check "
         "(kartograf commands list: check)",
     ),
+    "detached_with_target": Text(
+        "a detached plan writes nowhere: it takes no {option} (it is planned as the "
+        "write into .)",
+        "plan odlaczony nie zapisuje nigdzie: nie przyjmuje {option} (jest planowany "
+        "jako zapis do .)",
+    ),
     # ``command_for_file`` (KB-6, ADR-057).
     "file_sidecar_type": Text(
         "command_for_file takes the Sidecar that read_sidecar returns, not {kind}",

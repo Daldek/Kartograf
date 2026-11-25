@@ -50,6 +50,7 @@ from kartograf.download.plan import (
     refusal_plan,
     require_store,
     select_planned,
+    source_of,
     store_id,
 )
 from kartograf.download.storage import storage_for_provider
@@ -167,14 +168,21 @@ def _select(
 def _check(
     provider: CuzkLazProvider, sheets: tuple[str, ...], root: str | Path
 ) -> UpdatePlan:
-    """Plan positions of the sheets: one ``HEAD`` each, no file transfer."""
+    """Plan positions of the sheets: one ``HEAD`` each, no file transfer.
+
+    A file is built (``fetch_reason`` ``built``): the ``.laz`` unpacked from the ZIP
+    the URL serves.
+    """
     signal = _signal(provider)
+    source = source_of(provider)
     items = tuple(
         inspect_version(
             _slot(provider, sheet, root),
             track="cz_laz",
             unit=sheet,
             signal=signal,
+            source=source,
+            fetch=None,
             probe=functools.partial(provider.file_signal, sheet),
         )
         for sheet in sheets

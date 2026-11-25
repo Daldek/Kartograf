@@ -5,6 +5,96 @@ All significant changes to the project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+#### The fields of a command form and the route on the server (ADR-063)
+
+- `kartograf-commands/1` writes the rules among the options as the fields a form reads (Nogat
+  AGI-2.3, the kit's `<nogat-command-form>`; ADR-063 decision 1), derived from the declared
+  `Constraint`s: each option gets `requires` and `excludes` (the options a call that gives it also
+  gives, or does not give) and `applies_to` and `required_when` (where it applies and where it is
+  required, `{option: true | [values]}`). Several rules of one kind on one option merge
+  (`applies_to` where all of them hold, `required_when` the values of one option; another merge is
+  refused when the catalog is built), a name that is no option (`--upgrade`) is left out and an
+  `any_of` rule has no field. A command gets `one_of`, the choice it requires, one alternative per
+  option (`[["sheet"], ["bbox"], ["geometry"]]`); the options keep their `one_of` group, and the
+  optional target (`output_dir` or `root`) and the second group of `soil hsg` (`depth` or
+  `depth_rule`) are no choice of the command. Keys without a value are left out; `elevation
+  download`, the largest page, grows from about 17,000 to about 17,300 characters.
+- `commands schema --form` (`command_schema(command, *, form=False)`, the argument `form` of the
+  MCP tool `kartograf_commands_schema`): the page of a form, whose options also carry `section`
+  (the English title of their `--help` section) and `i18n.pl` (the Polish `description`, `section`
+  and `enum`, the Polish meaning of each allowed value by the value as text), up to 50,000
+  characters (DOC-1.7; `elevation download` about 30,000); the default page has neither (J2). A
+  `form` that is no switch is a `validation_error` (`details.option` `form`).
+- The Polish meaning of every allowed value: the meanings of `kartograf.catalog.meanings` are
+  catalog messages of the new area `kartograf.messages.meanings` (the English text unchanged, its
+  Polish twin beside it), and a contract test asks every allowed value of every option for both.
+  The sentence of a `one_of` group after the description of each of its options (`Give exactly
+  one of ...`) is a catalog message with its Polish twin as well.
+- `rest`, the route of a command on `kartograf server` (ADR-063 decision 2), in every entry of
+  `kartograf-commands/1` and every row of `kartograf-command-list/1` (`RestEntry`, `{method, path,
+  key}`, or `null`), derived by `kartograf.catalog.build.rest` from the group, kind, effects and
+  options of the command, never declared: `null` for the groups `store`, `cache`, `config` and
+  `gui` and for a command that writes, `POST` with `key` true for a data command, `POST` for a
+  read-only command with an option of type `object`, `GET` for any other; the path is
+  `/api/v1/<group>/<verb>`. The rows of the list also carry `effects` (Nogat AGI-2.4); the list
+  grows from about 10,000 to about 16,000 characters of compact JSON.
+- `schemas/nogat/` holds Nogat's `commands-1.schema.json`, `command-list-1.schema.json` and
+  `server-1.schema.json` of `develop` `f5f6e67`, copied byte for byte (its README names the
+  commit of each file); `tests/contract/test_commands_schema.py` validates both pages of every
+  command against commands-1 and the list against command-list-1.
+
+#### Where the files of a plan come from, and the detached plan (ADR-063 decisions 3 and 4)
+
+- `kartograf-plan/1` grows additive keys (store and plain plans alike), filled from what the
+  check already reads and with no request more (no `HEAD` for a size): each item has `source`
+  (the registry key of its source, `null` for the position of the track `store`), `fetch`
+  `{url, size_bytes, sha256}` when the file is the bytes at `url` unchanged (a field `null` when
+  the check does not know it: the size comes from the `Content-Length` of the probe of an `http`
+  channel in a store plan or the length of an ATOM feed; the GUGiK and WFS index records name
+  none, and the only SHA-256 the registry pins, those of the CAMELS-PL members, belong to files
+  read out of a ZIP), otherwise `fetch_reason`: `credentials` for a source whose `auth` is not
+  `none` (CORINE of CLMS, the WMS preview too; before `built`) or `built` for a file Kartograf
+  builds. The plan lists `sources`, one `{key, provider, license: {id, attribution, url}, auth}`
+  per source in the order of its first item, as `<group> list-sources` writes them; `merge`
+  joins them without repeats; a 0.9.0 plan without them still loads (`UpdatePlan.from_dict`).
+  Library types `kartograf.download.plan.Fetch` and `PlanSource`; `PlanItem.source`, `fetch`,
+  `fetch_reason`, `UpdatePlan.sources`.
+- The tracks, classified by what they store: `fetch` for a PL sheet (`pl_sheet`: the URL of its
+  index record; a sheet whose index failed has a `fetch` without a URL), a PL LAZ tile
+  (`laz_tile`), a CZ contour ZIP (`cz_sheet` of `cz_contours`), a package of `unit_package`
+  stored as published (a URL template or the record of an index), a file of an ATOM feed (its
+  URL and length from the feed in a store plan; in a plain plan, whose check reads no feed, a
+  `fetch` without a URL), the SHP package and the raw GPKG package (`keep_raw`) of BDOT10k;
+  `built` for a CZ sheet (`cz_sheet`: the GeoTIFF unpacked from the openzu ZIP with its CRS
+  written, or an ImageServer export), a CZ LAZ file (`cz_laz`: unpacked from its ZIP), a PL or
+  CZ cutout (`pl_cutout`, `cz_cutout`), the GeoPackage merged from a BDOT10k package, a
+  SoilGrids raster and HSG (`landcover`, `hsg`), a GeoPackage written from features
+  (`feature_bbox`, the layers of an archive), a member unpacked from a package or the ZIP of the
+  chosen classes (`unit_package` with `unpack` or `layers`), the members of a CAMELS-PL release
+  read by range requests and its `ATTRIBUTION.txt` (`release_files`, `zip_range`), and the four
+  files of a CZ orthophoto sheet (`cz_orto`: members of its ZIP).
+- `check_command(..., detached=True)`: the plan of a request for another machine, as a plain write
+  into a directory that does not exist (a fresh name in the temporary directory, never created),
+  answered as the write into `.`: `output_dir` `"."`, the `path` of each item relative to it (a
+  relative POSIX path in the document: `EncodeContext.relative_paths`), every file `write`.
+  `detached` with `output_dir` or `root` is a `validation_error` naming the option
+  (`exclusive_options`); the options a plain write refuses (`all_campaigns`) stay refused.
+
+### Changed
+
+- `src/kartograf/_output_schema.py` is regenerated from the new commands-1, whose `command_name`
+  reserves the groups `server` and `jobs` (AGI-6.1).
+- The description of `commands schema` names the rules of the options and the server route, and
+  the command has a third example, `--form --json`; USAGE 8.4 and ARCHITECTURE 4.11 describe the
+  fields, `--form` and `rest`.
+- `kartograf.download.fetch.inspect_version` takes the `source` and the `fetch` of its position
+  (keyword-only, required); the callable type of a download of `fetch_version` is `Download`
+  (was `Fetch`, now the type of the plan).
+
 ## [0.9.0] - 2026-11-25
 
 Changes since 0.8.2, to be released as 0.9.0, the next minor release. The release commit
