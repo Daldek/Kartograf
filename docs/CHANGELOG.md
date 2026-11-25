@@ -5,6 +5,56 @@ All significant changes to the project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+#### The fields of a command form and the route on the server (ADR-063)
+
+- `kartograf-commands/1` writes the rules among the options as the fields a form reads (Nogat
+  AGI-2.3, the kit's `<nogat-command-form>`; ADR-063 decision 1), derived from the declared
+  `Constraint`s: each option gets `requires` and `excludes` (the options a call that gives it also
+  gives, or does not give) and `applies_to` and `required_when` (where it applies and where it is
+  required, `{option: true | [values]}`). Several rules of one kind on one option merge
+  (`applies_to` where all of them hold, `required_when` the values of one option; another merge is
+  refused when the catalog is built), a name that is no option (`--upgrade`) is left out and an
+  `any_of` rule has no field. A command gets `one_of`, the choice it requires, one alternative per
+  option (`[["sheet"], ["bbox"], ["geometry"]]`); the options keep their `one_of` group, and the
+  optional target (`output_dir` or `root`) and the second group of `soil hsg` (`depth` or
+  `depth_rule`) are no choice of the command. Keys without a value are left out; `elevation
+  download`, the largest page, grows from about 17,000 to about 17,300 characters.
+- `commands schema --form` (`command_schema(command, *, form=False)`, the argument `form` of the
+  MCP tool `kartograf_commands_schema`): the page of a form, whose options also carry `section`
+  (the English title of their `--help` section) and `i18n.pl` (the Polish `description`, `section`
+  and `enum`, the Polish meaning of each allowed value by the value as text), up to 50,000
+  characters (DOC-1.7; `elevation download` about 30,000); the default page has neither (J2). A
+  `form` that is no switch is a `validation_error` (`details.option` `form`).
+- The Polish meaning of every allowed value: the meanings of `kartograf.catalog.meanings` are
+  catalog messages of the new area `kartograf.messages.meanings` (the English text unchanged, its
+  Polish twin beside it), and a contract test asks every allowed value of every option for both.
+  The sentence of a `one_of` group after the description of each of its options (`Give exactly
+  one of ...`) is a catalog message with its Polish twin as well.
+- `rest`, the route of a command on `kartograf server` (ADR-063 decision 2), in every entry of
+  `kartograf-commands/1` and every row of `kartograf-command-list/1` (`RestEntry`, `{method, path,
+  key}`, or `null`), derived by `kartograf.catalog.build.rest` from the group, kind, effects and
+  options of the command, never declared: `null` for the groups `store`, `cache`, `config` and
+  `gui` and for a command that writes, `POST` with `key` true for a data command, `POST` for a
+  read-only command with an option of type `object`, `GET` for any other; the path is
+  `/api/v1/<group>/<verb>`. The rows of the list also carry `effects` (Nogat AGI-2.4); the list
+  grows from about 10,000 to about 16,000 characters of compact JSON.
+- `schemas/nogat/` holds Nogat's `commands-1.schema.json`, `command-list-1.schema.json` and
+  `server-1.schema.json` of `develop` `f5f6e67`, copied byte for byte (its README names the
+  commit of each file); `tests/contract/test_commands_schema.py` validates both pages of every
+  command against commands-1 and the list against command-list-1.
+
+### Changed
+
+- `src/kartograf/_output_schema.py` is regenerated from the new commands-1, whose `command_name`
+  reserves the groups `server` and `jobs` (AGI-6.1).
+- The description of `commands schema` names the rules of the options and the server route, and
+  the command has a third example, `--form --json`; USAGE 8.4 and ARCHITECTURE 4.11 describe the
+  fields, `--form` and `rest`.
+
 ## [0.9.0] - 2026-11-25
 
 Changes since 0.8.2, to be released as 0.9.0, the next minor release. The release commit

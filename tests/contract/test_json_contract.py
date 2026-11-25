@@ -20,7 +20,12 @@ import pytest
 import kartograf
 from kartograf.cache_info import CacheEntries, CacheInfo
 from kartograf.catalog import command_schema, list_commands
-from kartograf.catalog.model import EnumValue, OptionEntry
+from kartograf.catalog.model import (
+    EnumValue,
+    OptionEntry,
+    OptionI18nEntry,
+    OptionPolishTexts,
+)
 from kartograf.config import Config, ConfigFileInfo, IgnoredKey, Setting, StoreInfo
 from kartograf.core.bbox import BBox
 from kartograf.download.availability import (
@@ -503,6 +508,18 @@ def _full_option() -> OptionEntry:
         examples=(["0-5cm"],),
         one_of="area",
         path_role="input",
+        section="Product parameters",
+        requires=("property",),
+        excludes=("depth_rule",),
+        applies_to={"product": ("soil",)},
+        required_when={"stat": True},
+        i18n=OptionI18nEntry(
+            OptionPolishTexts(
+                "Przedzialy glebokosci.",
+                "Parametry produktu",
+                {"0-5cm": "Przedzial glebokosci 0-5cm ponizej powierzchni."},
+            )
+        ),
     )
 
 
@@ -875,7 +892,16 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
     ),
     "CommandRow": (
         lambda: list_commands().commands[0],
-        ["name", "operation_id", "summary", "families", "read_only", "check"],
+        [
+            "name",
+            "operation_id",
+            "summary",
+            "families",
+            "read_only",
+            "check",
+            "effects",
+            "rest",
+        ],
     ),
     "CommandEntry": (
         _command_entry,
@@ -889,7 +915,9 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "result",
             "effects",
             "check",
+            "rest",
             "families",
+            "one_of",
             "rules",
             "examples",
             "errors",
@@ -912,13 +940,28 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "description",
             "one_of",
             "path_role",
+            "section",
+            "requires",
+            "excludes",
+            "applies_to",
+            "required_when",
+            "i18n",
         ],
+    ),
+    "OptionI18nEntry": (lambda: _full_option().i18n, ["pl"]),
+    "OptionPolishTexts": (
+        lambda: _full_option().i18n.pl,  # type: ignore[union-attr]
+        ["description", "section", "enum"],
     ),
     "EnumValue": (lambda: _full_option().enum[0], ["value", "meaning"]),  # type: ignore[index]
     "ResultEntry": (lambda: _command_entry().result, ["schema", "cardinality"]),  # type: ignore[attr-defined]
     "EffectsEntry": (
         lambda: _command_entry().effects,  # type: ignore[attr-defined]
         ["read_only", "writes", "idempotent", "network", "destructive"],
+    ),
+    "RestEntry": (
+        lambda: _command_entry().rest,  # type: ignore[attr-defined]
+        ["method", "path", "key"],
     ),
     "ExampleEntry": (
         lambda: _command_entry().examples[0],  # type: ignore[attr-defined]

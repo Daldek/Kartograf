@@ -31,6 +31,14 @@ MESSAGES = {
         "albo jej operation_id (np. kartograf_elevation_download); lista: kartograf "
         "commands list",
     ),
+    "form_description": Text(
+        "Also give each option its section and its Polish texts (`section`, "
+        "`i18n.pl`: the description, the section and the meaning of each allowed "
+        "value), what a form of the command reads; a longer page.",
+        "Dodaj do kazdej opcji jej sekcje i polskie teksty (section, i18n.pl: opis, "
+        "sekcja i znaczenie kazdej dozwolonej wartosci), ktore czyta formularz "
+        "komendy; dluzsza strona",
+    ),
     "format_description": Text(
         "Guide to render: `agents` is AGENTS.md, `llms` is llms.txt and "
         "`agents-md-block` is the compact block for the AGENTS.md of a repository "
@@ -160,18 +168,25 @@ MESSAGES = {
     ),
     "commands_schema_description": Text(
         "Offline, read only: the schema of one command (`kartograf-commands/1`): each "
-        "option with its type, bounds, allowed values and meanings and path role, the "
-        "result document, effects, rules, examples with a result excerpt, error codes "
-        "and the Polish texts. One command per call; the names are in `commands list`.",
+        "option with its type, bounds, allowed values and meanings, path role and the "
+        "options it requires or excludes, the result document, effects, server route, "
+        "rules, examples with a result excerpt, error codes and the Polish texts. One "
+        "command per call; the names are in `commands list`.",
         "Schemat jednej komendy z katalogu (bez sieci i bez zapisu): opcje (rodzaj, "
-        "zakresy, dozwolone wartosci ze znaczeniami, rola sciezki), dokument wyniku, "
-        "skutki, zasady, przyklady z fragmentem wyniku i kody bledow. --json: "
-        "dokument kartograf-commands/1 (opisy po angielsku, polskie teksty komendy w "
-        "i18n.pl).",
+        "zakresy, dozwolone wartosci ze znaczeniami, rola sciezki, zaleznosci miedzy "
+        "opcjami), dokument wyniku, skutki, trasa serwera, zasady, przyklady z "
+        "fragmentem wyniku i kody bledow. --json: dokument kartograf-commands/1 (opisy "
+        "po angielsku, polskie teksty komendy w i18n.pl; z --form takze sekcje i "
+        "polskie teksty opcji).",
     ),
     "example_schema_data_command": Text(
         "The schema of a data command",
         "Schemat komendy danych",
+    ),
+    "example_schema_form_json": Text(
+        "The page of a form: also the sections and the Polish texts of the options, "
+        "as JSON",
+        "Strona formularza: takze sekcje i polskie teksty opcji, jako JSON",
     ),
     "example_schema_command_operation_id_json": Text(
         "The schema of a command by its operation id, as JSON",

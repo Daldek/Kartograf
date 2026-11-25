@@ -3678,6 +3678,7 @@ kartograf commands list                                         # groups with pr
 kartograf commands list --json                                  # the list: kartograf-command-list/1
 kartograf commands schema --command "elevation download"        # description of a command: parameters, rules, examples (text)
 kartograf commands schema --command kartograf_soil_hsg --json   # kartograf-commands/1 with one command
+kartograf commands schema --command "elevation download" --form --json   # the page of a form: also the sections and Polish texts
 ```
 
 ```python
@@ -3685,6 +3686,7 @@ from kartograf import command_schema, list_commands
 
 listing = list_commands()                       # = commands list --json (the `result` of the envelope)
 schema = command_schema("elevation download")   # = commands schema --command ... --json
+form = command_schema("elevation download", form=True)  # = ... --form --json
 print(schema.to_json())                         # to_dict() / to_json(): like every document
 ```
 
@@ -3692,21 +3694,27 @@ print(schema.to_json())                         # to_dict() / to_json(): like ev
 (`kartograf_elevation_download`); an unknown or missing command is a `validation_error` with
 `details.option` `command` and `details.allowed` (the command names).
 
-**The list** (`kartograf-command-list/1`, about 10 thousand characters of compact JSON): `tool`, `version`,
+**The list** (`kartograf-command-list/1`, the Nogat schema `schemas/nogat/command-list-1.schema.json`; about
+16 thousand characters of compact JSON): `tool`, `version`,
 `groups` (`name`, `summary`, `products`: the product names) and `commands` (`name` =
 `<group> <command>`, `operation_id` = `kartograf_<group>_<command>`, `summary`, `families`,
 `read_only`, `check`: the command that plans this command without effects, that is, itself with the option
-`check`, or `null`).
+`check`, or `null`; `effects` and `rest`, as in the schema of the command).
 
 **The schema** (`kartograf-commands/1`, the Nogat schema `schemas/nogat/commands-1.schema.json`; up to
 about 17 thousand characters of compact JSON, the CLI prints it indented) carries one command: `name`,
 `operation_id`, `function` (the library function), `summary`, `description` (when to use, when not,
 the main limitation), `options`, `result` (`schema` and `cardinality`: `single`, `bounded`,
 `unbounded`), `effects` (`read_only`, `writes`: `none`, `add`, `replace`, `delete`;
-`idempotent`, `network`, `destructive`), `check`, `families` (the MCP tool families; `core` is the
-main tasks), `rules`, `examples` (`call` = the full CLI command, `result` = an excerpt of the result,
+`idempotent`, `network`, `destructive`), `check`, `rest`, `families` (the MCP tool families; `core` is the
+main tasks), `one_of`, `rules`, `examples` (`call` = the full CLI command, `result` = an excerpt of the result,
 `title`), `errors` (codes of the error registry, 8.3) and `i18n.pl` (the Polish `summary`, `description`,
-`rules`; the document does not carry the Polish option descriptions, they are in `--help`).
+`rules`). `rest` is the route of the command on Kartograf's server (ADR-063): `{method, path, key}` with the
+path `/api/v1/<group>/<command>`, `POST` with `key` true for a data command (the server plans it and runs
+nothing), `POST` for a read-only command that takes an object, `GET` for another read-only command, `null`
+for the commands of `store`, `cache`, `config` and `gui` and for a command that writes. `one_of` is the
+choice a command requires, one alternative per option (`[["sheet"], ["bbox"], ["geometry"]]`, the area);
+a command without one has no key.
 
 An option (`options[]`) is a parameter with an argument of the library function, or `check` of a command with a
 plan; the flags only the CLI has (`--json`, `--quiet`, `--lang`, `--details`, `--inject`, `--upgrade` and the `--force` of a write) are not options
@@ -3714,9 +3722,19 @@ plan; the flags only the CLI has (`--json`, `--quiet`, `--lang`, `--details`, `-
 call and the `--flag`), `type` (`string`, `integer`, `boolean`, `array`, `object`), `required`,
 `description` (in English) and, when it has the value: `items`, `unit`, `default`, `enum` (`value`
 and a one-line `meaning`), `min`, `max`, `examples`, `one_of` (a group of mutually exclusive options:
-`area`, the choice of the area, exactly one of them; `target`, `output_dir` or `root`, at most one; `depth`, `depth` or `depth_rule` of `soil hsg`, exactly one) and `path_role` (`input`, `output`, `root`:
-a path that the MCP server checks). A value per country (`resolution`, `vertical_crs`) is a string
-or an object with the keys `pl` and `cz`.
+`area`, the choice of the area, exactly one of them; `target`, `output_dir` or `root`, at most one; `depth`, `depth` or `depth_rule` of `soil hsg`, exactly one), `path_role` (`input`, `output`, `root`:
+a path that the MCP server checks), and the rules among the options that a form reads (AGI-2.3):
+`requires` and `excludes` (the options a call that gives this one also gives, or does not give: `cutout`
+requires `horizontal_crs` and excludes `sheet`), `applies_to` and `required_when` (where the option applies
+and where it is required: `{option: true | [values]}`, `true` for an option given, e.g. `model` applies to
+`{"product": ["laz"]}`). A rule that asks for at least one of several options (`any_of`) has no field.
+A value per country (`resolution`, `vertical_crs`) is a string or an object with the keys `pl` and `cz`.
+
+**The page of a form** (`--form`, `form=True`, MCP `form`; up to about 31 thousand characters, at most 50,000,
+DOC-1.7) is the same document whose options also carry `section` (the English title of the section of
+`--help`) and `i18n.pl`: the Polish `description` (the text of `--help --lang pl`), `section` and `enum`, the
+Polish meaning of each allowed value by the value as text (ADR-063, the Nogat command form
+`<nogat-command-form>`). The default page has neither.
 
 The exit codes and error codes are not in the catalog any more: the tables are in 8.3, and the codes of a command in its `errors`.
 The command descriptions are in English (AGI-9.1); the CLI text and `--help` are Polish by default and

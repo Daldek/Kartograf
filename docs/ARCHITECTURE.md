@@ -655,9 +655,11 @@ kartograf/
 ├── catalog/             # Command catalog - the single source of truth (section 4.11), no cli/mcp import
 │   ├── spec.py          # Command, Param, Constraint, Example, Group (data; value providers from the registry)
 │   ├── model.py         # documents kartograf-command-list/1 and kartograf-commands/1: CommandList, GroupRow,
-│   │                    # CommandRow, CommandCatalog, CommandEntry, OptionEntry, EnumValue, ResultEntry,
-│   │                    # EffectsEntry, ExampleEntry, I18nEntry, PolishTexts
-│   ├── build.py         # list_commands(), command_schema(command), is_option, effects; entries built once
+│   │                    # CommandRow, CommandCatalog, CommandEntry, OptionEntry, EnumValue, OptionI18nEntry,
+│   │                    # OptionPolishTexts, ResultEntry, EffectsEntry, RestEntry, ExampleEntry, I18nEntry,
+│   │                    # PolishTexts
+│   ├── build.py         # list_commands(), command_schema(command, form=), is_option, effects, rest
+│   │                    # (the route on kartograf server); the rules as option fields; entries built once
 │   ├── shared.py        # shared command parameters (area, output, update modes, --json...)
 │   ├── kinds.py         # value kinds: flag text parsers, convert_arguments (JSON options ->
 │   │                    # library arguments)
@@ -668,7 +670,8 @@ kartograf/
 │   ├── arguments.py     # check_call: a call in its JSON form against the declaration (names, kinds,
 │   │                    # required, allowed values, bounds, Constraint); check_constraints
 │   ├── excerpts.py      # EXCERPTS: the result excerpt of the catalog examples per document schema
-│   ├── meanings.py      # MEANINGS, meaning(): the one-line meaning of every allowed value of an option
+│   ├── meanings.py      # MEANINGS, meaning(): the meaning of every allowed value of an option, a message
+│   │                    # of messages/meanings.py (English and its Polish twin)
 │   └── commands/        # declarations, one module = one group (elevation, imagery, landcover, soil, boundaries,
 │                        # cadastre, models3d, hydro, names, maps, geodesy, config, misc: sheet,
 │                        # commands, cache and store); _collection.py = shape of the collection groups
@@ -4265,12 +4268,25 @@ the API argument name (`argument`), whether it is required, `allowed`
 (a provider reading the source registry when the catalog is built, not at import), the description and fields
 for the parser only (`dest`, `metavar`...). The declarations produce:
 
-- `list_commands()` -> `CommandList` (`kartograf-command-list/1`) and `command_schema(command)` ->
+- `list_commands()` -> `CommandList` (`kartograf-command-list/1`) and `command_schema(command, *, form=False)` ->
   `CommandCatalog` (`kartograf-commands/1`, one command: the name or the `operation_id`;
   `catalog/build.py`, `model.py`): `build.command_entries()` builds the entries once from the declarations
   (an option = `is_option`, enums from `meanings.py`, examples from `excerpts.py`); the page budget of
-  20,000 characters (DOC-1.7) and conformance with `schemas/nogat/commands-1.schema.json` are guarded by
-  `tests/contract/test_commands_schema.py`. The exit code and error tables:
+  20,000 characters (DOC-1.7) and conformance with `schemas/nogat/commands-1.schema.json` and
+  `command-list-1.schema.json` are guarded by `tests/contract/test_commands_schema.py`. The constraints become
+  the fields a form reads (AGI-2.3, ADR-063 decision 1): `requires` and `excludes` on the option of a rule (the
+  names that are options; `--upgrade`, a flag only the CLI has, is left out), `applies_to` and `required_when`
+  its `when` as `{option: true | [values]}` (several `applies_to` rules on one option hold together, several
+  `required_when` rules join the values of one option; another merge is a `ValueError` of the build), the
+  command's `one_of` the first non-optional `one_of` constraint, one alternative per option (`soil hsg`'s
+  `depth` group stays a group of its options); an `any_of` constraint has no field, only its message. `form=True`
+  (`commands schema --form`, J2) builds a second set of entries whose options also carry `section` and
+  `i18n.pl` (the Polish `description`, `section` and the meaning of each allowed value: the catalog messages
+  rendered with `localize`, the meanings from `messages/meanings.py`); its page may have 50,000 characters.
+  `build.rest(command)` derives the route on `kartograf server` of every entry and list row (decision 2):
+  `null` for the groups `store`, `cache`, `config` and `gui`, `POST` with `key` for a data command, `POST`
+  for a read-only command with an option of type `object`, `GET` for another read-only command, `null` for a
+  command that writes; the path `/api/v1/<group>/<verb>`. The exit code and error tables:
   `error_report.EXIT_CODES`, `ERROR_CODES` (USAGE 8.3); the 12 data commands: kind `data`
   in the declarations (`data_commands.DATA_COMMANDS`, KB-1);
 - the CLI parser (`catalog/cliparser.py::build_parser`; `cli/_parser.py::create_parser` is a
@@ -4368,7 +4384,8 @@ run options next to `check`,
 characters) are built by `build_instructions` from the tool names of the catalog and the state of the server. Context
 budget: `tools/list` is about 187,000 characters (83,000 without `outputSchema`; `--tools core` 66,000 and 35,000), because
 every property carries the description from the catalog and every tool an `outputSchema`; the budget of 30,000 characters
-of ADR-046 (D22) no longer holds (ADR-052, decision 9); `list_commands()` and a result page <= 20,000 characters (DOC-1.7);
+of ADR-046 (D22) no longer holds (ADR-052, decision 9); `list_commands()` and a result page <= 20,000 characters (DOC-1.7;
+the page of a form, `commands schema` with `form`, <= 50,000);
 tests enforce this (`tests/contract/test_mcp_tools.py`, the AGI-5.13 gate test in
 `tests/integration/test_mcp_server.py`). Usage and client configuration: USAGE 8.6.
 

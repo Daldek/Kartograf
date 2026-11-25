@@ -128,9 +128,11 @@ OUTPUT_SCHEMA: Final[dict[str, Any]] = {
             },
         },
         "command_name": {
-            "description": "`<group> <verb>` as typed in the CLI",
+            "description": "`<group> <verb>` as typed in the CLI; "
+            "`server` and `jobs` are reserved and "
+            "never a group (AGI-6.1)",
             "type": "string",
-            "pattern": "^[a-z][a-z0-9-]* [a-z][a-z0-9-]*$",
+            "pattern": "^(?!(server|jobs) )[a-z][a-z0-9-]* [a-z][a-z0-9-]*$",
         },
         "code": {
             "enum": [

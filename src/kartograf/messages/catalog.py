@@ -141,6 +141,16 @@ MESSAGES = {
         "--root)",
         "--output-dir wyklucza {flags} (dzialaja na wersjach magazynu: uzyj --root)",
     ),
+    # ``catalog.build``: a ``one_of`` group after the description of each option of it
+    # (a Polish description has no final period, the English one has).
+    "option_exactly_one_of": Text(
+        "{description} Give exactly one of {names}.",
+        "{description}. Podaj dokladnie jedno z: {names}.",
+    ),
+    "option_at_most_one_of": Text(
+        "{description} Give at most one of {names}.",
+        "{description}. Podaj najwyzej jedno z: {names}.",
+    ),
     # ``catalog.shared``: ``list-sources`` of every group.
     "list_sources_summary": Text(
         "List the registered data sources of the {group} group (offline)",

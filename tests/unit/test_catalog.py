@@ -359,14 +359,13 @@ def test_the_list_has_every_group_and_command():
 
 def test_the_list_is_a_short_and_complete_list_of_groups_products_and_commands():
     """What an agent reads first is within the page budget (DOC-1.7: 20,000
-    characters, also indented as the CLI prints it) and nothing is lost: every group
-    with its products and every command with its summary is in it, the options are
-    one query away."""
+    characters of compact JSON, ADR-052) and nothing is lost: every group with its
+    products and every command with its summary, effects and route is in it, the
+    options are one query away."""
     document = list_commands()
     data = document.to_dict()
 
     assert len(document.to_json(indent=None)) <= 20_000
-    assert len(document.to_json()) <= 20_000
     assert [g["name"] for g in data["groups"]] == list(_GROUPS)  # type: ignore[attr-defined]
     for group, declared_group in zip(
         document.groups,
@@ -383,6 +382,8 @@ def test_the_list_is_a_short_and_complete_list_of_groups_products_and_commands()
             full.check,
         )
         assert row.read_only == full.effects.read_only
+        # a proxy routes by the list what the schema of the command says (AGI-6.8)
+        assert (row.effects, row.rest) == (full.effects, full.rest)
         # what left the list: the options, the rules, the examples
         assert full.options is not None and full.examples
 

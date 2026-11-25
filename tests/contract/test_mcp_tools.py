@@ -336,7 +336,9 @@ def test_the_catalog_tools_take_no_argument_and_the_command_to_describe():
 
     assert listing["properties"] == {}
     assert "required" not in listing
-    assert list(schema["properties"]) == ["command"]
+    # ``form`` asks for the page of a form (ADR-063); only the command is required
+    assert list(schema["properties"]) == ["command", "form"]
+    assert schema["properties"]["form"]["type"] == "boolean"
     assert schema["required"] == ["command"]
     # the 43 names are the list's: a second copy in every tools/list is waste
     assert "enum" not in schema["properties"]["command"]

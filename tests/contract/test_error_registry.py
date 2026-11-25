@@ -45,7 +45,9 @@ def test_error_module_carries_every_code_and_outcome_of_the_registry():
     } == _errors.OUTCOMES
 
 
-@pytest.mark.parametrize("name", ["result-1", "error-1", "commands-1"])
+@pytest.mark.parametrize(
+    "name", ["result-1", "error-1", "commands-1", "command-list-1", "server-1"]
+)
 def test_vendored_schema_is_a_valid_json_schema(name):
     path = ROOT / "schemas" / "nogat" / f"{name}.schema.json"
     schema = json.loads(path.read_text(encoding="utf-8"))

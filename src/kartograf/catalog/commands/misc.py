@@ -92,6 +92,12 @@ _SCHEMA_PARAMS = (
         allowed=_command_ids,
         examples=("elevation download",),
     ),
+    Param(
+        "form",
+        "flag",
+        message("catalog_misc.form_description"),
+        default=False,
+    ),
     shared.JSON,
 )
 
@@ -285,6 +291,11 @@ COMMANDS = (
             Example(
                 {"command": "kartograf_soil_hsg"},
                 title=message("catalog_misc.example_schema_command_operation_id_json"),
+                run={"json": True},
+            ),
+            Example(
+                {"command": "elevation download", "form": True},
+                title=message("catalog_misc.example_schema_form_json"),
                 run={"json": True},
             ),
         ),

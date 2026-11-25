@@ -24,6 +24,7 @@ from kartograf import (
     check_availability,
     check_data,
     clear_cache,
+    command_schema,
     describe_sheet,
     download_collection,
     download_data,
@@ -678,6 +679,11 @@ def test_every_cli_command_has_a_json_test():
             lambda: list_layers(group="soil"),
         ),
         ("config show", ["config", "show"], get_config),
+        (
+            "commands schema",
+            ["commands", "schema", "--command", "elevation download", "--form"],
+            lambda: command_schema("elevation download", form=True),
+        ),
     ],
     ids=[
         "parse-pl",
@@ -687,6 +693,7 @@ def test_every_cli_command_has_a_json_test():
         "bdoo-layers",
         "soil-layers",
         "config",
+        "schema-form",
     ],
 )
 def test_json_is_the_envelope_of_the_document_of_the_library_function(
