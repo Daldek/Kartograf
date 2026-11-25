@@ -274,3 +274,12 @@ Kartograf's steps K1 to K7 ship in the minor after `0.9.0` (question 1), whose r
   `validation_error`, (b) needs no plan, the server's plans are detached plain plans, the form's line goes through
   the new catalog commands `commands format` and `commands parse`, the options' sections and Polish texts come with
   `commands schema --form` (DOC-1.7), and the group `gui` and the port 8065 are its.
+- The form's fields (2026-11-25, ADR-063 decisions 1 and 2): the rules of the options, the command's `one_of`,
+  `commands schema --form` with `section` and `i18n.pl` (the Polish meaning of every allowed value), `rest` in the
+  catalog and the command list, and Nogat's commands-1, command-list-1 and server-1 vendored. `soil hsg` has two
+  required groups; its `one_of` is the area.
+- K2 (2026-11-25, decisions 3 and 4): `source`, `fetch`, `fetch_reason` and `sources` in `kartograf-plan/1`, and
+  `check_command(..., detached=True)`. Open: the CAMELS-PL members are `built` (ZIP members), so no pinned SHA-256
+  reaches a `fetch`. A plain or detached plan of an ATOM file has a `fetch` without a URL because its check reads no
+  feed, so (c) cannot download those files. Per-track tests for collections, land cover, HSG, releases and the CZ
+  tracks are still missing.
